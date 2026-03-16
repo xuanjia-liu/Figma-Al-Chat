@@ -1,0 +1,51 @@
+{
+  "name": "Figma AI Chat",
+  "id": "1577217394172756225",
+  "api": "1.0.0",
+  "main": "code.js",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "enablePrivatePluginApi": true,
+  "documentAccess": "dynamic-page",
+  "editorType": [
+    "figma",
+    "figjam"
+  ],
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://generativelanguage.googleapis.com",
+      "https://aistudio.google.com",
+      "https://api.openai.com",
+      "https://api.anthropic.com",
+      "https://api.quiver.ai",
+      "https://app.quiver.ai",
+      "https://corsproxy.io",
+      "https://api.iconify.design",
+      "https://icones.js.org",
+      "https://raw.githubusercontent.com",
+      "https://unpkg.com",
+      "https://www.weavefox.cn",
+      "https://mdn.alipayobjects.com",
+      "https://api.figma.com",
+      "https://s3-alpha.figma.com",
+      "https://www.figma.com",
+      "https://cdnjs.cloudflare.com",
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://www.gravatar.com",
+      "https://loremflickr.com",
+      "https://picsum.photos",
+      "https://fastly.picsum.photos",
+      "https://placehold.co",
+      "https://api.unsplash.com",
+      "https://images.unsplash.com",
+      "https://pixabay.com",
+      "https://api.pexels.com",
+      "https://images.pexels.com"
+    ]
+  },
+  "permissions": [
+    "teamlibrary"
+  ]
+}
