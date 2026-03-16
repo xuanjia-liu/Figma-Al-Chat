@@ -13273,6 +13273,9 @@ Answer capability questions with the above (in the user's language); otherwise r
     function isQuickActionAllowedInAiOff(task) {
       if (!isAiOffModeEnabled()) return true;
       if (!task) return false;
+      if (task.name === 'Smart rename') {
+        return true;
+      }
       if (task.directAction) {
         return isDirectActionAllowedInAiOff(task.directAction);
       }
@@ -36731,6 +36734,45 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
     }
 
+    async function runSmartRenameCaseOnlyAction(values) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timed out while renaming layers.'));
+        }, 15000);
+
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (!msg) return;
+
+          if (msg.type === 'smart-rename-case-only-result') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(msg);
+          } else if (
+            msg.type === 'error' &&
+            typeof msg.message === 'string' &&
+            (msg.message.includes('Case-only rename failed') || msg.message.includes('Please select at least one layer to rename.'))
+          ) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            reject(new Error(msg.message));
+          }
+        };
+
+        window.addEventListener('message', handler);
+        parent.postMessage({
+          pluginMessage: {
+            type: 'smart-rename-case-only',
+            delimiter: values.delimiter || 'camelCase',
+            onlySelected: values.onlySelected === true,
+            includeInstances: values.includeInstances === true,
+            keepOriginal: values.keepOriginal === true
+          }
+        }, '*');
+      });
+    }
+
     // ==========================================
     // Fill from Online Image
     // ==========================================
@@ -37917,6 +37959,20 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         // Special handling for custom tone
         if (values.tone === '__custom__' && values.customTone) {
           values.tone = values.customTone.trim();
+        }
+
+        if (action.name === 'Smart rename') {
+          if (values.style === 'caseOnly') {
+            closePromptDrawer();
+            closeCommandsDrawer();
+            await runSmartRenameCaseOnlyAction(values);
+            return;
+          }
+
+          if (isAiOffModeEnabled()) {
+            showToast('In No AI mode, Smart rename only supports "Case only (keep text)".', 'error');
+            return;
+          }
         }
 
         if (action.directAction) {
@@ -49536,6 +49592,18 @@ Based on the user's instruction, generate the appropriate commands to modify the
         case 'local-variables':
           showToast(`Received ${msg.variables?.length || 0} local variables (not displayed)`, 'info');
           break;
+
+        case 'smart-rename-case-only-result': {
+          const renamed = Number(msg.renamed) || 0;
+          const skipped = Number(msg.skipped) || 0;
+          const total = Number(msg.total) || (renamed + skipped);
+          if (renamed > 0) {
+            showToast(`Renamed ${renamed}/${total} layer${renamed === 1 ? '' : 's'} with case-only formatting.`, 'success');
+          } else {
+            showToast(`No layer names needed changes${total ? ` out of ${total}` : ''}.`, 'info');
+          }
+          break;
+        }
 
         case 'variable-collections-list':
           // Store collections for palette generation dropdown

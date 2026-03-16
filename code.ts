@@ -239,6 +239,113 @@ function smartSetFill(node: GeometryMixin, targetColor: RGBA): boolean {
   return true;
 }
 
+type SmartRenameCaseOnlyDelimiter = 'camelCase' | 'PascalCase' | '_' | '/' | '-' | ' ';
+
+function splitNameIntoTokens(name: string): string[] {
+  return name
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .replace(/[_/\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map(token => token.trim())
+    .filter(Boolean);
+}
+
+function capitalizeWord(word: string): string {
+  if (!word) return '';
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
+
+function formatTokensWithDelimiter(tokens: string[], delimiter: SmartRenameCaseOnlyDelimiter): string {
+  if (tokens.length === 0) return '';
+
+  switch (delimiter) {
+    case 'camelCase':
+      return tokens
+        .map((token, index) => index === 0 ? token.toLowerCase() : capitalizeWord(token))
+        .join('');
+    case 'PascalCase':
+      return tokens.map(capitalizeWord).join('');
+    case '_':
+    case '/':
+    case '-':
+      return tokens.map(token => token.toLowerCase()).join(delimiter);
+    case ' ':
+    default:
+      return tokens.map(capitalizeWord).join(' ');
+  }
+}
+
+function transformNameCaseOnly(name: string, delimiter: SmartRenameCaseOnlyDelimiter, keepOriginal: boolean): string {
+  const trimmedName = (name || '').trim();
+  if (!trimmedName) return name;
+
+  let transformedName = '';
+
+  if (trimmedName.includes('=')) {
+    const [propertyPart, ...rest] = trimmedName.split('=');
+    const valuePart = rest.join('=').trim();
+    const formattedValue = formatTokensWithDelimiter(splitNameIntoTokens(valuePart), delimiter) || valuePart;
+    transformedName = `${propertyPart}=${formattedValue}`;
+  } else {
+    transformedName = formatTokensWithDelimiter(splitNameIntoTokens(trimmedName), delimiter) || trimmedName;
+  }
+
+  if (keepOriginal && transformedName !== trimmedName) {
+    return `${transformedName} (${trimmedName})`;
+  }
+
+  return transformedName;
+}
+
+function isRenameableSceneNode(node: SceneNode): node is SceneNode & { name: string } {
+  return typeof node.name === 'string';
+}
+
+function collectSmartRenameTargets(
+  selection: readonly SceneNode[],
+  onlySelected: boolean,
+  includeInstances: boolean
+): SceneNode[] {
+  const collected: SceneNode[] = [];
+  const seen = new Set<string>();
+
+  const visit = (node: SceneNode) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+
+    if (!includeInstances && node.type === 'INSTANCE') {
+      return;
+    }
+
+    collected.push(node);
+
+    if ('children' in node) {
+      for (const child of node.children) {
+        visit(child as SceneNode);
+      }
+    }
+  };
+
+  for (const node of selection) {
+    if (onlySelected) {
+      if (!includeInstances && node.type === 'INSTANCE') {
+        continue;
+      }
+      if (!seen.has(node.id)) {
+        seen.add(node.id);
+        collected.push(node);
+      }
+      continue;
+    }
+    visit(node);
+  }
+
+  return collected;
+}
+
 // Global font cache to avoid redundant awaits during large batch operations
 const loadedFontsCache = new Set<string>();
 const loadingFontsPromises = new Map<string, Promise<void>>();
@@ -3661,7 +3768,22 @@ async function exportWithCloneMethod(
   }
 }
 
-figma.ui.onmessage = async (msg: { type: string, cssFormat?: string, settings?: any, usage?: Record<string, number>, customTones?: any[], customImagePresets?: any[], customReStylePresets?: any[], width?: number, height?: number, history?: any }) => {
+figma.ui.onmessage = async (msg: {
+  type: string,
+  cssFormat?: string,
+  settings?: any,
+  usage?: Record<string, number>,
+  customTones?: any[],
+  customImagePresets?: any[],
+  customReStylePresets?: any[],
+  width?: number,
+  height?: number,
+  history?: any,
+  delimiter?: SmartRenameCaseOnlyDelimiter,
+  onlySelected?: boolean,
+  includeInstances?: boolean,
+  keepOriginal?: boolean
+}) => {
   // Handle cancellation requests immediately, before the switch
   if (msg.type === 'cancel-execution') {
     executionCancelled = true;
@@ -4575,6 +4697,78 @@ figma.ui.onmessage = async (msg: { type: string, cssFormat?: string, settings?: 
         };
       });
       figma.ui.postMessage({ type: 'selection-info', data: info });
+      break;
+    }
+
+    case 'smart-rename-case-only': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer to rename.' });
+          break;
+        }
+
+        const delimiter = msg.delimiter || '_';
+        const onlySelected = msg.onlySelected === true;
+        const includeInstances = msg.includeInstances === true;
+        const keepOriginal = msg.keepOriginal === true;
+
+        const targets = collectSmartRenameTargets(selection, onlySelected, includeInstances)
+          .filter(isRenameableSceneNode);
+
+        let renamed = 0;
+        let skipped = 0;
+
+        for (const node of targets) {
+          const nextName = transformNameCaseOnly(node.name, delimiter, keepOriginal);
+          if (!nextName || nextName === node.name) {
+            skipped++;
+            continue;
+          }
+
+          node.name = nextName;
+          renamed++;
+        }
+
+        figma.ui.postMessage({
+          type: 'smart-rename-case-only-result',
+          renamed,
+          skipped,
+          total: targets.length
+        });
+
+        const collectDescendantIds = (node: BaseNode): string[] => {
+          const ids: string[] = [];
+          if ('children' in node) {
+            for (const child of node.children) {
+              ids.push(child.id);
+              ids.push(...collectDescendantIds(child));
+            }
+          }
+          return ids;
+        };
+
+        const updatedInfo = figma.currentPage.selection.map(node => {
+          let hasImageFill = false;
+          if ('fills' in node && Array.isArray(node.fills)) {
+            hasImageFill = node.fills.some((fill: Paint) => fill.type === 'IMAGE');
+          }
+          return {
+            name: node.name,
+            type: node.type,
+            id: node.id,
+            description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
+            hasImageFill,
+            descendantIds: collectDescendantIds(node)
+          };
+        });
+        figma.ui.postMessage({ type: 'selection-info', data: updatedInfo });
+      } catch (error) {
+        console.error('smart-rename-case-only failed', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: `Case-only rename failed: ${(error as Error)?.message || 'Unknown error'}`
+        });
+      }
       break;
     }
 
