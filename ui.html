@@ -9289,6 +9289,20 @@
       border-color: var(--accent-hover-agent);
     }
 
+    .prompt-custom-select-option.option-disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      color: var(--text-tertiary);
+      background: var(--bg-tertiary);
+      border-color: var(--border);
+    }
+
+    .prompt-custom-select-option.option-disabled:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--border);
+      color: var(--text-tertiary);
+    }
+
     /* Embedded number input in select option */
     .prompt-custom-select-option .embedded-input {
       width: 56px !important;
@@ -30803,6 +30817,10 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
     }
 
     function renderPromptFields(fields, preservedValues = null) {
+      const isSmartRenameStyleFieldInAiOffMode = (fieldKey) => {
+        return fieldKey === 'style' && currentPromptAction?.name === 'Smart rename' && isAiOffModeEnabled();
+      };
+
       function renderSingleField(field, index) {
         let fieldHtml = '';
         const fieldId = `prompt-field-${index}`;
@@ -30841,6 +30859,11 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           if (preservedValues && preservedValues[field.key] !== undefined) {
             effectiveDefault = preservedValues[field.key];
           }
+
+          if (isSmartRenameStyleFieldInAiOffMode(field.key) && effectiveDefault !== 'caseOnly') {
+            effectiveDefault = 'caseOnly';
+          }
+
           const defaultValues = Array.isArray(effectiveDefault)
             ? effectiveDefault.map(v => String(v))
             : (effectiveDefault !== undefined && effectiveDefault !== null ? [String(effectiveDefault)] : []);
@@ -30960,6 +30983,11 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const optionsHtml = (optionsArray || []).map(opt => {
             const valueRaw = opt.value ?? '';
             const labelRaw = opt.label ?? valueRaw;
+            const isDisabledSmartRenameStyle = isSmartRenameStyleFieldInAiOffMode(field.key) && String(valueRaw) !== 'caseOnly';
+            const disabledAttr = isDisabledSmartRenameStyle ? ' data-disabled="true"' : '';
+            const disabledTitleAttr = isDisabledSmartRenameStyle
+              ? ' title="Unavailable in No AI mode. Use Case only (keep text)."'
+              : '';
 
             // Handle provider header options
             if (opt.isProviderHeader) {
@@ -31004,7 +31032,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
                      data-text="${escapeHtml(String(labelRaw))}"
                      data-has-input="true"
                      data-input-key="${opt.inputKey}"
-                     tabindex="0">
+                     tabindex="0"${disabledAttr}${disabledTitleAttr}>
                   <span>${escapeHtml(labelRaw)}</span>
                   <input type="${opt.inputType || 'number'}" class="embedded-input"
                          value="${escapeHtml(String(inputDefault))}"
@@ -31038,13 +31066,13 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
               ${previewHtml}
             `;
 
-            const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${hasThumbnail || (hasRichLayout && !previewIcons.length) ? ' with-thumbnail' : ''}`;
+            const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${hasThumbnail || (hasRichLayout && !previewIcons.length) ? ' with-thumbnail' : ''}${isDisabledSmartRenameStyle ? ' option-disabled' : ''}`;
 
             // Include provider data attribute if present (for image model selection)
             const providerAttr = opt.provider ? ` data-provider="${escapeHtml(opt.provider)}"` : '';
 
             return `
-              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${providerAttr} tabindex="0">
+              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${providerAttr}${disabledAttr}${disabledTitleAttr} tabindex="0">
                 ${hasRichLayout ? bodyHtml : escapeHtml(labelRaw)}
                 ${moreBtnHtml}
               </div>
@@ -31806,6 +31834,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           optionEl.addEventListener('click', (e) => {
             // Don't change selection if clicking on more button
             if (e.target.closest('.option-more-btn')) return;
+            if (optionEl.dataset.disabled === 'true') return;
             // If clicking on embedded input, don't trigger the general option click (which might close menu)
             if (e.target.classList.contains('embedded-input')) return;
 
@@ -31858,6 +31887,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           if (embeddedInput) {
             embeddedInput.addEventListener('click', (e) => {
               e.stopPropagation();
+              if (optionEl.dataset.disabled === 'true') return;
               // Auto-select this option when clicking the input
               if (isMulti) {
                 optionEl.classList.add('selected');
@@ -31897,6 +31927,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             // Let Ctrl/Cmd+Enter bubble to prompt drawer submit handler
             if (e.metaKey || e.ctrlKey) return;
             e.preventDefault();
+            if (targetOption.dataset.disabled === 'true') return;
             targetOption.click();
             return;
           }
