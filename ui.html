@@ -19694,6 +19694,13 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           requiredContext: ContextMode.ALL,
           fields: [
             {
+              key: 'annotationRequest',
+              type: 'textarea',
+              label: 'Description',
+              placeholder: 'Describe the specific annotation you want, such as what to explain, emphasize, or warn about.',
+              default: ''
+            },
+            {
               key: 'includeNodeName',
               type: 'checkbox',
               label: 'Node name',
@@ -19702,7 +19709,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             {
               key: 'includeDescription',
               type: 'checkbox',
-              label: 'Description',
+              label: 'Generated description',
               default: true
             },
             {
@@ -19745,12 +19752,16 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           promptTemplate: `
 Generate annotation content for the selected node.
 Write ANNOTATION_CONTENT in the same primary language as the selected node.Do not translate; if the selection is mixed - language, use the majority language.
-{ includeNodeName ? "Include the node name." : "" }
-            { includeDescription ? "Include a detailed description of what this element is." : "" }
-            { includeUsageGuidelines ? "Add usage guidelines : 2-3 ✅ Do items and 2-3 ❌ Don't items tailored to the component's role, prominence, variant, size, label length, and page hierarchy." : "" }
-            { includeHandOffNote ? "Add a Hand off note for developers. For each implemented property (fills, padding, spacing, radius, etc.), check if a human-readable design token name exists in the 'tokens' object. If a token name is found, use it (e.g., 'Use token \"Primary/Blue-500\"'). If NO token name is found in the 'tokens' object, use the raw numeric or hex value from the node data (e.g., 'Use 16px' or 'Use #FFFFFF'). NEVER output names starting with 'tokens.' or use raw IDs. Focus on implementation details, edge cases, and behavior." : "" }
-            { includeDimensions ? "Include the node dimensions (width × height px)." : "" }
-            { includeTextCounts ? "Include text counts for different languages separately and add a total count." : "" }
+Only include the parts explicitly requested below. If a part is not requested, omit it completely. Do not add any extra sections on your own.
+{ annotationRequest ? "Custom user request:\n{annotationRequest}" : "" }
+Requested parts:
+{ includeNodeName ? "- Node name" : "" }
+            { includeDescription ? "- Detailed description of what this element is" : "" }
+            { includeUsageGuidelines ? "- Usage guidelines: 2-3 ✅ Do items and 2-3 ❌ Don't items tailored to the component's role, prominence, variant, size, label length, and page hierarchy" : "" }
+            { includeHandOffNote ? "- Hand off note for developers. For each implemented property (fills, padding, spacing, radius, etc.), check if a human-readable design token name exists in the 'tokens' object. If a token name is found, use it (e.g., 'Use token \"Primary/Blue-500\"'). If NO token name is found in the 'tokens' object, use the raw numeric or hex value from the node data (e.g., 'Use 16px' or 'Use #FFFFFF'). NEVER output names starting with 'tokens.' or use raw IDs. Focus on implementation details, edge cases, and behavior." : "" }
+            { includeDimensions ? "- Node dimensions (width × height px)" : "" }
+            { includeTextCounts ? "- Text counts for different languages separately and a total count" : "" }
+If no requested parts are listed, create a concise annotation that follows only the custom user request. If there is no custom user request either, create a short neutral annotation with no extra breakdown sections.
 
 Return ONLY JSON with commands: [
               { replaceExisting? { "action": "clearAnnotations" } : null},
