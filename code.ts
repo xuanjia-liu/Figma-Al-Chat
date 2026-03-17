@@ -240,6 +240,13 @@ function smartSetFill(node: GeometryMixin, targetColor: RGBA): boolean {
 }
 
 type SmartRenameCaseOnlyDelimiter = 'camelCase' | 'PascalCase' | '_' | '/' | '-' | ' ';
+type LocalSequenceOrder = 'zOrder' | 'reverse' | 'alphabetical';
+
+type EditableTextTarget =
+  | { kind: 'text'; node: TextNode }
+  | { kind: 'sticky'; node: StickyNode }
+  | { kind: 'shape-with-text'; node: ShapeWithTextNode }
+  | { kind: 'instance-prop'; node: InstanceNode; propertyKey: string; currentText: string };
 
 function splitNameIntoTokens(name: string): string[] {
   return name
@@ -344,6 +351,233 @@ function collectSmartRenameTargets(
   }
 
   return collected;
+}
+
+function getNodeSortText(node: SceneNode): string {
+  const text = extractTextContent([node]).trim();
+  if (text) return text.toLowerCase();
+  return (node.name || '').trim().toLowerCase();
+}
+
+function getNodeAbsolutePosition(node: SceneNode): { x: number; y: number } {
+  const transform = node.absoluteTransform;
+  return {
+    x: transform[0][2],
+    y: transform[1][2]
+  };
+}
+
+function sortSceneNodesByOrder(nodes: readonly SceneNode[], order: LocalSequenceOrder = 'zOrder'): SceneNode[] {
+  const sorted = [...nodes];
+
+  if (order === 'alphabetical') {
+    sorted.sort((a, b) => getNodeSortText(a).localeCompare(getNodeSortText(b), undefined, { numeric: true }));
+    return sorted;
+  }
+
+  sorted.sort((a, b) => {
+    const posA = getNodeAbsolutePosition(a);
+    const posB = getNodeAbsolutePosition(b);
+    if (posA.y !== posB.y) return posA.y - posB.y;
+    if (posA.x !== posB.x) return posA.x - posB.x;
+    return a.id.localeCompare(b.id);
+  });
+
+  if (order === 'reverse') {
+    sorted.reverse();
+  }
+
+  return sorted;
+}
+
+function getSequencePaddingDigits(
+  tokenLength: number,
+  sequenceNumber: number,
+  maxSequenceNumber: number,
+  explicitPadLength: number = 0
+): number {
+  if (explicitPadLength > 0) return explicitPadLength;
+  const autoDigits = Math.max(String(Math.max(sequenceNumber, maxSequenceNumber, 0)).length, 1);
+  return Math.max(tokenLength, autoDigits);
+}
+
+function replaceSequenceTokens(
+  template: string,
+  original: string,
+  sequenceNumber: number,
+  maxSequenceNumber: number,
+  explicitPadLength: number = 0
+): string {
+  const input = template || '';
+  return input
+    .replace(/\{original\}/g, original)
+    .replace(/\{(n+)\}/g, (_, token: string) => {
+      const digits = getSequencePaddingDigits(token.length, sequenceNumber, maxSequenceNumber, explicitPadLength);
+      return String(sequenceNumber).padStart(digits, '0');
+    });
+}
+
+function normalizeManagedSpacing(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function buildAffixedString(
+  original: string,
+  prefix: string,
+  suffix: string,
+  sequenceNumber: number,
+  maxSequenceNumber: number,
+  explicitPadLength: number = 0,
+  keepSpacing: boolean = false
+): string {
+  const prefixHasOriginal = /\{original\}/.test(prefix || '');
+  const suffixHasOriginal = /\{original\}/.test(suffix || '');
+  const resolvedPrefix = replaceSequenceTokens(prefix || '', original, sequenceNumber, maxSequenceNumber, explicitPadLength);
+  const resolvedSuffix = replaceSequenceTokens(suffix || '', original, sequenceNumber, maxSequenceNumber, explicitPadLength);
+
+  const combined = (prefixHasOriginal || suffixHasOriginal)
+    ? `${resolvedPrefix}${resolvedSuffix}`
+    : `${resolvedPrefix}${original}${resolvedSuffix}`;
+
+  return keepSpacing ? normalizeManagedSpacing(combined) : combined;
+}
+
+function cleanUpNameSegment(segment: string): string {
+  return segment
+    .replace(/[^\p{L}\p{N}\s\-_]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanUpLayerName(name: string): string {
+  if (!name) return '';
+  if (name.includes('=')) {
+    const [propertyPart, ...rest] = name.split('=');
+    return `${cleanUpNameSegment(propertyPart)}=${cleanUpNameSegment(rest.join('='))}`;
+  }
+  return cleanUpNameSegment(name);
+}
+
+async function resolveEditableTextTarget(node: SceneNode): Promise<EditableTextTarget | null> {
+  if (node.type === 'INSTANCE') {
+    const instance = node as InstanceNode;
+    try {
+      let mainComp: ComponentNode | null = null;
+      if ('getMainComponentAsync' in instance) {
+        mainComp = await (instance as any).getMainComponentAsync();
+      } else {
+        mainComp = (instance as any).mainComponent;
+      }
+
+      if (mainComp) {
+        const defs = (mainComp.parent && mainComp.parent.type === 'COMPONENT_SET')
+          ? (mainComp.parent as ComponentSetNode).componentPropertyDefinitions
+          : mainComp.componentPropertyDefinitions;
+
+        const textPropDefs = Object.entries(defs).filter(([_, d]) => (d as any).type === 'TEXT');
+        if (textPropDefs.length > 0) {
+          const bestMatch = textPropDefs.find(([key]) => {
+            const lowKey = key.toLowerCase();
+            return lowKey.includes('label') || lowKey.includes('text') || lowKey.includes('title') || lowKey.includes('content') || lowKey.includes('button');
+          });
+          const propertyKey = (bestMatch ? bestMatch[0] : textPropDefs[0][0]) || '';
+          const currentText = typeof (instance.componentProperties as any)?.[propertyKey]?.value === 'string'
+            ? (instance.componentProperties as any)[propertyKey].value
+            : '';
+          if (propertyKey) {
+            return { kind: 'instance-prop', node: instance, propertyKey, currentText };
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to resolve instance text property', error);
+    }
+  }
+
+  if (node.type === 'TEXT') return { kind: 'text', node: node as TextNode };
+  if (node.type === 'STICKY') return { kind: 'sticky', node: node as StickyNode };
+  if (node.type === 'SHAPE_WITH_TEXT') return { kind: 'shape-with-text', node: node as ShapeWithTextNode };
+
+  if ('children' in node) {
+    const container = node as ChildrenMixin;
+    let textNode = container.children.find(n => n.type === 'TEXT' && isEffectivelyVisible(n as SceneNode)) as TextNode | undefined;
+    if (!textNode && 'findOne' in container) {
+      textNode = (container as any).findOne((n: any) => n.type === 'TEXT' && isEffectivelyVisible(n as SceneNode)) as TextNode | undefined;
+    }
+    if (textNode) return { kind: 'text', node: textNode };
+  }
+
+  return null;
+}
+
+function getEditableTextTargetContent(target: EditableTextTarget): string {
+  switch (target.kind) {
+    case 'text':
+      return target.node.characters || '';
+    case 'sticky':
+      return target.node.text.characters || '';
+    case 'shape-with-text':
+      return target.node.text.characters || '';
+    case 'instance-prop':
+      return target.currentText || '';
+  }
+}
+
+async function setEditableTextTargetContent(target: EditableTextTarget, newText: string): Promise<void> {
+  switch (target.kind) {
+    case 'instance-prop':
+      target.node.setProperties({ [target.propertyKey]: newText });
+      return;
+    case 'sticky':
+      await loadAllFontsForTextSublayerNode(target.node.text);
+      target.node.text.characters = newText;
+      return;
+    case 'shape-with-text':
+      await loadAllFontsForTextSublayerNode(target.node.text);
+      target.node.text.characters = newText;
+      return;
+    case 'text': {
+      const textNode = target.node;
+      await loadAllFontsForTextNode(textNode);
+      if (textNode.fontName !== figma.mixed && textNode.fontSize !== figma.mixed && textNode.textStyleId === '') {
+        textNode.characters = newText;
+      } else {
+        const originalLen = textNode.characters.length;
+        const originalSegs = getTextStyleSegments(textNode);
+        textNode.characters = newText;
+        await reapplyTextStylesAfterReplace(textNode, originalSegs, originalLen, newText);
+      }
+      return;
+    }
+  }
+}
+
+function buildSelectionInfoPayload(selection: readonly SceneNode[]) {
+  const collectDescendantIds = (node: BaseNode): string[] => {
+    const ids: string[] = [];
+    if ('children' in node) {
+      for (const child of node.children) {
+        ids.push(child.id);
+        ids.push(...collectDescendantIds(child));
+      }
+    }
+    return ids;
+  };
+
+  return selection.map(node => {
+    let hasImageFill = false;
+    if ('fills' in node && Array.isArray(node.fills)) {
+      hasImageFill = node.fills.some((fill: Paint) => fill.type === 'IMAGE');
+    }
+    return {
+      name: node.name,
+      type: node.type,
+      id: node.id,
+      description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
+      hasImageFill,
+      descendantIds: collectDescendantIds(node)
+    };
+  });
 }
 
 // Global font cache to avoid redundant awaits during large batch operations
@@ -3780,6 +4014,14 @@ figma.ui.onmessage = async (msg: {
   height?: number,
   history?: any,
   delimiter?: SmartRenameCaseOnlyDelimiter,
+  formatPattern?: string,
+  startIndex?: number,
+  order?: LocalSequenceOrder,
+  padLength?: number,
+  replaceSubstring?: boolean,
+  prefix?: string,
+  suffix?: string,
+  keepSpacing?: boolean,
   onlySelected?: boolean,
   includeInstances?: boolean,
   keepOriginal?: boolean
@@ -4668,35 +4910,7 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'get-selection-info': {
-      // Helper function to recursively collect all descendant node IDs
-      const collectDescendantIds = (node: BaseNode): string[] => {
-        const ids: string[] = [];
-        if ('children' in node) {
-          for (const child of node.children) {
-            ids.push(child.id);
-            ids.push(...collectDescendantIds(child));
-          }
-        }
-        return ids;
-      };
-
-      const info = selection.map(node => {
-        let hasImageFill = false;
-        if ('fills' in node && Array.isArray(node.fills)) {
-          hasImageFill = node.fills.some((fill: any) => fill.type === 'IMAGE');
-        }
-        // Collect all descendant node IDs for comment searching
-        const descendantIds = collectDescendantIds(node);
-        return {
-          name: node.name,
-          type: node.type,
-          id: node.id,
-          description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
-          hasImageFill,
-          descendantIds
-        };
-      });
-      figma.ui.postMessage({ type: 'selection-info', data: info });
+      figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(selection) });
       break;
     }
 
@@ -4736,38 +4950,209 @@ figma.ui.onmessage = async (msg: {
           total: targets.length
         });
 
-        const collectDescendantIds = (node: BaseNode): string[] => {
-          const ids: string[] = [];
-          if ('children' in node) {
-            for (const child of node.children) {
-              ids.push(child.id);
-              ids.push(...collectDescendantIds(child));
-            }
-          }
-          return ids;
-        };
-
-        const updatedInfo = figma.currentPage.selection.map(node => {
-          let hasImageFill = false;
-          if ('fills' in node && Array.isArray(node.fills)) {
-            hasImageFill = node.fills.some((fill: Paint) => fill.type === 'IMAGE');
-          }
-          return {
-            name: node.name,
-            type: node.type,
-            id: node.id,
-            description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
-            hasImageFill,
-            descendantIds: collectDescendantIds(node)
-          };
-        });
-        figma.ui.postMessage({ type: 'selection-info', data: updatedInfo });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
       } catch (error) {
         console.error('smart-rename-case-only failed', error);
         figma.ui.postMessage({
           type: 'error',
           message: `Case-only rename failed: ${(error as Error)?.message || 'Unknown error'}`
         });
+      }
+      break;
+    }
+
+    case 'local-sequential-naming': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer to rename.' });
+          break;
+        }
+
+        const formatPattern = msg.formatPattern || 'Layer {n}';
+        const startIndex = typeof msg.startIndex === 'number' ? msg.startIndex : 1;
+        const order = msg.order || 'zOrder';
+        const padLength = typeof msg.padLength === 'number' ? msg.padLength : 0;
+        const targets = sortSceneNodesByOrder(selection.filter(isRenameableSceneNode), order);
+        const maxSequenceNumber = startIndex + Math.max(targets.length - 1, 0);
+
+        let renamed = 0;
+        let skipped = 0;
+
+        targets.forEach((node, index) => {
+          const nextName = replaceSequenceTokens(formatPattern, node.name, startIndex + index, maxSequenceNumber, padLength);
+          if (!nextName || nextName === node.name) {
+            skipped++;
+            return;
+          }
+          node.name = nextName;
+          renamed++;
+        });
+
+        figma.ui.postMessage({ type: 'local-sequential-naming-result', renamed, skipped, total: targets.length });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+      } catch (error) {
+        console.error('local-sequential-naming failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Sequential naming failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'local-prefix-suffix-naming': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer to rename.' });
+          break;
+        }
+
+        const prefix = msg.prefix || '';
+        const suffix = msg.suffix || '';
+        const startIndex = typeof msg.startIndex === 'number' ? msg.startIndex : 1;
+        const padLength = typeof msg.padLength === 'number' ? msg.padLength : 0;
+        const keepSpacing = msg.keepSpacing === true;
+        const targets = selection.filter(isRenameableSceneNode);
+        const maxSequenceNumber = startIndex + Math.max(targets.length - 1, 0);
+
+        let renamed = 0;
+        let skipped = 0;
+
+        targets.forEach((node, index) => {
+          const nextName = buildAffixedString(node.name, prefix, suffix, startIndex + index, maxSequenceNumber, padLength, keepSpacing);
+          if (!nextName || nextName === node.name) {
+            skipped++;
+            return;
+          }
+          node.name = nextName;
+          renamed++;
+        });
+
+        figma.ui.postMessage({ type: 'local-prefix-suffix-naming-result', renamed, skipped, total: targets.length });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+      } catch (error) {
+        console.error('local-prefix-suffix-naming failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Prefix/suffix naming failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'local-clean-up-names': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer to rename.' });
+          break;
+        }
+
+        const targets = selection.filter(isRenameableSceneNode);
+        let renamed = 0;
+        let skipped = 0;
+
+        targets.forEach((node) => {
+          const nextName = cleanUpLayerName(node.name);
+          if (!nextName || nextName === node.name) {
+            skipped++;
+            return;
+          }
+          node.name = nextName;
+          renamed++;
+        });
+
+        figma.ui.postMessage({ type: 'local-clean-up-names-result', renamed, skipped, total: targets.length });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+      } catch (error) {
+        console.error('local-clean-up-names failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Clean up names failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'local-format-sequencer': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one text layer.' });
+          break;
+        }
+
+        const formatPattern = msg.formatPattern || 'Item {n}';
+        const startIndex = typeof msg.startIndex === 'number' ? msg.startIndex : 1;
+        const order = msg.order || 'zOrder';
+        const targets = sortSceneNodesByOrder(selection, order);
+        const maxSequenceNumber = startIndex + Math.max(targets.length - 1, 0);
+
+        let updated = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (let index = 0; index < targets.length; index++) {
+          const node = targets[index];
+          const target = await resolveEditableTextTarget(node);
+          if (!target) {
+            skipped++;
+            continue;
+          }
+
+          const original = getEditableTextTargetContent(target);
+          const nextText = replaceSequenceTokens(formatPattern, original, startIndex + index, maxSequenceNumber);
+          if (nextText === original) {
+            skipped++;
+            continue;
+          }
+
+          try {
+            await setEditableTextTargetContent(target, nextText);
+            updated++;
+          } catch (error) {
+            console.error('local-format-sequencer failed for node', node.id, error);
+            failed++;
+          }
+        }
+
+        figma.ui.postMessage({ type: 'local-format-sequencer-result', updated, skipped, failed, total: targets.length });
+      } catch (error) {
+        console.error('local-format-sequencer failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Format sequencer failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'local-add-prefix-suffix-text': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one text layer.' });
+          break;
+        }
+
+        const prefix = msg.prefix || '';
+        const suffix = msg.suffix || '';
+        let updated = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const node of selection) {
+          const target = await resolveEditableTextTarget(node);
+          if (!target) {
+            skipped++;
+            continue;
+          }
+
+          const original = getEditableTextTargetContent(target);
+          const nextText = `${prefix}${original}${suffix}`;
+          if (nextText === original) {
+            skipped++;
+            continue;
+          }
+
+          try {
+            await setEditableTextTargetContent(target, nextText);
+            updated++;
+          } catch (error) {
+            console.error('local-add-prefix-suffix-text failed for node', node.id, error);
+            failed++;
+          }
+        }
+
+        figma.ui.postMessage({ type: 'local-add-prefix-suffix-text-result', updated, skipped, failed, total: selection.length });
+      } catch (error) {
+        console.error('local-add-prefix-suffix-text failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Add prefix/suffix failed: ${(error as Error)?.message || 'Unknown error'}` });
       }
       break;
     }

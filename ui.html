@@ -12608,6 +12608,14 @@
       'listAllComments',
       'browseStyles'
     ]);
+    const NON_AI_LOCAL_TASKS = new Set([
+      'Smart rename',
+      'Sequential naming',
+      'Prefix/Suffix (smart)',
+      'Clean up names',
+      'Format sequencer',
+      'Add prefix/suffix'
+    ]);
     // Store model metadata (displayName, description, etc.) by provider and model ID
     let modelMetadata = {
       gemini: {},
@@ -13284,10 +13292,25 @@ Answer capability questions with the above (in the user's language); otherwise r
       return NON_AI_DIRECT_ACTIONS.has(actionKey);
     }
 
+    function isLocalTaskAllowedInAiOff(taskOrName) {
+      const name = typeof taskOrName === 'string'
+        ? taskOrName
+        : (taskOrName && typeof taskOrName.name === 'string' ? taskOrName.name : '');
+      return NON_AI_LOCAL_TASKS.has(name);
+    }
+
+    function isTaskAvailableInAiOff(task, fallbackName = '') {
+      if (!isAiOffModeEnabled()) return true;
+      if (isQuickActionAllowedInAiOff(task)) {
+        return true;
+      }
+      return isLocalTaskAllowedInAiOff(fallbackName || task?.name || '');
+    }
+
     function isQuickActionAllowedInAiOff(task) {
       if (!isAiOffModeEnabled()) return true;
       if (!task) return false;
-      if (task.name === 'Smart rename') {
+      if (isLocalTaskAllowedInAiOff(task)) {
         return true;
       }
       if (task.directAction) {
@@ -14820,7 +14843,7 @@ Answer capability questions with the above (in the user's language); otherwise r
         ? getMostUsedQuickActions(1)
         : [];
       lastUsed.forEach((action, idx) => {
-        const isDisabled = !isQuickActionAllowedInAiOff(action.task);
+        const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
         const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
         html += `
@@ -23371,7 +23394,7 @@ Please provide the final summary of what was modified in the same language as th
         const taskCategory = task.category || selectedCategory;
         const icon = getActionIconForTask(task, taskCategory);
         const noSelectionClass = task.noSelection ? ' no-selection' : '';
-        const aiDisabled = !isQuickActionAllowedInAiOff(task);
+        const aiDisabled = !isTaskAvailableInAiOff(task, task.name);
         const aiDisabledClass = aiDisabled ? ' ai-disabled' : '';
         const noSelectionBadge = task.noSelection ? '<span class="no-selection-badge" title="No selection required">✨</span>' : '';
         // Escape icon for data attribute (encode HTML)
@@ -23406,7 +23429,7 @@ Please provide the final summary of what was modified in the same language as th
 
           // Get the full task object
           const task = filteredTasks[taskIndex];
-          if (!isQuickActionAllowedInAiOff(task)) {
+          if (!isTaskAvailableInAiOff(task, actionName || task?.name || '')) {
             showToast(getAiOffBlockedMessage(actionName || task?.name || 'Quick action'), 'error');
             closeCommandsDrawer();
             return;
@@ -23445,6 +23468,14 @@ Please provide the final summary of what was modified in the same language as th
             await handleSummarizeComments(actionName, actionIcon);
           } else {
             // Direct execution for simple actions
+
+            // Local deterministic tasks bypass AI entirely
+            if (NON_AI_LOCAL_TASKS.has(actionName) && actionName !== 'Smart rename') {
+              closeCommandsDrawer();
+              recordQuickActionUsage(actionName);
+              await runLocalDeterministicQuickAction(actionName, {});
+              return;
+            }
 
             // Handle askMode actions - they run in ask mode
             if (task && task.askMode) {
@@ -36804,6 +36835,98 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       });
     }
 
+    async function runLocalActionRequest({ requestType, resultType, payload, timeoutMs = 15000, errorPrefixes = [] }) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timed out while running local quick action.'));
+        }, timeoutMs);
+
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (!msg) return;
+
+          if (msg.type === resultType) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(msg);
+            return;
+          }
+
+          if (msg.type === 'error' && typeof msg.message === 'string' && errorPrefixes.some(prefix => msg.message.includes(prefix))) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            reject(new Error(msg.message));
+          }
+        };
+
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: { type: requestType, ...payload } }, '*');
+      });
+    }
+
+    async function runLocalDeterministicQuickAction(actionName, values) {
+      switch (actionName) {
+        case 'Sequential naming':
+          return runLocalActionRequest({
+            requestType: 'local-sequential-naming',
+            resultType: 'local-sequential-naming-result',
+            payload: {
+              formatPattern: values.formatPattern || 'Layer {n}',
+              startIndex: values.startIndex ?? 1,
+              order: values.order || 'zOrder',
+              padLength: values.padLength ?? 0,
+              replaceSubstring: values.replaceSubstring === true
+            },
+            errorPrefixes: ['Sequential naming failed', 'Please select at least one layer to rename.']
+          });
+        case 'Prefix/Suffix (smart)':
+          return runLocalActionRequest({
+            requestType: 'local-prefix-suffix-naming',
+            resultType: 'local-prefix-suffix-naming-result',
+            payload: {
+              prefix: values.prefix || '',
+              suffix: values.suffix || '',
+              startIndex: values.startIndex ?? 1,
+              padLength: values.padLength ?? 0,
+              keepSpacing: values.keepSpacing === true
+            },
+            errorPrefixes: ['Prefix/suffix naming failed', 'Please select at least one layer to rename.']
+          });
+        case 'Clean up names':
+          return runLocalActionRequest({
+            requestType: 'local-clean-up-names',
+            resultType: 'local-clean-up-names-result',
+            payload: {},
+            errorPrefixes: ['Clean up names failed', 'Please select at least one layer to rename.']
+          });
+        case 'Format sequencer':
+          return runLocalActionRequest({
+            requestType: 'local-format-sequencer',
+            resultType: 'local-format-sequencer-result',
+            payload: {
+              formatPattern: values.formatPattern || 'Task {n}: {original}',
+              startIndex: values.startIndex ?? 1,
+              order: values.order || 'zOrder',
+              replaceSubstring: values.replaceSubstring === true
+            },
+            errorPrefixes: ['Format sequencer failed', 'Please select at least one text layer.']
+          });
+        case 'Add prefix/suffix':
+          return runLocalActionRequest({
+            requestType: 'local-add-prefix-suffix-text',
+            resultType: 'local-add-prefix-suffix-text-result',
+            payload: {
+              prefix: values.prefix || '',
+              suffix: values.suffix || ''
+            },
+            errorPrefixes: ['Add prefix/suffix failed', 'Please select at least one text layer.']
+          });
+        default:
+          throw new Error(`Unsupported local action: ${actionName}`);
+      }
+    }
+
     // ==========================================
     // Fill from Online Image
     // ==========================================
@@ -38004,6 +38127,13 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
             showToast('In No AI mode, Smart rename only supports "Case only (keep text)".', 'error');
             return;
           }
+        }
+
+        if (NON_AI_LOCAL_TASKS.has(action.name) && action.name !== 'Smart rename') {
+          closePromptDrawer();
+          closeCommandsDrawer();
+          await runLocalDeterministicQuickAction(action.name, values);
+          return;
         }
 
         if (action.directAction) {
@@ -47105,7 +47235,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       const itemsHtml = slashMenuItems.map((action, idx) => {
         const isActive = idx === slashMenuSelectedIndex;
-        const isDisabled = !isQuickActionAllowedInAiOff(action.task);
+        const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
         const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
         return `
@@ -47130,7 +47260,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (slashMenuItems.length === 0) {
         slashMenuSelectedIndex = -1;
       } else {
-        const firstEnabled = slashMenuItems.findIndex(action => isQuickActionAllowedInAiOff(action.task));
+        const firstEnabled = slashMenuItems.findIndex(action => isTaskAvailableInAiOff(action.task, action.name));
         slashMenuSelectedIndex = firstEnabled >= 0 ? firstEnabled : 0;
       }
       slashMenuVisible = slashMenuItems.length > 0;
@@ -47155,7 +47285,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       for (let i = 0; i < count; i++) {
         nextIndex = (nextIndex + delta + count) % count;
         const action = slashMenuItems[nextIndex];
-        if (isQuickActionAllowedInAiOff(action?.task)) {
+        if (isTaskAvailableInAiOff(action?.task, action?.name || '')) {
           slashMenuSelectedIndex = nextIndex;
           renderSlashActionsMenu();
           return;
@@ -47374,7 +47504,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       chatInput.style.height = 'auto';
 
       const task = action.task;
-      if (!isQuickActionAllowedInAiOff(task)) {
+      if (!isTaskAvailableInAiOff(task, task?.name || action?.name || '')) {
         showToast(getAiOffBlockedMessage(task.name || 'Quick action'), 'error');
         return;
       }
@@ -49632,6 +49762,38 @@ Based on the user's instruction, generate the appropriate commands to modify the
             showToast(`Renamed ${renamed}/${total} layer${renamed === 1 ? '' : 's'} with case-only formatting.`, 'success');
           } else {
             showToast(`No layer names needed changes${total ? ` out of ${total}` : ''}.`, 'info');
+          }
+          break;
+        }
+
+        case 'local-sequential-naming-result':
+        case 'local-prefix-suffix-naming-result':
+        case 'local-clean-up-names-result': {
+          const renamed = Number(msg.renamed) || 0;
+          const skipped = Number(msg.skipped) || 0;
+          const total = Number(msg.total) || (renamed + skipped);
+          if (renamed > 0) {
+            showToast(`Renamed ${renamed}/${total} layer${renamed === 1 ? '' : 's'}.`, 'success');
+          } else {
+            showToast(`No layer names needed changes${total ? ` out of ${total}` : ''}.`, 'info');
+          }
+          break;
+        }
+
+        case 'local-format-sequencer-result':
+        case 'local-add-prefix-suffix-text-result': {
+          const updated = Number(msg.updated) || 0;
+          const skipped = Number(msg.skipped) || 0;
+          const failed = Number(msg.failed) || 0;
+          const total = Number(msg.total) || (updated + skipped + failed);
+          if (updated > 0 && failed === 0) {
+            showToast(`Updated ${updated}/${total} text layer${updated === 1 ? '' : 's'}.`, 'success');
+          } else if (updated > 0 && failed > 0) {
+            showToast(`Updated ${updated}/${total} text layers, ${failed} failed.`, 'warning');
+          } else if (failed > 0) {
+            showToast(`Failed to update ${failed}/${total} text layer${failed === 1 ? '' : 's'}.`, 'error');
+          } else {
+            showToast(`No text content needed changes${total ? ` out of ${total}` : ''}.`, 'info');
           }
           break;
         }
