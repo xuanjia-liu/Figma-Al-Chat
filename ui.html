@@ -11008,7 +11008,8 @@
     .cmd-info {
       flex: 1;
       display: flex;
-      align-items: baseline;
+      align-items: flex-start;
+      flex-wrap: wrap;
       gap: 6px;
       min-width: 0;
     }
@@ -11049,9 +11050,13 @@
       font-family: 'Inter', sans-serif;
       font-size: 12px;
       color: var(--text-secondary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      flex: 1 1 220px;
+      min-width: 0;
       font-weight: 400;
     }
 
@@ -13353,6 +13358,107 @@ Answer capability questions with the above (in the user's language); otherwise r
         return name.split('/').pop().trim();
       }
       return name.replace(/^models\//i, '').trim();
+    }
+
+    function buildGeminiImageGenerationConfig(modelName, options = {}) {
+      const lower = normalizeGeminiModelName(modelName).toLowerCase();
+      const selectedRatio = options.aspectRatio || '1:1';
+      const selectedRes = options.imageSize || '1K';
+      const thinkingLevel = options.thinkingLevel || 'minimal';
+      const config = {};
+      const imageConfig = {};
+
+      if (selectedRatio) {
+        imageConfig.aspectRatio = selectedRatio;
+      }
+
+      if (selectedRes) {
+        imageConfig.imageSize = selectedRes;
+      }
+
+      if (Object.keys(imageConfig).length > 0) {
+        config.imageConfig = imageConfig;
+      }
+
+      const isNanoBanana2 = lower.includes('gemini-3.1-flash-image-preview');
+      const isGemini3ProPreview = lower.includes('gemini-3-pro-image-preview') || lower.includes('gemini-3.0-pro');
+      const supportsThinking = isNanoBanana2 || isGemini3ProPreview;
+
+      // `gemini-3.1-flash-image-preview` is stricter than the older image-preview models.
+      // Keep its request body aligned with the current Google docs and omit extra knobs
+      // that can trigger `INVALID_ARGUMENT` in Generate image quick actions.
+      if (!isNanoBanana2) {
+        config.responseModalities = ['TEXT', 'IMAGE'];
+      }
+
+      if (supportsThinking && thinkingLevel !== 'minimal') {
+        const normalizedThinkingLevel = thinkingLevel.toLowerCase() === 'high' ? 'HIGH' : 'LOW';
+        config.thinkingConfig = {
+          thinkingLevel: normalizedThinkingLevel,
+          includeThoughts: true
+        };
+      }
+
+      return Object.keys(config).length > 0 ? config : undefined;
+    }
+
+    async function requestGeminiImageGeneration(modelUrl, modelName, parts, options = {}) {
+      const selectedRes = options.imageSize || '1K';
+      const requestBody = {
+        contents: [{ parts }],
+        generationConfig: buildGeminiImageGenerationConfig(modelName, options)
+      };
+
+      let response = await fetch(modelUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData?.error?.message || '';
+        const errorStatus = errorData?.error?.status || '';
+        const isNanoBanana2 = normalizeGeminiModelName(modelName).toLowerCase() === 'gemini-3.1-flash-image-preview';
+        const isKnownHalfKIssue = isNanoBanana2 &&
+          selectedRes === '0.5K' &&
+          errorStatus === 'INVALID_ARGUMENT';
+
+        // The Nano Banana 2 model page documents 0.5K support, but the public
+        // generateContent API schema still lists only 1K/2K/4K. When the backend
+        // rejects 0.5K, retry at 1K so the action still completes instead of hard-failing.
+        if (isKnownHalfKIssue) {
+          console.warn('Gemini 3.1 Flash rejected 0.5K imageSize, retrying at 1K:', errorData);
+          showToast('Nano Banana 2 rejected 0.5K in the API. Retrying with 1K.', 'warning');
+
+          const retryBody = {
+            contents: [{ parts }],
+            generationConfig: buildGeminiImageGenerationConfig(modelName, {
+              ...options,
+              imageSize: '1K'
+            })
+          };
+
+          response = await fetch(modelUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(retryBody)
+          });
+
+          if (!response.ok) {
+            const retryErrorData = await response.json().catch(() => ({}));
+            const retryErr = new Error(retryErrorData.error?.message || `Gemini API failed with status ${response.status}`);
+            retryErr.rawData = retryErrorData;
+            throw retryErr;
+          }
+        } else {
+          const err = new Error(errorMessage || `Gemini API failed with status ${response.status}`);
+          err.rawData = errorData;
+          throw err;
+        }
+      }
+
+      return response.json();
     }
 
     // List available Gemini models for a given key
@@ -27971,11 +28077,6 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             const b64 = await getImageFromOpenAIResponse(data);
             return { image: b64, raw: data };
           } else if (isGeminiModel) {
-            const isNewImageModel = selectedModel.toLowerCase().includes('nano-banana') ||
-              selectedModel.toLowerCase().includes('gemini-2.0') ||
-              selectedModel.toLowerCase().includes('gemini-2.5') ||
-              selectedModel.toLowerCase().includes('gemini-3');
-
             const modelUrl = selectedModel.startsWith('models/') || selectedModel.startsWith('publishers/')
               ? `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${effectiveApiKey}`
               : `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${effectiveApiKey}`;
@@ -27998,33 +28099,11 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
               }
             }
 
-            const response = await fetch(modelUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: parts }],
-                generationConfig: isNewImageModel ? {
-                  responseModalities: ["TEXT", "IMAGE"],
-                  imageConfig: { aspectRatio: selectedRatio, imageSize: selectedRes },
-                  ...(thinkingLevel !== 'minimal' && !selectedModel.toLowerCase().includes('gemini-3-pro') ? {
-                    thinkingConfig: {
-                      thinkingLevel: thinkingLevel.charAt(0).toUpperCase() + thinkingLevel.slice(1).toLowerCase(),
-                      includeThoughts: true
-                    }
-                  } : {})
-                } : {
-                  imageConfig: { aspectRatio: selectedRatio, imageSize: selectedRes }
-                }
-              })
+            const data = await requestGeminiImageGeneration(modelUrl, selectedModel, parts, {
+              aspectRatio: selectedRatio,
+              imageSize: selectedRes,
+              thinkingLevel: thinkingLevel
             });
-
-            if (!response.ok) {
-              const errorData = await response.json().catch(() => ({}));
-              const err = new Error(errorData.error?.message || `Gemini API failed with status ${response.status}`);
-              err.rawData = errorData;
-              throw err;
-            }
-            const data = await response.json();
             const candidate = data.candidates?.[0];
             const allParts = candidate?.content?.parts || [];
             const imagePart = allParts.find(p => p.inlineData?.data);
@@ -33783,7 +33862,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           if (selectedProvider === 'openai') {
             defaultModel = 'gpt-image-1.5';
           } else {
-            defaultModel = aspectRatio !== '1:1' ? 'nano-banana-pro' : 'imagen-4.0-fast-generate-001';
+            defaultModel = aspectRatio !== '1:1' ? 'gemini-3.1-flash-image-preview' : 'imagen-4.0-fast-generate-001';
           }
 
           return {
@@ -45870,11 +45949,6 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
             const b64 = await getImageFromOpenAIResponse(data);
             return { image: b64, raw: data };
           } else if (isGeminiModel) {
-            const isNewImageModel = selectedModel.toLowerCase().includes('nano-banana') ||
-              selectedModel.toLowerCase().includes('gemini-2.0') ||
-              selectedModel.toLowerCase().includes('gemini-2.5') ||
-              selectedModel.toLowerCase().includes('gemini-3');
-
             const modelUrl = selectedModel.startsWith('models/') || selectedModel.startsWith('publishers/')
               ? `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${effectiveApiKey}`
               : `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${effectiveApiKey}`;
@@ -45892,27 +45966,10 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
               });
             }
 
-            const response = await fetch(modelUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: parts }],
-                generationConfig: isNewImageModel ? {
-                  responseModalities: ["TEXT", "IMAGE"],
-                  imageConfig: { aspectRatio: selectedRatio, imageSize: selectedRes }
-                } : {
-                  imageConfig: { aspectRatio: selectedRatio, imageSize: selectedRes }
-                }
-              })
+            const data = await requestGeminiImageGeneration(modelUrl, selectedModel, parts, {
+              aspectRatio: selectedRatio,
+              imageSize: selectedRes
             });
-
-            if (!response.ok) {
-              const errorData = await response.json().catch(() => ({}));
-              const err = new Error(errorData.error?.message || `Gemini API failed with status ${response.status}`);
-              err.rawData = errorData;
-              throw err;
-            }
-            const data = await response.json();
             const candidate = data.candidates?.[0];
             const allParts = candidate?.content?.parts || [];
             const imagePart = allParts.find(p => p.inlineData?.data);
