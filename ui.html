@@ -19674,19 +19674,56 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           help: 'Adds a detailed description to the selected component with customizable sections.',
           requiredContext: ContextMode.ALL,
           fields: [
+            {
+              key: 'descriptionRequest',
+              type: 'textarea',
+              label: 'Description',
+              placeholder: 'Describe the specific component description you want, such as what to emphasize, explain, or document.',
+              default: ''
+            },
             { key: 'includePurpose', type: 'checkbox', label: 'Component purpose/role', default: true, hint: 'Describe what the component does and its primary function' },
             { key: 'includeGuidelines', type: 'checkbox', label: 'Usage Guidelines', default: true, hint: '2-3 ✅ Do items and 2-3 ❌ Don\'t items (no redundant items)' },
             { key: 'includeVariants', type: 'checkbox', label: 'Variants and states', default: false, hint: 'List available variants and key states' },
             { key: 'includeResponsiveness', type: 'checkbox', label: 'Responsiveness/behavior', default: false },
             { key: 'includeContent', type: 'checkbox', label: 'Content guidelines', default: false, hint: 'Guidelines for text length, icons, or placeholder content (e.g., \'Limit labels to 2-3 words\')' }
           ],
-          promptTemplate: `Generate a description for the selected component(s) and write it into the component description instead of replying in chat.
+          promptTemplate: (values) => {
+            const sections = [];
+            if (values.includePurpose) {
+              sections.push('- COMPONENT PURPOSE/ROLE: describe what the component does and its primary function with precise wording.');
+            }
+            if (values.includeGuidelines) {
+              sections.push("- USAGE GUIDELINES: exactly 2-3 ✅ Do items and 2-3 ❌ Don't items. Tailor to the component's role, prominence, variant, size, label length, and page hierarchy. Avoid redundant items.");
+            }
+            if (values.includeVariants) {
+              sections.push('- VARIANTS AND STATES: list available variants and key states.');
+            }
+            if (values.includeResponsiveness) {
+              sections.push('- RESPONSIVENESS/BEHAVIOR: describe how the component behaves across different screen sizes or interactions.');
+            }
+            if (values.includeContent) {
+              sections.push("- CONTENT GUIDELINES: provide guidelines for text length, icons, or placeholder content (for example, 'Limit labels to 2-3 words').");
+            }
 
-{ includePurpose ? "Include a section for COMPONENT PURPOSE/ROLE that describes what the component does and its primary function with precise wording." : "" }
-            { includeGuidelines ? "Include a USAGE GUIDELINES section with exactly 2-3 ✅ Do: items and 2-3 ❌ Don't: items. Tailor to the component's role, prominence, variant, size, label length, and page hierarchy. Avoid redundant items." : "" }
-            { includeVariants ? "Include a VARIANTS AND STATES section that lists available variants and key states." : "" }
-            { includeResponsiveness ? "Include a RESPONSIVENESS/BEHAVIOR section describing how the component behaves across different screen sizes or interactions." : "" }
-            { includeContent ? "Include a CONTENT GUIDELINES section with guidelines for text length, icons, or placeholder content (e.g., 'Limit labels to 2-3 words')." : "" } `,
+            const promptParts = [
+              'Generate a description for the selected component(s) and write it into the component description instead of replying in chat.',
+              'Only include the sections explicitly requested below. If a section is not requested, omit it completely. Do not add any extra sections on your own.'
+            ];
+
+            if (values.descriptionRequest && String(values.descriptionRequest).trim()) {
+              promptParts.push(`Custom user request:\n${String(values.descriptionRequest).trim()}`);
+            }
+
+            if (sections.length > 0) {
+              promptParts.push(`Requested sections:\n${sections.join('\n')}`);
+            } else if (values.descriptionRequest && String(values.descriptionRequest).trim()) {
+              promptParts.push('No preset sections were selected. Write a concise component description that follows only the custom user request.');
+            } else {
+              promptParts.push('No preset sections were selected. Write a short neutral component description with no extra breakdown sections.');
+            }
+
+            return promptParts.join('\n\n');
+          },
         },
         {
           name: 'Add annotation',
@@ -19749,25 +19786,53 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           includeTokens: true,
           // Use promptTemplate so the drawer can build the prompt dynamically.
           // We store the generated content in labelMarkdown to avoid invalid annotation properties.
-          promptTemplate: `
-Generate annotation content for the selected node.
-Write ANNOTATION_CONTENT in the same primary language as the selected node.Do not translate; if the selection is mixed - language, use the majority language.
-Only include the parts explicitly requested below. If a part is not requested, omit it completely. Do not add any extra sections on your own.
-{ annotationRequest ? "Custom user request:\n{annotationRequest}" : "" }
-Requested parts:
-{ includeNodeName ? "- Node name" : "" }
-            { includeDescription ? "- Detailed description of what this element is" : "" }
-            { includeUsageGuidelines ? "- Usage guidelines: 2-3 ✅ Do items and 2-3 ❌ Don't items tailored to the component's role, prominence, variant, size, label length, and page hierarchy" : "" }
-            { includeHandOffNote ? "- Hand off note for developers. For each implemented property (fills, padding, spacing, radius, etc.), check if a human-readable design token name exists in the 'tokens' object. If a token name is found, use it (e.g., 'Use token \"Primary/Blue-500\"'). If NO token name is found in the 'tokens' object, use the raw numeric or hex value from the node data (e.g., 'Use 16px' or 'Use #FFFFFF'). NEVER output names starting with 'tokens.' or use raw IDs. Focus on implementation details, edge cases, and behavior." : "" }
-            { includeDimensions ? "- Node dimensions (width × height px)" : "" }
-            { includeTextCounts ? "- Text counts for different languages separately and a total count" : "" }
-If no requested parts are listed, create a concise annotation that follows only the custom user request. If there is no custom user request either, create a short neutral annotation with no extra breakdown sections.
+          promptTemplate: (values) => {
+            const parts = [];
+            if (values.includeNodeName) {
+              parts.push('- Node name');
+            }
+            if (values.includeDescription) {
+              parts.push('- Detailed description of what this element is');
+            }
+            if (values.includeUsageGuidelines) {
+              parts.push("- Usage guidelines: 2-3 ✅ Do items and 2-3 ❌ Don't items tailored to the component's role, prominence, variant, size, label length, and page hierarchy");
+            }
+            if (values.includeHandOffNote) {
+              parts.push('- Hand off note for developers. For each implemented property (fills, padding, spacing, radius, etc.), check if a human-readable design token name exists in the \'tokens\' object. If a token name is found, use it (e.g., \'Use token "Primary/Blue-500"\'). If NO token name is found in the \'tokens\' object, use the raw numeric or hex value from the node data (e.g., \'Use 16px\' or \'Use #FFFFFF\'). NEVER output names starting with \'tokens.\' or use raw IDs. Focus on implementation details, edge cases, and behavior.');
+            }
+            if (values.includeDimensions) {
+              parts.push('- Node dimensions (width × height px)');
+            }
+            if (values.includeTextCounts) {
+              parts.push('- Text counts for different languages separately and a total count');
+            }
 
-Return ONLY JSON with commands: [
+            const promptParts = [
+              'Generate annotation content for the selected node.',
+              'Write ANNOTATION_CONTENT in the same primary language as the selected node. Do not translate; if the selection is mixed-language, use the majority language.',
+              'Only include the parts explicitly requested below. If a part is not requested, omit it completely. Do not add any extra sections on your own.'
+            ];
+
+            if (values.annotationRequest && String(values.annotationRequest).trim()) {
+              promptParts.push(`Custom user request:\n${String(values.annotationRequest).trim()}`);
+            }
+
+            if (parts.length > 0) {
+              promptParts.push(`Requested parts:\n${parts.join('\n')}`);
+            } else if (values.annotationRequest && String(values.annotationRequest).trim()) {
+              promptParts.push('No preset parts were selected. Create a concise annotation that follows only the custom user request.');
+            } else {
+              promptParts.push('No preset parts were selected. Create a short neutral annotation with no extra breakdown sections.');
+            }
+
+            promptParts.push(`Return ONLY JSON with commands: [
               { replaceExisting? { "action": "clearAnnotations" } : null},
   { "action": "addAnnotation", "labelMarkdown": "ANNOTATION_CONTENT", "properties": [] }
       ]
-        `
+        `);
+
+            return promptParts.join('\n\n');
+          }
         },
         {
           name: 'Add interaction',
