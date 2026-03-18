@@ -8384,6 +8384,10 @@
       align-items: center;
     }
 
+    .prompt-field-header--with-actions {
+      min-height: 22px;
+    }
+
     .prompt-ai-actions {
       display: flex;
       gap: var(--space-xs);
@@ -8926,6 +8930,11 @@
     .prompt-field-row .prompt-field {
       flex: 1;
       min-width: 0;
+    }
+
+    .prompt-field-row .prompt-field.prompt-field--compact {
+      flex: 0 0 64px;
+      min-width: 64px;
     }
 
     /* Image Upload Field */
@@ -11739,33 +11748,6 @@
               </div>
             </div>
 
-            <!-- Icons Category -->
-            <div class="settings-category-panel" id="category-icons">
-              <div class="settings-group-title">Icon Settings</div>
-              <div class="setting-item">
-                <label class="setting-label">Icon Source</label>
-                <select class="setting-input" id="iconApiSourceSelect">
-                  <option value="iconify">Iconify (Standard UI Icons)</option>
-                  <option value="antv">AntV Infographic (100k+ Specialized Icons)</option>
-                  <option value="iconfont">Icon Font (Use installed Figma icon fonts)</option>
-                </select>
-                <div class="setting-hint">
-                  Choose where the "Create icon" action fetches icons from.
-                </div>
-              </div>
-              <div class="setting-item hidden" id="iconFontFamilySetting">
-                <label class="setting-label">Icon Font Family</label>
-                <select class="setting-input" id="iconFontFamilySelect">
-                  <option value="Font Awesome 5 Free">Font Awesome 5 Free</option>
-                  <option value="Font Awesome 6 Free">Font Awesome6 Free</option>
-                  <option value="Material Icons">Material Icons</option>
-                </select>
-                <div class="setting-hint">
-                  Used when Icon Source is set to Icon Font.
-                </div>
-              </div>
-            </div>
-
             <!-- Limits Category -->
             <div class="settings-category-panel" id="category-limits">
               <div class="settings-group-title">Selection Limits</div>
@@ -13156,8 +13138,6 @@
     let askBackContextCounter = 0;
     let isAIThinking = false;
     let cssFormat = 'classes';
-    let iconApiSource = 'iconify'; // 'iconify' | 'antv' | 'iconfont'
-    let iconFontFamily = 'Font Awesome 6 Free';
     let figmaPersonalToken = ''; // Figma Personal Access Token for REST API
     let quiverApiKey = '';
     let unsplashApiKey = '';
@@ -14867,8 +14847,6 @@ Answer capability questions with the above (in the user's language); otherwise r
         anthropicApiKey: anthropicApiKeyInput.value || '',
         anthropicModel: anthropicModelSelect.value || 'claude-sonnet-4-20250514',
         cssFormat: cssFormatSelect.value || 'classes',
-        iconApiSource: iconApiSourceSelect.value || 'iconify',
-        iconFontFamily: iconFontFamilySelect?.value || 'Font Awesome 6 Free',
         quiverApiKey: quiverApiKeyInput.value || '',
         selectionSizeLimit: selectionSizeLimitSelect.value || '200',
         enabledModels: {
@@ -14890,8 +14868,6 @@ Answer capability questions with the above (in the user's language); otherwise r
         a.anthropicApiKey === b.anthropicApiKey &&
         a.anthropicModel === b.anthropicModel &&
         a.cssFormat === b.cssFormat &&
-        a.iconApiSource === b.iconApiSource &&
-        a.iconFontFamily === b.iconFontFamily &&
         a.quiverApiKey === b.quiverApiKey &&
         String(a.selectionSizeLimit) === String(b.selectionSizeLimit);
     }
@@ -14916,13 +14892,8 @@ Answer capability questions with the above (in the user's language); otherwise r
       anthropicApiKeyInput.value = lastSavedSettings.anthropicApiKey || '';
       populateAnthropicModelSelect(DEFAULT_ANTHROPIC_MODELS, lastSavedSettings.anthropicModel || 'claude-sonnet-4-20250514');
       cssFormatSelect.value = lastSavedSettings.cssFormat || 'classes';
-      iconApiSourceSelect.value = lastSavedSettings.iconApiSource || 'iconify';
-      if (iconFontFamilySelect) {
-        iconFontFamilySelect.value = lastSavedSettings.iconFontFamily || 'Font Awesome 6 Free';
-      }
       quiverApiKeyInput.value = lastSavedSettings.quiverApiKey || '';
       selectionSizeLimitSelect.value = (lastSavedSettings.selectionSizeLimit ?? 200).toString();
-      updateIconSettingsVisibility();
       updateProviderSettingsVisibility();
       suppressSettingsDirty = false;
       refreshSettingsBaselineFromForm();
@@ -15399,9 +15370,6 @@ Answer capability questions with the above (in the user's language); otherwise r
     const anthropicApiKeyInput = document.getElementById('anthropicApiKeyInput');
     const anthropicModelSelect = document.getElementById('anthropicModelSelect');
     const cssFormatSelect = document.getElementById('cssFormatSelect');
-    const iconApiSourceSelect = document.getElementById('iconApiSourceSelect');
-    const iconFontFamilySelect = document.getElementById('iconFontFamilySelect');
-    const iconFontFamilySetting = document.getElementById('iconFontFamilySetting');
     const figmaPersonalTokenInput = document.getElementById('figmaPersonalTokenInput');
     const quiverApiKeyInput = document.getElementById('quiverApiKeyInput');
     const unsplashApiKeyInput = document.getElementById('unsplashApiKeyInput');
@@ -15900,7 +15868,7 @@ Answer capability questions with the above (in the user's language); otherwise r
       geminiApiKeyInput, geminiModelSelect,
       openaiApiKeyInput, openaiModelSelect,
       anthropicApiKeyInput, anthropicModelSelect,
-      cssFormatSelect, iconApiSourceSelect, iconFontFamilySelect, quiverApiKeyInput, selectionSizeLimitSelect
+      cssFormatSelect, quiverApiKeyInput, selectionSizeLimitSelect
     ];
 
     settingsFields.forEach(field => {
@@ -15908,16 +15876,6 @@ Answer capability questions with the above (in the user's language); otherwise r
       field.addEventListener('input', handleSettingsChanged);
       field.addEventListener('change', handleSettingsChanged);
     });
-
-    function updateIconSettingsVisibility() {
-      if (!iconFontFamilySetting || !iconApiSourceSelect) return;
-      const useIconFont = iconApiSourceSelect.value === 'iconfont';
-      iconFontFamilySetting.classList.toggle('hidden', !useIconFont);
-    }
-
-    if (iconApiSourceSelect) {
-      iconApiSourceSelect.addEventListener('change', updateIconSettingsVisibility);
-    }
 
     // Add event listeners for check-all toggles
     document.querySelectorAll('.check-all-toggle').forEach(toggle => {
@@ -21133,24 +21091,24 @@ Return ONLY JSON.`;
           noSelection: true,
           directAction: 'createIcon',
           fields: [
-            { key: 'iconDescription', type: 'text', label: 'Concept/Description', placeholder: 'A calendar with a checkmark (completed event)', translate: true },
-            {
-              key: 'stylePreferences', type: 'select', label: 'Style', multi: true, default: ['Outline'], options: [
-                { value: 'Outline', label: 'Outline' },
-                { value: 'Filled', label: 'Filled' },
-                { value: 'Duotone', label: 'Duotone' },
-                { value: 'Glyph', label: 'Glyph' },
-                { value: 'Isometric', label: 'Isometric' },
-                { value: 'Round Corners', label: 'Round Corners' },
-                { value: 'Sharp Edges', label: 'Sharp Edges' },
-              ]
-            },
             {
               type: 'row',
               fields: [
-                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512 },
-                { key: 'strokeWidth', type: 'number', label: 'Stroke width', default: 2, min: 0.5, step: 0.5 }
+                { key: 'iconDescription', type: 'text', label: 'Concept/Description', placeholder: 'A calendar with a checkmark (completed event)', translate: true },
+                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512, wrapperClass: 'prompt-field--compact', alignHeader: true, headerClass: 'prompt-field-header--with-actions' }
               ]
+            },
+            {
+              key: 'iconSource', type: 'select', label: 'Icon Source', default: 'iconify', options: [
+                { value: 'iconify', label: 'Iconify' },
+                { value: 'antv', label: 'AntV Infographic' },
+                { value: 'iconfont-fa5', label: 'Icon Font - Font Awesome 5 Free' },
+                { value: 'iconfont-fa6', label: 'Icon Font - Font Awesome 6 Free' },
+                { value: 'iconfont-material', label: 'Icon Font - Material Icons' }
+              ]
+            },
+            {
+              key: 'strokeWidth', type: 'number', label: 'AI stroke width', default: 2, min: 0.5, step: 0.5, showWhen: { field: 'useAiFallback', equals: true }
             },
             { key: 'showResultsInDrawer', type: 'checkbox', label: 'Show search results in drawer', default: true },
             { key: 'useAiFallback', type: 'checkbox', label: 'Generate fallback if missing', default: true }
@@ -31189,6 +31147,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
       function renderSingleField(field, index) {
         let fieldHtml = '';
         const fieldId = `prompt-field-${index}`;
+        const wrapperClass = field.wrapperClass ? ` ${field.wrapperClass}` : '';
         let conditionalAttrs = '';
         if (field.showWhen) {
           if (Array.isArray(field.showWhen)) {
@@ -31214,7 +31173,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const isSmartRenameCaseToggle = currentPromptAction?.name === 'Smart rename' && field.key === 'caseOnly';
           if (isSmartRenameCaseToggle) {
             fieldHtml += `
-              <div class="prompt-field prompt-field-checkbox prompt-field-checkbox-toggle${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+              <div class="prompt-field${wrapperClass} prompt-field-checkbox prompt-field-checkbox-toggle${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
                 <label class="prompt-toggle-switch" for="${fieldId}">
                   <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
                   <span class="prompt-field-label">${field.label}</span>
@@ -31224,7 +31183,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             `;
           } else {
             fieldHtml += `
-              <div class="prompt-field prompt-field-checkbox${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+              <div class="prompt-field${wrapperClass} prompt-field-checkbox${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
                 <div class="prompt-checkbox-row">
                   <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
                   <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
@@ -31528,7 +31487,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           ` : `<label class="prompt-field-label">${field.label}</label>`;
 
           fieldHtml += `
-            <div class="prompt-field"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}"${conditionalAttrs}>
               ${fieldHeaderHtml}
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <div class="prompt-custom-select${field.searchable ? ' collapsible collapsed' : ''}${field.disabled || forceDisabled ? ' disabled' : ''}" id="${fieldId}" data-field-key="${field.key}" data-selected="${selectedAttr}" data-multi="${isMulti ? 'true' : 'false'}" data-searchable="${field.searchable ? 'true' : 'false'}"${selectDisabledAttr}>
@@ -31546,7 +31505,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             ? preservedValues[field.key]
             : (field.default || '#3B82F6');
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <label class="prompt-field-label">${field.label}</label>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <div class="prompt-color-input-wrapper">
@@ -31627,7 +31586,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const isEmptyClass = ((field.aiButtons || field.translate || field.customAiButtons || field.personaHistoryButton) && isEmpty) ? ' is-empty' : '';
 
           fieldHtml += `
-            <div class="prompt-field${field.disabled || forceDisabled ? ' disabled' : ''}${isEmptyClass}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}${isEmptyClass}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
                 ${aiButtonsHtml}
@@ -31645,7 +31604,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           `;
         } else if (field.type === 'context-variables') {
           fieldHtml += `
-            <div class="prompt-field"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label">${field.label}</label>
                 <div class="prompt-ai-actions">
@@ -31663,9 +31622,13 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const numberValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
             : (field.default || '');
+          const headerClass = field.headerClass ? ` ${field.headerClass}` : '';
+          const numberLabelHtml = field.alignHeader
+            ? `<div class="prompt-field-header${headerClass}"><label class="prompt-field-label" for="${fieldId}">${field.label}</label></div>`
+            : `<label class="prompt-field-label" for="${fieldId}">${field.label}</label>`;
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
-              <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+              ${numberLabelHtml}
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <input type="number" id="${fieldId}" data-field-key="${field.key}" 
                 value="${numberValue}" 
@@ -31689,7 +31652,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             : (field.default || '');
 
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <div class="prompt-text-with-tags" data-field-key="${field.key}">
@@ -31711,7 +31674,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const step = field.step !== undefined ? field.step : 1;
 
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <div class="prompt-slider-container">
@@ -31734,7 +31697,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const camLightColor = (preservedValues && preservedValues.camLightColor !== undefined) ? preservedValues.camLightColor : '#ffffff';
 
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}${isCamEnabled ? '' : ' camera-off'}"${conditionalAttrs} data-field-type="cameraControl">
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}${isCamEnabled ? '' : ' camera-off'}"${conditionalAttrs} data-field-type="cameraControl">
               <div class="prompt-field-label-row">
                 <label class="prompt-field-label">${field.label}</label>
                 <label class="camera-lock-style-toggle" title="Lock the visual style of the original image">
@@ -31776,7 +31739,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           `;
         } else if (field.type === 'image') {
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-label-row">
                 <label class="prompt-field-label">${field.label}</label>
                 <div class="prompt-ai-actions">
@@ -31804,7 +31767,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
         } else if (field.type === 'comments') {
           // Comments list field - lazy loaded with cached data
           fieldHtml += `
-            <div class="prompt-field prompt-field-comments"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass} prompt-field-comments"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <div class="pill-tab-container">
                   <button class="pill-tab ${currentCommentsScope === 'all' ? 'active' : ''}" onclick="switchCommentScope('all', this)" type="button">File</button>
@@ -31854,7 +31817,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           ` : '';
 
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
                 ${translateBtnHtml}
@@ -34484,7 +34447,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       showToast('Choose an icon from the options above.', 'info');
     }
 
-    function renderCreateIconResultsInDrawer(matches, { size, useAiFallback, fallbackHint, actionMeta }) {
+    function renderCreateIconResultsInDrawer(matches, { size, useAiFallback, fallbackHint, actionMeta, iconApiSource, iconFontFamily }) {
       if (!Array.isArray(matches) || matches.length === 0) return;
 
       cleanupBrowseState();
@@ -34557,7 +34520,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           item.classList.add('selected');
           try {
             if (iconApiSource === 'iconfont') {
-              await createIconFontFromId(match.id, { size: safeSize, fallbackHint, actionMeta });
+              await createIconFontFromId(match.id, { size: safeSize, fallbackHint, actionMeta, fontFamily: iconFontFamily });
             } else {
               await createIconFromId(match.id, { size: safeSize, useAiFallback, fallbackHint, actionMeta });
             }
@@ -35263,8 +35226,8 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return results.slice(0, Math.max(1, limit));
     }
 
-    async function createIconFontFromId(iconId, { size, fallbackHint, actionMeta }) {
-      const selectedFont = iconFontFamily || 'Font Awesome 6 Free';
+    async function createIconFontFromId(iconId, { size, fallbackHint, actionMeta, fontFamily }) {
+      const selectedFont = fontFamily || 'Font Awesome 6 Free';
       const fontStyle = getIconFontStyleForIconId(iconId, selectedFont);
 
       showThinkingIndicator('Inserting icon font glyph...');
@@ -35637,12 +35600,20 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const rawIconSet = (values.iconSet || '').trim();
       const iconSet = rawIconSet; // empty means global search
       const size = clampNumber(values.size || 24, 16, 512);
+      const selectedIconSource = values.iconSource || 'iconify';
+      const iconSourceMap = {
+        iconify: { apiSource: 'iconify', fontFamily: null, label: 'Iconify' },
+        antv: { apiSource: 'antv', fontFamily: null, label: 'AntV Infographic' },
+        'iconfont-fa5': { apiSource: 'iconfont', fontFamily: 'Font Awesome 5 Free', label: 'Font Awesome 5 Free' },
+        'iconfont-fa6': { apiSource: 'iconfont', fontFamily: 'Font Awesome 6 Free', label: 'Font Awesome 6 Free' },
+        'iconfont-material': { apiSource: 'iconfont', fontFamily: 'Material Icons', label: 'Material Icons' }
+      };
+      const resolvedIconSource = iconSourceMap[selectedIconSource] || iconSourceMap.iconify;
+      const iconApiSource = resolvedIconSource.apiSource;
+      const iconFontFamily = resolvedIconSource.fontFamily;
       const isNoAiMode = isAiOffModeEnabled();
-      const useAiFallback = !isNoAiMode && values.useAiFallback !== false;
+      const useAiFallback = iconApiSource !== 'iconfont' && !isNoAiMode && values.useAiFallback !== false;
       const description = (values.iconDescription || '').trim();
-      const stylePreferences = Array.isArray(values.stylePreferences)
-        ? values.stylePreferences.filter(Boolean)
-        : (values.stylePreferences ? [values.stylePreferences] : []);
       const strokeWidth = Number(values.strokeWidth || 0) || 2;
       const setMeta = (iconSetOptionsCache || []).find(opt => opt.value === iconSet) || {};
       const sampleIcons = Array.isArray(setMeta.samples) ? setMeta.samples : (iconCollectionsCache?.[iconSet]?.samples || []);
@@ -35651,7 +35622,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const slugSuggestion = isNoAiMode ? null : await suggestIconSlug({
         iconSet: iconSet || 'mdi',
         description,
-        styles: stylePreferences,
+        styles: [],
         tags: [],
         strokeWidth,
         samples: sampleIcons
@@ -35660,11 +35631,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
       // Clean up description for search to avoid noise
       const cleanDesc = (description || '').replace(/["']/g, '').trim();
-      const stylesStr = stylePreferences.join(' ');
 
       const searchQuery = [
         cleanDesc,
-        stylesStr,
         slug
       ].filter(Boolean).join(' ').trim();
 
@@ -35689,7 +35658,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           slug,
           cleanDesc,
           searchQuery,
-          stylesStr
         ].filter(Boolean);
         const allResults = [];
         const isMaterialIconsFamily = (iconFontFamily || '') === 'Material Icons';
@@ -35717,8 +35685,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         const queries = [
           slug,            // 1. AI suggested slug (most specific)
           cleanDesc,       // 2. User description
-          searchQuery,     // 3. Combined search
-          stylesStr        // 4. Just styles
+          searchQuery      // 3. Combined search
         ].filter(Boolean);
         const allResults = [];
         for (const q of queries) {
@@ -35799,16 +35766,14 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
       const aiContext = {
         description: description || slug,
-        stylePreferences,
         strokeWidth,
-        isSolid: stylePreferences.some(s => /filled|solid|glyph/i.test(s)),
+        isSolid: false,
         size,
         color: null
       };
 
       const fallbackHint = [
         aiContext.description,
-        aiContext.stylePreferences.length ? `style ${aiContext.stylePreferences.join(', ')}` : '',
         `stroke ${aiContext.strokeWidth}px`,
         iconSet ? `set ${iconSet}` : ''
       ].filter(Boolean).join(' | ');
@@ -35845,7 +35810,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
               fallbackHint: aiContext,
               size,
               useAiFallback,
-              actionMeta
+              actionMeta,
+              iconApiSource,
+              iconFontFamily
             });
             return;
           }
@@ -35880,7 +35847,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
                   return;
                 }
                 if (iconApiSource === 'iconfont') {
-                  await createIconFontFromId(chosenId, { size, fallbackHint: aiContext, actionMeta });
+                  await createIconFontFromId(chosenId, { size, fallbackHint: aiContext, actionMeta, fontFamily: iconFontFamily });
                 } else {
                   await createIconFromId(chosenId, { size, useAiFallback, fallbackHint: aiContext, actionMeta });
                 }
@@ -35896,7 +35863,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         const target = matches[0];
         const iconId = target?.id || `${iconSet || 'mdi'}:${slug}`;
         if (iconApiSource === 'iconfont') {
-          await createIconFontFromId(iconId, { size, fallbackHint: aiContext, actionMeta });
+          await createIconFontFromId(iconId, { size, fallbackHint: aiContext, actionMeta, fontFamily: iconFontFamily });
         } else {
           await createIconFromId(iconId, { size, useAiFallback, fallbackHint: aiContext, actionMeta });
         }
@@ -40071,8 +40038,6 @@ Example structure:
       anthropicApiKey = settings?.anthropicApiKey || '';
       anthropicModel = settings?.anthropicModel || 'claude-sonnet-4-20250514';
       cssFormat = settings?.cssFormat || 'classes';
-      iconApiSource = settings?.iconApiSource || 'iconify';
-      iconFontFamily = settings?.iconFontFamily || 'Font Awesome 6 Free';
       figmaPersonalToken = settings?.figmaPersonalToken || '';
       quiverApiKey = settings?.quiverApiKey || '';
       unsplashApiKey = settings?.unsplashApiKey || '';
@@ -40116,11 +40081,6 @@ Example structure:
       anthropicApiKeyInput.value = anthropicApiKey;
       populateAnthropicModelSelect(DEFAULT_ANTHROPIC_MODELS, anthropicModel);
       cssFormatSelect.value = cssFormat;
-      iconApiSourceSelect.value = iconApiSource;
-      if (iconFontFamilySelect) {
-        iconFontFamilySelect.value = iconFontFamily;
-      }
-      updateIconSettingsVisibility();
       figmaPersonalTokenInput.value = figmaPersonalToken;
       quiverApiKeyInput.value = quiverApiKey;
       unsplashApiKeyInput.value = unsplashApiKey;
@@ -40172,7 +40132,6 @@ Example structure:
         anthropicApiKey,
         anthropicModel,
         cssFormat,
-        iconApiSource,
         quiverApiKey,
         selectionSizeLimit: savedSizeLimit,
         enabledModels: enabledModels,
@@ -40315,8 +40274,6 @@ Example structure:
         anthropicApiKey: anthropicApiKeyInput.value || '',
         anthropicModel: anthropicModelSelect.value || 'claude-sonnet-4-20250514',
         cssFormat: cssFormatSelect.value || 'classes',
-        iconApiSource: iconApiSourceSelect.value || 'iconify',
-        iconFontFamily: iconFontFamilySelect?.value || 'Font Awesome 6 Free',
         figmaPersonalToken: figmaPersonalTokenInput.value || '',
         quiverApiKey: quiverApiKeyInput.value || '',
         unsplashApiKey: unsplashApiKeyInput.value || '',
@@ -40346,8 +40303,6 @@ Example structure:
       anthropicApiKey = settings.anthropicApiKey;
       anthropicModel = settings.anthropicModel;
       cssFormat = settings.cssFormat;
-      iconApiSource = settings.iconApiSource;
-      iconFontFamily = settings.iconFontFamily || 'Font Awesome 6 Free';
       figmaPersonalToken = settings.figmaPersonalToken;
       quiverApiKey = settings.quiverApiKey;
       unsplashApiKey = settings.unsplashApiKey;

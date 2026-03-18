@@ -4084,8 +4084,6 @@ figma.ui.onmessage = async (msg: {
         const customSmartRenamePresets = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_SMART_RENAME_PRESETS) || [];
         const customStyleCategories = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_STYLE_CATEGORIES) || [];
         const enabledModels = await figma.clientStorage.getAsync(SETTINGS_KEYS.ENABLED_MODELS) || null;
-        const iconApiSource = await figma.clientStorage.getAsync(SETTINGS_KEYS.ICON_API_SOURCE) || 'iconify';
-        const iconFontFamily = await figma.clientStorage.getAsync(SETTINGS_KEYS.ICON_FONT_FAMILY) || 'Font Awesome 6 Free';
         const figmaPersonalToken = await figma.clientStorage.getAsync(SETTINGS_KEYS.FIGMA_PERSONAL_TOKEN) || '';
         const quiverApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.QUIVER_API_KEY) || '';
         const unsplashApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.UNSPLASH_API_KEY) || '';
@@ -4100,7 +4098,7 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, iconApiSource, iconFontFamily, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
@@ -4280,7 +4278,7 @@ figma.ui.onmessage = async (msg: {
           return;
         }
 
-        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, iconApiSource, iconFontFamily, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey } = msg.settings;
+        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey } = msg.settings;
 
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PROVIDER, provider || 'gemini');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.AI_OFF_MODE, aiOffMode === true);
@@ -4291,8 +4289,6 @@ figma.ui.onmessage = async (msg: {
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY, anthropicApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_MODEL, anthropicModel || 'claude-sonnet-4-20250514');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.CSS_FORMAT, cssFormat || 'classes');
-        await figma.clientStorage.setAsync(SETTINGS_KEYS.ICON_API_SOURCE, iconApiSource || 'iconify');
-        await figma.clientStorage.setAsync(SETTINGS_KEYS.ICON_FONT_FAMILY, iconFontFamily || 'Font Awesome 6 Free');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.SELECTION_SIZE_LIMIT, selectionSizeLimit || 200);
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ENABLED_MODELS, enabledModels || null);
         await figma.clientStorage.setAsync(SETTINGS_KEYS.FIGMA_PERSONAL_TOKEN, figmaPersonalToken || '');
