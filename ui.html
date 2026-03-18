@@ -27,8 +27,11 @@
       --text-primary: #fafafa;
       --text-secondary: #a1a1aa;
       --text-muted: #71717a;
+      --text-disabled: #6b7280;
+      --text-tertiary: var(--text-disabled);
       --border: #ffffff0d;
       --border-intense: #ffffff26;
+      --disabled-opacity: 0.55;
       --success: #12B654;
       --error: #F00F66;
       --accent-error: #F00F66;
@@ -886,7 +889,7 @@
       transition: all 0.2s ease;
     }
 
-    .setting-btn:hover {
+    .setting-btn:hover:not(:disabled) {
       background: var(--accent);
       border-color: var(--accent);
       color: white;
@@ -898,8 +901,27 @@
       color: white;
     }
 
-    .setting-btn.primary:hover {
+    .setting-btn.primary:hover:not(:disabled) {
       box-shadow: 0 2px 10px var(--accent-glow);
+    }
+
+    .setting-btn:disabled,
+    .setting-btn.primary:disabled,
+    .prompt-comments-batch-btn:disabled,
+    .prompt-comments-batch-actions .batch-reply-chevron-btn:disabled,
+    .message-edit-btn.update:disabled,
+    .askback-option-btn:disabled,
+    .askback-action-btn:disabled,
+    .ai-assistant-popup-submit:disabled,
+    .code-sel-btn:disabled,
+    .prompt-add-image-btn:disabled {
+      background: var(--bg-tertiary);
+      border-color: var(--border);
+      color: var(--text-disabled);
+      opacity: var(--disabled-opacity);
+      box-shadow: none;
+      transform: none;
+      cursor: not-allowed;
     }
 
     /* Comments Container */
@@ -2046,8 +2068,7 @@
     }
 
     .prompt-comments-batch-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .prompt-comments-batch-btn svg {
@@ -2066,8 +2087,7 @@
     }
 
     .prompt-comments-batch-actions .batch-reply-chevron-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .prompt-comments-loading {
@@ -2470,7 +2490,6 @@
 
     .ai-assistant-popup-submit:disabled,
     .code-sel-btn:disabled {
-      opacity: 0.6;
       pointer-events: none;
     }
 
@@ -2923,8 +2942,7 @@
     }
 
     .message-edit-btn.update:disabled {
-      opacity: 0.2;
-      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .message.bot .message-content {
@@ -2987,8 +3005,6 @@
 
     .askback-option-btn.askback-btn-disabled,
     .askback-option-btn:disabled {
-      opacity: 0.6;
-      cursor: default;
       transform: none;
     }
 
@@ -3519,8 +3535,7 @@
     }
 
     .askback-action-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .askback-action-btn.secondary {
@@ -4638,7 +4653,7 @@
       overflow: hidden;
     }
 
-    .node-action-btn:hover {
+    .node-action-btn:not([aria-disabled="true"]):hover {
       background: var(--accent-agent);
       border-color: var(--accent-agent);
       padding: var(--space-sm) var(--space-md) var(--space-sm) var(--space-sm);
@@ -4646,13 +4661,18 @@
       max-width: 200px;
     }
 
-    .node-action-btn.ai-disabled {
-      opacity: 0.5;
+    .node-action-btn.ai-disabled,
+    .node-action-btn[aria-disabled="true"] {
+      background: var(--bg-tertiary);
+      border-color: var(--border);
+      color: var(--text-disabled);
+      opacity: var(--disabled-opacity);
       cursor: not-allowed;
       border-style: dashed;
     }
 
-    .node-action-btn.ai-disabled:hover {
+    .node-action-btn.ai-disabled:hover,
+    .node-action-btn[aria-disabled="true"]:hover {
       background: var(--bg-tertiary);
       border-color: var(--border);
       padding: var(--space-sm);
@@ -4901,18 +4921,28 @@
       transition: color 0.15s ease;
     }
 
-    .slash-action-item:hover .slash-action-icon,
+    .slash-action-item:not([aria-disabled="true"]):hover .slash-action-icon,
     .slash-action-item.active .slash-action-icon {
       color: var(--text-primary);
       transition: all 0.15s ease;
     }
 
-    .slash-action-item.ai-disabled {
-      opacity: 0.5;
+    .slash-action-item.ai-disabled,
+    .slash-action-item[aria-disabled="true"] {
+      color: var(--text-disabled);
+      opacity: var(--disabled-opacity);
       cursor: not-allowed;
     }
 
+    .slash-action-item.ai-disabled .slash-action-icon,
+    .slash-action-item.ai-disabled .slash-action-name,
+    .slash-action-item[aria-disabled="true"] .slash-action-icon,
+    .slash-action-item[aria-disabled="true"] .slash-action-name {
+      color: var(--text-disabled);
+    }
+
     .slash-action-item.ai-disabled:hover,
+    .slash-action-item[aria-disabled="true"]:hover,
     .slash-action-item.ai-disabled.active {
       background: transparent;
       box-shadow: none;
@@ -4994,8 +5024,8 @@
       text-align: center;
     }
 
-    .slash-action-item:hover .slash-action-name,
-    .slash-action-item.active .slash-action-name {
+    .slash-action-item:not([aria-disabled="true"]):hover .slash-action-name,
+    .slash-action-item.active:not([aria-disabled="true"]) .slash-action-name {
       color: var(--text-primary);
       transition: all 0.15s ease;
     }
@@ -7271,7 +7301,7 @@
       transition: all 0.2s ease;
     }
 
-    .command-item:hover .command-item-icon {
+    .command-item:not([aria-disabled="true"]):hover .command-item-icon {
       background: var(--text-primary);
       color: var(--accent-agent);
       width: 32px;
@@ -7305,31 +7335,47 @@
       overflow-wrap: break-word;
     }
 
-    .command-item:hover .command-item-name {
+    .command-item:not([aria-disabled="true"]):hover .command-item-name {
       background-size: 100% 16px;
     }
 
 
 
-    .command-item:hover .command-item-desc {
+    .command-item:not([aria-disabled="true"]):hover .command-item-desc {
       color: var(--text-secondary);
       transition: all 0.2s ease;
     }
 
-    .command-item.ai-disabled {
-      opacity: 0.5;
+    .command-item.ai-disabled,
+    .command-item[aria-disabled="true"] {
+      color: var(--text-disabled);
+      opacity: var(--disabled-opacity);
       cursor: not-allowed;
     }
 
-    .command-item.ai-disabled:hover .command-item-icon {
+    .command-item.ai-disabled .command-item-name,
+    .command-item.ai-disabled .command-item-desc,
+    .command-item[aria-disabled="true"] .command-item-name,
+    .command-item[aria-disabled="true"] .command-item-desc {
+      color: var(--text-disabled);
+    }
+
+    .command-item.ai-disabled .command-item-icon,
+    .command-item[aria-disabled="true"] .command-item-icon {
+      color: var(--text-disabled);
+    }
+
+    .command-item.ai-disabled:hover .command-item-icon,
+    .command-item[aria-disabled="true"]:hover .command-item-icon {
       background: var(--bg-tertiary);
-      color: var(--text-secondary);
+      color: var(--text-disabled);
       width: 28px;
       height: 28px;
       margin: 0;
     }
 
-    .command-item.ai-disabled:hover .command-item-name {
+    .command-item.ai-disabled:hover .command-item-name,
+    .command-item[aria-disabled="true"]:hover .command-item-name {
       background-size: 0% 16px;
     }
 
@@ -7903,9 +7949,9 @@
     }
 
     .prompt-field.disabled {
-      opacity: 0.6;
+      opacity: var(--disabled-opacity);
       pointer-events: none;
-      filter: grayscale(0.5);
+      cursor: not-allowed;
     }
 
     .prompt-field-label {
@@ -9281,9 +9327,9 @@
     }
 
     .prompt-custom-select.disabled {
-      opacity: 0.6;
+      opacity: var(--disabled-opacity);
       pointer-events: none;
-      filter: grayscale(0.5);
+      cursor: not-allowed;
     }
 
     .prompt-custom-select.collapsible .prompt-custom-select-options {
@@ -9347,17 +9393,19 @@
     }
 
     .prompt-custom-select-option.option-disabled {
-      opacity: 0.45;
+      opacity: var(--disabled-opacity);
       cursor: not-allowed;
-      color: var(--text-tertiary);
+      color: var(--text-disabled);
       background: var(--bg-tertiary);
       border-color: var(--border);
     }
 
-    .prompt-custom-select-option.option-disabled:hover {
+    .prompt-custom-select-option.option-disabled:hover,
+    .prompt-custom-select-option.option-disabled.selected,
+    .prompt-custom-select-option.option-disabled.selected:hover {
       background: var(--bg-tertiary);
       border-color: var(--border);
-      color: var(--text-tertiary);
+      color: var(--text-disabled);
     }
 
     /* Embedded number input in select option */
@@ -15008,9 +15056,10 @@ Answer capability questions with the above (in the user's language); otherwise r
       lastUsed.forEach((action, idx) => {
         const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
+        const disabledAttrs = isDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
         const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
         html += `
-          <button class="node-action-btn last-used-action-btn${disabledClass}" data-last-used-index="${idx}" title="${title}" data-ai-disabled="${isDisabled ? 'true' : 'false'}">
+          <button class="node-action-btn last-used-action-btn${disabledClass}" data-last-used-index="${idx}" title="${title}" data-ai-disabled="${isDisabled ? 'true' : 'false'}"${disabledAttrs}>
             ${action.icon || defaultActionIcon}
             <span>${action.name}</span>
           </button>
@@ -15126,6 +15175,10 @@ Answer capability questions with the above (in the user's language); otherwise r
       const lastUsedActionBtns = nodeActionsContent.querySelectorAll('.last-used-action-btn');
       lastUsedActionBtns.forEach(btn => {
         btn.addEventListener('click', () => {
+          if (btn.dataset.aiDisabled === 'true') {
+            showToast(btn.title || getAiOffBlockedMessage('Quick action'), 'error');
+            return;
+          }
           const idx = parseInt(btn.dataset.lastUsedIndex);
           if (!Number.isNaN(idx) && lastUsed[idx]) {
             triggerSlashAction(lastUsed[idx]);
@@ -23672,8 +23725,9 @@ Please provide the final summary of what was modified in the same language as th
         const hasFields = task.fields && task.fields.length > 0;
         const fieldsIndicator = hasFields ? '<span class="fields-badge" title="Opens settings panel">⚙️</span>' : '';
         const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${task.category}</div>` : '';
+        const disabledAttrs = aiDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
         html += `
-                <button class="command-item${noSelectionClass}${aiDisabledClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="${aiDisabled ? 'true' : 'false'}" title="${aiDisabled ? getAiOffBlockedMessage(task.name || 'Quick action') : (task.desc || task.name)}">
+                <button class="command-item${noSelectionClass}${aiDisabledClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="${aiDisabled ? 'true' : 'false'}" title="${aiDisabled ? getAiOffBlockedMessage(task.name || 'Quick action') : (task.desc || task.name)}"${disabledAttrs}>
             <div class="command-item-icon">${icon}${noSelectionBadge}${fieldsIndicator}</div>
             <div class="command-item-text">
               <div class="command-item-name">${task.name}</div>
@@ -23690,6 +23744,10 @@ Please provide the final summary of what was modified in the same language as th
       // Add click handlers to command items
       commandsContent.querySelectorAll('.command-item').forEach(item => {
         item.addEventListener('click', async () => {
+          if (item.dataset.aiDisabled === 'true') {
+            showToast(item.title || getAiOffBlockedMessage(item.dataset.actionName || 'Quick action'), 'error');
+            return;
+          }
           const taskIndex = parseInt(item.dataset.taskIndex);
           const hasFields = item.dataset.hasFields === 'true';
           const noSelection = item.dataset.noSelection === 'true';
@@ -31375,6 +31433,8 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
               const inputDefault = (preservedValues && preservedValues[opt.inputKey] !== undefined)
                 ? preservedValues[opt.inputKey]
                 : (opt.inputDefault !== undefined ? opt.inputDefault : '');
+              const optionTabIndex = isDisabledInAiOffMode ? '-1' : '0';
+              const ariaDisabledAttr = isDisabledInAiOffMode ? ' aria-disabled="true"' : '';
               const suffix = opt.inputSuffix ? `<span class="embedded-suffix">${escapeHtml(opt.inputSuffix)}</span>` : '';
               return `
                 <div class="prompt-custom-select-option${isSelected ? ' selected' : ''}" 
@@ -31383,7 +31443,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
                      data-text="${escapeHtml(String(labelRaw))}"
                      data-has-input="true"
                      data-input-key="${opt.inputKey}"
-                     tabindex="0"${disabledAttr}${disabledTitleAttr}>
+                     tabindex="${optionTabIndex}"${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr}>
                   <span>${escapeHtml(labelRaw)}</span>
                   <input type="${opt.inputType || 'number'}" class="embedded-input"
                          value="${escapeHtml(String(inputDefault))}"
@@ -31422,8 +31482,10 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             // Include provider data attribute if present (for image model selection)
             const providerAttr = opt.provider ? ` data-provider="${escapeHtml(opt.provider)}"` : '';
 
+            const optionTabIndex = isDisabledInAiOffMode ? '-1' : '0';
+            const ariaDisabledAttr = isDisabledInAiOffMode ? ' aria-disabled="true"' : '';
             return `
-              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${providerAttr}${disabledAttr}${disabledTitleAttr} tabindex="0">
+              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${providerAttr}${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr} tabindex="${optionTabIndex}">
                 ${hasRichLayout ? bodyHtml : escapeHtml(labelRaw)}
                 ${moreBtnHtml}
               </div>
@@ -32317,6 +32379,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
         selectEl.addEventListener('keydown', (e) => {
           // If focus is in an embedded input, don't run select navigation logic
           if (e.target.classList.contains('embedded-input')) return;
+          if (isDisabled()) return;
 
           const targetOption = e.target.closest('.prompt-custom-select-option');
           const isOptionContext = !!targetOption;
@@ -32337,7 +32400,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) {
             e.preventDefault();
             const visibleOptions = Array.from(selectEl.querySelectorAll('.prompt-custom-select-option'))
-              .filter(opt => opt.style.display !== 'none');
+              .filter(opt => opt.style.display !== 'none' && opt.dataset.disabled !== 'true');
             if (visibleOptions.length === 0) return;
 
             const current = targetOption || (isSearchInput ? null : null);
@@ -47622,9 +47685,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
         const isActive = idx === slashMenuSelectedIndex;
         const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
+        const disabledAttrs = isDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
         const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
         return `
-          <button class="slash-action-item ${isActive ? 'active' : ''}${disabledClass}" data-index="${idx}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" title="${title}">
+          <button class="slash-action-item ${isActive ? 'active' : ''}${disabledClass}" data-index="${idx}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" title="${title}"${disabledAttrs}>
             <div class="slash-action-icon">${action.icon || defaultActionIcon}</div>
             <div class="slash-action-name">${action.name}</div>
           </button>
@@ -47953,6 +48017,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
         const item = e.target.closest('.slash-action-item');
         if (!item) return;
         e.preventDefault(); // keep focus in textarea
+        if (item.dataset.aiDisabled === 'true') {
+          showToast(item.title || getAiOffBlockedMessage('Quick action'), 'error');
+          return;
+        }
         const idx = parseInt(item.dataset.index);
         if (!Number.isNaN(idx) && slashMenuItems[idx]) {
           triggerSlashAction(slashMenuItems[idx]);
