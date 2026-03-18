@@ -27,6 +27,7 @@ const SETTINGS_KEYS = {
   CUSTOM_TONES: 'figma-custom-tones',
   CUSTOM_IMAGE_PRESETS: 'figma-custom-image-presets',
   CUSTOM_RE_STYLE_PRESETS: 'figma-custom-re-style-presets',
+  CUSTOM_SMART_RENAME_PRESETS: 'figma-custom-smart-rename-presets',
   CUSTOM_STYLE_CATEGORIES: 'figma-custom-style-categories',
   // Last used quick actions
   LAST_USED_QUICK_ACTIONS: 'figma-last-used-quick-actions',
@@ -4080,6 +4081,7 @@ figma.ui.onmessage = async (msg: {
         const customTones = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_TONES) || [];
         const customImagePresets = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_IMAGE_PRESETS) || [];
         const customReStylePresets = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_RE_STYLE_PRESETS) || [];
+        const customSmartRenamePresets = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_SMART_RENAME_PRESETS) || [];
         const customStyleCategories = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_STYLE_CATEGORIES) || [];
         const enabledModels = await figma.clientStorage.getAsync(SETTINGS_KEYS.ENABLED_MODELS) || null;
         const iconApiSource = await figma.clientStorage.getAsync(SETTINGS_KEYS.ICON_API_SOURCE) || 'iconify';
@@ -4098,14 +4100,14 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customStyleCategories, enabledModels, iconApiSource, iconFontFamily, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, iconApiSource, iconFontFamily, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '' }
         });
       }
       break;
@@ -4220,6 +4222,25 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('Failed to save custom re-style presets:', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to save custom re-style presets' });
+      }
+      break;
+    }
+
+    case 'save-custom-smart-rename-presets': {
+      try {
+        const presets = Array.isArray((msg as any).presets) ? (msg as any).presets : [];
+        const sanitized = presets.filter((p: any) =>
+          typeof p === 'object' &&
+          p !== null &&
+          typeof p.value === 'string' &&
+          typeof p.label === 'string' &&
+          p.value.trim() !== '' &&
+          p.label.trim() !== ''
+        );
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.CUSTOM_SMART_RENAME_PRESETS, sanitized);
+      } catch (error) {
+        console.error('Failed to save custom smart rename presets:', error);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to save custom smart rename presets' });
       }
       break;
     }

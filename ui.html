@@ -17683,6 +17683,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     let customImagePresets = [];
     let customStyleCategories = [];
     let customReStylePresets = [];
+    let customSmartRenamePresets = [];
     let replyTemplates = [];
 
     function toggleReplyTemplatesDropdown(event, commentId) {
@@ -19381,6 +19382,21 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       }
     ];
 
+    const SMART_RENAME_PROMPT_PRESETS = {
+      "Short & consistent": {
+        style: "Rename layers to short, semantic, deterministic names. Prefer the minimum number of words that still make each layer's role clear."
+      },
+      "More descriptive": {
+        style: "Rename layers to clear, descriptive, semantic names that explain the layer's role, content, or UI purpose while staying consistent across siblings."
+      },
+      "Mobile-friendly": {
+        style: "Rename layers with short, mobile-friendly semantic names optimized for compact screen hierarchies, mobile UI patterns, and touch-first components."
+      },
+      "Web/components": {
+        style: "Rename layers using web and component-oriented semantic names suitable for reusable UI parts, wrappers, containers, slots, states, and layout structure."
+      }
+    };
+
     const agentTasks = {
       'UI & Layout': [
         {
@@ -20516,14 +20532,17 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           prompt: '',
           fields: [
             {
-              key: 'style', type: 'select', label: 'Style', default: 'short', options: [
-                { value: 'short', label: 'Short & consistent' },
-                { value: 'descriptive', label: 'More descriptive' },
-                { value: 'mobile', label: 'Mobile-friendly' },
-                { value: 'web', label: 'Web/components' },
-                { value: 'caseOnly', label: 'Case only (keep text)' },
+              key: 'renamePreset',
+              type: 'select',
+              label: 'Prompt Preset',
+              default: '',
+              searchable: true,
+              options: () => [
+                { value: '', label: 'None (Custom)' },
+                ...Object.keys(SMART_RENAME_PROMPT_PRESETS).map(name => ({ value: name, label: name }))
               ]
             },
+            { key: 'renamePrompt', type: 'textarea', label: 'Prompt', placeholder: 'Describe how Smart Rename should rename the selected layers...', default: '', aiButtons: true },
             {
               key: 'delimiter', type: 'select', label: 'Delimiter', default: 'camelCase', options: [
                 { value: 'camelCase', label: 'camelCase' },
@@ -20535,13 +20554,14 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
               ]
             },
             { key: 'onlySelected', type: 'checkbox', label: 'Only rename selected layer', default: false },
+            { key: 'caseOnly', type: 'checkbox', label: 'Case only (keep text)', default: false },
             { key: 'includeInstances', type: 'checkbox', label: 'Include component instances', default: false },
             { key: 'keepOriginal', type: 'checkbox', label: 'Append original in parentheses', default: false },
           ],
           promptTemplate: function (values) {
             const onlySelected = values.onlySelected || false;
-            const style = values.style || 'short';
-            const delimiter = values.delimiter || '_';
+            const renamePrompt = (values.renamePrompt || '').trim();
+            const delimiter = values.delimiter || 'camelCase';
             const includeInstances = values.includeInstances || false;
             const keepOriginal = values.keepOriginal || false;
 
@@ -20550,28 +20570,38 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
               : "Analyze each selected element and all its descendant elements (children, grandchildren, etc.)";
             const pronoun = onlySelected ? "it" : "them";
             const delimiterText = delimiter === "camelCase"
-              ? " in camelCase format"
-              : ` with delimiter "${delimiter}"`;
-            const instancesText = includeInstances ? "" : "Skip component instances and their descendants.";
+              ? "Use camelCase."
+              : delimiter === "PascalCase"
+                ? "Use PascalCase."
+                : delimiter === " "
+                  ? "Use spaces between words."
+                  : `Use "${delimiter}" as the separator style.`;
+            const instancesText = includeInstances
+              ? "Include component instances when renaming."
+              : "Skip component instances and their descendants.";
             const originalText = keepOriginal
               ? "Append the original name in parentheses."
               : "Replace the name entirely with the new name.";
-            const styleInstruction = style === 'caseOnly'
-              ? `Use a case-only transformation${delimiterText}. Keep the original words and wording exactly the same; do not paraphrase, translate, shorten, expand, or infer semantic replacements. Only change casing and separator style to match the selected delimiter.`
-              : `Use a ${style} naming style${delimiterText}.`;
 
-            return `${scopeText} and rename ${pronoun}. ${styleInstruction}${instancesText} 
-            
-            SPECIAL RULES FOR VARIANTS & COMPONENTS:
-    1. VARIANTS: If an element is a variant inside a Component Set(its name follows "Property=Value" format, e.g., "Property 1=Frame 47695"), ONLY rename the "Value" part.Keep the "Property=" part exactly as is.Example: "Property 1=Frame 47695" -> "Property 1=Primary".
-            2. COMPONENT PROPERTIES: If an element is a Component Set, analyze its property names(e.g., "Property 1").If they have default names like "Property 1", suggest better semantic property names(e.g., "State", "Type", "Size") and rename them within the variant names of its children.
-            
-            GENERAL RULES:
-    - Use element type, text content, variant properties, auto - layout role, and parent grouping for context. 
-            - Keep names concise, deterministic, and consistent. 
-            - Avoid duplication; add numeric suffix only when needed.
-      ${originalText}
-    - Use rename to apply.`;
+            return `${scopeText} and rename ${pronoun}.
+
+FOLLOW THIS NAMING INSTRUCTION:
+${renamePrompt}
+
+FORMATTING:
+- ${delimiterText}
+- ${instancesText}
+- ${originalText}
+
+SPECIAL RULES FOR VARIANTS & COMPONENTS:
+1. VARIANTS: If an element is a variant inside a Component Set (its name follows "Property=Value" format, e.g. "Property 1=Frame 47695"), ONLY rename the "Value" part. Keep the "Property=" part exactly as is. Example: "Property 1=Frame 47695" -> "Property 1=Primary".
+2. COMPONENT PROPERTIES: If an element is a Component Set, analyze its property names (e.g. "Property 1"). If they have default names like "Property 1", suggest better semantic property names (e.g. "State", "Type", "Size") and rename them within the variant names of its children.
+
+GENERAL RULES:
+- Use element type, text content, variant properties, auto-layout role, and parent grouping for context.
+- Keep names concise, deterministic, and consistent.
+- Avoid duplication; add numeric suffix only when needed.
+- Use rename to apply.`;
           }
         },
         { name: 'Clean up names', desc: 'Remove special chars', requiredContext: ContextMode.MINIMAL, prompt: 'For each selected element, use rename to clean up the name by: removing special characters (except hyphen and underscore), collapsing multiple spaces to single space, and trimming whitespace from start and end.' },
@@ -31002,9 +31032,51 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
       }
     }
 
+    function updatePromptFieldIndicator(fieldKey, { visible = false, text = 'Custom text', buttonText = 'Clear' } = {}) {
+      if (!promptDrawerFields || !fieldKey) return;
+      const textarea = promptDrawerFields.querySelector(`textarea[data-field-key="${fieldKey}"]`);
+      if (!textarea) return;
+
+      const fieldEl = textarea.closest('.prompt-field');
+      const indicator = fieldEl?.querySelector('.prompt-field-indicator');
+      if (!indicator) return;
+
+      const textEl = indicator.querySelector('.prompt-indicator-text');
+      const buttonEl = indicator.querySelector('.prompt-indicator-delete');
+      if (textEl) textEl.textContent = text;
+      if (buttonEl) buttonEl.textContent = buttonText;
+      indicator.classList.toggle('visible', !!visible);
+    }
+
+    function applySmartRenamePreset(presetName) {
+      isApplyingPreset = true;
+      try {
+        let preset = SMART_RENAME_PROMPT_PRESETS[presetName];
+        if (!preset && typeof customSmartRenamePresets !== 'undefined' && customSmartRenamePresets.length > 0) {
+          preset = customSmartRenamePresets.find(p => p.value === presetName || p.label === presetName);
+        }
+
+        const promptTextarea = promptDrawerFields.querySelector('textarea[data-field-key="renamePrompt"]');
+        if (!promptTextarea) return;
+
+        if (!preset) {
+          updatePromptFieldIndicator('renamePrompt', { visible: false });
+          return;
+        }
+
+        promptTextarea.value = preset.style || '';
+        promptTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+        updatePromptFieldIndicator('renamePrompt', { visible: false, text: 'Preset modified', buttonText: 'Reset' });
+      } finally {
+        isApplyingPreset = false;
+      }
+    }
+
     function renderPromptFields(fields, preservedValues = null) {
-      const isSmartRenameStyleFieldInAiOffMode = (fieldKey) => {
-        return fieldKey === 'style' && currentPromptAction?.name === 'Smart rename' && isAiOffModeEnabled();
+      const isSmartRenameFieldDisabledInAiOffMode = (fieldKey) => {
+        return currentPromptAction?.name === 'Smart rename' &&
+          isAiOffModeEnabled() &&
+          (fieldKey === 'renamePreset' || fieldKey === 'renamePrompt');
       };
 
       function renderSingleField(field, index) {
@@ -31026,9 +31098,12 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
         const disabledAttr = field.disabled ? ' disabled' : '';
 
         if (field.type === 'checkbox') {
-          const isChecked = (preservedValues && preservedValues[field.key] !== undefined)
+          let isChecked = (preservedValues && preservedValues[field.key] !== undefined)
             ? !!preservedValues[field.key]
             : !!field.default;
+          if (currentPromptAction?.name === 'Smart rename' && isAiOffModeEnabled() && field.key === 'caseOnly' && !(preservedValues && preservedValues[field.key] !== undefined)) {
+            isChecked = true;
+          }
           fieldHtml += `
             <div class="prompt-field prompt-field-checkbox${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-checkbox-row">
@@ -31040,14 +31115,12 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           `;
         } else if (field.type === 'select') {
           const isMulti = field.multi === true;
+          const forceDisabled = isSmartRenameFieldDisabledInAiOffMode(field.key);
+          const selectDisabledAttr = (field.disabled || forceDisabled) ? ' disabled' : '';
           // Use preservedValues if available, otherwise fall back to field.default
           let effectiveDefault = field.default;
           if (preservedValues && preservedValues[field.key] !== undefined) {
             effectiveDefault = preservedValues[field.key];
-          }
-
-          if (isSmartRenameStyleFieldInAiOffMode(field.key) && effectiveDefault !== 'caseOnly') {
-            effectiveDefault = 'caseOnly';
           }
 
           const defaultValues = Array.isArray(effectiveDefault)
@@ -31165,13 +31238,35 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             optionsArray = allPresets;
           }
 
+          if (field.key === 'renamePreset') {
+            const allPresets = [
+              { value: '', label: 'None (Custom)' }
+            ];
+
+            if (typeof customSmartRenamePresets !== 'undefined' && customSmartRenamePresets && customSmartRenamePresets.length > 0) {
+              allPresets.push(...customSmartRenamePresets.map(p => ({ ...p, isCustom: true })));
+            }
+
+            if (typeof SMART_RENAME_PROMPT_PRESETS !== 'undefined') {
+              for (const name in SMART_RENAME_PROMPT_PRESETS) {
+                allPresets.push({
+                  value: name,
+                  label: name,
+                  ...SMART_RENAME_PROMPT_PRESETS[name]
+                });
+              }
+            }
+
+            optionsArray = allPresets;
+          }
+
           // Custom inline select with pill-style options
           const optionsHtml = (optionsArray || []).map(opt => {
             const valueRaw = opt.value ?? '';
             const labelRaw = opt.label ?? valueRaw;
-            const isDisabledSmartRenameStyle = isSmartRenameStyleFieldInAiOffMode(field.key) && String(valueRaw) !== 'caseOnly';
-            const disabledAttr = isDisabledSmartRenameStyle ? ' data-disabled="true"' : '';
-            const disabledTitleAttr = isDisabledSmartRenameStyle
+            const isDisabledInAiOffMode = forceDisabled;
+            const disabledAttr = isDisabledInAiOffMode ? ' data-disabled="true"' : '';
+            const disabledTitleAttr = isDisabledInAiOffMode
               ? ' title="Unavailable in No AI mode. Use Case only (keep text)."'
               : '';
 
@@ -31252,7 +31347,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
               ${previewHtml}
             `;
 
-            const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${hasThumbnail || (hasRichLayout && !previewIcons.length) ? ' with-thumbnail' : ''}${isDisabledSmartRenameStyle ? ' option-disabled' : ''}`;
+            const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${hasThumbnail || (hasRichLayout && !previewIcons.length) ? ' with-thumbnail' : ''}${isDisabledInAiOffMode ? ' option-disabled' : ''}`;
 
             // Include provider data attribute if present (for image model selection)
             const providerAttr = opt.provider ? ` data-provider="${escapeHtml(opt.provider)}"` : '';
@@ -31271,7 +31366,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const searchHtml = field.searchable ? `
             <div class="prompt-select-search-wrapper">
               <div class="prompt-select-search">
-                <input type="text" placeholder="${isMulti ? `Select ${escapeHtml(field.label || '')}...` : `Search ${escapeHtml(field.label || '')}`}" data-select-search="${fieldId}" autocomplete="off">
+                <input type="text" placeholder="${isMulti ? `Select ${escapeHtml(field.label || '')}...` : `Search ${escapeHtml(field.label || '')}`}" data-select-search="${fieldId}" autocomplete="off"${selectDisabledAttr}>
               </div>
               <svg class="prompt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M6 9l6 6 6-6" />
@@ -31295,11 +31390,11 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             </div>
           ` : '';
 
-          const canAddOption = field.key === 'tone' || field.key === 'imagePreset' || field.key === 'reStylePreset' || field.key === 'styleCategory';
+          const canAddOption = field.key === 'tone' || field.key === 'imagePreset' || field.key === 'reStylePreset' || field.key === 'renamePreset' || field.key === 'styleCategory';
           const fieldHeaderHtml = canAddOption ? `
             <div class="prompt-field-label-row">
               <label class="prompt-field-label">${field.label}</label>
-              <button class="add-option-btn" data-add-for="${field.key}" title="Add custom ${field.key}">
+              <button class="add-option-btn" data-add-for="${field.key}" title="Add custom ${field.key}"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
@@ -31312,7 +31407,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             <div class="prompt-field"${conditionalAttrs}>
               ${fieldHeaderHtml}
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <div class="prompt-custom-select${field.searchable ? ' collapsible collapsed' : ''}${field.disabled ? ' disabled' : ''}" id="${fieldId}" data-field-key="${field.key}" data-selected="${selectedAttr}" data-multi="${isMulti ? 'true' : 'false'}" data-searchable="${field.searchable ? 'true' : 'false'}"${disabledAttr}>
+              <div class="prompt-custom-select${field.searchable ? ' collapsible collapsed' : ''}${field.disabled || forceDisabled ? ' disabled' : ''}" id="${fieldId}" data-field-key="${field.key}" data-selected="${selectedAttr}" data-multi="${isMulti ? 'true' : 'false'}" data-searchable="${field.searchable ? 'true' : 'false'}"${selectDisabledAttr}>
                 ${searchHtml}
                 <div class="prompt-custom-select-options">
                   ${optionsHtml}
@@ -31342,19 +31437,20 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             </div>
           `;
         } else if (field.type === 'textarea') {
+          const forceDisabled = isSmartRenameFieldDisabledInAiOffMode(field.key);
           const aiButtons = [];
 
           if (field.aiButtons) {
             aiButtons.push(`
-              <button class="prompt-ai-btn" data-ai-action="generate" title="Generate description based on screen type and context" type="button">
+              <button class="prompt-ai-btn" data-ai-action="generate" title="Generate description based on screen type and context" type="button"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"></path></svg>
                 <span>Generate</span>
               </button>
-              <button class="prompt-ai-btn" data-ai-action="improve" title="Improve writing (without changing too much)" type="button">
+              <button class="prompt-ai-btn" data-ai-action="improve" title="Improve writing (without changing too much)" type="button"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
                 <span>Improve</span>
               </button>
-              <button class="prompt-ai-btn" data-ai-action="expand" title="Add details or suggestions" type="button">
+              <button class="prompt-ai-btn" data-ai-action="expand" title="Add details or suggestions" type="button"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
                 <span>Expand</span>
               </button>
@@ -31407,13 +31503,13 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const isEmptyClass = ((field.aiButtons || field.translate || field.customAiButtons || field.personaHistoryButton) && isEmpty) ? ' is-empty' : '';
 
           fieldHtml += `
-            <div class="prompt-field${field.disabled ? ' disabled' : ''}${isEmptyClass}"${conditionalAttrs}>
+            <div class="prompt-field${field.disabled || forceDisabled ? ' disabled' : ''}${isEmptyClass}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
                 ${aiButtonsHtml}
               </div>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <textarea id="${fieldId}" data-field-key="${field.key}" placeholder="${field.placeholder || ''}"${disabledAttr}>${textareaValue}</textarea>
+              <textarea id="${fieldId}" data-field-key="${field.key}" placeholder="${field.placeholder || ''}"${field.disabled || forceDisabled ? ' disabled' : ''}>${textareaValue}</textarea>
               <div class="prompt-field-image-chips" data-chips-for="${field.key}"></div>
               <div class="prompt-field-indicator" data-indicator-for="${field.key}">
                 <span class="prompt-indicator-text">Custom text</span>
@@ -31712,6 +31808,22 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
         applyStyleDefaults(styleSelect.dataset.selected);
       }
 
+      const renamePresetSelect = promptDrawerFields.querySelector('[data-field-key="renamePreset"]');
+      const renamePromptTextarea = promptDrawerFields.querySelector('textarea[data-field-key="renamePrompt"]');
+      if (renamePresetSelect && renamePromptTextarea) {
+        const selectedPreset = renamePresetSelect.dataset.selected || '';
+        const presetData = selectedPreset
+          ? (SMART_RENAME_PROMPT_PRESETS[selectedPreset] || customSmartRenamePresets.find(p => p.value === selectedPreset || p.label === selectedPreset))
+          : null;
+        const presetPrompt = (presetData?.style || '').trim();
+        const currentPrompt = (renamePromptTextarea.value || '').trim();
+        updatePromptFieldIndicator('renamePrompt', {
+          visible: !!selectedPreset && !!currentPrompt && currentPrompt !== presetPrompt,
+          text: 'Preset modified',
+          buttonText: 'Reset'
+        });
+      }
+
       // Add general change listener to save history
       promptDrawerFields.addEventListener('input', (e) => {
         if (e.target.matches('input, textarea, select')) {
@@ -31733,6 +31845,21 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
                 }
               }
             }
+          }
+
+          if (!isApplyingPreset && e.target.dataset.fieldKey === 'renamePrompt') {
+            const presetSelect = promptDrawerFields.querySelector('.prompt-custom-select[data-field-key="renamePreset"]');
+            const selectedPresetValue = presetSelect?.dataset.selected || '';
+            const presetData = selectedPresetValue
+              ? (SMART_RENAME_PROMPT_PRESETS[selectedPresetValue] || customSmartRenamePresets.find(p => p.value === selectedPresetValue || p.label === selectedPresetValue))
+              : null;
+            const presetPrompt = (presetData?.style || '').trim();
+            const currentPrompt = (e.target.value || '').trim();
+            updatePromptFieldIndicator('renamePrompt', {
+              visible: !!selectedPresetValue && currentPrompt !== presetPrompt,
+              text: 'Preset modified',
+              buttonText: 'Reset'
+            });
           }
         }
       });
@@ -31844,6 +31971,16 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           deleteBtn.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
+
+            if (textarea.dataset.fieldKey === 'renamePrompt') {
+              const presetSelect = promptDrawerFields.querySelector('.prompt-custom-select[data-field-key="renamePreset"]');
+              const selectedPresetValue = presetSelect?.dataset.selected || '';
+              if (selectedPresetValue) {
+                applySmartRenamePreset(selectedPresetValue);
+                return;
+              }
+            }
+
             setInputValueWithUndo(textarea, '');
             indicator.classList.remove('visible');
           };
@@ -31956,8 +32093,10 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
       promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
         const isMulti = selectEl.dataset.multi === 'true';
         const searchInput = selectEl.querySelector('.prompt-select-search input');
+        const isDisabled = () => selectEl.hasAttribute('disabled') || selectEl.classList.contains('disabled');
 
         const openSelect = () => {
+          if (isDisabled()) return;
           selectEl.classList.remove('collapsed');
           const fieldEl = selectEl.closest('.prompt-field');
           if (fieldEl) fieldEl.classList.add('has-open-select');
@@ -31995,6 +32134,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           const searchWrapper = selectEl.querySelector('.prompt-select-search-wrapper');
           if (searchWrapper) {
             searchWrapper.addEventListener('click', (e) => {
+              if (isDisabled()) return;
               const isChevron = e.target.closest('.prompt-select-chevron');
               if (isChevron && !selectEl.classList.contains('collapsed')) {
                 // If it's already open and we clicked the chevron, close it
@@ -32018,6 +32158,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
 
         selectEl.querySelectorAll('.prompt-custom-select-option').forEach(optionEl => {
           optionEl.addEventListener('click', (e) => {
+            if (isDisabled()) return;
             // Don't change selection if clicking on more button
             if (e.target.closest('.option-more-btn')) return;
             if (optionEl.dataset.disabled === 'true') return;
@@ -32055,6 +32196,9 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
             if (selectEl.dataset.fieldKey === 'reStylePreset') {
               applyReStylePreset(optionEl.dataset.value);
             }
+            if (selectEl.dataset.fieldKey === 'renamePreset') {
+              applySmartRenamePreset(optionEl.dataset.value);
+            }
             // --------------------------------------------------
             applyPromptFieldVisibility();
             if (searchInput) {
@@ -32073,6 +32217,7 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           if (embeddedInput) {
             embeddedInput.addEventListener('click', (e) => {
               e.stopPropagation();
+              if (isDisabled()) return;
               if (optionEl.dataset.disabled === 'true') return;
               // Auto-select this option when clicking the input
               if (isMulti) {
@@ -32996,6 +33141,24 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
       if (action === 'translate') {
         systemPrompt = "You are a professional translator. Translate the given text into English. Your response should contain ONLY the translated text. If the text is already in English, return it as is.";
         userPrompt = `Translate this text to English:\n\n${currentVal}`;
+      } else if (actionName === 'Smart rename' && fieldKey === 'renamePrompt') {
+        const delimiter = values.delimiter || 'camelCase';
+        const scope = values.onlySelected ? 'Only the selected layers' : 'The selected layers and their descendants';
+        const includeInstances = values.includeInstances ? 'Include component instances' : 'Skip component instances';
+        const keepOriginal = values.keepOriginal ? 'Append original names in parentheses' : 'Replace names entirely';
+        const preset = values.renamePreset || '';
+        const sharedContext = `\n\nContext:\n- Delimiter: ${delimiter}\n- Scope: ${scope}\n- Instances: ${includeInstances}\n- Original name handling: ${keepOriginal}${preset ? `\n- Preset: ${preset}` : ''}`;
+
+        if (action === 'generate') {
+          systemPrompt = "You are an expert design-system naming strategist. Generate a concise but actionable prompt for AI-based Figma layer renaming. The response must be ONLY the prompt text the renaming AI should follow.";
+          userPrompt = `Generate a Smart Rename prompt for Figma layer naming.${sharedContext}\n\nThe prompt should help produce semantic, consistent, UI-aware layer names.`;
+        } else if (action === 'improve') {
+          systemPrompt = "You are an expert design-system naming strategist. Improve the Smart Rename instruction so it is clearer, more actionable, and more deterministic while preserving intent. Your response must contain ONLY the improved prompt text.";
+          userPrompt = `Improve this Smart Rename prompt:\n\n${currentVal}${sharedContext}`;
+        } else if (action === 'expand') {
+          systemPrompt = "You are an expert design-system naming strategist. Expand the Smart Rename instruction with useful naming criteria, hierarchy cues, edge cases, and consistency rules. Your response must contain ONLY the expanded prompt text.";
+          userPrompt = `Expand this Smart Rename prompt with more useful rename guidance:\n\n${currentVal}${sharedContext}`;
+        }
       } else if (actionName === 'Generate image') {
         const subject = values.imageSubject || '';
         const style = values.imageStyle || '';
@@ -38271,7 +38434,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         }
 
         if (action.name === 'Smart rename') {
-          if (values.style === 'caseOnly') {
+          if (values.caseOnly) {
             closePromptDrawer();
             closeCommandsDrawer();
             await runSmartRenameCaseOnlyAction(values);
@@ -38280,6 +38443,11 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
 
           if (isAiOffModeEnabled()) {
             showToast('In No AI mode, Smart rename only supports "Case only (keep text)".', 'error');
+            return;
+          }
+
+          if (!(values.renamePrompt || '').trim()) {
+            showToast('Prompt is required for Smart rename', 'error');
             return;
           }
         }
@@ -48950,7 +49118,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
     const customStyleSecondaryColors = document.getElementById('customStyleSecondaryColors');
     const customStyleEffects = document.getElementById('customStyleEffects');
 
-    let currentAddingFor = null; // 'tone', 'imagePreset', 'reStylePreset', or 'styleCategory'
+    let currentAddingFor = null; // 'tone', 'imagePreset', 'reStylePreset', 'renamePreset', or 'styleCategory'
     let editingOptionOriginalId = null; // Store ID of option being edited
     let editingOptionOriginalValue = null; // Store value of option being edited (fallback for old data)
 
@@ -48987,10 +49155,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
         return;
       }
 
-      if (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset') {
+      if (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset' || fieldKey === 'renamePreset') {
         const typedPresetName = getDrawerFieldTypedText(fieldKey);
         if (customPresetName && typedPresetName) customPresetName.value = typedPresetName;
-        if (customPresetStyle) customPresetStyle.value = (values.imageStyle || '').toString();
+        if (customPresetStyle) {
+          customPresetStyle.value = fieldKey === 'renamePreset'
+            ? (values.renamePrompt || '').toString()
+            : (values.imageStyle || '').toString();
+        }
         if (fieldKey === 'imagePreset' && customPresetSubject) {
           customPresetSubject.value = (values.imageSubject || '').toString();
         }
@@ -49010,15 +49182,23 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       const isEdit = !!editData;
       const titlePrefix = isEdit ? 'Edit' : 'Add';
-      addOptionModalTitle.textContent = fieldKey === 'tone' ? `${titlePrefix} Custom Tone` : (fieldKey === 'styleCategory' ? `${titlePrefix} Design Style` : (fieldKey === 'imagePreset' ? `${titlePrefix} Style Preset` : `${titlePrefix} ReStyle Preset`));
+      addOptionModalTitle.textContent = fieldKey === 'tone'
+        ? `${titlePrefix} Custom Tone`
+        : (fieldKey === 'styleCategory'
+          ? `${titlePrefix} Design Style`
+          : (fieldKey === 'imagePreset'
+            ? `${titlePrefix} Style Preset`
+            : (fieldKey === 'renamePreset'
+              ? `${titlePrefix} Rename Prompt Preset`
+              : `${titlePrefix} ReStyle Preset`)));
       btnConfirmAddOption.textContent = isEdit ? 'Update Option' : 'Add Option';
 
       // Reset all fields
       if (customToneName) customToneName.value = editData && fieldKey === 'tone' ? editData.label : '';
       if (customToneValue) customToneValue.value = editData && fieldKey === 'tone' ? editData.value : '';
-      if (customPresetName) customPresetName.value = editData && (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset') ? editData.label : '';
+      if (customPresetName) customPresetName.value = editData && (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset' || fieldKey === 'renamePreset') ? editData.label : '';
       if (customPresetSubject) customPresetSubject.value = editData && fieldKey === 'imagePreset' ? editData.subject : '';
-      if (customPresetStyle) customPresetStyle.value = editData && (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset') ? editData.style : '';
+      if (customPresetStyle) customPresetStyle.value = editData && (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset' || fieldKey === 'renamePreset') ? editData.style : '';
       if (customPresetThumbnail) customPresetThumbnail.value = editData && (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset') ? (editData.thumbnail || '') : '';
       if (customStyleName) customStyleName.value = editData && fieldKey === 'styleCategory' ? (editData.name || editData.label) : '';
       if (customStyleKeywords) customStyleKeywords.value = editData && fieldKey === 'styleCategory' ? (editData.keywords || '') : '';
@@ -49029,10 +49209,11 @@ Based on the user's instruction, generate the appropriate commands to modify the
       // Show/hide appropriate fields
       if (toneOnlyFields) toneOnlyFields.style.display = fieldKey === 'tone' ? 'block' : 'none';
       if (imagePresetOnlyFields) {
-        imagePresetOnlyFields.style.display = (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset') ? 'block' : 'none';
-        // Hide subject field if it's a reStylePreset
+        imagePresetOnlyFields.style.display = (fieldKey === 'imagePreset' || fieldKey === 'reStylePreset' || fieldKey === 'renamePreset') ? 'block' : 'none';
         const subjectField = customPresetSubject.closest('.setting-item');
-        if (subjectField) subjectField.style.display = fieldKey === 'reStylePreset' ? 'none' : 'block';
+        const thumbnailField = customPresetThumbnail.closest('.setting-item');
+        if (subjectField) subjectField.style.display = fieldKey === 'imagePreset' ? 'block' : 'none';
+        if (thumbnailField) thumbnailField.style.display = fieldKey === 'renamePreset' ? 'none' : 'block';
       }
       if (styleCategoryOnlyFields) styleCategoryOnlyFields.style.display = fieldKey === 'styleCategory' ? 'block' : 'none';
 
@@ -49100,7 +49281,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           renderPromptFields(currentPromptAction.fields, currentValues);
         }
 
-      } else if (currentAddingFor === 'imagePreset' || currentAddingFor === 'reStylePreset') {
+      } else if (currentAddingFor === 'imagePreset' || currentAddingFor === 'reStylePreset' || currentAddingFor === 'renamePreset') {
         const name = customPresetName.value.trim();
         const subject = customPresetSubject.value.trim();
         const style = customPresetStyle.value.trim();
@@ -49116,12 +49297,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
           return;
         }
 
-        if (currentAddingFor === 'reStylePreset' && !style) {
+        if ((currentAddingFor === 'reStylePreset' || currentAddingFor === 'renamePreset') && !style) {
           showToast('Style (Prompt) is required', 'error');
           return;
         }
 
-        const targetList = currentAddingFor === 'imagePreset' ? customImagePresets : customReStylePresets;
+        const targetList = currentAddingFor === 'imagePreset'
+          ? customImagePresets
+          : (currentAddingFor === 'reStylePreset' ? customReStylePresets : customSmartRenamePresets);
 
         // Check for duplicates (excluding the one we're editing)
         if (targetList.some(p => p.value === name && (editingOptionOriginalId ? p.id !== editingOptionOriginalId : p.value !== editingOptionOriginalValue))) {
@@ -49130,7 +49313,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         }
 
         const newPreset = {
-          id: `${currentAddingFor === 'imagePreset' ? 'img' : 'rst'}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: `${currentAddingFor === 'imagePreset' ? 'img' : (currentAddingFor === 'reStylePreset' ? 'rst' : 'rnp')}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           label: name,
           value: name,
           subject: currentAddingFor === 'imagePreset' ? subject : '',
@@ -49156,12 +49339,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
         // Preserve current values and set the new preset as selected
         const currentValues = getPromptFieldValues();
         currentValues[currentAddingFor] = name;
-        // Also populate the subject and style fields if it's an image preset
+        // Also populate the linked prompt fields
         if (currentAddingFor === 'imagePreset') {
           currentValues.imageSubject = subject;
           currentValues.imageStyle = style;
         } else if (currentAddingFor === 'reStylePreset') {
           currentValues.imageStyle = style;
+        } else if (currentAddingFor === 'renamePreset') {
+          currentValues.renamePrompt = style;
         }
 
         closeAddOptionModal();
@@ -49177,6 +49362,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
           } else if (currentAddingFor === 'reStylePreset') {
             setTimeout(() => {
               applyReStylePreset(name);
+            }, 50);
+          } else if (currentAddingFor === 'renamePreset') {
+            setTimeout(() => {
+              applySmartRenamePreset(name);
             }, 50);
           }
         }
@@ -49282,6 +49471,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
         optionData = customImagePresets.find(p => p.id === menuActiveOptionId || (menuActiveOptionValue && p.value === menuActiveOptionValue));
       } else if (menuActiveFieldKey === 'reStylePreset') {
         optionData = customReStylePresets.find(p => p.id === menuActiveOptionId || (menuActiveOptionValue && p.value === menuActiveOptionValue));
+      } else if (menuActiveFieldKey === 'renamePreset') {
+        optionData = customSmartRenamePresets.find(p => p.id === menuActiveOptionId || (menuActiveOptionValue && p.value === menuActiveOptionValue));
       } else if (menuActiveFieldKey === 'styleCategory') {
         optionData = customStyleCategories.find(s => s.id === menuActiveOptionId || (menuActiveOptionValue && (s.name === menuActiveOptionValue || s.value === menuActiveOptionValue)));
         if (optionData && !optionData.value) optionData = { ...optionData, value: optionData.name };
@@ -49330,6 +49521,17 @@ Based on the user's instruction, generate the appropriate commands to modify the
           customReStylePresets.unshift(newOption);
           saveCustomOptions('reStylePreset', customReStylePresets);
         }
+      } else if (menuActiveFieldKey === 'renamePreset') {
+        optionData = customSmartRenamePresets.find(p => p.id === menuActiveOptionId || (menuActiveOptionValue && p.value === menuActiveOptionValue));
+        if (optionData) {
+          const newOption = {
+            ...optionData,
+            id: `rnp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            label: `${optionData.label} (Copy)`
+          };
+          customSmartRenamePresets.unshift(newOption);
+          saveCustomOptions('renamePreset', customSmartRenamePresets);
+        }
       } else if (menuActiveFieldKey === 'styleCategory') {
         optionData = customStyleCategories.find(s => s.id === menuActiveOptionId || (menuActiveOptionValue && (s.name === menuActiveOptionValue || s.value === menuActiveOptionValue)));
         if (optionData) {
@@ -49377,6 +49579,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
         if (currentValues.reStylePreset === value) {
           currentValues.reStylePreset = '';
         }
+      } else if (fieldKey === 'renamePreset') {
+        customSmartRenamePresets = customSmartRenamePresets.filter(p => id ? p.id !== id : p.value !== value);
+        saveCustomOptions('renamePreset', customSmartRenamePresets);
+        if (currentValues.renamePreset === value) {
+          currentValues.renamePreset = '';
+        }
       } else if (fieldKey === 'styleCategory') {
         customStyleCategories = customStyleCategories.filter(s => id ? s.id !== id : (s.name !== value && s.value !== value));
         saveCustomOptions('styleCategory', customStyleCategories);
@@ -49401,6 +49609,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
         payloadKey = 'presets';
       } else if (type === 'reStylePreset') {
         messageType = 'save-custom-re-style-presets';
+        payloadKey = 'presets';
+      } else if (type === 'renamePreset') {
+        messageType = 'save-custom-smart-rename-presets';
         payloadKey = 'presets';
       } else if (type === 'styleCategory') {
         messageType = 'save-custom-style-categories';
@@ -49699,6 +49910,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
           }
           if (msg.data.customReStylePresets) {
             customReStylePresets = msg.data.customReStylePresets;
+          }
+          if (msg.data.customSmartRenamePresets) {
+            customSmartRenamePresets = msg.data.customSmartRenamePresets;
           }
           if (msg.data.customStyleCategories) {
             customStyleCategories = msg.data.customStyleCategories;
