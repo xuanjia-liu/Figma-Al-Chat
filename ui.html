@@ -8798,7 +8798,7 @@
       gap: var(--space-sm);
     }
 
-    .prompt-field-checkbox input[type="checkbox"] {
+    .prompt-field-checkbox:not(.prompt-field-checkbox-toggle) input[type="checkbox"] {
       width: 16px;
       height: 16px;
       accent-color: var(--accent);
@@ -8808,6 +8808,63 @@
     .prompt-field-checkbox .prompt-field-label {
       cursor: pointer;
       user-select: none;
+    }
+
+    .prompt-field-checkbox.prompt-field-checkbox-toggle {
+      padding: var(--space-xs) 0;
+    }
+
+    .prompt-toggle-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .prompt-toggle-switch input {
+      appearance: none;
+      -webkit-appearance: none;
+      accent-color: transparent;
+      width: 36px;
+      height: 20px;
+      min-width: 36px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease;
+      margin: 0;
+      flex-shrink: 0;
+      display: inline-block;
+      vertical-align: middle;
+      box-sizing: border-box;
+      outline: none;
+    }
+
+    .prompt-toggle-switch input::after {
+      content: '';
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--bg-primary);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+      transition: transform 0.2s ease;
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+
+    .prompt-toggle-switch input:checked {
+      background: var(--accent-agent);
+      border-color: var(--accent-agent);
+    }
+
+    .prompt-toggle-switch input:checked::after {
+      transform: translateX(16px);
     }
 
     .checkbox-hint {
@@ -20531,6 +20588,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           requiredContext: ContextMode.HIERARCHY,
           prompt: '',
           fields: [
+            { key: 'caseOnly', type: 'checkbox', label: 'Case only (keep text)', default: false },
             {
               key: 'renamePreset',
               type: 'select',
@@ -20554,7 +20612,6 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
               ]
             },
             { key: 'onlySelected', type: 'checkbox', label: 'Only rename selected layer', default: false },
-            { key: 'caseOnly', type: 'checkbox', label: 'Case only (keep text)', default: false },
             { key: 'includeInstances', type: 'checkbox', label: 'Include component instances', default: false },
             { key: 'keepOriginal', type: 'checkbox', label: 'Append original in parentheses', default: false },
           ],
@@ -31104,15 +31161,28 @@ Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
           if (currentPromptAction?.name === 'Smart rename' && isAiOffModeEnabled() && field.key === 'caseOnly' && !(preservedValues && preservedValues[field.key] !== undefined)) {
             isChecked = true;
           }
-          fieldHtml += `
-            <div class="prompt-field prompt-field-checkbox${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
-              <div class="prompt-checkbox-row">
-                <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
-                <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+          const isSmartRenameCaseToggle = currentPromptAction?.name === 'Smart rename' && field.key === 'caseOnly';
+          if (isSmartRenameCaseToggle) {
+            fieldHtml += `
+              <div class="prompt-field prompt-field-checkbox prompt-field-checkbox-toggle${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+                <label class="prompt-toggle-switch" for="${fieldId}">
+                  <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
+                  <span class="prompt-field-label">${field.label}</span>
+                </label>
+                ${field.hint ? `<span class="prompt-field-hint checkbox-hint">${field.hint}</span>` : ''}
               </div>
-              ${field.hint ? `<span class="prompt-field-hint checkbox-hint">${field.hint}</span>` : ''}
-            </div>
-          `;
+            `;
+          } else {
+            fieldHtml += `
+              <div class="prompt-field prompt-field-checkbox${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+                <div class="prompt-checkbox-row">
+                  <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
+                  <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                </div>
+                ${field.hint ? `<span class="prompt-field-hint checkbox-hint">${field.hint}</span>` : ''}
+              </div>
+            `;
+          }
         } else if (field.type === 'select') {
           const isMulti = field.multi === true;
           const forceDisabled = isSmartRenameFieldDisabledInAiOffMode(field.key);
@@ -33431,6 +33501,20 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       if (rowsField && rowsField.closest) {
         const rowsFieldEl = rowsField.closest('.prompt-field');
         if (rowsFieldEl) rowsFieldEl.style.display = hideColsRows ? 'none' : '';
+      }
+
+      if (currentPromptAction?.name === 'Smart rename') {
+        const caseOnlyEnabled = getPromptVisibilityValue('caseOnly') === 'true';
+        ['renamePreset', 'renamePrompt'].forEach((fieldKey) => {
+          const fieldEl = promptDrawerFields.querySelector(`[data-field-key="${fieldKey}"]`)?.closest('.prompt-field');
+          if (!fieldEl) return;
+          const shouldDisable = caseOnlyEnabled || isAiOffModeEnabled();
+          fieldEl.classList.toggle('disabled', shouldDisable);
+        });
+
+        if (caseOnlyEnabled) {
+          updatePromptFieldIndicator('renamePrompt', { visible: false });
+        }
       }
 
       // 2b. Handle Button component set field visibility
