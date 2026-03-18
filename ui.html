@@ -8385,7 +8385,7 @@
     }
 
     .prompt-field-header--with-actions {
-      min-height: 22px;
+      min-height: 20px;
     }
 
     .prompt-ai-actions {
@@ -21102,9 +21102,7 @@ Return ONLY JSON.`;
               key: 'iconSource', type: 'select', label: 'Icon Source', default: 'iconify', options: [
                 { value: 'iconify', label: 'Iconify' },
                 { value: 'antv', label: 'AntV Infographic' },
-                { value: 'iconfont-fa5', label: 'Icon Font - Font Awesome 5 Free' },
-                { value: 'iconfont-fa6', label: 'Icon Font - Font Awesome 6 Free' },
-                { value: 'iconfont-material', label: 'Icon Font - Material Icons' }
+                { value: 'iconfont', label: 'Icon Font' }
               ]
             },
             {
@@ -34467,9 +34465,23 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       let isInserting = false;
       const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#111827';
       const safeSize = clampNumber(size || 24, 16, 512);
+      let lastFontFamily = null;
 
       matches.forEach((match) => {
         if (!match || !match.id) return;
+
+        if (iconApiSource === 'iconfont' && match.fontFamily && match.fontFamily !== lastFontFamily) {
+          const title = document.createElement('div');
+          title.textContent = match.fontFamily;
+          title.style.gridColumn = '1 / -1';
+          title.style.margin = grid.children.length > 0 ? '12px 0 4px' : '0 0 4px';
+          title.style.fontSize = '11px';
+          title.style.fontWeight = '700';
+          title.style.letterSpacing = '0.02em';
+          title.style.color = 'var(--text-secondary)';
+          grid.appendChild(title);
+          lastFontFamily = match.fontFamily;
+        }
 
         const item = document.createElement('div');
         item.className = 'icon-browse-item';
@@ -34520,7 +34532,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           item.classList.add('selected');
           try {
             if (iconApiSource === 'iconfont') {
-              await createIconFontFromId(match.id, { size: safeSize, fallbackHint, actionMeta, fontFamily: iconFontFamily });
+              await createIconFontFromId(match.id, { size: safeSize, fallbackHint, actionMeta, fontFamily: match.fontFamily || iconFontFamily });
             } else {
               await createIconFromId(match.id, { size: safeSize, useAiFallback, fallbackHint, actionMeta });
             }
@@ -35162,7 +35174,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return null;
     }
 
-    async function searchIconifyAcrossPrefixes(prefixes, query, limit = 20) {
+    async function searchIconifyAcrossPrefixes(prefixes, query, limit = 20, fontFamily = null) {
       const allResults = [];
       for (const prefix of prefixes || []) {
         const url = new URL('https://api.iconify.design/search');
@@ -35176,7 +35188,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           const icons = Array.isArray(data?.icons) ? data.icons : [];
           for (const id of icons) {
             if (typeof id === 'string' && id.includes(':')) {
-              allResults.push({ id, label: id, source: 'iconfont' });
+              allResults.push({ id, label: id, source: 'iconfont', fontFamily });
             }
           }
         } catch (err) {
@@ -35186,7 +35198,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
       const unique = new Map();
       allResults.forEach(item => {
-        if (item?.id && !unique.has(item.id)) unique.set(item.id, item);
+        if (item?.id && !unique.has(`${item.fontFamily || ''}:${item.id}`)) unique.set(`${item.fontFamily || ''}:${item.id}`, item);
       });
       return Array.from(unique.values());
     }
@@ -35205,7 +35217,22 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return 0;
     }
 
-    async function searchMaterialIconsByCodepoints(query, limit = 20) {
+    function scoreGenericIconName(name, query) {
+      const n = (name || '').toLowerCase();
+      const q = (query || '').toLowerCase().trim();
+      if (!q) return 0;
+      if (n === q) return 100;
+      if (n.startsWith(q)) return 80;
+      if (n.includes(q)) return 50;
+      const hyphenated = q.replace(/[\s_]+/g, '-');
+      const underscored = q.replace(/[\s-]+/g, '_');
+      if (n === hyphenated || n === underscored) return 95;
+      if (n.startsWith(hyphenated) || n.startsWith(underscored)) return 75;
+      if (n.includes(hyphenated) || n.includes(underscored)) return 45;
+      return 0;
+    }
+
+    async function searchMaterialIconsByCodepoints(query, limit = 20, fontFamily = 'Material Icons') {
       const unicodeMap = await loadIconFontUnicodeMap('Material Icons');
       const queryNormalized = (query || '').toLowerCase().trim();
       if (!queryNormalized) return [];
@@ -35218,6 +35245,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           id: `material-symbols:${name.replace(/_/g, '-')}`,
           label: `material-icons:${name}`,
           source: 'iconfont',
+          fontFamily,
           score
         });
       }
@@ -35604,9 +35632,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const iconSourceMap = {
         iconify: { apiSource: 'iconify', fontFamily: null, label: 'Iconify' },
         antv: { apiSource: 'antv', fontFamily: null, label: 'AntV Infographic' },
-        'iconfont-fa5': { apiSource: 'iconfont', fontFamily: 'Font Awesome 5 Free', label: 'Font Awesome 5 Free' },
-        'iconfont-fa6': { apiSource: 'iconfont', fontFamily: 'Font Awesome 6 Free', label: 'Font Awesome 6 Free' },
-        'iconfont-material': { apiSource: 'iconfont', fontFamily: 'Material Icons', label: 'Material Icons' }
+        iconfont: { apiSource: 'iconfont', fontFamily: null, label: 'Icon Font' }
       };
       const resolvedIconSource = iconSourceMap[selectedIconSource] || iconSourceMap.iconify;
       const iconApiSource = resolvedIconSource.apiSource;
@@ -35617,7 +35643,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const strokeWidth = Number(values.strokeWidth || 0) || 2;
       const setMeta = (iconSetOptionsCache || []).find(opt => opt.value === iconSet) || {};
       const sampleIcons = Array.isArray(setMeta.samples) ? setMeta.samples : (iconCollectionsCache?.[iconSet]?.samples || []);
-      const iconFontConfig = ICON_FONT_FAMILY_CONFIG[iconFontFamily || 'Font Awesome 6 Free'] || null;
 
       const slugSuggestion = isNoAiMode ? null : await suggestIconSlug({
         iconSet: iconSet || 'mdi',
@@ -35660,12 +35685,18 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           searchQuery,
         ].filter(Boolean);
         const allResults = [];
-        const isMaterialIconsFamily = (iconFontFamily || '') === 'Material Icons';
+        const iconFontSearchConfigs = [
+          { fontFamily: 'Font Awesome 5 Free', prefixes: ICON_FONT_FAMILY_CONFIG['Font Awesome 5 Free']?.iconifyPrefixes || ['fa-solid', 'fa-regular'] },
+          { fontFamily: 'Font Awesome 6 Free', prefixes: ICON_FONT_FAMILY_CONFIG['Font Awesome 6 Free']?.iconifyPrefixes || ['fa6-solid', 'fa6-regular'] },
+          { fontFamily: 'Material Icons', material: true }
+        ];
         for (const q of queries) {
-          const res = isMaterialIconsFamily
-            ? await searchMaterialIconsByCodepoints(q, 20)
-            : await searchIconifyAcrossPrefixes((iconFontConfig?.iconifyPrefixes || ['fa6-solid', 'fa6-regular']), q, 20);
-          if (res && res.length) allResults.push(...res);
+          for (const config of iconFontSearchConfigs) {
+            const res = config.material
+              ? await searchMaterialIconsByCodepoints(q, 20, config.fontFamily)
+              : await searchIconifyAcrossPrefixes(config.prefixes, q, 20, config.fontFamily);
+            if (res && res.length) allResults.push(...res);
+          }
         }
         matches = allResults;
       } else if (iconSet) {
@@ -35704,11 +35735,13 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           const newMatches = (loosened || []).filter(m => !existingIds.has(m.id));
           matches = [...matches, ...newMatches];
         } else if (iconApiSource === 'iconfont') {
-          const isMaterialIconsFamily = (iconFontFamily || '') === 'Material Icons';
-          const loosened = isMaterialIconsFamily
-            ? await searchMaterialIconsByCodepoints(description || slug || 'icon', 30)
-            : await searchIconifyAcrossPrefixes((iconFontConfig?.iconifyPrefixes || ['fa6-solid', 'fa6-regular']), description || slug || 'icon', 30);
-          matches = [...matches, ...(loosened || [])];
+          const broadenedQuery = description || slug || 'icon';
+          const loosenedGroups = await Promise.all([
+            searchIconifyAcrossPrefixes(ICON_FONT_FAMILY_CONFIG['Font Awesome 5 Free']?.iconifyPrefixes || ['fa-solid', 'fa-regular'], broadenedQuery, 30, 'Font Awesome 5 Free'),
+            searchIconifyAcrossPrefixes(ICON_FONT_FAMILY_CONFIG['Font Awesome 6 Free']?.iconifyPrefixes || ['fa6-solid', 'fa6-regular'], broadenedQuery, 30, 'Font Awesome 6 Free'),
+            searchMaterialIconsByCodepoints(broadenedQuery, 30, 'Material Icons')
+          ]);
+          matches = [...matches, ...loosenedGroups.flat().filter(Boolean)];
         } else {
           const loosened = await searchIconifyIconGlobal(description || slug || 'icon', 30);
           matches = [...matches, ...(loosened || [])];
@@ -35719,15 +35752,39 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       matches = matches || [];
       const uniqueMap = new Map();
       matches.forEach(m => {
-        if (m?.id) uniqueMap.set(m.id, m);
+        if (m?.id) uniqueMap.set(`${m.fontFamily || ''}:${m.id}`, m);
       });
       matches = Array.from(uniqueMap.values());
+
+      if (iconApiSource === 'iconfont') {
+        matches = matches.filter(match => {
+          const iconName = parseIconNameFromId(match.id);
+          const score = Math.max(
+            scoreGenericIconName(iconName, cleanDesc),
+            scoreGenericIconName(iconName, slug),
+            scoreMaterialIconName(iconName, cleanDesc),
+            scoreMaterialIconName(iconName, slug)
+          );
+          return score > 0;
+        });
+      }
 
       // Relevance sort: icons whose name contains the user's keyword rank higher
       const descLower = (cleanDesc || slug || '').toLowerCase();
       const slugLower = (slug || '').toLowerCase();
       if (descLower) {
         matches.sort((a, b) => {
+          if (iconApiSource === 'iconfont') {
+            const fontOrder = {
+              'Font Awesome 5 Free': 0,
+              'Font Awesome 6 Free': 1,
+              'Material Icons': 2
+            };
+            const aFont = fontOrder[a.fontFamily] ?? 99;
+            const bFont = fontOrder[b.fontFamily] ?? 99;
+            if (aFont !== bFont) return aFont - bFont;
+          }
+
           const aId = (a.id || '').toLowerCase();
           const bId = (b.id || '').toLowerCase();
           const aName = aId.includes(':') ? aId.split(':').pop() : aId;
@@ -35755,7 +35812,19 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           const bIsLogo = bPrefix === 'logos';
           if (aIsLogo !== bIsLogo) return aIsLogo ? 1 : -1;
 
-          return 0;
+          return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
+        });
+      } else if (iconApiSource === 'iconfont') {
+        const fontOrder = {
+          'Font Awesome 5 Free': 0,
+          'Font Awesome 6 Free': 1,
+          'Material Icons': 2
+        };
+        matches.sort((a, b) => {
+          const aFont = fontOrder[a.fontFamily] ?? 99;
+          const bFont = fontOrder[b.fontFamily] ?? 99;
+          if (aFont !== bFont) return aFont - bFont;
+          return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
         });
       }
 
@@ -35781,7 +35850,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const userText = `Create ${iconApiSource === 'antv'
         ? 'AntV'
         : iconApiSource === 'iconfont'
-          ? `${iconFontFamily || 'Icon Font'}`
+          ? 'Icon Font'
           : (iconSet || 'any')
         } icon${description ? `: "${description}"` : ''}`;
       addMessage('user', userText, null, { name: actionMeta?.name || 'Create icon', icon: actionMeta?.icon });
@@ -35846,8 +35915,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
                   showChoices(nextStart);
                   return;
                 }
+                const chosenMatch = options.find(o => o.id === chosenId);
                 if (iconApiSource === 'iconfont') {
-                  await createIconFontFromId(chosenId, { size, fallbackHint: aiContext, actionMeta, fontFamily: iconFontFamily });
+                  await createIconFontFromId(chosenId, { size, fallbackHint: aiContext, actionMeta, fontFamily: chosenMatch?.fontFamily || iconFontFamily });
                 } else {
                   await createIconFromId(chosenId, { size, useAiFallback, fallbackHint: aiContext, actionMeta });
                 }
@@ -35863,7 +35933,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         const target = matches[0];
         const iconId = target?.id || `${iconSet || 'mdi'}:${slug}`;
         if (iconApiSource === 'iconfont') {
-          await createIconFontFromId(iconId, { size, fallbackHint: aiContext, actionMeta, fontFamily: iconFontFamily });
+          await createIconFontFromId(iconId, { size, fallbackHint: aiContext, actionMeta, fontFamily: target?.fontFamily || iconFontFamily });
         } else {
           await createIconFromId(iconId, { size, useAiFallback, fallbackHint: aiContext, actionMeta });
         }
