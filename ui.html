@@ -21152,14 +21152,6 @@ Return ONLY JSON.`;
                 { key: 'strokeWidth', type: 'number', label: 'Stroke width', default: 2, min: 0.5, step: 0.5 }
               ]
             },
-            {
-              key: 'paddingBehavior', type: 'select', label: 'Padding behavior', default: 'medium', options: [
-                { value: 'none', label: 'None' },
-                { value: 'small', label: 'Small' },
-                { value: 'medium', label: 'Medium' },
-                { value: 'large', label: 'Large' },
-              ]
-            },
             { key: 'showResultsInDrawer', type: 'checkbox', label: 'Show search results in drawer', default: true },
             { key: 'useAiFallback', type: 'checkbox', label: 'Generate fallback if missing', default: true }
           ]
@@ -34089,7 +34081,6 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         iconDescription: finalDesc || 'icon',
         stylePreferences: isSolid ? ['Filled'] : ['Outline'],
         strokeWidth: isSolid ? 0 : 2,
-        paddingBehavior: 'medium',
         showResultsInDrawer: true,
         size: sizeMatch ? parseInt(sizeMatch[1]) : 24,
         color: colorMatch ? `#${colorMatch[1]} ` : '#111827',
@@ -35562,7 +35553,7 @@ TECHNICAL RULES:
       }
     }
 
-    async function suggestIconSlug({ iconSet, description, styles = [], tags = [], strokeWidth, paddingBehavior, samples = [] }) {
+    async function suggestIconSlug({ iconSet, description, styles = [], tags = [], strokeWidth, samples = [] }) {
       const apiKey = getCurrentApiKey();
       if (!apiKey) return null;
       const styleLine = styles.length ? `Style preferences: ${styles.join(', ')}` : 'Style preferences: none specified';
@@ -35575,7 +35566,6 @@ ${styleLine}
 ${tagLine}
 ${sampleLine}
 Stroke width: ${strokeWidth || 'default'}
-Padding behavior: ${paddingBehavior || 'medium'}
 Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). Do not include the prefix or extra text.`;
       const systemPrompt = 'You are a professional icon librarian for a modern design system. Your task is to find the most accurate and stylistically consistent Iconify slug (no prefix) for a given description. Prioritize minimalist, clean, and recognizable icons that work well in modern UI. Output ONLY the slug (e.g., calendar-check).';
 
@@ -35654,8 +35644,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         ? values.stylePreferences.filter(Boolean)
         : (values.stylePreferences ? [values.stylePreferences] : []);
       const strokeWidth = Number(values.strokeWidth || 0) || 2;
-      const paddingBehavior = (values.paddingBehavior || 'medium').trim();
-
       const setMeta = (iconSetOptionsCache || []).find(opt => opt.value === iconSet) || {};
       const sampleIcons = Array.isArray(setMeta.samples) ? setMeta.samples : (iconCollectionsCache?.[iconSet]?.samples || []);
       const iconFontConfig = ICON_FONT_FAMILY_CONFIG[iconFontFamily || 'Font Awesome 6 Free'] || null;
@@ -35666,7 +35654,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         styles: stylePreferences,
         tags: [],
         strokeWidth,
-        paddingBehavior,
         samples: sampleIcons
       });
       const slug = normalizeIconSlug(slugSuggestion || description || 'icon');
@@ -35813,7 +35800,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const aiContext = {
         description: description || slug,
         stylePreferences,
-        paddingBehavior,
         strokeWidth,
         isSolid: stylePreferences.some(s => /filled|solid|glyph/i.test(s)),
         size,
@@ -35823,7 +35809,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const fallbackHint = [
         aiContext.description,
         aiContext.stylePreferences.length ? `style ${aiContext.stylePreferences.join(', ')}` : '',
-        `padding ${aiContext.paddingBehavior}`,
         `stroke ${aiContext.strokeWidth}px`,
         iconSet ? `set ${iconSet}` : ''
       ].filter(Boolean).join(' | ');
