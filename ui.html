@@ -35644,7 +35644,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const setMeta = (iconSetOptionsCache || []).find(opt => opt.value === iconSet) || {};
       const sampleIcons = Array.isArray(setMeta.samples) ? setMeta.samples : (iconCollectionsCache?.[iconSet]?.samples || []);
 
-      const slugSuggestion = isNoAiMode ? null : await suggestIconSlug({
+      const slugSuggestion = (isNoAiMode || iconApiSource === 'iconfont') ? null : await suggestIconSlug({
         iconSet: iconSet || 'mdi',
         description,
         styles: [],
