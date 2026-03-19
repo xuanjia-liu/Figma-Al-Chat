@@ -11757,8 +11757,9 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawerTitle.textContent = actionData.name;
         promptDrawerIcon.innerHTML = actionData.icon || '';
 
-        // Set help text - only show if help exists
-        if (actionData.help && actionData.help.trim()) {
+        // Set help text - only show if help exists and this action uses the help panel
+        const hidePromptDrawerHelp = actionData.name === '縦書き / Vertical text';
+        if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
         } else {

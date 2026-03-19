@@ -5614,7 +5614,9 @@ figma.ui.onmessage = async (msg: {
               wrapperNode.appendChild(col1Frame);
             }
 
-            // --- Create additional columns (2+), each in its own frame, left-to-right ---
+            // --- Create additional columns (2+), each in its own frame.
+            // Insert new columns at the front so Col 1 remains on the right, which
+            // matches vertical CJK reading order.
             for (let c = 1; c < verticalColumnTexts.length; c++) {
               const colText = verticalColumnTexts[c];
               if (!colText) continue;
@@ -5631,7 +5633,7 @@ figma.ui.onmessage = async (msg: {
               colNode.setPluginData('fgVerticalTextExtra', 'true');
 
               const colFrame = wrapInColumnFrame(colNode, c);
-              wrapperNode.appendChild(colFrame);
+              wrapperNode.insertChild(0, colFrame);
             }
 
             // --- Store plugin data ---

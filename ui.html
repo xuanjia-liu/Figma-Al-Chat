@@ -27533,7 +27533,8 @@
           currentPromptAction = __spreadProps(__spreadValues({}, actionData), { promptTemplate: template });
           promptDrawerTitle.textContent = actionData.name;
           promptDrawerIcon.innerHTML = actionData.icon || "";
-          if (actionData.help && actionData.help.trim()) {
+          const hidePromptDrawerHelp = actionData.name === "縦書き / Vertical text";
+          if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
             promptDrawerHelpText.textContent = actionData.help.trim();
             promptDrawerHelp.classList.remove("hidden");
           } else {
