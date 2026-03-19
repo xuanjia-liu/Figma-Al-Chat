@@ -16,7 +16,10 @@ import {
   baseImageDimensions,
 } from './state.js';
 import { chatInlineHandlerNames, isCapabilityQuestion } from './features/chat.js';
-import { commentsInlineHandlerNames } from './features/comments.js';
+import { createCommentsActionHandlers } from './features/comments/actions.js';
+import { createCommentsApi } from './features/comments/api.js';
+import { createCommentsDrawerHelpers } from './features/comments/drawer.js';
+import { commentsInlineHandlerNames } from './features/comments/index.js';
 import { historyInlineHandlerNames } from './features/history.js';
 import { createInitialModelMetadata } from './features/models.js';
 import {
@@ -6519,6 +6522,92 @@ CRITICAL RULES:
     let commentsWithReplyMatches = new Set();
     let commentsWithPeopleReplyMatches = new Set();
 
+    function getCommentsFeatureState() {
+      return {
+        figmaComments,
+        figmaCommentsLastLoaded,
+        figmaCommentsLoading,
+        figmaCurrentUser,
+        showResolvedComments,
+        currentCommentsScope,
+        commentNodePageMap,
+        figmaCurrentPageId,
+        lastKnownSelectionItems,
+        selectedAuthorsFilter,
+        selectedMentionsFilter,
+        commentsSearchQuery,
+        commentsFilterBy,
+        commentsSortBy,
+        selectedCommentIds,
+        multiSelectEnabled,
+        cachedNodeNames,
+        commentsWithReplyMatches,
+        commentsWithPeopleReplyMatches,
+      };
+    }
+
+    function setCommentsFeatureState(partial) {
+      if (Object.prototype.hasOwnProperty.call(partial, 'figmaComments')) figmaComments = partial.figmaComments;
+      if (Object.prototype.hasOwnProperty.call(partial, 'figmaCommentsLastLoaded')) figmaCommentsLastLoaded = partial.figmaCommentsLastLoaded;
+      if (Object.prototype.hasOwnProperty.call(partial, 'figmaCommentsLoading')) figmaCommentsLoading = partial.figmaCommentsLoading;
+    }
+
+    const {
+      renderCommentItemHTML: movedRenderCommentItemHTML,
+      renderCommentsListHTML: movedRenderCommentsListHTML,
+      renderCommentsInDrawer: movedRenderCommentsInDrawer,
+    } = createCommentsDrawerHelpers({
+      getState: getCommentsFeatureState,
+      escapeHtml,
+      formatCommentDate,
+      highlightAndLinkify,
+      highlightSearchMatches,
+      filterCommentsBySearch,
+      commentMatchesPeopleFilter,
+    });
+
+    const {
+      loadFigmaComments: movedLoadFigmaComments,
+      ensureCommentsLoaded: movedEnsureCommentsLoaded,
+      buildCommentsContext: movedBuildCommentsContext,
+    } = createCommentsApi({
+      COMMENTS_CACHE_TTL,
+      getAuth: () => ({
+        token: figmaPersonalTokenInput?.value?.trim() || figmaPersonalToken,
+        fileKey: figmaFileKeyInput?.value?.trim() || figmaFileKey,
+      }),
+      getState: getCommentsFeatureState,
+      setCommentsState: setCommentsFeatureState,
+      setCurrentUser: (user) => {
+        figmaCurrentUser = user;
+      },
+      renderComments,
+      commentsContainer,
+      btnLoadComments,
+      btnRefreshComments,
+      showToast,
+    });
+
+    const {
+      summarizeCommentsFromDrawer: movedSummarizeCommentsFromDrawer,
+      solveCommentWithAI: movedSolveCommentWithAI,
+      handleListAllComments: movedHandleListAllComments,
+      handleSummarizeComments: movedHandleSummarizeComments,
+    } = createCommentsActionHandlers({
+      getState: getCommentsFeatureState,
+      showToast,
+      closePromptDrawer,
+      setMode,
+      chatInput,
+      sendMessage,
+      ensureCommentsLoaded,
+      getCommentsForNodes,
+      formatCommentDate,
+      addMessage,
+      sendToAI,
+      cachedNodeNames,
+    });
+
     // Highlight matching keywords and linkify mentions
     function highlightAndLinkify(text, searchQuery) {
       if (!text) return '';
@@ -7494,259 +7583,17 @@ Generate a suitable, professional response.
 
     // Summarize all comments from drawer header
     async function summarizeCommentsFromDrawer() {
-      const { filteredComments, threads } = getFilteredCommentsForSummarize();
-
-      if (filteredComments.length === 0) {
-        showToast('No comments to summarize', 'info');
-        return;
-      }
-
-      closePromptDrawer();
-      setMode('ask');
-
-      // Build comments list with replies
-      const commentsList = filteredComments.map((c, i) => {
-        const replies = threads.get(c.id) || [];
-        const baseIndex = i + 1;
-        let text = `${baseIndex}. ${c.user.handle}: "${c.message}"${c.resolved_at ? ' [RESOLVED]' : ''}`;
-        if (c.client_meta?.node_id) {
-          text += ` (Node ID: ${c.client_meta.node_id})`;
-        }
-        if (replies.length > 0) {
-          replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-          const repliesText = replies.map(r => `   - ${r.user.handle}: "${r.message}"`).join('\n');
-          text += '\n' + repliesText;
-        }
-        return text;
-      }).join('\n\n');
-
-      const prompt = `Please summarize these ${filteredComments.length} design feedback comments (with their replies). Group them by theme, identify key action items, and prioritize by importance.
-
-IMPORTANT: Respond in the same language as the majority of the comments.
-
-When referring to a specific comment that is attached to a node, use this EXACT format to create a clickable navigation link: [Author Name: Index]{nodeId}
-Example: "As mentioned in [Jane Doe: 3]{123:456}, we should..."
-
-Comments:
-${commentsList}`;
-
-      chatInput.value = prompt;
-      await sendMessage();
+      return movedSummarizeCommentsFromDrawer(getFilteredCommentsForSummarize);
     }
 
     // Render a single comment item HTML
     function renderCommentItemHTML(comment, threads) {
-      const replies = threads.get(comment.id) || [];
-      replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      const isResolved = !!comment.resolved_at;
-      const replyCount = replies.length;
-      const isSelected = selectedCommentIds.has(comment.id);
-
-      // Determine visual classes
-      let itemClasses = ['prompt-comment-item'];
-      if (multiSelectEnabled) itemClasses.push('selectable');
-      if (isResolved) itemClasses.push('resolved');
-      else itemClasses.push('unresolved');
-
-      return `
-        <div class="${itemClasses.join(' ')}" data-comment-id="${comment.id}" onclick="handleCommentItemClick(event, '${comment.id}')">
-          ${multiSelectEnabled ? `
-            <input type="checkbox" class="comment-select-checkbox" 
-              ${isSelected ? 'checked' : ''} 
-              onchange="toggleCommentSelection('${comment.id}', this)" />
-          ` : ''}
-          <div class="comment-header">
-            <div class="comment-avatar">
-              ${comment.user.img_url
-          ? `<img src="${comment.user.img_url}" alt="${comment.user.handle}" onerror="this.style.display='none';this.parentNode.textContent='${comment.user.handle.substring(0, 1).toUpperCase()}'" />`
-          : comment.user.handle.substring(0, 1).toUpperCase()
-        }
-            </div>
-            <div class="comment-header-text">
-              <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(comment.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(comment.user.handle, commentsSearchQuery)}</span>
-              ${comment.client_meta?.node_id ? `<span class="comment-attached-layer">on ${escapeHtml(cachedNodeNames[comment.client_meta.node_id] || '…')}</span>` : ''}
-            </div>
-            ${isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : ''}
-            <span class="comment-date">${formatCommentDate(comment.created_at)}</span>
-          </div>
-          <div class="comment-body">${highlightAndLinkify(comment.message, commentsSearchQuery)}</div>
-          ${(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle) && replyCount === 0) ? `
-            <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${comment.id}', 'drawer')" title="Rewrite with AI">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
-              </svg>
-            </button>
-          ` : ''}
-          <div class="comment-actions">
-            ${comment.client_meta?.node_id ? `
-              <button class="comment-action-btn icon-only" onclick="navigateToCommentNode('${comment.client_meta.node_id}', ${comment.client_meta.node_offset ? `{x: ${comment.client_meta.node_offset.x}, y: ${comment.client_meta.node_offset.y}}` : 'null'})" title="Go to">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-              </button>
-              <button class="comment-action-btn" onclick="solveCommentWithAI('${comment.id}', null, this)" title="Solve with AI">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
-                </svg>
-                Solve
-              </button>
-            ` : ''}
-            <div class="comment-action-btn-group">
-              <button class="comment-action-btn" onclick="toggleDrawerReplyInput('${comment.id}')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>
-                </svg>
-                Reply
-              </button>
-              <button class="comment-reply-chevron-btn" onclick="toggleReplyTemplatesDropdown(event, '${comment.id}')">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-              </button>
-              <div class="comment-more-menu hidden" id="reply-dropdown-${comment.id}" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
-            </div>
-            <div class="comment-more-container">
-              <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="More options">
-                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-              </button>
-              <div class="comment-more-menu hidden" id="comment-more-menu-${comment.id}">
-                <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${comment.id}'); closePromptDrawer();">Add to Chat</button>
-                ${(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle)) ? `
-                  <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${comment.id}', 'drawer')">Delete</button>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-      <div class="comment-reply-input" id="drawer-reply-input-${comment.id}" style="display: none;">
-        <div class="comment-reply-input-wrapper">
-          <textarea placeholder="Write a reply..." onkeydown="handleDrawerReplyKeydown(event, '${comment.id}')" oninput="autoExpandTextarea(this); handleCommentAiBtnVisibility(this, '${comment.id}'); handleMentionInput(this, 'drawer', '${comment.id}')" onfocus="startCommentAiTimer('${comment.id}'); cancelMentionBlur()" onblur="hideCommentAiBtn('${comment.id}'); handleMentionBlur()" id="drawer-reply-text-${comment.id}" rows="1"></textarea>
-          <button class="comment-ai-gen-btn" onclick="generateAIReplyInline('${comment.id}')" title="Generate reply with AI" id="drawer-ai-btn-${comment.id}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
-            </svg>
-          </button>
-        </div>
-        <button class="comment-action-btn" onclick="postDrawerReply('${comment.id}')">Send</button>
-      </div>
-          ${replyCount > 0 ? `
-            <button class="comment-replies-toggle${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ' has-match' : ''}" id="replies-toggle-${comment.id}" onclick="toggleReplies('${comment.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-              ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ' <span class="reply-match-indicator">• match</span>' : ''}
-            </button>
-            <div class="comment-replies collapsed" id="replies-${comment.id}">
-              ${replies.map(reply => `
-                <div class="comment-reply-item" data-comment-id="${reply.id}">
-                  <div class="comment-header">
-                    <div class="comment-avatar">
-                      ${reply.user.img_url
-            ? `<img src="${reply.user.img_url}" alt="${reply.user.handle}" onerror="this.style.display='none';this.parentNode.textContent='${reply.user.handle.substring(0, 1).toUpperCase()}'" />`
-            : reply.user.handle.substring(0, 1).toUpperCase()
-          }
-                    </div>
-                    <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(reply.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(reply.user.handle, commentsSearchQuery)}</span>
-                    <span class="comment-date">${formatCommentDate(reply.created_at)}</span>
-                  </div>
-                  <div class="comment-body">${highlightAndLinkify(reply.message, commentsSearchQuery)}</div>
-                  <div class="comment-reply-actions">
-                    <div class="comment-action-btn-group">
-                      <button class="comment-action-btn" onclick="toggleDrawerReplyItemInput('${comment.id}', '${reply.id}', '${escapeHtml(reply.user.handle).replace(/'/g, "\\'")}')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>
-                        </svg>
-                        Reply
-                      </button>
-                      <button class="comment-reply-chevron-btn" onclick="toggleReplyItemTemplatesDropdown(event, 'drawer', '${comment.id}', '${reply.id}')" title="Reply templates">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-                      </button>
-                      <div class="comment-more-menu hidden" id="reply-dropdown-drawer-${comment.id}-${reply.id}" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
-                    </div>
-                    ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
-                      <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${reply.id}', 'drawer')" title="Rewrite with AI">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                          <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
-                        </svg>
-                      </button>
-                    ` : ''}
-                    <div class="comment-more-container">
-                      <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="More options">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-                      </button>
-                      <div class="comment-more-menu hidden" id="comment-more-menu-${reply.id}">
-                        <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${reply.id}'); closePromptDrawer();">Add to Chat</button>
-                        ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
-                          <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${reply.id}', 'drawer')">Delete</button>
-                        ` : ''}
-                      </div>
-                    </div>
-                  </div>
-                  <div class="comment-reply-input" id="drawer-reply-item-input-${comment.id}-${reply.id}" style="display: none;">
-                    <div class="comment-reply-input-wrapper">
-                      <textarea placeholder="Write a reply..." onkeydown="handleReplyItemKeydown(event, 'drawer', '${comment.id}', '${reply.id}')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-${comment.id}-${reply.id}" rows="1"></textarea>
-                    </div>
-                    <button class="comment-action-btn" onclick="postDrawerReplyItem('${comment.id}', '${reply.id}')">Send</button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''
-        }
-        </div>
-      `;
+      return movedRenderCommentItemHTML(comment, threads);
     }
 
     // Render just the list portion (for search updates)
     function renderCommentsListHTML(filteredComments, threads) {
-      if (filteredComments.length === 0) {
-        return '<div class="prompt-comments-empty">No comments match your filters.</div>';
-      }
-
-      // Burst mode: group by 30-minute windows with headers
-      if (commentsSortBy === 'burst') {
-        const BURST_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-        const bursts = [];
-        let currentBurst = null;
-
-        // Comments are already sorted chronologically by the burst sort fn
-        // Group into 30-min windows
-        filteredComments.forEach(c => {
-          const t = new Date(c.created_at).getTime();
-          if (!currentBurst || t - currentBurst.start > BURST_WINDOW_MS) {
-            currentBurst = { start: t, end: t, comments: [c], authors: new Set([c.user.handle]) };
-            bursts.push(currentBurst);
-          } else {
-            currentBurst.end = t;
-            currentBurst.comments.push(c);
-            currentBurst.authors.add(c.user.handle);
-          }
-        });
-
-        // Sort bursts by most recent first
-        bursts.sort((a, b) => b.end - a.end);
-
-        // Render with headers
-        let html = '<div class="prompt-comments-list">';
-        bursts.forEach(burst => {
-          const startDate = new Date(burst.start);
-          const endDate = new Date(burst.end);
-          const dateStr = startDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-          const startTime = startDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-          const endTime = endDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-          const timeRange = burst.comments.length === 1 ? `${dateStr} ${startTime}` : `${dateStr} ${startTime} – ${endTime}`;
-          const authorsList = [...burst.authors].slice(0, 3).join(', ') + (burst.authors.size > 3 ? ` +${burst.authors.size - 3}` : '');
-
-          html += `<div class="burst-group-header">
-            <svg class="burst-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            <span class="burst-time">${timeRange}</span>
-            <span class="burst-count">${burst.comments.length}</span>
-            <span class="burst-authors">${escapeHtml(authorsList)}</span>
-          </div>`;
-          html += burst.comments.map(c => renderCommentItemHTML(c, threads)).join('');
-        });
-        html += '</div>';
-        return html;
-      }
-
-      return '<div class="prompt-comments-list">' +
-        filteredComments.map(c => renderCommentItemHTML(c, threads)).join('') +
-        '</div>';
+      return movedRenderCommentsListHTML(filteredComments, threads);
     }
 
     // Render comments list in the drawer container
@@ -8711,44 +8558,12 @@ Requirements:
     }
 
     async function solveCommentWithAI(commentId) {
-      const comment = figmaComments.find(c => c.id === commentId);
-      if (!comment) {
-        showToast('Comment not found', 'error');
-        return;
-      }
-
-      // 1. Navigate to and select the node or position
-      if (comment.client_meta?.node_id) {
-        navigateToCommentNode(comment.client_meta.node_id, comment.client_meta.node_offset || comment.client_meta.region);
-      } else if (comment.client_meta?.x !== undefined) {
-        // Handle canvas comment or comment on unknown node
-        parent.postMessage({
-          pluginMessage: {
-            type: 'navigate-to-pos',
-            x: comment.client_meta.x,
-            y: comment.client_meta.y
-          }
-        }, '*');
-      }
-
-      // 2. Prepare the prompt
-      const nodeName = (comment.client_meta?.node_id && cachedNodeNames[comment.client_meta.node_id]) || 'this design area';
-      const prompt = `Solve this design feedback comment on "${nodeName}": "${comment.message}"`;
-
-      // 3. Store the specific comment ID to prioritize it in context
-      window.solvingCommentId = commentId;
-
-      // 4. Switch to agent mode
-      setMode('agent');
-
-      // 5. Fill chat input and send
-      chatInput.value = prompt;
-      await sendMessage();
+      return movedSolveCommentWithAI(commentId);
     }
 
     // Legacy handler - no longer used but kept for compatibility
     async function handleListAllComments(actionName, actionIcon) {
-      // This is now handled by opening prompt drawer with comments field
+      return movedHandleListAllComments(actionName, actionIcon);
     }
 
     // Show comments modal with enhanced UI including AI reply
@@ -9193,128 +9008,7 @@ Generate ONLY the reply text, nothing else.`;
 
     // Handle Summarize Comments action
     async function handleSummarizeComments(actionName, actionIcon, values = {}) {
-      try {
-        showToast('Loading comments for summary...', 'info');
-
-        const commentsLoaded = await ensureCommentsLoaded();
-
-        if (!commentsLoaded) {
-          showToast('Please configure your Figma API token in Settings → Figma API', 'error');
-          return;
-        }
-
-        if (!figmaComments || figmaComments.length === 0) {
-          showToast('No comments found in this file', 'info');
-          return;
-        }
-
-        // Determine scope from values (default to 'all')
-        const commentScope = values.commentScope || 'all';
-
-        let commentsToSummarize;
-        let scopeDescription;
-
-        if (commentScope === 'selection') {
-          // Get comments for selected nodes only
-          if (!lastKnownSelectionItems || lastKnownSelectionItems.length === 0) {
-            showToast('No nodes selected. Please select nodes first or choose "All File Comments".', 'error');
-            return;
-          }
-
-          // Collect all node IDs including descendants
-          const allNodeIds = [];
-          lastKnownSelectionItems.forEach(item => {
-            // Add the node itself
-            allNodeIds.push(item.id);
-            // Add all descendant IDs if they exist
-            if (item.descendantIds && Array.isArray(item.descendantIds)) {
-              allNodeIds.push(...item.descendantIds);
-            }
-          });
-
-          const selectionComments = getCommentsForNodes(allNodeIds);
-
-          if (selectionComments.length === 0) {
-            showToast('No comments found on selected nodes', 'info');
-            return;
-          }
-
-          // Convert to the format expected by the prompt builder
-          commentsToSummarize = selectionComments;
-          scopeDescription = `on ${lastKnownSelectionItems.length} selected node(s)`;
-        } else {
-          // Get all unresolved comments for summary
-          const unresolvedComments = figmaComments.filter(c => !c.resolved_at && !c.parent_id);
-
-          if (unresolvedComments.length === 0) {
-            showToast('No unresolved comments to summarize', 'info');
-            return;
-          }
-
-          // Build comment data for AI
-          commentsToSummarize = unresolvedComments.map(comment => {
-            const replies = figmaComments.filter(c => c.parent_id === comment.id);
-            return {
-              id: comment.id,
-              author: comment.user.handle,
-              message: comment.message,
-              nodeId: comment.client_meta?.node_id || null,
-              createdAt: comment.created_at,
-              resolved: false,
-              replies: replies.map(r => ({
-                author: r.user.handle,
-                message: r.message,
-                createdAt: r.created_at
-              }))
-            };
-          });
-          scopeDescription = 'in this file';
-        }
-
-        // Build comment data for AI prompt
-        const commentData = commentsToSummarize.map((comment, index) => ({
-          index: index + 1,
-          author: comment.author,
-          message: comment.message,
-          hasNode: !!comment.nodeId,
-          nodeId: comment.nodeId,
-          replyCount: comment.replies ? comment.replies.length : 0,
-          createdAt: comment.createdAt
-        }));
-
-        const prompt = `Please analyze and summarize the following ${commentData.length} comments from a Figma design file (${scopeDescription}):
-
-${commentData.map(c => `
-${c.index}. **${c.author}**: "${c.message}"
-   - ${c.hasNode ? `Attached to node: [Focus Node]{${c.nodeId}}` : 'General comment'}
-   - ${c.replyCount} replies
-   - Posted: ${formatCommentDate(c.createdAt)}
-`).join('\n')}
-
-Please provide:
-1. **Summary Overview**: Brief summary of all comments (2-3 sentences)
-2. **Key Themes**: Group comments by theme (e.g., UI issues, content requests, bugs)
-3. **Priority Items**: Highlight any urgent or critical feedback
-4. **Suggested Actions**: Recommend next steps to address the feedback
-5. **Quick Wins**: Identify easy-to-fix items that could be addressed quickly
-
-Please provide the final summary and all accompanying descriptions in the same language as the majority of the comments above (e.g., if the comments are in Japanese, provide the summary in Japanese).
-
-IMPORTANT: When referring to a specific comment that is attached to a node in your summary, use this EXACT format to create a clickable navigation link: [Author Name: Index]{nodeId}
-Example: \"As mentioned in [Jane Doe: 3]{123:456}, we should...\"`;
-
-        // Show user message with quick action display
-        const userMessage = commentScope === 'selection'
-          ? `Summarize comments on selected nodes (${commentsToSummarize.length} comments)`
-          : `Summarize all comments in this file (${commentsToSummarize.length} comments)`;
-        addMessage('user', userMessage, null, { name: actionName, icon: actionIcon });
-
-        // Send to AI in ask mode - sendToAI handles chatHistory push and API request
-        await sendToAI(prompt, null, []);
-
-      } catch (error) {
-        showToast('Failed to summarize comments: ' + error.message, 'error');
-      }
+      return movedHandleSummarizeComments(actionName, actionIcon, values);
     }
 
     // Handle Generate Image with Reference action
@@ -21968,76 +21662,7 @@ Example structure:
 
     // Load comments from Figma API
     async function loadFigmaComments() {
-      const token = figmaPersonalTokenInput.value.trim() || figmaPersonalToken;
-      const fileKey = figmaFileKeyInput.value.trim() || figmaFileKey;
-
-      if (!token) {
-        showToast('Please enter your Figma Personal Access Token', 'error');
-        return;
-      }
-
-      if (!fileKey) {
-        showToast('Please enter or detect the file key first', 'error');
-        return;
-      }
-
-      btnLoadComments.disabled = true;
-      btnLoadComments.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right: 4px; animation: spin 1s linear infinite;">
-          <path d="M23 4v6h-6M1 20v-6h6"/>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-        </svg>
-        Loading...
-      `;
-
-      try {
-        const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
-          headers: {
-            'X-Figma-Token': token
-          }
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          throw new Error(error.message || `Failed to load comments: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        figmaComments = data.comments || [];
-
-        // Fetch current user info if not already loaded
-        if (!figmaCurrentUser) {
-          try {
-            const userResponse = await fetch('https://api.figma.com/v1/me', {
-              headers: { 'X-Figma-Token': token }
-            });
-            if (userResponse.ok) {
-              figmaCurrentUser = await userResponse.json();
-            }
-          } catch (e) {
-            console.warn('Could not fetch current user info:', e);
-          }
-        }
-
-        renderComments();
-        commentsContainer.style.display = 'block';
-        btnRefreshComments.disabled = false;
-
-        const resolvedCount = figmaComments.filter(c => c.resolved_at).length;
-        const unresolvedCount = figmaComments.length - resolvedCount;
-        showToast(`Loaded ${figmaComments.length} comments (${unresolvedCount} open, ${resolvedCount} resolved)`, 'success');
-      } catch (error) {
-        showToast(`Failed to load comments: ${error.message}`, 'error');
-        console.error('Failed to load comments:', error);
-      } finally {
-        btnLoadComments.disabled = false;
-        btnLoadComments.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="margin-right: 4px;">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          Load Comments
-        `;
-      }
+      return movedLoadFigmaComments();
     }
 
     // Render comments list
@@ -22492,123 +22117,11 @@ Example structure:
       return commentKeywords.some(keyword => lowerMessage.includes(keyword));
     }
 
-    window.solveCommentWithAI = function (commentId, text, btn) {
-      if (btn) {
-        btn.classList.add('loading');
-      }
-      window.solvingCommentId = commentId;
-      setMode('agent');
-
-      const comment = figmaComments.find(c => c.id === commentId);
-      // Resolve the prompt text from argument or from comment data
-      const commentText = text || (comment ? comment.message : 'this comment');
-      const nodeName = (comment && comment.client_meta?.node_id && cachedNodeNames[comment.client_meta.node_id]) || 'this design area';
-      const prompt = `Solve this design feedback comment on "${nodeName}": "${commentText}"`;
-
-      chatInput.value = prompt;
-      chatInput.style.height = 'auto';
-      chatInput.style.height = (chatInput.scrollHeight) + 'px';
-      chatInput.focus();
-      chatInput.dispatchEvent(new Event('input'));
-
-      // If the comment is attached to a node, select it first and wait for confirmation
-      if (comment && comment.client_meta && comment.client_meta.node_id) {
-        // Use navigate-to-node which sends back 'navigate-success' when done
-        const nodeId = comment.client_meta.node_id;
-        const nodeOffset = comment.client_meta.node_offset || null;
-        parent.postMessage({ pluginMessage: { type: 'navigate-to-node', nodeId, nodeOffset } }, '*');
-
-        // Wait for selection to sync (listen for selection-changed or navigate-success)
-        let resolved = false;
-        const onMessage = (event) => {
-          if (resolved) return;
-          const msg = event.data?.pluginMessage;
-          if (!msg) return;
-          if (msg.type === 'navigate-success' || msg.type === 'selection-changed') {
-            resolved = true;
-            window.removeEventListener('message', onMessage);
-            clearTimeout(fallbackTimer);
-            // Small additional delay to let Figma fully update selection state
-            setTimeout(() => sendMessage(), 150);
-          }
-        };
-        window.addEventListener('message', onMessage);
-        // Fallback: if no response within 1.5s, send anyway (node may not exist)
-        const fallbackTimer = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            window.removeEventListener('message', onMessage);
-            console.warn('[Solve] Node selection timed out, sending anyway');
-            sendMessage();
-          }
-        }, 1500);
-      } else {
-        // No node to select, send immediately
-        sendMessage();
-      }
-    };
+    window.solveCommentWithAI = solveCommentWithAI;
 
     // Fetch comments silently for AI context (auto-load if not loaded)
     async function ensureCommentsLoaded(forceRefresh = false) {
-      const token = figmaPersonalTokenInput?.value?.trim() || figmaPersonalToken;
-      const fileKey = figmaFileKeyInput?.value?.trim() || figmaFileKey;
-
-      if (!token || !fileKey) {
-        return false;
-      }
-
-      // Check cache validity
-      const now = Date.now();
-      const cacheValid = !forceRefresh &&
-        figmaComments.length > 0 &&
-        (now - figmaCommentsLastLoaded) < COMMENTS_CACHE_TTL;
-
-      if (cacheValid) {
-        return true;
-      }
-
-      // Prevent concurrent loads
-      if (figmaCommentsLoading) {
-        // Wait for current load to complete
-        while (figmaCommentsLoading) {
-          await new Promise(r => setTimeout(r, 100));
-        }
-        return figmaComments.length > 0;
-      }
-
-      figmaCommentsLoading = true;
-
-      try {
-        const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
-          headers: { 'X-Figma-Token': token }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          figmaComments = data.comments || [];
-          figmaCommentsLastLoaded = Date.now();
-
-          // Also fetch current user info if not already loaded
-          if (!figmaCurrentUser) {
-            try {
-              const userResponse = await fetch('https://api.figma.com/v1/me', {
-                headers: { 'X-Figma-Token': token }
-              });
-              if (userResponse.ok) {
-                figmaCurrentUser = await userResponse.json();
-              }
-            } catch (e) {
-              console.warn('Could not fetch current user info in background:', e);
-            }
-          }
-          return true;
-        }
-      } catch (error) {
-        console.log('Failed to auto-load comments:', error);
-      } finally {
-        figmaCommentsLoading = false;
-      }
-      return false;
+      return movedEnsureCommentsLoaded(forceRefresh);
     }
 
     // Pre-load comments in background for fast drawer open
@@ -22619,31 +22132,7 @@ Example structure:
 
     // Build comments context string for AI
     function buildCommentsContext(comments) {
-      if (!comments || comments.length === 0) {
-        return '';
-      }
-
-      let context = '\n\n=== FIGMA COMMENTS ON SELECTED ELEMENTS ===\n';
-      context += 'The following comments have been left on the selected elements. Please address them:\n\n';
-
-      comments.forEach((comment, index) => {
-        context += `COMMENT ${index + 1}:\n`;
-        context += `- Author: ${comment.author}\n`;
-        context += `- Message: "${comment.message}"\n`;
-        context += `- Node ID: ${comment.nodeId || 'N/A'}\n`;
-        if (comment.replies && comment.replies.length > 0) {
-          context += `- Replies:\n`;
-          comment.replies.forEach(reply => {
-            context += `  - ${reply.author}: "${reply.message}"\n`;
-          });
-        }
-        context += '\n';
-      });
-
-      context += 'Please analyze these comments and make the necessary changes to address the feedback.\n';
-      context += '=== END COMMENTS ===\n';
-
-      return context;
+      return movedBuildCommentsContext(comments);
     }
 
     // ============================================
