@@ -5185,8 +5185,11 @@ figma.ui.onmessage = async (msg: {
           isVertical: boolean;
           heightPx: number;
           columnTextCount: number;
+          verticalColumns: number;
+          useVerticalColumns: boolean;
           lineHeightPx: number;
           sourceRowCount: number;
+          sourceCharCount: number;
           fontSize: number;
         }> = [];
 
@@ -5228,7 +5231,7 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (!textNode) {
-            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, lineHeightPx: 0, sourceRowCount: 0, fontSize: 0 });
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0 });
             continue;
           }
 
@@ -5239,13 +5242,38 @@ figma.ui.onmessage = async (msg: {
             results.push({
               isVertical: true,
               heightPx: parseFloat(textNode.getPluginData('fgVerticalTextHeightPx') || '0'),
-              columnTextCount: parseInt(textNode.getPluginData('fgVerticalTextColumnTextCount') || '0', 10),
+              columnTextCount: parseInt(
+                textNode.getPluginData('fgVerticalTextMaxCharsPerColumn')
+                || textNode.getPluginData('fgVerticalTextColumnTextCount')
+                || '0',
+                10
+              ),
+              verticalColumns: parseInt(
+                textNode.getPluginData('fgVerticalTextVerticalColumns')
+                || textNode.getPluginData('fgVerticalTextColumnTextCount')
+                || '0',
+                10
+              ),
+              useVerticalColumns: textNode.getPluginData('fgVerticalTextUseVerticalColumns') === 'true',
               lineHeightPx: parseFloat(textNode.getPluginData('fgVerticalTextLineHeightPx') || '0'),
               sourceRowCount: parseInt(textNode.getPluginData('fgVerticalTextSourceRowCount') || '0', 10),
+              sourceCharCount: Array.from(
+                (textNode.getPluginData('fgVerticalTextOriginalContent') || textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')
+              ).length,
               fontSize,
             });
           } else {
-            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, lineHeightPx: 0, sourceRowCount: 0, fontSize });
+            results.push({
+              isVertical: false,
+              heightPx: 0,
+              columnTextCount: 0,
+              verticalColumns: 0,
+              useVerticalColumns: false,
+              lineHeightPx: 0,
+              sourceRowCount: 0,
+              sourceCharCount: Array.from((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')).length,
+              fontSize
+            });
           }
         }
 
@@ -5266,6 +5294,8 @@ figma.ui.onmessage = async (msg: {
 
         const reqHeightPx = typeof (msg as any).heightPx === 'number' ? (msg as any).heightPx : 0;
         const reqColumnTextCount = typeof (msg as any).columnTextCount === 'number' ? (msg as any).columnTextCount : 0;
+        const reqUseVerticalColumns = (msg as any).useVerticalColumns === true;
+        const reqVerticalColumns = typeof (msg as any).verticalColumns === 'number' ? (msg as any).verticalColumns : 0;
         const reqLineHeightPx = typeof (msg as any).lineHeightPx === 'number' ? (msg as any).lineHeightPx : 0;
 
         let updated = 0;
@@ -5401,35 +5431,69 @@ figma.ui.onmessage = async (msg: {
             measurementNode.remove();
 
             const sourceRowCount = lineTexts.length;
+            const sourceRowLengths = lineTexts.map(line => Array.from(line || '').length);
+            const sourceMaxRowLength = sourceRowLengths.length > 0 ? Math.max(...sourceRowLengths, 1) : 1;
 
             // --- Resolve effective parameters ---
-            const effectiveLineHeight = reqLineHeightPx > 0 ? reqLineHeightPx : Math.round(baseFontSize * 1.1 * 10) / 10;
-            const effectiveColumnCount = reqColumnTextCount > 0 ? reqColumnTextCount : sourceRowCount;
-            const effectiveHeight = reqHeightPx > 0 ? reqHeightPx : effectiveColumnCount * effectiveLineHeight;
+            const effectiveLineHeight = reqLineHeightPx > 0 ? reqLineHeightPx : Math.round(baseFontSize * 1.1 * 100) / 100;
 
-            const splitTextIntoColumns = (text: string, columnCount: number): string[] => {
+            const normalizedSourceText = sourceText.replace(/\r/g, '');
+            const rawChars = Array.from(normalizedSourceText.replace(/\n/g, ''));
+            const totalCharCount = rawChars.length;
+
+            let effectiveColumnTextCount = 0;
+            let effectiveVerticalColumns = 0;
+
+            if (reqUseVerticalColumns) {
+              effectiveVerticalColumns = reqVerticalColumns > 0 ? reqVerticalColumns : Math.max(1, sourceRowCount);
+              if (totalCharCount > 0) {
+                effectiveColumnTextCount = Math.max(1, Math.ceil(totalCharCount / effectiveVerticalColumns));
+              } else {
+                effectiveColumnTextCount = Math.max(1, sourceMaxRowLength);
+              }
+            } else {
+              effectiveColumnTextCount = reqColumnTextCount > 0
+                ? reqColumnTextCount
+                : (reqHeightPx > 0 && effectiveLineHeight > 0
+                  ? Math.max(1, Math.ceil(reqHeightPx / effectiveLineHeight))
+                  : Math.max(1, sourceMaxRowLength));
+
+              if (reqVerticalColumns > 0) {
+                effectiveVerticalColumns = reqVerticalColumns;
+              } else if (totalCharCount > 0) {
+                effectiveVerticalColumns = Math.max(1, Math.ceil(totalCharCount / effectiveColumnTextCount));
+              } else {
+                effectiveVerticalColumns = Math.max(1, sourceRowCount);
+              }
+            }
+
+            if (totalCharCount > 0 && effectiveColumnTextCount > 0) {
+              const neededColumns = Math.ceil(totalCharCount / effectiveColumnTextCount);
+              effectiveVerticalColumns = Math.max(effectiveVerticalColumns, neededColumns);
+            }
+
+            const effectiveHeight = effectiveColumnTextCount * effectiveLineHeight;
+
+            const splitTextIntoColumns = (text: string, maxCharsPerColumn: number, verticalColumns: number): string[] => {
               const normalizedText = (text || '').replace(/\r/g, '');
               const manualSegments = normalizedText
                 .split('\n')
-                .map(segment => segment.trim())
-                .filter(Boolean);
-              const rawChars = Array.from(normalizedText.replace(/\n/g, ''));
+                .map(segment => segment || '');
 
-              if (manualSegments.length === columnCount) {
+              if (manualSegments.length === verticalColumns && manualSegments.every(segment => Array.from(segment).length <= maxCharsPerColumn)) {
                 return manualSegments;
               }
 
               const charChunks: string[] = [];
               let charCursor = 0;
 
-              for (let c = 0; c < columnCount; c++) {
-                const remainingColumns = columnCount - c;
+              for (let c = 0; c < verticalColumns; c++) {
                 const remainingChars = rawChars.length - charCursor;
                 if (remainingChars <= 0) {
                   charChunks.push('');
                   continue;
                 }
-                const chunkSize = Math.ceil(remainingChars / remainingColumns);
+                const chunkSize = Math.min(maxCharsPerColumn, remainingChars);
                 charChunks.push(rawChars.slice(charCursor, charCursor + chunkSize).join(''));
                 charCursor += chunkSize;
               }
@@ -5439,15 +5503,14 @@ figma.ui.onmessage = async (msg: {
 
             // --- Build columns from source rows ---
             let columns: string[] = [];
-            if (reqColumnTextCount > 0) {
-              // An explicit prompt setting should override the detected row structure,
-              // so we can generate vertical columns even when the source only wraps
-              // visually or contains no manual line breaks.
-              columns = splitTextIntoColumns(sourceText, effectiveColumnCount);
+            if (reqUseVerticalColumns || reqColumnTextCount > 0 || reqHeightPx > 0 || reqVerticalColumns > 0) {
+              // Explicit settings override the detected row structure, so we can
+              // generate columns based on max chars per column and requested count.
+              columns = splitTextIntoColumns(sourceText, effectiveColumnTextCount, effectiveVerticalColumns);
             } else {
-              for (let c = 0; c < effectiveColumnCount; c++) {
+              for (let c = 0; c < effectiveVerticalColumns; c++) {
                 if (c < sourceRowCount) {
-                  if (c === effectiveColumnCount - 1 && effectiveColumnCount < sourceRowCount) {
+                  if (c === effectiveVerticalColumns - 1 && effectiveVerticalColumns < sourceRowCount) {
                     columns.push(lineTexts.slice(c).join(''));
                   } else {
                     columns.push(lineTexts[c] || '');
@@ -5578,7 +5641,10 @@ figma.ui.onmessage = async (msg: {
               'fgVerticalTextWrapperId': wrapperNode.id,
               'fgVerticalTextOriginalContent': sourceText,
               'fgVerticalTextSourceRowCount': String(sourceRowCount),
-              'fgVerticalTextColumnTextCount': String(effectiveColumnCount),
+              'fgVerticalTextColumnTextCount': String(effectiveColumnTextCount),
+              'fgVerticalTextMaxCharsPerColumn': String(effectiveColumnTextCount),
+              'fgVerticalTextUseVerticalColumns': String(reqUseVerticalColumns),
+              'fgVerticalTextVerticalColumns': String(effectiveVerticalColumns),
               'fgVerticalTextLineHeightPx': String(effectiveLineHeight),
               'fgVerticalTextHeightPx': String(effectiveHeight),
             };

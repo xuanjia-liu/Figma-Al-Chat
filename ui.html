@@ -15869,11 +15869,13 @@
           prompt: "",
           isTextAction: true,
           requiredContext: ContextMode.TEXT_ONLY,
-          help: "Converts selected text into vertical columns. column text count = 0 means use original rendered row count. If you set a larger column count, the action now auto-inserts breaks even when the source text has no manual line breaks.",
+          help: "Converts selected text into vertical columns. Height and Column text count stay linked. Turn on Vertical columns to control by column count instead, which disables Height and Column text count.",
           fields: [
-            { key: "heightPx", type: "number", label: "Height (px)", default: 0, min: 0, hint: "0 = auto from columns × line height" },
-            { key: "columnTextCount", type: "number", label: "Column text count", default: 0, min: 0, hint: "0 = use original rendered row count" },
-            { key: "lineHeightPx", type: "number", label: "Line height (px)", default: 0, min: 0, hint: "0 = 1.1 × font size" }
+            { key: "useVerticalColumns", type: "checkbox", label: "Use Vertical columns", default: false },
+            { key: "heightPx", type: "number", label: "Height (px)", default: 0, min: 0, hint: "Linked with Column text count using line height", disabledWhen: { field: "useVerticalColumns", equals: true } },
+            { key: "columnTextCount", type: "number", label: "Column text count", default: 0, min: 0, hint: "Maximum characters per vertical column", disabledWhen: { field: "useVerticalColumns", equals: true } },
+            { key: "verticalColumns", type: "number", label: "Vertical columns", default: 0, min: 0, hint: "How many vertical columns to create", disabledWhen: { field: "useVerticalColumns", equals: false } },
+            { key: "lineHeightPx", type: "number", label: "Line height (px)", default: 0, min: 0, step: 0.01, hint: "0 = 1.1 × font size" }
           ]
         }
       ];
@@ -22659,47 +22661,55 @@
           return field;
         });
       }
+      var verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
       function attachVerticalTextLinkedFields() {
         const heightEl = promptDrawerFields.querySelector('input[data-field-key="heightPx"]');
         const colEl = promptDrawerFields.querySelector('input[data-field-key="columnTextCount"]');
+        const useVerticalColumnsEl = promptDrawerFields.querySelector('input[data-field-key="useVerticalColumns"]');
+        const verticalColsEl = promptDrawerFields.querySelector('input[data-field-key="verticalColumns"]');
         const lhEl = promptDrawerFields.querySelector('input[data-field-key="lineHeightPx"]');
         if (!heightEl || !colEl || !lhEl) return;
         let lastEdited = "columnTextCount";
+        const formatNumber = (value, decimals = 2) => {
+          if (!Number.isFinite(value)) return "0";
+          return Number(value.toFixed(decimals)).toString();
+        };
+        const updateComputedHeight = () => {
+          const useVerticalColumns = (useVerticalColumnsEl == null ? void 0 : useVerticalColumnsEl.checked) === true;
+          const c = parseFloat(colEl.value) || 0;
+          const lh = parseFloat(lhEl.value) || 0;
+          const verticalCols = parseInt((verticalColsEl == null ? void 0 : verticalColsEl.value) || "0", 10) || 0;
+          if (useVerticalColumns) {
+            const sourceCharCount = verticalTextHydrationMeta.sourceCharCount || 0;
+            const computedCount = verticalCols > 0 && sourceCharCount > 0 ? Math.max(1, Math.ceil(sourceCharCount / verticalCols)) : 0;
+            colEl.value = computedCount > 0 ? String(computedCount) : "0";
+            heightEl.value = computedCount > 0 && lh > 0 ? formatNumber(computedCount * lh) : "0";
+            heightEl.dispatchEvent(new Event("change", { bubbles: true }));
+            colEl.dispatchEvent(new Event("change", { bubbles: true }));
+            return;
+          }
+          if (lastEdited === "heightPx") {
+            const h = parseFloat(heightEl.value) || 0;
+            colEl.value = h > 0 && lh > 0 ? String(Math.ceil(h / lh)) : "0";
+          } else {
+            heightEl.value = c > 0 && lh > 0 ? formatNumber(c * lh) : "0";
+          }
+          heightEl.dispatchEvent(new Event("change", { bubbles: true }));
+        };
         heightEl.addEventListener("input", () => {
           lastEdited = "heightPx";
-          const h = parseFloat(heightEl.value) || 0;
-          const lh = parseFloat(lhEl.value) || 1;
-          if (h > 0 && lh > 0) {
-            colEl.value = Math.ceil(h / lh);
-            colEl.dispatchEvent(new Event("change", { bubbles: true }));
-          }
+          updateComputedHeight();
         });
         colEl.addEventListener("input", () => {
           lastEdited = "columnTextCount";
-          const c = parseFloat(colEl.value) || 0;
-          const lh = parseFloat(lhEl.value) || 1;
-          if (c > 0 && lh > 0) {
-            heightEl.value = Math.round(c * lh);
-            heightEl.dispatchEvent(new Event("change", { bubbles: true }));
-          }
+          updateComputedHeight();
         });
-        lhEl.addEventListener("input", () => {
-          const lh = parseFloat(lhEl.value) || 0;
-          if (lh <= 0) return;
-          if (lastEdited === "columnTextCount") {
-            const c = parseFloat(colEl.value) || 0;
-            if (c > 0) {
-              heightEl.value = Math.round(c * lh);
-              heightEl.dispatchEvent(new Event("change", { bubbles: true }));
-            }
-          } else {
-            const h = parseFloat(heightEl.value) || 0;
-            if (h > 0) {
-              colEl.value = Math.ceil(h / lh);
-              colEl.dispatchEvent(new Event("change", { bubbles: true }));
-            }
-          }
-        });
+        lhEl.addEventListener("input", updateComputedHeight);
+        useVerticalColumnsEl == null ? void 0 : useVerticalColumnsEl.addEventListener("input", updateComputedHeight);
+        if (verticalColsEl) {
+          verticalColsEl.addEventListener("input", updateComputedHeight);
+        }
+        updateComputedHeight();
       }
       async function hydrateVerticalTextFields(fields = []) {
         try {
@@ -22721,16 +22731,22 @@
           });
           if (metadata2 && Array.isArray(metadata2) && metadata2.length > 0) {
             const first = metadata2[0];
+            verticalTextHydrationMeta = {
+              sourceCharCount: first.sourceCharCount || 0,
+              useVerticalColumns: first.useVerticalColumns === true
+            };
             if (first.isVertical) {
               return fields.map((field) => {
                 if (field.key === "heightPx" && first.heightPx > 0) return __spreadProps(__spreadValues({}, field), { default: first.heightPx });
                 if (field.key === "columnTextCount" && first.columnTextCount > 0) return __spreadProps(__spreadValues({}, field), { default: first.columnTextCount });
+                if (field.key === "verticalColumns" && first.verticalColumns > 0) return __spreadProps(__spreadValues({}, field), { default: first.verticalColumns });
                 if (field.key === "lineHeightPx" && first.lineHeightPx > 0) return __spreadProps(__spreadValues({}, field), { default: first.lineHeightPx });
+                if (field.key === "useVerticalColumns") return __spreadProps(__spreadValues({}, field), { default: first.useVerticalColumns === true });
                 return field;
               });
             } else if (first.fontSize > 0) {
               return fields.map((field) => {
-                if (field.key === "lineHeightPx") return __spreadProps(__spreadValues({}, field), { default: Math.round(first.fontSize * 1.1 * 10) / 10 });
+                if (field.key === "lineHeightPx") return __spreadProps(__spreadValues({}, field), { default: Math.round(first.fontSize * 1.1 * 100) / 100 });
                 return field;
               });
             }
@@ -22738,6 +22754,7 @@
         } catch (e) {
           console.warn("Failed to hydrate vertical text fields", e);
         }
+        verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
         return fields;
       }
       async function backgroundRefreshImageModels(originalActionName) {
@@ -32367,6 +32384,8 @@
               payload: {
                 heightPx: parseFloat(values.heightPx) || 0,
                 columnTextCount: parseInt(values.columnTextCount) || 0,
+                useVerticalColumns: values.useVerticalColumns === true,
+                verticalColumns: parseInt(values.verticalColumns) || 0,
                 lineHeightPx: parseFloat(values.lineHeightPx) || 0
               },
               errorPrefixes: ["Verticalize text failed", "Please select at least one text layer."]
