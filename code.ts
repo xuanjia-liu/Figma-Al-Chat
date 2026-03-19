@@ -5195,13 +5195,32 @@ figma.ui.onmessage = async (msg: {
           let wrapperNode: FrameNode | null = null;
 
           if (node.type === 'FRAME' && node.getPluginData('fgVerticalText') === 'true') {
-            wrapperNode = node as FrameNode;
-            const child = wrapperNode.children.find(c => c.type === 'TEXT' && c.getPluginData('fgVerticalText') === 'true');
-            if (child) textNode = child as TextNode;
+            if (node.getPluginData('fgVerticalTextColFrame') === 'true') {
+              const tn = (node as FrameNode).children.find(c => c.type === 'TEXT') as TextNode | undefined;
+              if (tn) textNode = tn;
+              const outer = node.parent;
+              if (outer && outer.type === 'FRAME' && outer.getPluginData('fgVerticalText') === 'true') {
+                wrapperNode = outer as FrameNode;
+              }
+            } else {
+              wrapperNode = node as FrameNode;
+              for (const child of wrapperNode.children) {
+                if (child.type === 'FRAME' && child.getPluginData('fgVerticalTextColFrame') === 'true') {
+                  const tn = (child as FrameNode).children.find(c => c.type === 'TEXT' && c.getPluginData('fgVerticalText') === 'true' && c.getPluginData('fgVerticalTextExtra') !== 'true');
+                  if (tn) { textNode = tn as TextNode; break; }
+                }
+                if (child.type === 'TEXT' && child.getPluginData('fgVerticalText') === 'true') {
+                  textNode = child as TextNode; break;
+                }
+              }
+            }
           } else if (node.type === 'TEXT' && node.getPluginData('fgVerticalText') === 'true') {
             textNode = node as TextNode;
-            const p = node.parent;
-            if (p && p.type === 'FRAME' && p.getPluginData('fgVerticalText') === 'true') {
+            let p: BaseNode | null = node.parent;
+            if (p && p.type === 'FRAME' && (p as FrameNode).getPluginData('fgVerticalTextColFrame') === 'true') {
+              p = p.parent;
+            }
+            if (p && p.type === 'FRAME' && (p as FrameNode).getPluginData('fgVerticalText') === 'true') {
               wrapperNode = p as FrameNode;
             }
           } else if (node.type === 'TEXT') {
@@ -5259,13 +5278,39 @@ figma.ui.onmessage = async (msg: {
           let isRerun = false;
 
           if (node.type === 'FRAME' && node.getPluginData('fgVerticalText') === 'true') {
-            wrapperNode = node as FrameNode;
-            const child = wrapperNode.children.find(c => c.type === 'TEXT' && c.getPluginData('fgVerticalText') === 'true');
-            if (child) { textNode = child as TextNode; isRerun = true; }
+            // Could be the outer wrapper or a column frame
+            if (node.getPluginData('fgVerticalTextColFrame') === 'true') {
+              // Column frame selected — find its text child and the outer wrapper
+              const tn = (node as FrameNode).children.find(c => c.type === 'TEXT') as TextNode | undefined;
+              if (tn) textNode = tn;
+              const outer = node.parent;
+              if (outer && outer.type === 'FRAME' && outer.getPluginData('fgVerticalText') === 'true') {
+                wrapperNode = outer as FrameNode;
+              }
+              isRerun = true;
+            } else {
+              // Outer wrapper selected — find the original text node inside column frames
+              wrapperNode = node as FrameNode;
+              for (const child of wrapperNode.children) {
+                if (child.type === 'FRAME' && child.getPluginData('fgVerticalTextColFrame') === 'true') {
+                  const tn = (child as FrameNode).children.find(c => c.type === 'TEXT' && c.getPluginData('fgVerticalText') === 'true' && c.getPluginData('fgVerticalTextExtra') !== 'true');
+                  if (tn) { textNode = tn as TextNode; break; }
+                }
+                // Backward compat: direct text child
+                if (child.type === 'TEXT' && child.getPluginData('fgVerticalText') === 'true') {
+                  textNode = child as TextNode; break;
+                }
+              }
+              isRerun = true;
+            }
           } else if (node.type === 'TEXT' && node.getPluginData('fgVerticalText') === 'true') {
             textNode = node as TextNode;
             isRerun = true;
-            const p = node.parent;
+            // Walk up: parent could be column frame → outer wrapper
+            let p = node.parent;
+            if (p && p.type === 'FRAME' && p.getPluginData('fgVerticalTextColFrame') === 'true') {
+              p = p.parent;
+            }
             if (p && p.type === 'FRAME' && p.getPluginData('fgVerticalText') === 'true') {
               wrapperNode = p as FrameNode;
             }
@@ -5391,7 +5436,29 @@ figma.ui.onmessage = async (msg: {
               tn.resize(0.01, tn.height);
             };
 
-            // --- Create or update wrapper ---
+            const colPadding = Math.round(originalLineHeight / 2);
+
+            // --- Helper to create a column wrapper frame around a text node ---
+            const wrapInColumnFrame = (tn: TextNode, colIndex: number): FrameNode => {
+              const colFrame = figma.createFrame();
+              colFrame.name = `縦書き Col ${colIndex + 1}`;
+              colFrame.layoutMode = 'HORIZONTAL';
+              colFrame.primaryAxisSizingMode = 'AUTO';
+              colFrame.counterAxisSizingMode = 'AUTO';
+              colFrame.paddingLeft = colPadding;
+              colFrame.paddingRight = colPadding;
+              colFrame.paddingTop = 0;
+              colFrame.paddingBottom = 0;
+              colFrame.itemSpacing = 0;
+              colFrame.fills = [];
+              colFrame.clipsContent = false;
+              colFrame.setPluginData('fgVerticalText', 'true');
+              colFrame.setPluginData('fgVerticalTextColFrame', 'true');
+              colFrame.appendChild(tn);
+              return colFrame;
+            };
+
+            // --- Create or update outer wrapper ---
             if (!isRerun || !wrapperNode) {
               const parent = textNode.parent;
               if (!parent || !('insertChild' in parent)) {
@@ -5408,8 +5475,8 @@ figma.ui.onmessage = async (msg: {
               wrapper.layoutMode = 'HORIZONTAL';
               wrapper.primaryAxisSizingMode = 'AUTO';
               wrapper.counterAxisSizingMode = 'AUTO';
-              wrapper.paddingLeft = Math.round(originalLineHeight / 2);
-              wrapper.paddingRight = Math.round(originalLineHeight / 2);
+              wrapper.paddingLeft = 0;
+              wrapper.paddingRight = 0;
               wrapper.paddingTop = 0;
               wrapper.paddingBottom = 0;
               wrapper.itemSpacing = 0;
@@ -5419,23 +5486,35 @@ figma.ui.onmessage = async (msg: {
               (parent as any).insertChild(textIdx, wrapper);
               wrapper.x = textX;
               wrapper.y = textY;
-              wrapper.appendChild(textNode);
+
+              // Apply style to original text, wrap in column frame, add to wrapper
+              applyVerticalStyle(textNode, verticalColumnTexts[0] || '');
+              const col1Frame = wrapInColumnFrame(textNode, 0);
+              wrapper.appendChild(col1Frame);
+
               wrapperNode = wrapper;
             } else {
-              wrapperNode.paddingLeft = Math.round(originalLineHeight / 2);
-              wrapperNode.paddingRight = Math.round(originalLineHeight / 2);
-
-              // Remove previously created extra column text nodes
-              const extras = wrapperNode.children.filter(
-                c => c.type === 'TEXT' && c.getPluginData('fgVerticalTextExtra') === 'true'
+              // Re-run: remove all existing column frames and extra nodes
+              const toRemove = wrapperNode.children.filter(
+                c => c.getPluginData('fgVerticalTextColFrame') === 'true'
+                  || c.getPluginData('fgVerticalTextExtra') === 'true'
               );
-              for (const ex of extras) ex.remove();
+              // Detach the original text node before removing column frames
+              // so it doesn't get deleted with its parent column frame
+              const origParent = textNode.parent;
+              if (origParent && origParent.getPluginData('fgVerticalTextColFrame') === 'true') {
+                wrapperNode.appendChild(textNode);
+              }
+              for (const child of toRemove) {
+                if (child.id !== textNode.id) child.remove();
+              }
+
+              applyVerticalStyle(textNode, verticalColumnTexts[0] || '');
+              const col1Frame = wrapInColumnFrame(textNode, 0);
+              wrapperNode.appendChild(col1Frame);
             }
 
-            // --- Apply column 1 to the original text node ---
-            applyVerticalStyle(textNode, verticalColumnTexts[0] || '');
-
-            // --- Create additional text nodes for columns 2+ ---
+            // --- Create additional columns (2+), each in its own frame, left-to-right ---
             for (let c = 1; c < verticalColumnTexts.length; c++) {
               const colText = verticalColumnTexts[c];
               if (!colText) continue;
@@ -5450,7 +5529,9 @@ figma.ui.onmessage = async (msg: {
               applyVerticalStyle(colNode, colText);
               colNode.setPluginData('fgVerticalText', 'true');
               colNode.setPluginData('fgVerticalTextExtra', 'true');
-              wrapperNode.appendChild(colNode);
+
+              const colFrame = wrapInColumnFrame(colNode, c);
+              wrapperNode.appendChild(colFrame);
             }
 
             // --- Store plugin data ---
