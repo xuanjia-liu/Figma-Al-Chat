@@ -29,6 +29,10 @@ For more information, visit https://www.typescriptlang.org/
 Using TypeScript requires a compiler to convert TypeScript (code.ts) into JavaScript (code.js)
 for the browser to run.
 
+Developer note: the plugin UI is now maintained as split source files, not directly in the generated `ui.html`.
+Edit `ui.source.html`, `ui.css`, and files under `ui/`, then run `npm run build` before reloading the plugin in Figma.
+`ui.html` is a generated artifact used by `figma.showUI(__html__)`, so direct edits there will be overwritten.
+
 We recommend writing TypeScript code using Visual Studio code:
 
 1. Download Visual Studio Code if you haven't already: https://code.visualstudio.com/.

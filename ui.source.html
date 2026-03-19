@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <link rel="stylesheet" href="./ui.css">
+</head>
+
+<body class="agent-mode">
+  <!-- Persistent Gradients -->
+  <svg class="hidden-defs">
+    <defs>
+      <linearGradient id="ai-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#00BBFF" />
+        <stop offset="100%" stop-color="#c235ff" />
+      </linearGradient>
+    </defs>
+  </svg>
+  <div class="app-layout">
+    <!-- Chat History Sidebar -->
+    <div class="chat-history-sidebar collapsed" id="chatHistorySidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-search-container">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input type="text" id="chatHistorySearchInput" placeholder="Search chats..." />
+        </div>
+        <button class="sidebar-close-btn" id="sidebarCloseBtn" title="Close sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+          </svg>
+        </button>
+      </div>
+      <div class="chat-history-list" id="chatHistoryList">
+        <div class="chat-history-empty" id="chatHistoryEmpty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          </svg>
+          <span>No chat history yet</span>
+        </div>
+      </div>
+      <button class="new-chat-fab" id="newChatBtn" title="Start a new chat (Cmd+N)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </button>
+
+      <div class="sidebar-footer">
+        <div class="storage-usage">
+          <div class="storage-label">
+            <span>Storage Usage</span>
+            <span id="storageValue">—</span>
+          </div>
+          <div class="storage-meter">
+            <div class="storage-bar" id="storageBar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="header">
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle chat history">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+            stroke-width="2" viewBox="0 0 20 20">
+            <path d="M1 10a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L1 6m0 0V1m0 5h5m4-1v5l4 2" />
+          </svg>
+        </button>
+        <div class="header-info">
+          <div class="chat-status-header" id="chatStatusHeader">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Zm0-16v7m0 2v2" />
+            </svg>
+
+            <span>Configure API key in Settings to start</span>
+          </div>
+          <div class="selection-info hidden" id="selectionInfo">
+            <span class="selection-count" id="selectionCount">0</span>
+            <span>selected:</span>
+            <span class="selection-names" id="selectionNames">Nothing selected</span>
+          </div>
+          <div class="token-counter paused" id="tokenCounter"
+            title="Estimated input tokens (selection + prompt) - Click to resume realtime updates">
+            <span id="tokenCounterIcon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            </span>
+            <span id="tokenCountLabel"><span id="tokenCountValue">0</span> tokens</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="settings-btn" id="openSettingsBtn" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+            <span class="check-badge" id="settingsCheckBadge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div class="content">
+        <!-- Chat Panel -->
+        <div class="panel active" id="chatPanel">
+          <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+            </div>
+          </div>
+
+
+          <div class="chat-input-container" id="chatInputContainer">
+            <div class="node-actions-container hidden" id="nodeActionsContainer">
+              <div class="node-actions-content">
+                <button class="node-action-btn" id="smartRenameBtn" data-action="smart-rename">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7" rx="1" />
+                    <rect x="14" y="3" width="7" height="7" rx="1" />
+                    <rect x="3" y="14" width="7" height="7" rx="1" />
+                    <path d="M14 14h7M14 17h4M14 20h2" />
+                    <path d="M10 6h4M6 10v4" />
+                  </svg>
+                  <span>Smart rename</span>
+                </button>
+              </div>
+            </div>
+            <!-- Image Staging Area -->
+            <div class="image-staging" id="imageStaging"></div>
+            <div class="chat-input-row">
+              <button class="chat-input-ai-btn" id="chatInputAiBtn" title="Improve prompt with AI">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                  <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
+                </svg>
+              </button>
+              <textarea class="chat-input" id="chatInput" placeholder="Type your message or paste exported content..."
+                rows="1"></textarea>
+            </div>
+            <div class="slash-actions-menu" id="slashActionsMenu"></div>
+            <div class="image-ref-menu" id="imageRefMenu"></div>
+            <div class="chat-input-actions">
+              <div class="mode-toggle">
+                <button class="mode-btn" data-mode="ask" id="modeAskBtn">Ask</button>
+                <button class="mode-btn active" data-mode="agent" id="modeAgentBtn">Agent</button>
+                <button class="mode-btn" data-mode="audit" id="modeAuditBtn">Audit</button>
+              </div>
+              <div class="model-select-dropdown" id="modelSelectDropdown">
+                <button class="model-select-btn" id="modelSelectBtn" title="Select AI model">
+                  <span class="model-select-label" id="modelSelectLabel">Model</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="model-select-menu hidden" id="modelSelectMenu">
+                </div>
+              </div>
+              <button class="commands-drawer-btn" id="commandsDrawerBtn" title="Browse ready-to-use AI actions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <div class="plus-menu-container">
+                <button class="plus-btn" id="plusBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+                <div class="export-menu" id="exportMenu">
+                  <button class="export-menu-item" data-export="css">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+                    </svg>
+                    <span>Copy CSS</span>
+                  </button>
+                  <button class="export-menu-item" data-export="svg">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                    </svg>
+                    <span>Copy SVG</span>
+                  </button>
+                  <button class="export-menu-item" data-export="text">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+                    </svg>
+                    <span>Copy Text</span>
+                  </button>
+                  <button class="export-menu-item" data-export="png">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <path d="M21 15l-5-5L5 21" />
+                    </svg>
+                    <span>Copy Image</span>
+                  </button>
+                  <button class="export-menu-item" id="uploadImageBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 16v-8" />
+                      <path d="M8 8l4-4 4 4" />
+                      <path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2" />
+                    </svg>
+                    <span>Upload Image</span>
+                  </button>
+                </div>
+                <input type="file" id="uploadImageInput" accept="image/png,image/jpeg,image/webp" multiple
+                  style="display:none" />
+              </div>
+              <div class="spacer"></div>
+              <button class="chat-send-btn" id="chatSendBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option Context Menu -->
+  <div class="option-context-menu" id="optionContextMenu">
+    <div class="option-context-item" id="ctxEditOption">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path
+          d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </svg>
+      Edit
+    </div>
+    <div class="option-context-item" id="ctxDuplicateOption">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+      </svg>
+      Duplicate
+    </div>
+    <div class="option-context-item danger" id="ctxRemoveOption">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path
+          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+      Remove
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="settings-modal" id="settingsModal">
+    <div class="settings-modal-content">
+      <div class="settings-modal-header">
+        <span class="settings-modal-title">Settings</span>
+        <button class="settings-modal-close" id="closeSettingsBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="settings-modal-body">
+        <div class="settings-layout">
+          <div class="settings-sidebar">
+            <div class="settings-menu-item active" data-category="ai">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path
+                  d="m12 12.001 8.073-4.625M12 12.001 3.926 7.376M12 12.001v9.25m8.073-13.875a3.17 3.17 0 0 0-1.165-1.156l-5.316-3.046a3.2 3.2 0 0 0-3.184 0L5.092 6.221c-.493.282-.89.683-1.166 1.155m16.147 0a3.14 3.14 0 0 1 .427 1.581v6.09a3.15 3.15 0 0 1-1.592 2.736l-5.316 3.046a3.2 3.2 0 0 1-1.592.422M3.926 7.376a3.14 3.14 0 0 0-.426 1.58v6.09c0 1.13.607 2.172 1.592 2.736l5.316 3.046a3.2 3.2 0 0 0 1.592.423" />
+              </svg>
+              Models
+            </div>
+            <div class="settings-menu-item" data-category="export">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              Export
+            </div>
+            <div class="settings-menu-item" data-category="icons">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z"></path>
+                <path
+                  d="M11.542 6.053a.5.5 0 0 1 .916 0l1.338 3.054a.5.5 0 0 0 .409.297l3.317.328a.5.5 0 0 1 .283.872l-2.49 2.215a.5.5 0 0 0-.157.48l.713 3.257a.5.5 0 0 1-.741.539l-2.877-1.684a.5.5 0 0 0-.506 0L8.87 17.095a.5.5 0 0 1-.74-.539l.712-3.256a.5.5 0 0 0-.156-.48l-2.49-2.216a.5.5 0 0 1 .282-.872l3.318-.328a.5.5 0 0 0 .408-.297l1.338-3.054Z">
+                </path>
+              </svg>
+              Icons
+            </div>
+            <div class="settings-menu-item" data-category="limits">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              Limits
+            </div>
+            <div class="settings-menu-item" data-category="image-apis">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path d="M21 15l-5-5L5 21" />
+              </svg>
+              Image APIs
+            </div>
+            <div class="settings-menu-item" data-category="figma-api">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                <path d="M12 15V9H9a3 3 0 1 0 0 6m3 0H9m3 0v3a3 3 0 1 1-3-3" />
+                <path d="M12 11.998a3.001 3.001 0 1 1 6 .006 3.001 3.001 0 0 1-5.999-.006" />
+                <path d="M12 3h3a3 3 0 0 1 0 6h-3m0-6v6m0-6H9a3 3 0 1 0 0 6h3" />
+              </svg>
+              Figma API
+            </div>
+          </div>
+          <div class="settings-main-content">
+            <!-- AI Provider Category -->
+            <div class="settings-category-panel active" id="category-ai">
+              <div class="settings-group-title">Assistant Provider</div>
+              <div class="setting-item">
+                <label class="setting-label">Choose Assistant Mode</label>
+                <select class="setting-input" id="providerSelect">
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="off">No AI (Quick Actions only)</option>
+                </select>
+                <div class="setting-hint">Use No AI to focus on direct quick actions without chat-based AI generation.
+                </div>
+              </div>
+              <div class="provider-settings" id="geminiSettings">
+                <div class="setting-item">
+                  <label class="setting-label">API Key</label>
+                  <div class="setting-input-row">
+                    <input type="password" class="setting-input" id="geminiApiKeyInput"
+                      placeholder="Enter your Google AI Studio API key" />
+                    <button class="setting-btn" id="btnTestGemini" data-test-provider="gemini">Test</button>
+                  </div>
+                  <div class="setting-hint">
+                    Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank"
+                      style="color: var(--accent);">Google AI Studio</a>.
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label class="setting-label">Select Models</label>
+                  <div class="model-checklist" id="geminiModelChecklist">
+                  </div>
+                  <div class="model-actions">
+                    <button class="model-refresh-btn" data-provider="gemini" title="Refresh model list">
+                      <span>↻</span> Refresh
+                    </button>
+                    <button class="model-show-all-btn" data-provider="gemini" title="Show all models">
+                      Show All
+                    </button>
+                    <span class="check-all-toggle" data-provider="gemini" title="Check/Uncheck all">
+                      <span class="check-all-text">Check All</span>
+                    </span>
+                  </div>
+                  <select class="setting-input hidden" id="geminiModelSelect">
+                    <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
+                    <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro (Advanced)</option>
+                    <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Fastest)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="provider-settings hidden" id="openaiSettings">
+                <div class="setting-item">
+                  <label class="setting-label">API Key</label>
+                  <div class="setting-input-row">
+                    <input type="password" class="setting-input" id="openaiApiKeyInput"
+                      placeholder="Enter your OpenAI API key" />
+                    <button class="setting-btn" id="btnTestOpenAI" data-test-provider="openai">Test</button>
+                  </div>
+                  <div class="setting-hint">
+                    Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank"
+                      style="color: var(--accent);">OpenAI Platform</a>.
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label class="setting-label">Select Models</label>
+                  <div class="model-checklist" id="openaiModelChecklist">
+                  </div>
+                  <div class="model-actions">
+                    <button class="model-refresh-btn" data-provider="openai" title="Refresh model list">
+                      <span>↻</span> Refresh
+                    </button>
+                    <button class="model-show-all-btn" data-provider="openai" title="Show all models">
+                      Show All
+                    </button>
+                    <span class="check-all-toggle" data-provider="openai" title="Check/Uncheck all">
+                      <span class="check-all-text">Check All</span>
+                    </span>
+                  </div>
+                  <select class="setting-input hidden" id="openaiModelSelect">
+                    <option value="gpt-4o">GPT-4o (Latest)</option>
+                    <option value="gpt-4o-mini">GPT-4o Mini (Fast)</option>
+                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Economy)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="provider-settings hidden" id="anthropicSettings">
+                <div class="setting-item">
+                  <label class="setting-label">API Key</label>
+                  <div class="setting-input-row">
+                    <input type="password" class="setting-input" id="anthropicApiKeyInput"
+                      placeholder="Enter your Anthropic API key" />
+                    <button class="setting-btn" id="btnTestAnthropic" data-test-provider="anthropic">Test</button>
+                  </div>
+                  <div class="setting-hint">
+                    Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank"
+                      style="color: var(--accent);">Anthropic Console</a>.
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label class="setting-label">Select Models</label>
+                  <div class="model-checklist" id="anthropicModelChecklist">
+                  </div>
+                  <div class="model-actions">
+                    <button class="model-refresh-btn" data-provider="anthropic" title="Refresh model list">
+                      <span>↻</span> Refresh
+                    </button>
+                    <button class="model-show-all-btn" data-provider="anthropic" title="Show all models">
+                      Show All
+                    </button>
+                    <span class="check-all-toggle" data-provider="anthropic" title="Check/Uncheck all">
+                      <span class="check-all-text">Check All</span>
+                    </span>
+                  </div>
+                  <select class="setting-input hidden" id="anthropicModelSelect">
+                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Latest)</option>
+                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                    <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast)</option>
+                    <option value="claude-3-opus-20240229">Claude 3 Opus (Advanced)</option>
+                  </select>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Export Category -->
+            <div class="settings-category-panel" id="category-export">
+              <div class="settings-group-title">Export Settings</div>
+              <div class="setting-item">
+                <label class="setting-label">CSS Generation</label>
+                <select class="setting-input" id="cssFormatSelect">
+                  <option value="classes">CSS Classes</option>
+                  <option value="inline">Inline Styles</option>
+                  <option value="tailwind">Tailwind Classes</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Limits Category -->
+            <div class="settings-category-panel" id="category-limits">
+              <div class="settings-group-title">Selection Limits</div>
+              <div class="setting-item">
+                <label class="setting-label">Selection Size Limit</label>
+                <select class="setting-input" id="selectionSizeLimitSelect">
+                  <option value="50">50 KB — ~70-150 nodes (Fast)</option>
+                  <option value="100">100 KB — ~150-300 nodes (Balanced)</option>
+                  <option value="200" selected>200 KB — ~300-600 nodes (Default)</option>
+                  <option value="500">500 KB — ~800-1500 nodes (Large)</option>
+                  <option value="1024">1 MB — ~1500-3000 nodes</option>
+                  <option value="2048">2 MB — ~3000-6000 nodes</option>
+                  <option value="5120">5 MB — Extreme limit</option>
+                </select>
+                <div class="setting-hint">
+                  Controls how many elements can be selected at once in Agent/Audit mode.
+                </div>
+              </div>
+
+              <div class="settings-group-title" style="margin-top: 24px;">Output Token Limits</div>
+              <div class="setting-item">
+                <label class="setting-label">Agent Mode Limit</label>
+                <input type="number" class="setting-input" id="agentMaxTokensInput" placeholder="65536" min="1024"
+                  step="1024" />
+                <div class="setting-hint">Max tokens for Direct UI Creation.</div>
+              </div>
+              <div class="setting-item">
+                <label class="setting-label">Audit Mode Limit</label>
+                <input type="number" class="setting-input" id="auditMaxTokensInput" placeholder="16384" min="1024"
+                  step="1024" />
+                <div class="setting-hint">Max tokens for UI/UX Audit reports.</div>
+              </div>
+              <div class="setting-item">
+                <label class="setting-label">Chat/General Limit</label>
+                <input type="number" class="setting-input" id="chatMaxTokensInput" placeholder="16384" min="1024"
+                  step="1024" />
+                <div class="setting-hint">Max tokens for standard chat responses.</div>
+              </div>
+            </div>
+
+            <!-- Image APIs Category -->
+            <div class="settings-category-panel" id="category-image-apis">
+              <div class="settings-group-title">Vector Generation</div>
+              <div class="setting-item">
+                <label class="setting-label">Quiver API Key</label>
+                <input type="password" class="setting-input" id="quiverApiKeyInput"
+                  placeholder="Enter your Quiver API key" />
+                <div class="setting-hint">
+                  Get your API key from <a href="https://app.quiver.ai/settings/api-keys" target="_blank"
+                    style="color: var(--accent);">Quiver API Keys</a>.
+                </div>
+              </div>
+
+              <div class="settings-group-title">Unsplash</div>
+              <div class="setting-item">
+                <label class="setting-label">Unsplash Access Key</label>
+                <div class="setting-input-row">
+                  <input type="password" class="setting-input" id="unsplashApiKeyInput"
+                    placeholder="Enter your Unsplash Access Key" />
+                </div>
+                <div class="setting-hint">
+                  Get your key from <a href="https://unsplash.com/oauth/applications" target="_blank"
+                    style="color: var(--accent);">Unsplash Developers</a>. Only the Access Key is needed.
+                </div>
+              </div>
+
+              <div class="settings-group-title" style="margin-top: 24px;">Pixabay</div>
+              <div class="setting-item">
+                <label class="setting-label">Pixabay API Key</label>
+                <div class="setting-input-row">
+                  <input type="password" class="setting-input" id="pixabayApiKeyInput"
+                    placeholder="Enter your Pixabay API Key" />
+                </div>
+                <div class="setting-hint">
+                  Get your key from <a href="https://pixabay.com/api/docs/" target="_blank"
+                    style="color: var(--accent);">Pixabay API Docs</a>. Free with attribution.
+                </div>
+              </div>
+
+              <div class="settings-group-title" style="margin-top: 24px;">Pexels</div>
+              <div class="setting-item">
+                <label class="setting-label">Pexels API Key</label>
+                <div class="setting-input-row">
+                  <input type="password" class="setting-input" id="pexelsApiKeyInput"
+                    placeholder="Enter your Pexels API Key" />
+                </div>
+                <div class="setting-hint">
+                  Get your key from <a href="https://www.pexels.com/api/" target="_blank"
+                    style="color: var(--accent);">Pexels API</a>. Free with attribution.
+                </div>
+              </div>
+            </div>
+
+            <!-- Figma API Category -->
+            <div class="settings-category-panel" id="category-figma-api">
+              <div class="settings-group-title">Figma REST API</div>
+              <div class="setting-item">
+                <label class="setting-label">Personal Access Token</label>
+                <div class="setting-input-row">
+                  <input type="password" class="setting-input" id="figmaPersonalTokenInput"
+                    placeholder="Enter your Figma Personal Access Token" />
+                  <button class="setting-btn" id="btnTestFigmaToken">Test</button>
+                </div>
+                <div class="setting-hint">
+                  Get your token from <a href="https://www.figma.com/developers/api#access-tokens" target="_blank"
+                    style="color: var(--accent);">Figma Account Settings</a>. Required for Comments API.
+                </div>
+              </div>
+              <div class="setting-item">
+                <label class="setting-label">File Key</label>
+                <div class="setting-input-row">
+                  <input type="text" class="setting-input" id="figmaFileKeyInput"
+                    placeholder="Auto-detected or paste from URL" readonly />
+                  <button class="setting-btn" id="btnDetectFileKey">Detect</button>
+                </div>
+                <div class="setting-hint">
+                  File key from your Figma URL: figma.com/file/<strong>[FILE_KEY]</strong>/...
+                </div>
+              </div>
+
+              <div class="settings-group-title" style="margin-top: 24px;">Comments</div>
+              <div class="setting-item">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <button class="setting-btn" id="btnLoadComments">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
+                      style="margin-right: 4px;">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Load Comments
+                  </button>
+                  <button class="setting-btn" id="btnRefreshComments" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
+                      style="margin-right: 4px;">
+                      <path d="M23 4v6h-6M1 20v-6h6" />
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                    </svg>
+                    Refresh
+                  </button>
+                </div>
+                <div class="setting-hint" style="margin-top: 8px;">
+                  Load comments from the current file to view, reply to, or use in AI context.
+                </div>
+              </div>
+              <div id="commentsContainer" class="comments-container" style="display: none;">
+                <div class="comments-list" id="commentsList">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-modal-footer">
+        <button class="setting-btn primary" id="btnSaveSettings">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Custom Option Modal -->
+  <div class="add-option-modal" id="addOptionModal">
+    <div class="add-option-modal-content">
+      <div class="add-option-modal-header">
+        <span class="settings-modal-title" id="addOptionModalTitle">Add Custom Option</span>
+        <button class="add-option-modal-close" id="closeAddOptionBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="add-option-modal-body">
+        <!-- Tone fields (shown for tone) -->
+        <div id="toneOnlyFields">
+          <div class="setting-item">
+            <label class="setting-label">Tone Name</label>
+            <input type="text" class="setting-input" id="customToneName" placeholder="e.g. Professional" />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Tone Value (used in prompt)</label>
+            <input type="text" class="setting-input" id="customToneValue"
+              placeholder="e.g. Professional and business-like" />
+          </div>
+        </div>
+        <!-- Image preset fields (shown for imagePreset) -->
+        <div id="imagePresetOnlyFields" style="display: none;">
+          <div class="setting-item">
+            <label class="setting-label">Preset Name</label>
+            <input type="text" class="setting-input" id="customPresetName" placeholder="e.g. Cyberpunk Neon" />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Subject / Content</label>
+            <textarea class="setting-input" id="customPresetSubject" style="height: 60px; resize: none;"
+              placeholder="e.g. A futuristic cityscape at night..."></textarea>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Artistic Style / Direction</label>
+            <textarea class="setting-input" id="customPresetStyle" style="height: 80px; resize: none;"
+              placeholder="e.g. Neon lights, cyberpunk aesthetic, 8k, cinematic..."></textarea>
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Thumbnail URL (Optional)</label>
+            <input type="text" class="setting-input" id="customPresetThumbnail" placeholder="https://..." />
+          </div>
+        </div>
+        <!-- Style category fields (shown for styleCategory) -->
+        <div id="styleCategoryOnlyFields" style="display: none;">
+          <div class="setting-item">
+            <label class="setting-label">Name</label>
+            <input type="text" class="setting-input" id="customStyleName" placeholder="e.g. Minimalism & Swiss Style" />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Keywords</label>
+            <input type="text" class="setting-input" id="customStyleKeywords"
+              placeholder="e.g. Clean, simple, spacious, functional..." />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Primary Colors</label>
+            <input type="text" class="setting-input" id="customStylePrimaryColors"
+              placeholder="e.g. Monochromatic, Black #000000, White #FFFFFF" />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Secondary Colors</label>
+            <input type="text" class="setting-input" id="customStyleSecondaryColors"
+              placeholder="e.g. Neutral (Beige #F5F1E8, Grey #808080)" />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">Effects</label>
+            <input type="text" class="setting-input" id="customStyleEffects"
+              placeholder="e.g. Sharp shadows, clear type hierarchy" />
+          </div>
+        </div>
+        <button class="setting-btn primary" id="btnConfirmAddOption">Add
+          Option</button>
+      </div>
+    </div>
+  </div>
+  <div class="audit-modal" id="auditModal">
+    <div class="audit-modal-content">
+      <div class="audit-modal-header">
+        <span class="audit-modal-title">UI/UX Audit Settings</span>
+        <button class="audit-modal-close" id="closeAuditBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="audit-modal-body">
+        <!-- Preset Management -->
+        <div class="audit-group">
+          <div class="audit-group-title-row">
+            <div class="audit-group-title-left">
+              <div class="audit-group-title">Preset & Detail</div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <div class="audit-preset-select-wrapper">
+                <select class="audit-preset-select audit-select-sub" id="auditLanguageSelect" title="Response Language">
+                  <option value="auto" selected>Auto</option>
+                  <option value="en">English</option>
+                  <option value="ja">Japanese</option>
+                  <option value="cn">Chinese</option>
+                  <option value="kr">Korean</option>
+                </select>
+                <svg class="audit-preset-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+              <div class="audit-preset-select-wrapper">
+                <select class="audit-preset-select audit-select-sub" id="auditContextModeSelect"
+                  title="Context Detail Level (lower saves tokens)">
+                  <option value="smart" selected>Smart</option>
+                  <option value="all">Full Detail</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="textOnly">Text Only</option>
+                  <option value="hierarchy">Hierarchy</option>
+                </select>
+                <svg class="audit-preset-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div class="audit-preset-row">
+            <!-- Select Mode -->
+            <div class="audit-preset-select-mode" id="auditPresetSelectMode">
+              <div class="audit-preset-select-wrapper">
+                <select class="audit-preset-select" id="auditPresetSelect">
+                </select>
+                <svg class="audit-preset-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </div>
+              <button class="audit-preset-update-btn" id="auditPresetUpdateBtn" title="Update current preset"
+                style="display: none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
+                  <path d="M17 21v-8H7v8M7 3v5h8" />
+                </svg>
+              </button>
+              <button class="audit-preset-delete-btn" id="auditPresetDeleteBtn" title="Delete preset"
+                style="display: none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                </svg>
+              </button>
+              <button class="audit-preset-edit-btn" id="auditPresetEditBtn" title="Edit preset name"
+                style="display: none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              </button>
+              <button class="audit-preset-action-btn" id="auditPresetSaveBtn" title="Save as new preset">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            </div>
+            <!-- Input Mode (hidden by default) -->
+            <div class="audit-preset-input-mode hidden" id="auditPresetInputMode">
+              <input type="text" class="audit-preset-name-input" id="auditPresetNameInput"
+                placeholder="Enter preset name..." />
+              <button class="audit-preset-action-btn cancel" id="auditPresetCancelBtn" title="Cancel">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+              <button class="audit-preset-action-btn confirm" id="auditPresetConfirmBtn" title="Save preset">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Instructions -->
+        <div class="audit-group">
+          <div class="audit-group-title-row">
+            <div class="audit-group-title-left">
+              <span class="audit-group-title">System Instructions</span>
+              <span class="audit-modified-badge hidden" id="auditInstructionsModifiedBadge"
+                title="Instructions differ from the selected preset">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l7 4v8l-7 4-7-4V6z" />
+                  <path d="M12 8v4" />
+                  <circle cx="12" cy="15" r="1" />
+                </svg>
+                Modified
+              </span>
+            </div>
+            <button class="audit-autofill-btn" id="auditAutoFillInstructions"
+              title="Auto-fill or enhance with AI using preset context">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
+              </svg>
+            </button>
+          </div>
+          <div class="audit-textarea-wrapper">
+            <textarea class="audit-textarea" id="auditInstructions" rows="8"
+              placeholder="Enter your UI/UX audit instructions..."></textarea>
+          </div>
+        </div>
+
+        <!-- Quick Settings -->
+        <div class="audit-group">
+          <div class="audit-group-title-row">
+            <div class="audit-group-title-left">
+              <span class="audit-group-title" id="viewportTitle">Viewport Settings</span>
+              <label class="audit-toggle-switch">
+                <input type="checkbox" id="auditSizeToggle" checked />
+                <span class="toggle-label">Use size audit</span>
+              </label>
+            </div>
+            <button class="audit-autofill-btn" id="auditAutoFillViewport"
+              title="Auto-fill from instructions or selection">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
+              </svg>
+            </button>
+          </div>
+          <div class="audit-dimension-row">
+            <div class="audit-dimension-group">
+              <label class="audit-dimension-label">Target Viewport</label>
+              <div class="audit-dimension-inputs">
+                <input type="number" class="audit-dimension-input" id="auditTargetWidth" placeholder="980" />
+                <span class="audit-dimension-separator">×</span>
+                <input type="number" class="audit-dimension-input" id="auditTargetHeight" placeholder="632" />
+                <button class="audit-pick-btn" id="auditPickTargetSize" title="Use selected element's size">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l3 3 3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="audit-dimension-group">
+              <label class="audit-dimension-label">Min Supported</label>
+              <div class="audit-dimension-inputs">
+                <input type="number" class="audit-dimension-input" id="auditMinWidth" placeholder="320" />
+                <span class="audit-dimension-separator">×</span>
+                <input type="number" class="audit-dimension-input" id="auditMinHeight" placeholder="480" />
+                <button class="audit-pick-btn" id="auditPickMinSize" title="Use selected element's size">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l3 3 3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="audit-group">
+          <div class="audit-group-title-row">
+            <div class="audit-group-title-left">
+              <span class="audit-group-title">Output Settings</span>
+              <label class="audit-toggle-switch">
+                <input type="checkbox" id="auditPostCommentsToggle" />
+                <span class="toggle-label">Post as comments</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <!-- Color System -->
+        <div class="audit-group">
+          <div class="audit-group-title-row">
+            <div class="audit-group-title-left">
+              <span class="audit-group-title" id="colorsTitle">Design System Colors</span>
+              <label class="audit-toggle-switch">
+                <input type="checkbox" id="auditColorsToggle" checked />
+                <span class="toggle-label">Use color audit</span>
+              </label>
+            </div>
+            <button class="audit-autofill-btn" id="auditAutoFillColors"
+              title="Auto-fill from instructions or selection">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
+              </svg>
+            </button>
+          </div>
+          <div class="audit-colors-grid">
+            <div class="audit-color-item" draggable="true" data-color-role="primary">
+              <label class="audit-color-label">Primary</label>
+              <div class="audit-color-input-wrapper">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </div>
+                <input type="color" class="audit-color-picker" id="auditColorPrimary" value="#0E91EF" />
+                <input type="text" class="audit-color-hex" id="auditColorPrimaryHex" value="#0E91EF" />
+                <button class="audit-pick-btn" data-color-target="primary" title="Use selected element's fill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="audit-color-item" draggable="true" data-color-role="secondary">
+              <label class="audit-color-label">Secondary</label>
+              <div class="audit-color-input-wrapper">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </div>
+                <input type="color" class="audit-color-picker" id="auditColorSecondary" value="#6B7280" />
+                <input type="text" class="audit-color-hex" id="auditColorSecondaryHex" value="#6B7280" />
+                <button class="audit-pick-btn" data-color-target="secondary" title="Use selected element's fill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="audit-color-item" draggable="true" data-color-role="error">
+              <label class="audit-color-label">Error</label>
+              <div class="audit-color-input-wrapper">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </div>
+                <input type="color" class="audit-color-picker" id="auditColorError" value="#EF4444" />
+                <input type="text" class="audit-color-hex" id="auditColorErrorHex" value="#EF4444" />
+                <button class="audit-pick-btn" data-color-target="error" title="Use selected element's fill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="audit-color-item" draggable="true" data-color-role="warning">
+              <label class="audit-color-label">Warning</label>
+              <div class="audit-color-input-wrapper">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </div>
+                <input type="color" class="audit-color-picker" id="auditColorWarning" value="#F59E0B" />
+                <input type="text" class="audit-color-hex" id="auditColorWarningHex" value="#F59E0B" />
+                <button class="audit-pick-btn" data-color-target="warning" title="Use selected element's fill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="audit-color-item" draggable="true" data-color-role="success">
+              <label class="audit-color-label">Success</label>
+              <div class="audit-color-input-wrapper">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="9" cy="6" r="1.5" />
+                    <circle cx="15" cy="6" r="1.5" />
+                    <circle cx="9" cy="12" r="1.5" />
+                    <circle cx="15" cy="12" r="1.5" />
+                    <circle cx="9" cy="18" r="1.5" />
+                    <circle cx="15" cy="18" r="1.5" />
+                  </svg>
+                </div>
+                <input type="color" class="audit-color-picker" id="auditColorSuccess" value="#10B981" />
+                <input type="text" class="audit-color-hex" id="auditColorSuccessHex" value="#10B981" />
+                <button class="audit-pick-btn" data-color-target="success" title="Use selected element's fill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="audit-modal-footer">
+        <button class="audit-apply-btn" id="auditApplyBtn">Apply Settings</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+      <path d="M22 4L12 14.01l-3-3" />
+    </svg>
+    <span id="toastMessage">Settings saved!</span>
+    <button class="toast-close" id="toastCloseBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 6L6 18M6 6l12 12" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- Image Preview Modal -->
+  <div class="image-preview-modal" id="imagePreviewModal">
+    <div class="image-preview-content">
+      <button class="image-preview-close" id="imagePreviewClose">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+      <img id="imagePreviewImg" src="" alt="Preview" />
+    </div>
+  </div>
+
+  <!-- Commands Drawer Overlay -->
+  <div class="commands-drawer-overlay" id="commandsDrawerOverlay"></div>
+
+  <!-- Commands Drawer -->
+  <div class="commands-drawer" id="commandsDrawer">
+    <div class="commands-drawer-header">
+      <span class="commands-drawer-title">Quick Actions</span>
+      <div class="commands-drawer-search">
+        <input type="text" id="commandsSearch" placeholder="Search actions..." />
+      </div>
+      <button class="settings-btn no-ai-settings-btn" id="openSettingsBtnNoAi" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+      </button>
+      <button class="commands-drawer-close" id="commandsDrawerClose">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <div class="commands-drawer-body">
+      <div class="commands-sidebar" id="commandsSidebar">
+      </div>
+      <div class="commands-content" id="commandsContent">
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom Prompt Drawer (for actions needing user input) -->
+  <div class="prompt-drawer-overlay" id="promptDrawerOverlay"></div>
+  <div class="prompt-drawer" id="promptDrawer">
+    <div class="prompt-drawer-header">
+      <div class="prompt-drawer-title">
+        <span class="prompt-drawer-title-icon" id="promptDrawerIcon"></span>
+        <span id="promptDrawerTitle">Action Settings</span>
+      </div>
+      <div class="prompt-drawer-header-actions">
+        <button class="prompt-drawer-icon-btn" id="promptDrawerMinimize" title="Minimize">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+        <button class="prompt-drawer-icon-btn" id="promptDrawerMaximize" title="Maximize">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
+        </button>
+        <button class="prompt-drawer-icon-btn" id="promptDrawerClose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="prompt-drawer-body">
+      <div class="prompt-drawer-help" id="promptDrawerHelp">
+        <div class="prompt-drawer-help-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+          <span>How it works</span>
+        </div>
+        <div id="promptDrawerHelpText"></div>
+        <div class="prompt-drawer-help-examples" id="promptDrawerExamples"></div>
+      </div>
+      <div class="prompt-drawer-fields" id="promptDrawerFields">
+      </div>
+      <div class="prompt-drawer-custom-content hidden" id="promptDrawerCustomContent">
+      </div>
+    </div>
+    <div class="prompt-drawer-footer">
+      <button class="prompt-drawer-reset" id="promptDrawerReset" type="button"
+        title="Reset all fields to default values">Reset</button>
+      <div class="flex-spacer"></div>
+      <button class="prompt-drawer-back hidden" id="promptDrawerBack" type="button">← Back</button>
+      <button class="prompt-drawer-cancel" id="promptDrawerCancel" type="button">Back to List</button>
+      <button class="prompt-drawer-submit" id="promptDrawerSubmit" type="button">Run Action</button>
+      <div class="prompt-drawer-maximized-controls">
+        <button class="prompt-drawer-icon-btn" id="promptDrawerMaxFooterMinimize" title="Minimize">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14" />
+          </svg>
+        </button>
+        <button class="prompt-drawer-icon-btn" id="promptDrawerMaxFooterRestore" title="Restore size">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="8" y="4" width="12" height="12" rx="2" />
+            <path d="M4 8v12a2 2 0 002 2h12" />
+          </svg>
+        </button>
+        <button class="prompt-drawer-icon-btn" id="promptDrawerMaxFooterClose" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Minimized Prompt Drawer FAB Container -->
+  <div class="prompt-drawer-mini-fab-container" id="promptDrawerMiniFabContainer"></div>
+
+  <!-- Context Mode Menu -->
+  <div class="context-mode-menu" id="contextModeMenu">
+    <div class="context-mode-item" data-mode="smart">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+        Smart Focus (Default)
+      </div>
+      <div class="mode-desc">Intent-based adaptive context selection</div>
+    </div>
+    <div class="context-mode-item" data-mode="all">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v8M8 12h8" />
+        </svg>
+        Full Design Context
+      </div>
+      <div class="mode-desc">Bypass intent system; use all meta data</div>
+    </div>
+    <div class="context-mode-item" data-mode="textOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+        </svg>
+        Text Content Only
+      </div>
+      <div class="mode-desc">Only text content and hierarchy</div>
+    </div>
+    <div class="context-mode-item" data-mode="styleOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />
+        </svg>
+        Styles & Variables
+      </div>
+      <div class="mode-desc">Colors, typography, and variables</div>
+    </div>
+    <div class="context-mode-item" data-mode="layoutOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M9 21V9" />
+        </svg>
+        Structure & Layout
+      </div>
+      <div class="mode-desc">Frames, sizing, and spacing</div>
+    </div>
+    <div class="context-mode-item" data-mode="minimal">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+        Minimal
+      </div>
+      <div class="mode-desc">Only node names and types</div>
+    </div>
+  </div>
+  <!-- Reply Template Manager Modal -->
+  <div id="replyTemplateManagerModal" class="comments-quick-modal" style="display: none;">
+    <div class="comments-quick-modal-content" style="max-width: 400px;">
+      <div class="comments-quick-modal-header">
+        <h3 class="comments-quick-modal-title">Manage Reply Templates</h3>
+        <button class="comments-quick-modal-close" onclick="closeReplyTemplateManager()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="comments-quick-modal-body">
+        <div class="template-manager-info">Templates appear below the reply input for quick access.</div>
+        <div id="templateManagerList" class="template-manager-list">
+        </div>
+      </div>
+      <div class="comments-quick-modal-footer">
+        <textarea id="newTemplateInput" placeholder="Enter new template text..."
+          class="comment-action-textarea"></textarea>
+        <button class="comment-action-btn" onclick="addTemplate()">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Code Editor Modal -->
+  <div class="code-editor-modal" id="codeEditorModal">
+    <div class="code-editor-modal-content">
+      <div class="code-editor-modal-header">
+        <div class="code-editor-modal-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+          <span>Edit Code</span>
+          <span class="code-editor-lang-badge" id="codeEditorLangBadge">text</span>
+        </div>
+        <div class="code-editor-modal-actions">
+          <button class="code-editor-modal-copy" id="copyCodeEditorBtn" title="Copy code">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span>Copy</span>
+          </button>
+          <button class="code-editor-modal-close" id="closeCodeEditorBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="code-editor-modal-body">
+        <div class="code-editor-wrapper" id="codeEditorWrapper">
+          <textarea class="code-editor-textarea" id="codeEditorTextarea" spellcheck="false"></textarea>
+          <pre class="code-editor-highlight" id="codeEditorHighlight"
+            aria-hidden="true"><code id="codeEditorHighlightCode"></code></pre>
+          <!-- Selection context toolbar -->
+          <div class="code-editor-selection-toolbar" id="codeEditorSelectionToolbar">
+            <button class="code-sel-btn" id="codeSelFixBtn" title="AI Fix selected code">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <path
+                  d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+              </svg>
+              <span>Fix</span>
+            </button>
+            <div class="code-sel-divider"></div>
+            <button class="code-sel-btn" id="codeSelQuickEditBtn" title="AI Quick Edit with instruction">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+              <span>Quick Edit</span>
+            </button>
+          </div>
+          <!-- AI Assistant popup for Quick Edit -->
+          <div class="ai-assistant-popup" id="aiAssistantPopup">
+            <div class="ai-assistant-popup-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span>AI Quick Edit</span>
+            </div>
+            <textarea class="ai-assistant-popup-input" id="aiAssistantInput" placeholder="Describe what to change..."
+              rows="3"></textarea>
+            <div class="ai-assistant-popup-footer">
+              <button class="ai-assistant-popup-cancel" id="aiAssistantCancelBtn">Cancel</button>
+              <button class="ai-assistant-popup-submit" id="aiAssistantSubmitBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="code-editor-modal-footer">
+        <div class="code-editor-ai-anchor">
+          <button class="setting-btn code-editor-ai-btn" id="codeEditorAIBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            AI Edit
+          </button>
+          <div class="ai-assistant-popup code-editor-ai-popup" id="codeEditorAIPopup">
+            <div class="ai-assistant-popup-header">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span>AI Edit — Full Code</span>
+            </div>
+            <textarea class="ai-assistant-popup-input" id="codeEditorAIInput"
+              placeholder="e.g. &quot;Add error handling&quot;, &quot;Convert to TypeScript&quot;, &quot;Minify this code&quot;..."
+              rows="3"></textarea>
+            <div class="ai-assistant-popup-footer">
+              <button class="ai-assistant-popup-cancel" id="codeEditorAICancelBtn">Cancel</button>
+              <button class="ai-assistant-popup-submit" id="codeEditorAISubmitBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="code-editor-footer-spacer"></div>
+        <button class="setting-btn" id="codeEditorCancelBtn">Cancel</button>
+        <button class="setting-btn primary" id="codeEditorSaveBtn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resize Handle -->
+  <div id="resizeHandle" class="resize-handle">
+    <div class="resize-handle-icon"></div>
+  </div>
+
+  <script type="module" src="./ui/main.js"></script>
+</body>
+
+</html>
