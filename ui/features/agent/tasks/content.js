@@ -145,23 +145,21 @@ export const smartTextTasks = [
           requiredContext: ContextMode.TEXT_ONLY,
           examples: ['Product names', 'Prices', 'User names', 'Descriptions'],
           fields: [
-            { key: 'formatExample', type: 'text', label: 'Format example', placeholder: 'e.g., $1,234.56, MM/DD/YYYY, etc.' },
-            { key: 'customContext', type: 'textarea', label: 'Additional Context (optional)', placeholder: 'e.g., luxury brand, targeting millennials, etc.' },
             {
-              key: 'appType', type: 'select', label: 'App Type', default: '', options: [
-                { value: 'Shopping', label: 'Shopping / E-commerce' },
-                { value: 'Social Media', label: 'Social Media' },
-                { value: 'Banking', label: 'Banking / Finance' },
-                { value: 'News', label: 'News / Media' },
-                { value: 'Food Delivery', label: 'Food Delivery' },
-                { value: 'Travel', label: 'Travel / Booking' },
-                { value: 'Health', label: 'Health / Fitness' },
-                { value: 'Education', label: 'Education' },
-                { value: 'Productivity', label: 'Productivity' },
-                { value: 'Gaming', label: 'Gaming' },
-                { value: '__custom__', label: 'Custom...', inputKey: 'customAppType', inputType: 'text', inputDefault: '' }
-              ]
+              key: 'useSelectedTextNodeAsFormat',
+              type: 'checkbox',
+              label: 'Use selected text node as format',
+              default: false,
+              renderAsToggle: true
             },
+            {
+              key: 'formatExample',
+              type: 'text',
+              label: 'Format example',
+              placeholder: 'e.g., $1,234.56, MM/DD/YYYY, etc.',
+              disabledWhen: { field: 'useSelectedTextNodeAsFormat', equals: true }
+            },
+            { key: 'customContext', type: 'textarea', label: 'Additional Context (optional)', placeholder: 'e.g., luxury brand, targeting millennials, etc.' },
             {
               key: 'imageInput',
               type: 'image',
@@ -170,8 +168,8 @@ export const smartTextTasks = [
             },
           ],
           promptTemplate: function (values) {
-            const appType = values.appType === '__custom__' ? (values.customAppType || 'custom') : values.appType;
-            const formatExample = values.formatExample;
+            const useSelectedTextNodeAsFormat = !!values.useSelectedTextNodeAsFormat;
+            const formatExample = useSelectedTextNodeAsFormat ? '' : values.formatExample;
             const customContext = values.customContext;
             const hasImage = !!values.imageInput;
 
@@ -182,12 +180,15 @@ export const smartTextTasks = [
             }
 
             const contextParts = [];
-            if (appType) contextParts.push(`App type: ${appType} `);
             if (formatExample) contextParts.push(`Format example: ${formatExample} `);
             if (customContext) contextParts.push(`Additional context: ${customContext} `);
 
             if (contextParts.length > 0) {
               prompt += ' Context: ' + contextParts.join(', ') + '.';
+            }
+
+            if (useSelectedTextNodeAsFormat) {
+              prompt += ' Use the content and formatting pattern of the selected text node as the format reference instead of a typed format example.';
             }
 
             if (!hasImage) {

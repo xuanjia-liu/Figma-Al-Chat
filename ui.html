@@ -8901,7 +8901,7 @@
       width: 16px;
       height: 16px;
       border-radius: 50%;
-      background: var(--bg-primary);
+      background: var(--text-primary);
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
       transition: transform 0.2s ease;
       box-sizing: border-box;
@@ -15734,27 +15734,21 @@
           requiredContext: ContextMode.TEXT_ONLY,
           examples: ["Product names", "Prices", "User names", "Descriptions"],
           fields: [
-            { key: "formatExample", type: "text", label: "Format example", placeholder: "e.g., $1,234.56, MM/DD/YYYY, etc." },
-            { key: "customContext", type: "textarea", label: "Additional Context (optional)", placeholder: "e.g., luxury brand, targeting millennials, etc." },
             {
-              key: "appType",
-              type: "select",
-              label: "App Type",
-              default: "",
-              options: [
-                { value: "Shopping", label: "Shopping / E-commerce" },
-                { value: "Social Media", label: "Social Media" },
-                { value: "Banking", label: "Banking / Finance" },
-                { value: "News", label: "News / Media" },
-                { value: "Food Delivery", label: "Food Delivery" },
-                { value: "Travel", label: "Travel / Booking" },
-                { value: "Health", label: "Health / Fitness" },
-                { value: "Education", label: "Education" },
-                { value: "Productivity", label: "Productivity" },
-                { value: "Gaming", label: "Gaming" },
-                { value: "__custom__", label: "Custom...", inputKey: "customAppType", inputType: "text", inputDefault: "" }
-              ]
+              key: "useSelectedTextNodeAsFormat",
+              type: "checkbox",
+              label: "Use selected text node as format",
+              default: false,
+              renderAsToggle: true
             },
+            {
+              key: "formatExample",
+              type: "text",
+              label: "Format example",
+              placeholder: "e.g., $1,234.56, MM/DD/YYYY, etc.",
+              disabledWhen: { field: "useSelectedTextNodeAsFormat", equals: true }
+            },
+            { key: "customContext", type: "textarea", label: "Additional Context (optional)", placeholder: "e.g., luxury brand, targeting millennials, etc." },
             {
               key: "imageInput",
               type: "image",
@@ -15763,8 +15757,8 @@
             }
           ],
           promptTemplate: function(values) {
-            const appType = values.appType === "__custom__" ? values.customAppType || "custom" : values.appType;
-            const formatExample = values.formatExample;
+            const useSelectedTextNodeAsFormat = !!values.useSelectedTextNodeAsFormat;
+            const formatExample = useSelectedTextNodeAsFormat ? "" : values.formatExample;
             const customContext = values.customContext;
             const hasImage = !!values.imageInput;
             let prompt = 'For each selected TEXT node containing "Lorem", placeholder-like text, or generic content, use setSimpleText (not setText) to replace with realistic content.';
@@ -15772,11 +15766,13 @@
               prompt = "Extract data from the provided reference image and fill each selected TEXT node with unique information from the image. For each node, pick a different data entry (row, item, or value) from the image. Use setSimpleText to update the text content.";
             }
             const contextParts = [];
-            if (appType) contextParts.push("App type: ".concat(appType, " "));
             if (formatExample) contextParts.push("Format example: ".concat(formatExample, " "));
             if (customContext) contextParts.push("Additional context: ".concat(customContext, " "));
             if (contextParts.length > 0) {
               prompt += " Context: " + contextParts.join(", ") + ".";
+            }
+            if (useSelectedTextNodeAsFormat) {
+              prompt += " Use the content and formatting pattern of the selected text node as the format reference instead of a typed format example.";
             }
             if (!hasImage) {
               prompt += " Generate appropriate content like product names, prices, user names, descriptions, etc. based on the node's existing text or label.";
@@ -27875,14 +27871,21 @@
           const fieldId = "prompt-field-".concat(index);
           const wrapperClass = field.wrapperClass ? " ".concat(field.wrapperClass) : "";
           let conditionalAttrs = "";
-          if (field.showWhen) {
-            if (Array.isArray(field.showWhen)) {
-              conditionalAttrs = " data-show-when-json='".concat(JSON.stringify(field.showWhen), "'");
-            } else if (field.showWhen.equalsAny) {
-              conditionalAttrs = " data-show-when-json='".concat(JSON.stringify([field.showWhen]), "'");
-            } else {
-              conditionalAttrs = ' data-show-when-field="'.concat(field.showWhen.field, '" data-show-when-value="').concat(field.showWhen.equals, '"');
+          const buildConditionAttr = (attrName, condition) => {
+            if (!condition) return "";
+            if (Array.isArray(condition)) {
+              return " ".concat(attrName, "-json='").concat(JSON.stringify(condition), "'");
             }
+            if (condition.equalsAny) {
+              return " ".concat(attrName, "-json='").concat(JSON.stringify([condition]), "'");
+            }
+            return " ".concat(attrName, '-field="').concat(condition.field, '" ').concat(attrName, '-value="').concat(condition.equals, '"');
+          };
+          if (field.showWhen) {
+            conditionalAttrs += buildConditionAttr("data-show-when", field.showWhen);
+          }
+          if (field.disabledWhen) {
+            conditionalAttrs += buildConditionAttr("data-disable-when", field.disabledWhen);
           }
           if (field.hideWhenNoSelection) {
             conditionalAttrs += ' data-hide-when-no-selection="true"';
@@ -27893,8 +27896,8 @@
             if ((currentPromptAction == null ? void 0 : currentPromptAction.name) === "Smart rename" && isAiOffModeEnabled() && field.key === "caseOnly" && !(preservedValues && preservedValues[field.key] !== void 0)) {
               isChecked = true;
             }
-            const isSmartRenameCaseToggle = (currentPromptAction == null ? void 0 : currentPromptAction.name) === "Smart rename" && field.key === "caseOnly";
-            if (isSmartRenameCaseToggle) {
+            const useToggleStyle = field.renderAsToggle || (currentPromptAction == null ? void 0 : currentPromptAction.name) === "Smart rename" && field.key === "caseOnly";
+            if (useToggleStyle) {
               fieldHtml += '\n              <div class="prompt-field'.concat(wrapperClass, " prompt-field-checkbox prompt-field-checkbox-toggle").concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, '>\n                <label class="prompt-toggle-switch" for="').concat(fieldId, '">\n                  <input type="checkbox" id="').concat(fieldId, '" ').concat(isChecked ? "checked" : "", ' data-field-key="').concat(field.key, '"').concat(disabledAttr, '>\n                  <span class="prompt-field-label">').concat(field.label, "</span>\n                </label>\n                ").concat(field.hint ? '<span class="prompt-field-hint checkbox-hint">'.concat(field.hint, "</span>") : "", "\n              </div>\n            ");
             } else {
               fieldHtml += '\n              <div class="prompt-field'.concat(wrapperClass, " prompt-field-checkbox").concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, '>\n                <div class="prompt-checkbox-row">\n                  <input type="checkbox" id="').concat(fieldId, '" ').concat(isChecked ? "checked" : "", ' data-field-key="').concat(field.key, '"').concat(disabledAttr, '>\n                  <label class="prompt-field-label" for="').concat(fieldId, '">').concat(field.label, "</label>\n                </div>\n                ").concat(field.hint ? '<span class="prompt-field-hint checkbox-hint">'.concat(field.hint, "</span>") : "", "\n              </div>\n            ");
@@ -29172,28 +29175,41 @@
         return el.value || "";
       }
       function applyPromptFieldVisibility() {
-        promptDrawerFields.querySelectorAll(".prompt-field[data-show-when-field], .prompt-field[data-show-when-json]").forEach((fieldEl) => {
-          let match = false;
-          if (fieldEl.dataset.showWhenJson) {
+        const evaluatePromptCondition = (fieldEl, attrPrefix) => {
+          if (fieldEl.dataset["".concat(attrPrefix, "Json")]) {
             try {
-              const conditions = JSON.parse(fieldEl.dataset.showWhenJson);
-              match = conditions.every((cond) => {
-                const current = getPromptVisibilityValue(cond.field);
+              const conditions = JSON.parse(fieldEl.dataset["".concat(attrPrefix, "Json")]);
+              return conditions.every((cond) => {
+                const current2 = getPromptVisibilityValue(cond.field);
                 if (cond.equalsAny) {
-                  return cond.equalsAny.map(String).includes(String(current));
+                  return cond.equalsAny.map(String).includes(String(current2));
                 }
-                return String(current) === String(cond.equals);
+                return String(current2) === String(cond.equals);
               });
             } catch (e) {
-              console.error("Error parsing show-when-json:", e);
+              console.error("Error parsing ".concat(attrPrefix, "-json:"), e);
+              return false;
             }
-          } else {
-            const controllerKey = fieldEl.dataset.showWhenField;
-            const expected = fieldEl.dataset.showWhenValue;
-            const current = getPromptVisibilityValue(controllerKey);
-            match = String(current) === String(expected);
           }
+          const controllerKey = fieldEl.dataset["".concat(attrPrefix, "Field")];
+          if (!controllerKey) return false;
+          const expected = fieldEl.dataset["".concat(attrPrefix, "Value")];
+          const current = getPromptVisibilityValue(controllerKey);
+          return String(current) === String(expected);
+        };
+        promptDrawerFields.querySelectorAll(".prompt-field[data-show-when-field], .prompt-field[data-show-when-json]").forEach((fieldEl) => {
+          const match = evaluatePromptCondition(fieldEl, "showWhen");
           fieldEl.style.display = match ? "" : "none";
+        });
+        promptDrawerFields.querySelectorAll(".prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]").forEach((fieldEl) => {
+          const shouldDisable = evaluatePromptCondition(fieldEl, "disableWhen");
+          fieldEl.classList.toggle("disabled", shouldDisable);
+          fieldEl.querySelectorAll("input, textarea, select, button").forEach((control) => {
+            if (!control.dataset.baseDisabled) {
+              control.dataset.baseDisabled = control.disabled ? "true" : "false";
+            }
+            control.disabled = shouldDisable || control.dataset.baseDisabled === "true";
+          });
         });
         const hasSelection = Array.isArray(lastKnownSelectionItems) && lastKnownSelectionItems.length > 0;
         promptDrawerFields.querySelectorAll('.prompt-field[data-hide-when-no-selection="true"]').forEach((fieldEl) => {

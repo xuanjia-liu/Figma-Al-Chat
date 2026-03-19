@@ -12301,14 +12301,21 @@ Generate ONLY the reply text, nothing else.`;
         const fieldId = `prompt-field-${index}`;
         const wrapperClass = field.wrapperClass ? ` ${field.wrapperClass}` : '';
         let conditionalAttrs = '';
-        if (field.showWhen) {
-          if (Array.isArray(field.showWhen)) {
-            conditionalAttrs = ` data-show-when-json='${JSON.stringify(field.showWhen)}'`;
-          } else if (field.showWhen.equalsAny) {
-            conditionalAttrs = ` data-show-when-json='${JSON.stringify([field.showWhen])}'`;
-          } else {
-            conditionalAttrs = ` data-show-when-field="${field.showWhen.field}" data-show-when-value="${field.showWhen.equals}"`;
+        const buildConditionAttr = (attrName, condition) => {
+          if (!condition) return '';
+          if (Array.isArray(condition)) {
+            return ` ${attrName}-json='${JSON.stringify(condition)}'`;
           }
+          if (condition.equalsAny) {
+            return ` ${attrName}-json='${JSON.stringify([condition])}'`;
+          }
+          return ` ${attrName}-field="${condition.field}" ${attrName}-value="${condition.equals}"`;
+        };
+        if (field.showWhen) {
+          conditionalAttrs += buildConditionAttr('data-show-when', field.showWhen);
+        }
+        if (field.disabledWhen) {
+          conditionalAttrs += buildConditionAttr('data-disable-when', field.disabledWhen);
         }
         if (field.hideWhenNoSelection) {
           conditionalAttrs += ' data-hide-when-no-selection="true"';
@@ -12322,8 +12329,8 @@ Generate ONLY the reply text, nothing else.`;
           if (currentPromptAction?.name === 'Smart rename' && isAiOffModeEnabled() && field.key === 'caseOnly' && !(preservedValues && preservedValues[field.key] !== undefined)) {
             isChecked = true;
           }
-          const isSmartRenameCaseToggle = currentPromptAction?.name === 'Smart rename' && field.key === 'caseOnly';
-          if (isSmartRenameCaseToggle) {
+          const useToggleStyle = field.renderAsToggle || (currentPromptAction?.name === 'Smart rename' && field.key === 'caseOnly');
+          if (useToggleStyle) {
             fieldHtml += `
               <div class="prompt-field${wrapperClass} prompt-field-checkbox prompt-field-checkbox-toggle${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
                 <label class="prompt-toggle-switch" for="${fieldId}">
@@ -14409,14 +14416,11 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     }
 
     function applyPromptFieldVisibility() {
-      // 1. Handle standard conditional fields and multiple conditions
-      promptDrawerFields.querySelectorAll('.prompt-field[data-show-when-field], .prompt-field[data-show-when-json]').forEach(fieldEl => {
-        let match = false;
-
-        if (fieldEl.dataset.showWhenJson) {
+      const evaluatePromptCondition = (fieldEl, attrPrefix) => {
+        if (fieldEl.dataset[`${attrPrefix}Json`]) {
           try {
-            const conditions = JSON.parse(fieldEl.dataset.showWhenJson);
-            match = conditions.every(cond => {
+            const conditions = JSON.parse(fieldEl.dataset[`${attrPrefix}Json`]);
+            return conditions.every(cond => {
               const current = getPromptVisibilityValue(cond.field);
               if (cond.equalsAny) {
                 return cond.equalsAny.map(String).includes(String(current));
@@ -14424,16 +14428,33 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
               return String(current) === String(cond.equals);
             });
           } catch (e) {
-            console.error('Error parsing show-when-json:', e);
+            console.error(`Error parsing ${attrPrefix}-json:`, e);
+            return false;
           }
-        } else {
-          const controllerKey = fieldEl.dataset.showWhenField;
-          const expected = fieldEl.dataset.showWhenValue;
-          const current = getPromptVisibilityValue(controllerKey);
-          match = String(current) === String(expected);
         }
 
+        const controllerKey = fieldEl.dataset[`${attrPrefix}Field`];
+        if (!controllerKey) return false;
+        const expected = fieldEl.dataset[`${attrPrefix}Value`];
+        const current = getPromptVisibilityValue(controllerKey);
+        return String(current) === String(expected);
+      };
+
+      // 1. Handle standard conditional fields and multiple conditions
+      promptDrawerFields.querySelectorAll('.prompt-field[data-show-when-field], .prompt-field[data-show-when-json]').forEach(fieldEl => {
+        const match = evaluatePromptCondition(fieldEl, 'showWhen');
         fieldEl.style.display = match ? '' : 'none';
+      });
+
+      promptDrawerFields.querySelectorAll('.prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]').forEach(fieldEl => {
+        const shouldDisable = evaluatePromptCondition(fieldEl, 'disableWhen');
+        fieldEl.classList.toggle('disabled', shouldDisable);
+        fieldEl.querySelectorAll('input, textarea, select, button').forEach(control => {
+          if (!control.dataset.baseDisabled) {
+            control.dataset.baseDisabled = control.disabled ? 'true' : 'false';
+          }
+          control.disabled = shouldDisable || control.dataset.baseDisabled === 'true';
+        });
       });
 
       // 2. Handle special cases (patterns, etc.)
