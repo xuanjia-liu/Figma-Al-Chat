@@ -1,0 +1,320 @@
+import {
+  ContextMode,
+  IMAGE_GEN_PRESETS,
+  RE_STYLE_PRESETS,
+} from '../../../config/agent-data.js';
+
+export const stylingImageTasks = [
+{
+          name: 'Set image fill',
+          desc: 'Apply image fill to selected node',
+          requiredContext: ContextMode.STYLE_ONLY,
+          promptTemplate: 'Use the current selection. If exactly one selected node has an image fill, return ONLY JSON with commands: [{"action":"setImageFill","nodeId":"<SELECTED_NODE_ID>","scaleMode":"{scaleMode}"}]. Do not ask for nodeId or image data. If no selection or the selection has no image fill, ask the user to select a node with an image fill.',
+          fields: [
+            {
+              key: 'scaleMode', type: 'select', label: 'Image fill type', default: 'FILL', options: [
+                { value: 'FILL', label: 'Fill' },
+                { value: 'FIT', label: 'Fit' },
+                { value: 'CROP', label: 'Crop' },
+                { value: 'TILE', label: 'Tile' }
+              ]
+            }
+          ]
+        },
+{
+          name: 'Fill from online image',
+          desc: 'Fill selected nodes with free stock photos',
+          directAction: 'fillFromOnlineImage',
+          fields: [
+            {
+              key: 'service', type: 'select', label: 'Image source',
+              default: 'unsplash',
+              options: [
+                { value: 'unsplash', label: 'Unsplash (high-quality, needs API key)' },
+                { value: 'pixabay', label: 'Pixabay (free, needs API key)' },
+                { value: 'pexels', label: 'Pexels (free, needs API key)' },
+                { value: 'loremflickr', label: 'LoremFlickr (keyword search)' },
+                { value: 'picsum', label: 'Lorem Picsum (random high-quality)' },
+                { value: 'placehold', label: 'Placeholder (solid color)' }
+              ]
+            },
+            {
+              key: 'autoDetect', type: 'checkbox',
+              label: 'AI auto-detect keywords from selection',
+              default: false,
+              showWhen: { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels'] }
+            },
+            {
+              key: 'keywords', type: 'text',
+              label: 'Subject / Keywords',
+              placeholder: 'e.g. nature, city, food',
+              showWhen: [
+                { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels'] },
+                { field: 'autoDetect', equals: 'false' }
+              ]
+            },
+            {
+              key: 'scaleMode', type: 'select', label: 'Fill mode',
+              default: 'FILL',
+              options: [
+                { value: 'FILL', label: 'Fill' },
+                { value: 'FIT', label: 'Fit' },
+                { value: 'CROP', label: 'Crop' },
+                { value: 'TILE', label: 'Tile' }
+              ]
+            }
+          ]
+        }
+];
+
+export const quickCreateImageTasks = [
+{
+          name: 'Create icon',
+          desc: 'Insert Iconify icon or generate fallback',
+          promptTemplate: 'Create icon for {iconDescription}',
+          noSelection: true,
+          directAction: 'createIcon',
+          fields: [
+            {
+              type: 'row',
+              fields: [
+                { key: 'iconDescription', type: 'text', label: 'Concept/Description', placeholder: 'A calendar with a checkmark (completed event)', translate: true },
+                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512, wrapperClass: 'prompt-field--compact', alignHeader: true, headerClass: 'prompt-field-header--with-actions' }
+              ]
+            },
+            {
+              key: 'iconSource', type: 'select', label: 'Icon Source', default: 'iconify', options: [
+                { value: 'iconify', label: 'Iconify' },
+                { value: 'antv', label: 'AntV Infographic' },
+                { value: 'iconfont', label: 'Icon Font' }
+              ]
+            },
+            {
+              key: 'strokeWidth', type: 'number', label: 'AI stroke width', default: 2, min: 0.5, step: 0.5, showWhen: { field: 'useAiFallback', equals: true }
+            },
+            { key: 'showResultsInDrawer', type: 'checkbox', label: 'Show search results in drawer', default: true },
+            { key: 'useAiFallback', type: 'checkbox', label: 'Generate fallback if missing', default: true }
+          ]
+        },
+{
+          name: 'Import icon sets',
+          desc: 'Explore and batch import icons from standard sets',
+          noSelection: true,
+          directAction: 'browseIconSet',
+          fields: [
+            { key: 'iconSet', type: 'select', label: 'Icon set', default: '', options: [], searchable: true },
+            {
+              type: 'row',
+              fields: [
+                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512 },
+                { key: 'color', type: 'color', label: 'Color', default: '#111827' }
+              ]
+            },
+            {
+              key: 'importMode', type: 'select', label: 'Import as', default: 'frame', options: [
+                { value: 'frame', label: 'Frames' },
+                { value: 'component', label: 'Multiple components' },
+                { value: 'componentSet', label: 'Component Set' }
+              ]
+            }
+          ]
+        },
+{
+          name: 'Re-style',
+          desc: 'Transform / restyle an image into a new style using AI',
+          promptTemplate: 'Re-style image: {imageStyle}{aspectRatio ? \" [Aspect Ratio: {aspectRatio}]\" : \"\"}{imageResolution ? \" [Resolution: {imageResolution}]\" : \"\"}{imageVariations ? \" [Variations: {imageVariations}]\" : \"\"}',
+          noSelection: true,
+          directAction: 'generateImage',
+          fields: [
+            {
+              key: 'imageInput',
+              type: 'image',
+              label: 'Reference Image (Required)'
+            },
+            {
+              key: 'reStylePreset',
+              type: 'select',
+              label: 'Style Preset (Optional)',
+              default: '',
+              searchable: true,
+              options: () => [
+                { value: '', label: 'None (Custom)' },
+                ...Object.keys(RE_STYLE_PRESETS).map(name => ({ value: name, label: name }))
+              ]
+            },
+            { key: 'imageStyle', type: 'textarea', label: 'Prompt', placeholder: 'Artistic style, medium, lighting, mood...', aiButtons: true },
+            {
+              key: 'cameraControl',
+              type: 'cameraControl',
+              label: '3D Camera Control',
+              hint: 'Drag to adjust rotation, tilt, and distance'
+            },
+            {
+              key: 'imageModel', type: 'select', label: 'Model', searchable: true, default: 'gemini-3-pro-image-preview', dynamicOptions: 'imageGenModels', options: [
+                { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro (Preview)' },
+                { value: 'imagen-4.0-fast-generate-001', label: 'Imagen 4 Fast' },
+                { value: 'imagen-4.0-generate-001', label: 'Imagen 4 (Balanced)' },
+                { value: 'imagen-3.0-generate-002', label: 'Imagen 3 (Balanced)' },
+              ]
+            },
+            {
+              key: 'aspectRatio', type: 'select', label: 'Aspect Ratio', default: '1:1', options: [
+                { value: '1:1', label: '1:1' },
+                { value: '16:9', label: '16:9' },
+                { value: '9:16', label: '9:16' },
+                { value: '4:3', label: '4:3' },
+                { value: '3:4', label: '3:4' },
+                { value: '2:3', label: '2:3' },
+                { value: '3:2', label: '3:2' },
+                { value: '4:5', label: '4:5' },
+                { value: '5:4', label: '5:4' },
+                { value: '21:9', label: '21:9 (Ultra-wide)' },
+                { value: '4:1', label: '4:1' },
+                { value: '1:4', label: '1:4' },
+                { value: '8:1', label: '8:1' },
+                { value: '1:8', label: '1:8' },
+              ]
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  key: 'imageResolution', type: 'select', label: 'Resolution', default: '1K', options: [
+                    { value: '0.5K', label: '0.5K' },
+                    { value: '1K', label: '1K' },
+                    { value: '2K', label: '2K' },
+                    { value: '4K', label: '4K' },
+                  ]
+                },
+                {
+                  key: 'imageVariations', type: 'select', label: 'Variations', default: '1', options: [
+                    { value: '1', label: '1' },
+                    { value: '2', label: '2' },
+                    { value: '4', label: '4' },
+                    { value: '8', label: '8' },
+                  ]
+                },
+              ]
+            },
+            {
+              key: 'thinkingLevel', type: 'select', label: 'Thinking Level', default: 'minimal', options: [
+                { value: 'minimal', label: 'Minimal (Fast)' },
+                { value: 'high', label: 'High (Better Quality)' },
+              ]
+            },
+            { key: 'applyToSelection', type: 'checkbox', label: 'Apply to selected node', default: false, hideWhenNoSelection: true },
+          ]
+        },
+{
+          name: 'Generate image',
+          desc: 'Create image from text prompt using AI',
+          promptTemplate: 'Generate image: {imageSubject} {imageStyle ? "(Style: {imageStyle})" : ""}{aspectRatio ? " [Aspect Ratio: {aspectRatio}]" : ""}{imageResolution ? " [Resolution: {imageResolution}]" : ""}{imageVariations ? " [Variations: {imageVariations}]" : ""}',
+          noSelection: true,
+          directAction: 'generateImage',
+          fields: [
+            {
+              key: 'imagePreset',
+              type: 'select',
+              label: 'Style Preset (Optional)',
+              default: '',
+              searchable: true,
+              options: () => [
+                { value: '', label: 'None (Custom)' },
+                ...Object.keys(IMAGE_GEN_PRESETS).map(name => ({ value: name, label: name }))
+              ]
+            },
+            { key: 'imageSubject', type: 'textarea', label: 'Subject / Content', placeholder: 'A serene mountain landscape at sunset with golden light...', aiButtons: true },
+            { key: 'imageStyle', type: 'textarea', label: 'Artistic Style / Direction', placeholder: 'Cinematic lighting, 8k, photorealistic, wide angle...', aiButtons: true },
+            {
+              key: 'cameraControl',
+              type: 'cameraControl',
+              label: '3D Camera Control',
+              hint: 'Drag to adjust rotation, tilt, and distance'
+            },
+            {
+              key: 'imageInput',
+              type: 'image',
+              label: 'Reference Image (Optional)'
+            },
+            {
+              key: 'imageModel', type: 'select', label: 'Model', searchable: true, default: 'gemini-3-pro-image-preview', dynamicOptions: 'imageGenModels', options: [
+                { value: 'gemini-3-pro-image-preview', label: 'Gemini 3 Pro (Preview)' },
+                { value: 'imagen-4.0-fast-generate-001', label: 'Imagen 4 Fast' },
+                { value: 'imagen-4.0-generate-001', label: 'Imagen 4 (Balanced)' },
+                { value: 'imagen-3.0-generate-002', label: 'Imagen 3 (Balanced)' },
+              ]
+            },
+            {
+              key: 'aspectRatio', type: 'select', label: 'Aspect Ratio', default: '1:1', options: [
+                { value: '1:1', label: '1:1' },
+                { value: '16:9', label: '16:9' },
+                { value: '9:16', label: '9:16' },
+                { value: '4:3', label: '4:3' },
+                { value: '3:4', label: '3:4' },
+                { value: '2:3', label: '2:3' },
+                { value: '3:2', label: '3:2' },
+                { value: '4:5', label: '4:5' },
+                { value: '5:4', label: '5:4' },
+                { value: '21:9', label: '21:9 (Ultra-wide)' },
+                { value: '4:1', label: '4:1' },
+                { value: '1:4', label: '1:4' },
+                { value: '8:1', label: '8:1' },
+                { value: '1:8', label: '1:8' },
+              ]
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  key: 'imageResolution', type: 'select', label: 'Resolution', default: '1K', options: [
+                    { value: '0.5K', label: '0.5K' },
+                    { value: '1K', label: '1K' },
+                    { value: '2K', label: '2K' },
+                    { value: '4K', label: '4K' },
+                  ]
+                },
+                {
+                  key: 'imageVariations', type: 'select', label: 'Variations', default: '1', options: [
+                    { value: '1', label: '1' },
+                    { value: '2', label: '2' },
+                    { value: '4', label: '4' },
+                    { value: '8', label: '8' },
+                  ]
+                },
+              ]
+            },
+            {
+              key: 'thinkingLevel', type: 'select', label: 'Thinking Level', default: 'minimal', options: [
+                { value: 'minimal', label: 'Minimal (Fast)' },
+                { value: 'high', label: 'High (Better Quality)' },
+              ]
+            },
+            { key: 'applyToSelection', type: 'checkbox', label: 'Apply to selected node', default: false, hideWhenNoSelection: true },
+          ]
+        },
+{
+          name: 'Generate Vector',
+          desc: 'Create SVG vector from text/reference via Quiver',
+          promptTemplate: 'Generate vector: {vectorSubject} {vectorStyle ? "(Style: {vectorStyle})" : ""}{vectorVariations ? " [Variations: {vectorVariations}]" : ""}',
+          noSelection: true,
+          directAction: 'generateVector',
+          fields: [
+            { key: 'vectorSubject', type: 'textarea', label: 'Subject / Content', placeholder: 'A modern geometric app logo with a lightning bolt...', aiButtons: true },
+            { key: 'vectorStyle', type: 'textarea', label: 'Artistic Style / Direction', placeholder: 'Flat minimal vector, clean strokes, rounded corners...', aiButtons: true },
+            {
+              key: 'vectorReferenceImage',
+              type: 'image',
+              label: 'Reference Image (Optional)'
+            },
+            {
+              key: 'vectorVariations', type: 'select', label: 'Variations', default: '1', options: [
+                { value: '1', label: '1' },
+                { value: '2', label: '2' },
+                { value: '4', label: '4' },
+                { value: '8', label: '8' },
+                { value: '16', label: '16' },
+              ]
+            }
+          ]
+        }
+];
