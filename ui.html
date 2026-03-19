@@ -12776,7 +12776,8 @@
         "Prefix/Suffix (smart)",
         "Clean up names",
         "Format sequencer",
-        "Add prefix/suffix"
+        "Add prefix/suffix",
+        "縦書き / Vertical text"
       ]);
       COMMENTS_CACHE_TTL = 6e4;
       MAX_CHAT_ARCHIVES = 30;
@@ -13572,6 +13573,7 @@
         "Format sequencer": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h8M7 16h6"/><circle cx="5" cy="8" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="16" r="1"/></svg>',
         "Add prefix/suffix": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
         "Add ruby/furigana": '<svg fill="currentColor" viewBox="0 0 24 24"><path d="M11.348 15.662c-.531.634-1.221 1.175-2.07 1.622-.68.299-1.273.28-1.776-.056-.504-.335-.765-.857-.783-1.566V7.885c0-.708.354-1.063 1.063-1.063.708 0 1.063.355 1.063 1.063v6.532c.009.29.167.373.475.252.093-.028.378-.2.853-.518.495-.373.942-.373 1.343 0 .308.55.252 1.054-.168 1.51Zm-8.895.728a21.48 21.48 0 0 0 .727-2.756c.158-.82.238-1.716.238-2.686V8.025c0-.7.35-1.049 1.049-1.049.708 0 1.063.35 1.063 1.05v2.922c-.01 1.474-.126 2.714-.35 3.72-.214 1.008-.452 1.824-.713 2.448-.299.616-.783.821-1.455.616-.643-.233-.83-.68-.56-1.343Zm16.969-9.82c0-.317.159-.475.476-.475.326 0 .49.158.49.476v1.063c0 .317-.16.475-.477.475-.326 0-.489-.158-.489-.475V6.57Zm1.511 0c0-.317.158-.475.475-.475.326 0 .49.158.49.476v1.063c0 .317-.159.475-.476.475-.326 0-.49-.158-.49-.475V6.57Zm-6.113.196c.709 0 1.063.355 1.063 1.063v.784h4.896c.727 0 1.09.363 1.09 1.09 0 .737-.363 1.106-1.09 1.106h-4.896v3.622c.019.354.13.639.336.853.214.205.61.322 1.189.35.82.01 1.958-.037 3.413-.14.699-.037 1.072.28 1.119.951.037.7-.299 1.091-1.008 1.175-1.613.121-2.843.173-3.692.154-1.026-.047-1.85-.313-2.476-.797-.624-.485-.965-1.264-1.02-2.336V7.829c0-.708.354-1.063 1.062-1.063h.014Z"/></svg>',
+        "縦書き / Vertical text": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18"/><path d="M12 3l-3 3M12 3l3 3"/><path d="M6 8v10M18 8v10"/><path d="M4 8h4M16 8h4"/></svg>',
         // Layer Naming
         "Sequential naming": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h8"/><circle cx="18" cy="18" r="3"/></svg>',
         "Prefix/Suffix (smart)": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M8 8l-3 4 3 4M16 8l3 4-3 4"/><path d="M12 5v14"/></svg>',
@@ -15860,6 +15862,19 @@
           prompt: 'Add furigana (ruby text) above the kanji in the selected Japanese text. ONLY use this command if the user wants to ADD readings above the text (e.g., "ふりがなを振る", "ルビを振る"). If the user wants to CONVERT or REPLACE kanji with furigana (e.g., "ふりがなに変える"), use the standard setText command instead. When adding ruby: Keep all non-kanji parts intact. Always use the addRuby command with a rubyPairs array. For each kanji word you can confidently determine the reading for, include it in rubyPairs as {"base":"kanji","ruby":"reading"}. Set rubyFontSize to half of the base font size.',
           isTextAction: true,
           requiredContext: ContextMode.TEXT_ONLY
+        },
+        {
+          name: "縦書き / Vertical text",
+          desc: "Convert text to vertical composition",
+          prompt: "",
+          isTextAction: true,
+          requiredContext: ContextMode.TEXT_ONLY,
+          help: "Converts selected text into vertical columns. column text count = 0 means use original rendered row count.",
+          fields: [
+            { key: "heightPx", type: "number", label: "Height (px)", default: 0, min: 0, hint: "0 = auto from columns × line height" },
+            { key: "columnTextCount", type: "number", label: "Column text count", default: 0, min: 0, hint: "0 = use original rendered row count" },
+            { key: "lineHeightPx", type: "number", label: "Line height (px)", default: 0, min: 0, hint: "0 = 1.1 × font size" }
+          ]
         }
       ];
       layerNamingTasks = [
@@ -22644,6 +22659,87 @@
           return field;
         });
       }
+      function attachVerticalTextLinkedFields() {
+        const heightEl = promptDrawerFields.querySelector('input[data-field-key="heightPx"]');
+        const colEl = promptDrawerFields.querySelector('input[data-field-key="columnTextCount"]');
+        const lhEl = promptDrawerFields.querySelector('input[data-field-key="lineHeightPx"]');
+        if (!heightEl || !colEl || !lhEl) return;
+        let lastEdited = "columnTextCount";
+        heightEl.addEventListener("input", () => {
+          lastEdited = "heightPx";
+          const h = parseFloat(heightEl.value) || 0;
+          const lh = parseFloat(lhEl.value) || 1;
+          if (h > 0 && lh > 0) {
+            colEl.value = Math.ceil(h / lh);
+            colEl.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        colEl.addEventListener("input", () => {
+          lastEdited = "columnTextCount";
+          const c = parseFloat(colEl.value) || 0;
+          const lh = parseFloat(lhEl.value) || 1;
+          if (c > 0 && lh > 0) {
+            heightEl.value = Math.round(c * lh);
+            heightEl.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        });
+        lhEl.addEventListener("input", () => {
+          const lh = parseFloat(lhEl.value) || 0;
+          if (lh <= 0) return;
+          if (lastEdited === "columnTextCount") {
+            const c = parseFloat(colEl.value) || 0;
+            if (c > 0) {
+              heightEl.value = Math.round(c * lh);
+              heightEl.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          } else {
+            const h = parseFloat(heightEl.value) || 0;
+            if (h > 0) {
+              colEl.value = Math.ceil(h / lh);
+              colEl.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          }
+        });
+      }
+      async function hydrateVerticalTextFields(fields = []) {
+        try {
+          const metadata2 = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              window.removeEventListener("message", handler);
+              resolve(null);
+            }, 5e3);
+            const handler = (event) => {
+              const msg = event.data.pluginMessage;
+              if (msg && msg.type === "detect-vertical-text-metadata-result") {
+                clearTimeout(timeout);
+                window.removeEventListener("message", handler);
+                resolve(msg.results);
+              }
+            };
+            window.addEventListener("message", handler);
+            parent.postMessage({ pluginMessage: { type: "detect-vertical-text-metadata" } }, "*");
+          });
+          if (metadata2 && Array.isArray(metadata2) && metadata2.length > 0) {
+            const first = metadata2[0];
+            if (first.isVertical) {
+              return fields.map((field) => {
+                if (field.key === "heightPx" && first.heightPx > 0) return __spreadProps(__spreadValues({}, field), { default: first.heightPx });
+                if (field.key === "columnTextCount" && first.columnTextCount > 0) return __spreadProps(__spreadValues({}, field), { default: first.columnTextCount });
+                if (field.key === "lineHeightPx" && first.lineHeightPx > 0) return __spreadProps(__spreadValues({}, field), { default: first.lineHeightPx });
+                return field;
+              });
+            } else if (first.fontSize > 0) {
+              return fields.map((field) => {
+                if (field.key === "lineHeightPx") return __spreadProps(__spreadValues({}, field), { default: Math.round(first.fontSize * 1.1 * 10) / 10 });
+                return field;
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to hydrate vertical text fields", e);
+        }
+        return fields;
+      }
       async function backgroundRefreshImageModels(originalActionName) {
         if (!geminiApiKey && !openaiApiKey) return;
         try {
@@ -27494,6 +27590,8 @@
             hydratedFields = await hydrateImageGenerationFields(actionData.fields, true);
           } else if (actionData.name === "Create Graph") {
             hydratedFields = await hydrateCreateGraphFields(actionData.fields);
+          } else if (actionData.name === "縦書き / Vertical text") {
+            hydratedFields = await hydrateVerticalTextFields(actionData.fields);
           }
           const savedActionHistory = promptHistory[actionData.name];
           if (savedActionHistory) {
@@ -27532,6 +27630,9 @@
           }
           if (actionData.directAction === "browseIconSet") {
             attachCreateIconFieldBehaviors();
+          }
+          if (actionData.name === "縦書き / Vertical text") {
+            attachVerticalTextLinkedFields();
           }
           setupExampleClicks();
           promptDrawer.classList.add("open");
@@ -32259,6 +32360,17 @@
               },
               errorPrefixes: ["Add prefix/suffix failed", "Please select at least one text layer."]
             });
+          case "縦書き / Vertical text":
+            return runLocalActionRequest({
+              requestType: "local-verticalize-text",
+              resultType: "local-verticalize-text-result",
+              payload: {
+                heightPx: parseFloat(values.heightPx) || 0,
+                columnTextCount: parseInt(values.columnTextCount) || 0,
+                lineHeightPx: parseFloat(values.lineHeightPx) || 0
+              },
+              errorPrefixes: ["Verticalize text failed", "Please select at least one text layer."]
+            });
           default:
             throw new Error("Unsupported local action: ".concat(actionName));
         }
@@ -33166,7 +33278,7 @@
         try {
           const action = currentPromptAction;
           const template = currentPromptAction.promptTemplate || currentPromptAction.prompt || "";
-          if (!template && !action.directAction) {
+          if (!template && !action.directAction && !(NON_AI_LOCAL_TASKS.has(action.name) && action.name !== "Smart rename")) {
             showToast("No prompt template found for this action.", "error");
             return;
           }
@@ -41158,6 +41270,22 @@
               showToast("Failed to update ".concat(failed, "/").concat(total, " text layer").concat(failed === 1 ? "" : "s", "."), "error");
             } else {
               showToast("No text content needed changes".concat(total ? " out of ".concat(total) : "", "."), "info");
+            }
+            break;
+          }
+          case "local-verticalize-text-result": {
+            const updated = Number(msg.updated) || 0;
+            const skipped = Number(msg.skipped) || 0;
+            const failed = Number(msg.failed) || 0;
+            const total = Number(msg.total) || updated + skipped + failed;
+            if (updated > 0 && failed === 0) {
+              showToast("Verticalized ".concat(updated, "/").concat(total, " text layer").concat(updated === 1 ? "" : "s", "."), "success");
+            } else if (updated > 0 && failed > 0) {
+              showToast("Verticalized ".concat(updated, "/").concat(total, " text layers, ").concat(failed, " failed."), "warning");
+            } else if (failed > 0) {
+              showToast("Failed to verticalize ".concat(failed, "/").concat(total, " text layer").concat(failed === 1 ? "" : "s", "."), "error");
+            } else {
+              showToast("No text layers needed changes".concat(total ? " out of ".concat(total) : "", "."), "info");
             }
             break;
           }

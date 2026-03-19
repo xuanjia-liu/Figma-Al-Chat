@@ -239,6 +239,19 @@ export const smartTextTasks = [
           prompt: 'Add furigana (ruby text) above the kanji in the selected Japanese text. ONLY use this command if the user wants to ADD readings above the text (e.g., "ふりがなを振る", "ルビを振る"). If the user wants to CONVERT or REPLACE kanji with furigana (e.g., "ふりがなに変える"), use the standard setText command instead. When adding ruby: Keep all non-kanji parts intact. Always use the addRuby command with a rubyPairs array. For each kanji word you can confidently determine the reading for, include it in rubyPairs as {"base":"kanji","ruby":"reading"}. Set rubyFontSize to half of the base font size.',
           isTextAction: true,
           requiredContext: ContextMode.TEXT_ONLY
+        },
+{
+          name: '縦書き / Vertical text',
+          desc: 'Convert text to vertical composition',
+          prompt: '',
+          isTextAction: true,
+          requiredContext: ContextMode.TEXT_ONLY,
+          help: 'Converts selected text into vertical columns. column text count = 0 means use original rendered row count.',
+          fields: [
+            { key: 'heightPx', type: 'number', label: 'Height (px)', default: 0, min: 0, hint: '0 = auto from columns × line height' },
+            { key: 'columnTextCount', type: 'number', label: 'Column text count', default: 0, min: 0, hint: '0 = use original rendered row count' },
+            { key: 'lineHeightPx', type: 'number', label: 'Line height (px)', default: 0, min: 0, hint: '0 = 1.1 × font size' },
+          ]
         }
 ];
 

@@ -5203,6 +5203,95 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       });
     }
 
+    function attachVerticalTextLinkedFields() {
+      const heightEl = promptDrawerFields.querySelector('input[data-field-key="heightPx"]');
+      const colEl = promptDrawerFields.querySelector('input[data-field-key="columnTextCount"]');
+      const lhEl = promptDrawerFields.querySelector('input[data-field-key="lineHeightPx"]');
+
+      if (!heightEl || !colEl || !lhEl) return;
+
+      let lastEdited = 'columnTextCount';
+
+      heightEl.addEventListener('input', () => {
+        lastEdited = 'heightPx';
+        const h = parseFloat(heightEl.value) || 0;
+        const lh = parseFloat(lhEl.value) || 1;
+        if (h > 0 && lh > 0) {
+          colEl.value = Math.ceil(h / lh);
+          colEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      colEl.addEventListener('input', () => {
+        lastEdited = 'columnTextCount';
+        const c = parseFloat(colEl.value) || 0;
+        const lh = parseFloat(lhEl.value) || 1;
+        if (c > 0 && lh > 0) {
+          heightEl.value = Math.round(c * lh);
+          heightEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      lhEl.addEventListener('input', () => {
+        const lh = parseFloat(lhEl.value) || 0;
+        if (lh <= 0) return;
+        if (lastEdited === 'columnTextCount') {
+          const c = parseFloat(colEl.value) || 0;
+          if (c > 0) {
+            heightEl.value = Math.round(c * lh);
+            heightEl.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        } else {
+          const h = parseFloat(heightEl.value) || 0;
+          if (h > 0) {
+            colEl.value = Math.ceil(h / lh);
+            colEl.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      });
+    }
+
+    async function hydrateVerticalTextFields(fields = []) {
+      try {
+        const metadata = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            resolve(null);
+          }, 5000);
+          const handler = (event) => {
+            const msg = event.data.pluginMessage;
+            if (msg && msg.type === 'detect-vertical-text-metadata-result') {
+              clearTimeout(timeout);
+              window.removeEventListener('message', handler);
+              resolve(msg.results);
+            }
+          };
+          window.addEventListener('message', handler);
+          parent.postMessage({ pluginMessage: { type: 'detect-vertical-text-metadata' } }, '*');
+        });
+
+        if (metadata && Array.isArray(metadata) && metadata.length > 0) {
+          const first = metadata[0];
+          if (first.isVertical) {
+            return fields.map(field => {
+              if (field.key === 'heightPx' && first.heightPx > 0) return { ...field, default: first.heightPx };
+              if (field.key === 'columnTextCount' && first.columnTextCount > 0) return { ...field, default: first.columnTextCount };
+              if (field.key === 'lineHeightPx' && first.lineHeightPx > 0) return { ...field, default: first.lineHeightPx };
+              return field;
+            });
+          } else if (first.fontSize > 0) {
+            return fields.map(field => {
+              if (field.key === 'lineHeightPx') return { ...field, default: Math.round(first.fontSize * 1.1 * 10) / 10 };
+              return field;
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to hydrate vertical text fields', e);
+      }
+      return fields;
+    }
+
     // Refresh model list in background after drawer opens (fetches from all available providers)
     async function backgroundRefreshImageModels(originalActionName) {
       // Check if at least one provider has an API key
@@ -11739,6 +11828,8 @@ Generate ONLY the reply text, nothing else.`;
           hydratedFields = await hydrateImageGenerationFields(actionData.fields, true); // true = skip wait for instant open
         } else if (actionData.name === 'Create Graph') {
           hydratedFields = await hydrateCreateGraphFields(actionData.fields);
+        } else if (actionData.name === '縦書き / Vertical text') {
+          hydratedFields = await hydrateVerticalTextFields(actionData.fields);
         }
 
         // Apply history if available for this action
@@ -11791,6 +11882,10 @@ Generate ONLY the reply text, nothing else.`;
         // THEN attach behaviors to the rendered elements
         if (actionData.directAction === 'browseIconSet') {
           attachCreateIconFieldBehaviors();
+        }
+
+        if (actionData.name === '縦書き / Vertical text') {
+          attachVerticalTextLinkedFields();
         }
 
         // Setup click handlers for examples
@@ -18337,6 +18432,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Add prefix/suffix failed', 'Please select at least one text layer.']
           });
+        case '縦書き / Vertical text':
+          return runLocalActionRequest({
+            requestType: 'local-verticalize-text',
+            resultType: 'local-verticalize-text-result',
+            payload: {
+              heightPx: parseFloat(values.heightPx) || 0,
+              columnTextCount: parseInt(values.columnTextCount) || 0,
+              lineHeightPx: parseFloat(values.lineHeightPx) || 0
+            },
+            errorPrefixes: ['Verticalize text failed', 'Please select at least one text layer.']
+          });
         default:
           throw new Error(`Unsupported local action: ${actionName}`);
       }
@@ -19476,7 +19582,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
       try {
         const action = currentPromptAction; // cache before any close resets it
         const template = currentPromptAction.promptTemplate || currentPromptAction.prompt || '';
-        if (!template && !action.directAction) {
+        if (!template && !action.directAction && !(NON_AI_LOCAL_TASKS.has(action.name) && action.name !== 'Smart rename')) {
           showToast('No prompt template found for this action.', 'error');
           return;
         }
@@ -31041,6 +31147,23 @@ Based on the user's instruction, generate the appropriate commands to modify the
             showToast(`Failed to update ${failed}/${total} text layer${failed === 1 ? '' : 's'}.`, 'error');
           } else {
             showToast(`No text content needed changes${total ? ` out of ${total}` : ''}.`, 'info');
+          }
+          break;
+        }
+
+        case 'local-verticalize-text-result': {
+          const updated = Number(msg.updated) || 0;
+          const skipped = Number(msg.skipped) || 0;
+          const failed = Number(msg.failed) || 0;
+          const total = Number(msg.total) || (updated + skipped + failed);
+          if (updated > 0 && failed === 0) {
+            showToast(`Verticalized ${updated}/${total} text layer${updated === 1 ? '' : 's'}.`, 'success');
+          } else if (updated > 0 && failed > 0) {
+            showToast(`Verticalized ${updated}/${total} text layers, ${failed} failed.`, 'warning');
+          } else if (failed > 0) {
+            showToast(`Failed to verticalize ${failed}/${total} text layer${failed === 1 ? '' : 's'}.`, 'error');
+          } else {
+            showToast(`No text layers needed changes${total ? ` out of ${total}` : ''}.`, 'info');
           }
           break;
         }

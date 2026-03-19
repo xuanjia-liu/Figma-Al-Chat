@@ -5175,6 +5175,323 @@ figma.ui.onmessage = async (msg: {
     }
 
     // ============================================
+    // 縦書き / Vertical Text
+    // ============================================
+
+    case 'detect-vertical-text-metadata': {
+      try {
+        const sel = figma.currentPage.selection;
+        const results: Array<{
+          isVertical: boolean;
+          heightPx: number;
+          columnTextCount: number;
+          lineHeightPx: number;
+          sourceRowCount: number;
+          fontSize: number;
+        }> = [];
+
+        for (const node of sel) {
+          let textNode: TextNode | null = null;
+          let wrapperNode: FrameNode | null = null;
+
+          if (node.type === 'FRAME' && node.getPluginData('fgVerticalText') === 'true') {
+            wrapperNode = node as FrameNode;
+            const child = wrapperNode.children.find(c => c.type === 'TEXT' && c.getPluginData('fgVerticalText') === 'true');
+            if (child) textNode = child as TextNode;
+          } else if (node.type === 'TEXT' && node.getPluginData('fgVerticalText') === 'true') {
+            textNode = node as TextNode;
+            const p = node.parent;
+            if (p && p.type === 'FRAME' && p.getPluginData('fgVerticalText') === 'true') {
+              wrapperNode = p as FrameNode;
+            }
+          } else if (node.type === 'TEXT') {
+            textNode = node as TextNode;
+          }
+
+          if (!textNode) {
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, lineHeightPx: 0, sourceRowCount: 0, fontSize: 0 });
+            continue;
+          }
+
+          const isVertical = textNode.getPluginData('fgVerticalText') === 'true';
+          const fontSize = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
+
+          if (isVertical) {
+            results.push({
+              isVertical: true,
+              heightPx: parseFloat(textNode.getPluginData('fgVerticalTextHeightPx') || '0'),
+              columnTextCount: parseInt(textNode.getPluginData('fgVerticalTextColumnTextCount') || '0', 10),
+              lineHeightPx: parseFloat(textNode.getPluginData('fgVerticalTextLineHeightPx') || '0'),
+              sourceRowCount: parseInt(textNode.getPluginData('fgVerticalTextSourceRowCount') || '0', 10),
+              fontSize,
+            });
+          } else {
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, lineHeightPx: 0, sourceRowCount: 0, fontSize });
+          }
+        }
+
+        figma.ui.postMessage({ type: 'detect-vertical-text-metadata-result', results });
+      } catch (error) {
+        console.error('detect-vertical-text-metadata failed', error);
+        figma.ui.postMessage({ type: 'detect-vertical-text-metadata-result', results: [] });
+      }
+      break;
+    }
+
+    case 'local-verticalize-text': {
+      try {
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Verticalize text failed: Please select at least one text layer.' });
+          break;
+        }
+
+        const reqHeightPx = typeof (msg as any).heightPx === 'number' ? (msg as any).heightPx : 0;
+        const reqColumnTextCount = typeof (msg as any).columnTextCount === 'number' ? (msg as any).columnTextCount : 0;
+        const reqLineHeightPx = typeof (msg as any).lineHeightPx === 'number' ? (msg as any).lineHeightPx : 0;
+
+        let updated = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const node of selection) {
+          let textNode: TextNode | null = null;
+          let wrapperNode: FrameNode | null = null;
+          let isRerun = false;
+
+          if (node.type === 'FRAME' && node.getPluginData('fgVerticalText') === 'true') {
+            wrapperNode = node as FrameNode;
+            const child = wrapperNode.children.find(c => c.type === 'TEXT' && c.getPluginData('fgVerticalText') === 'true');
+            if (child) { textNode = child as TextNode; isRerun = true; }
+          } else if (node.type === 'TEXT' && node.getPluginData('fgVerticalText') === 'true') {
+            textNode = node as TextNode;
+            isRerun = true;
+            const p = node.parent;
+            if (p && p.type === 'FRAME' && p.getPluginData('fgVerticalText') === 'true') {
+              wrapperNode = p as FrameNode;
+            }
+          } else if (node.type === 'TEXT') {
+            textNode = node as TextNode;
+          }
+
+          if (!textNode) {
+            skipped++;
+            continue;
+          }
+
+          try {
+            await loadAllFontsForTextNode(textNode);
+
+            const baseFontSize = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
+            const baseFontName = typeof textNode.fontName !== 'symbol' ? textNode.fontName : { family: "Inter", style: "Regular" };
+            let baseFills = textNode.fills;
+            if (typeof baseFills === 'symbol') baseFills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+
+            // Determine the original line height before conversion (for wrapper padding)
+            let originalLineHeight = baseFontSize * 1.2;
+            if (typeof textNode.lineHeight !== 'symbol' && textNode.lineHeight.unit === 'PIXELS') {
+              originalLineHeight = textNode.lineHeight.value;
+            } else if (typeof textNode.lineHeight !== 'symbol' && textNode.lineHeight.unit === 'PERCENT') {
+              originalLineHeight = baseFontSize * (textNode.lineHeight.value / 100);
+            }
+
+            // --- Get source text ---
+            let sourceText: string;
+            if (isRerun) {
+              const stored = textNode.getPluginData('fgVerticalTextOriginalContent')
+                || (wrapperNode ? wrapperNode.getPluginData('fgVerticalTextOriginalContent') : '');
+              sourceText = stored || textNode.characters;
+            } else {
+              sourceText = textNode.characters;
+            }
+
+            // --- Measure source rows using the ruby/wrapping measurement approach ---
+            await smartLoadFont(baseFontName);
+            const measurementNode = figma.createText();
+            measurementNode.visible = false;
+            measurementNode.fontName = baseFontName;
+            measurementNode.fontSize = baseFontSize;
+            if (typeof textNode.letterSpacing !== 'symbol') {
+              measurementNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+            }
+            figma.currentPage.appendChild(measurementNode);
+            const measureWidth = (text: string): number => {
+              measurementNode.characters = text || '';
+              return measurementNode.width;
+            };
+
+            // Determine wrapping width from the *original* text layout (before verticalization)
+            let maxLineWidth = Infinity;
+            if (!isRerun) {
+              const autoResizeMode = textNode.textAutoResize || 'NONE';
+              if (autoResizeMode === 'HEIGHT' || autoResizeMode === 'NONE') {
+                maxLineWidth = textNode.width;
+              }
+            }
+
+            const lineTexts: string[] = [''];
+            let lineIdx = 0;
+            const wrapTolerance = 0.5;
+
+            for (let i = 0; i < sourceText.length; i++) {
+              const ch = sourceText[i];
+              if (ch === '\n') {
+                lineIdx++;
+                lineTexts[lineIdx] = '';
+                continue;
+              }
+              if (maxLineWidth !== Infinity) {
+                const prospectiveText = lineTexts[lineIdx] + ch;
+                const prospectiveWidth = measureWidth(prospectiveText);
+                if (prospectiveWidth > maxLineWidth + wrapTolerance && lineTexts[lineIdx].length > 0) {
+                  lineIdx++;
+                  lineTexts[lineIdx] = ch;
+                } else {
+                  lineTexts[lineIdx] = prospectiveText;
+                }
+              } else {
+                lineTexts[lineIdx] = (lineTexts[lineIdx] || '') + ch;
+              }
+            }
+
+            measurementNode.remove();
+
+            const sourceRowCount = lineTexts.length;
+
+            // --- Resolve effective parameters ---
+            const effectiveLineHeight = reqLineHeightPx > 0 ? reqLineHeightPx : Math.round(baseFontSize * 1.1 * 10) / 10;
+            const effectiveColumnCount = reqColumnTextCount > 0 ? reqColumnTextCount : sourceRowCount;
+            const effectiveHeight = reqHeightPx > 0 ? reqHeightPx : effectiveColumnCount * effectiveLineHeight;
+
+            // --- Build columns from source rows ---
+            const columns: string[] = [];
+            for (let c = 0; c < effectiveColumnCount; c++) {
+              if (c < sourceRowCount) {
+                if (c === effectiveColumnCount - 1 && effectiveColumnCount < sourceRowCount) {
+                  columns.push(lineTexts.slice(c).join(''));
+                } else {
+                  columns.push(lineTexts[c] || '');
+                }
+              } else {
+                columns.push('');
+              }
+            }
+
+            // Convert each column into vertical text (characters joined by \n)
+            const verticalColumnTexts: string[] = columns.map(col => {
+              const chars = Array.from(col);
+              return chars.join('\n');
+            });
+
+            // --- Helper to apply vertical style to a text node ---
+            const applyVerticalStyle = (tn: TextNode, content: string) => {
+              tn.characters = content;
+              tn.textAlignHorizontal = 'CENTER';
+              tn.lineHeight = { value: effectiveLineHeight, unit: 'PIXELS' };
+              tn.textAutoResize = 'HEIGHT';
+              tn.resize(0.01, tn.height);
+            };
+
+            // --- Create or update wrapper ---
+            if (!isRerun || !wrapperNode) {
+              const parent = textNode.parent;
+              if (!parent || !('insertChild' in parent)) {
+                failed++;
+                continue;
+              }
+
+              const textIdx = parent.children.indexOf(textNode);
+              const textX = textNode.x;
+              const textY = textNode.y;
+
+              const wrapper = figma.createFrame();
+              wrapper.name = '縦書き Wrapper';
+              wrapper.layoutMode = 'HORIZONTAL';
+              wrapper.primaryAxisSizingMode = 'AUTO';
+              wrapper.counterAxisSizingMode = 'AUTO';
+              wrapper.paddingLeft = Math.round(originalLineHeight / 2);
+              wrapper.paddingRight = Math.round(originalLineHeight / 2);
+              wrapper.paddingTop = 0;
+              wrapper.paddingBottom = 0;
+              wrapper.itemSpacing = 0;
+              wrapper.fills = [];
+              wrapper.clipsContent = false;
+
+              (parent as any).insertChild(textIdx, wrapper);
+              wrapper.x = textX;
+              wrapper.y = textY;
+              wrapper.appendChild(textNode);
+              wrapperNode = wrapper;
+            } else {
+              wrapperNode.paddingLeft = Math.round(originalLineHeight / 2);
+              wrapperNode.paddingRight = Math.round(originalLineHeight / 2);
+
+              // Remove previously created extra column text nodes
+              const extras = wrapperNode.children.filter(
+                c => c.type === 'TEXT' && c.getPluginData('fgVerticalTextExtra') === 'true'
+              );
+              for (const ex of extras) ex.remove();
+            }
+
+            // --- Apply column 1 to the original text node ---
+            applyVerticalStyle(textNode, verticalColumnTexts[0] || '');
+
+            // --- Create additional text nodes for columns 2+ ---
+            for (let c = 1; c < verticalColumnTexts.length; c++) {
+              const colText = verticalColumnTexts[c];
+              if (!colText) continue;
+
+              const colNode = figma.createText();
+              colNode.fontName = baseFontName;
+              colNode.fontSize = baseFontSize;
+              colNode.fills = baseFills as Paint[];
+              if (typeof textNode.letterSpacing !== 'symbol') {
+                colNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+              }
+              applyVerticalStyle(colNode, colText);
+              colNode.setPluginData('fgVerticalText', 'true');
+              colNode.setPluginData('fgVerticalTextExtra', 'true');
+              wrapperNode.appendChild(colNode);
+            }
+
+            // --- Store plugin data ---
+            const pluginData: Record<string, string> = {
+              'fgVerticalText': 'true',
+              'fgVerticalTextVersion': '1',
+              'fgVerticalTextWrapperId': wrapperNode.id,
+              'fgVerticalTextOriginalContent': sourceText,
+              'fgVerticalTextSourceRowCount': String(sourceRowCount),
+              'fgVerticalTextColumnTextCount': String(effectiveColumnCount),
+              'fgVerticalTextLineHeightPx': String(effectiveLineHeight),
+              'fgVerticalTextHeightPx': String(effectiveHeight),
+            };
+
+            for (const [key, val] of Object.entries(pluginData)) {
+              textNode.setPluginData(key, val);
+              wrapperNode.setPluginData(key, val);
+            }
+
+            updated++;
+          } catch (nodeError) {
+            console.error('local-verticalize-text failed for node', node.id, nodeError);
+            failed++;
+          }
+        }
+
+        figma.ui.postMessage({
+          type: 'local-verticalize-text-result',
+          updated,
+          skipped,
+          failed,
+          total: selection.length
+        });
+      } catch (error) {
+        console.error('local-verticalize-text failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Verticalize text failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    // ============================================
     // Intent-Based Context System - Context Lock
     // ============================================
 
