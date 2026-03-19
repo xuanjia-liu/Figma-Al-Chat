@@ -6541,8 +6541,14 @@ CRITICAL RULES:
         selectedCommentIds,
         multiSelectEnabled,
         cachedNodeNames,
+        cachedViewportCenter,
+        cachedNodePositions,
         commentsWithReplyMatches,
         commentsWithPeopleReplyMatches,
+        peopleFilterExpanded,
+        peopleFilterActiveTab,
+        peopleFilterIncludeRepliesFrom,
+        peopleFilterIncludeRepliesMentions,
       };
     }
 
@@ -6564,6 +6570,12 @@ CRITICAL RULES:
       highlightSearchMatches,
       filterCommentsBySearch,
       commentMatchesPeopleFilter,
+      extractPeopleFromComments,
+      setFilteredCounts: (filteredCount, totalCount) => {
+        lastFilteredCount = filteredCount;
+        lastTotalCount = totalCount;
+      },
+      updateBatchActionsState,
     });
 
     const {
@@ -7598,311 +7610,7 @@ Generate a suitable, professional response.
 
     // Render comments list in the drawer container
     function renderCommentsInDrawer(container) {
-      // Get current page and selection info
-      // Get current page and selection info
-      // parent.postMessage({ pluginMessage: { type: 'get-current-context' } }, '*');
-
-      // Group comments by thread
-      const threads = new Map();
-      const topLevelComments = [];
-
-      figmaComments.forEach(comment => {
-        if (comment.parent_id) {
-          if (!threads.has(comment.parent_id)) {
-            threads.set(comment.parent_id, []);
-          }
-          threads.get(comment.parent_id).push(comment);
-        } else {
-          topLevelComments.push(comment);
-        }
-      });
-
-      // Filter by resolved state
-      let filteredComments = showResolvedComments
-        ? topLevelComments
-        : topLevelComments.filter(c => !c.resolved_at);
-
-      // Filter by scope
-      if (currentCommentsScope === 'page') {
-        filteredComments = filteredComments.filter(c => {
-          const nodeId = c.client_meta?.node_id;
-          if (!nodeId) return false;
-          const pageId = commentNodePageMap.get(nodeId);
-          // If we don't have pageId yet, it might be loading. We'll show it for now or filter out?
-          // Let's filter out if we have page mapping but it doesn't match.
-          // If no mapping yet, let it pass (it will be filtered in next render once enrichment returns)
-          return !pageId || pageId === figmaCurrentPageId;
-        });
-      } else if (currentCommentsScope === 'selection') {
-        const selectedIds = new Set();
-        const selectedNodes = lastKnownSelectionItems || [];
-        selectedNodes.forEach(node => {
-          selectedIds.add(node.id);
-          if (node.descendantIds) {
-            node.descendantIds.forEach(id => selectedIds.add(id));
-          }
-        });
-        filteredComments = filteredComments.filter(c => {
-          const nodeId = c.client_meta?.node_id;
-          return nodeId && selectedIds.has(nodeId);
-        });
-      }
-
-
-      // Filter by people (if any selected in either tab)
-      commentsWithPeopleReplyMatches.clear();
-      if (selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0) {
-        filteredComments = filteredComments.filter(c => commentMatchesPeopleFilter(c, threads, true));
-      }
-
-      // Filter by search query (with AND/OR logic and reply search)
-      filteredComments = filterCommentsBySearch(filteredComments, commentsSearchQuery, threads);
-
-      // Filter by custom filter (e.g. pending reply)
-      if (commentsFilterBy === 'pending') {
-        filteredComments = filteredComments.filter(c => {
-          const replies = threads.get(c.id) || [];
-          if (replies.length > 0) {
-            // Sort replies by date to find the last one
-            const sortedReplies = [...replies].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-            const lastReply = sortedReplies[sortedReplies.length - 1];
-            return lastReply.user.id !== figmaCurrentUser?.id;
-          } else {
-            // No replies, check if the original comment is from someone else
-            return c.user.id !== figmaCurrentUser?.id;
-          }
-        });
-      }
-
-      // Sort comments
-      const sortFn = {
-        'activity': (a, b) => {
-          const getLatest = (c) => {
-            const replies = threads.get(c.id) || [];
-            return replies.reduce((latest, r) => {
-              const d = new Date(r.created_at);
-              return d > latest ? d : latest;
-            }, new Date(c.created_at));
-          };
-          return getLatest(b) - getLatest(a);
-        },
-        'newest': (a, b) => new Date(b.created_at) - new Date(a.created_at),
-        'oldest': (a, b) => new Date(a.created_at) - new Date(b.created_at),
-        'replies': (a, b) => (threads.get(b.id)?.length || 0) - (threads.get(a.id)?.length || 0),
-        'people': (a, b) => a.user.handle.localeCompare(b.user.handle),
-        'viewport': (a, b) => {
-          if (!cachedViewportCenter) return 0;
-          const vc = cachedViewportCenter;
-          const posA = cachedNodePositions[a.client_meta?.node_id];
-          const posB = cachedNodePositions[b.client_meta?.node_id];
-          const distA = posA ? Math.sqrt((posA.x - vc.x) ** 2 + (posA.y - vc.y) ** 2) : Infinity;
-          const distB = posB ? Math.sqrt((posB.x - vc.x) ** 2 + (posB.y - vc.y) ** 2) : Infinity;
-          return distA - distB;
-        },
-        'burst': (a, b) => new Date(a.created_at) - new Date(b.created_at)
-      };
-      filteredComments.sort(sortFn[commentsSortBy] || sortFn['newest']);
-
-      const total = topLevelComments.length;
-      lastFilteredCount = filteredComments.length;
-      lastTotalCount = total;
-
-      // Extract people from comments that match the resolved filter (before people filter)
-      // This ensures the people list only shows people in currently visible comments
-      const commentsForPeopleExtraction = showResolvedComments
-        ? topLevelComments
-        : topLevelComments.filter(c => !c.resolved_at);
-
-      // Include replies in people extraction
-      const allCommentsForPeople = [];
-      commentsForPeopleExtraction.forEach(c => {
-        allCommentsForPeople.push(c);
-        const replies = threads.get(c.id) || [];
-        allCommentsForPeople.push(...replies);
-      });
-
-      const allPeople = extractPeopleFromComments(allCommentsForPeople);
-      const peopleList = Array.from(allPeople.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([name, info]) => ({ name, ...info }));
-
-      // Clean up selected people that are no longer visible
-      const visibleAuthors = new Set(peopleList.filter(p => p.isAuthor).map(p => p.name));
-      const visibleMentions = new Set(peopleList.filter(p => p.isMentioned).map(p => p.name));
-      selectedAuthorsFilter.forEach(name => {
-        if (!visibleAuthors.has(name)) {
-          selectedAuthorsFilter.delete(name);
-        }
-      });
-      selectedMentionsFilter.forEach(name => {
-        if (!visibleMentions.has(name)) {
-          selectedMentionsFilter.delete(name);
-        }
-      });
-
-      // Build full HTML with toolbar + people filter + list container
-      let html = `
-      <div class="prompt-comments-toolbar">
-          <input type="text" class="prompt-comments-search" placeholder="Search..." 
-            value="${escapeHtml(commentsSearchQuery)}" 
-            oninput="handleCommentsSearchInput(this.value)"
-            oncompositionstart="handleCommentsSearchCompositionStart()"
-            oncompositionend="handleCommentsSearchCompositionEnd(event)" />
-          <div class="comments-dropdown-container">
-            <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="Sort and filter options">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18M6 12h12M10 18h4" />
-              </svg>
-              <span>Options</span>
-            </button>
-            <div class="comments-dropdown-menu hidden" id="commentsDropdownMenu">
-              <div class="dropdown-section">Sort</div>
-              <button class="dropdown-item ${commentsSortBy === 'activity' ? 'active' : ''}" onclick="handleCommentsSort('activity')">Last Activity</button>
-              <button class="dropdown-item ${commentsSortBy === 'newest' ? 'active' : ''}" onclick="handleCommentsSort('newest')">Newest</button>
-              <button class="dropdown-item ${commentsSortBy === 'oldest' ? 'active' : ''}" onclick="handleCommentsSort('oldest')">Oldest</button>
-              <button class="dropdown-item ${commentsSortBy === 'replies' ? 'active' : ''}" onclick="handleCommentsSort('replies')">Replies</button>
-              <button class="dropdown-item ${commentsSortBy === 'viewport' ? 'active' : ''}" onclick="handleCommentsSort('viewport')">Nearest to viewport</button>
-              <button class="dropdown-item ${commentsSortBy === 'burst' ? 'active' : ''}" onclick="handleCommentsSort('burst')">Burst</button>
-              <div class="dropdown-divider"></div>
-              <div class="dropdown-section">Filter</div>
-              <button class="dropdown-item ${commentsFilterBy === 'all' ? 'active' : ''}" onclick="handleCommentsFilter('all')">All</button>
-              <button class="dropdown-item ${commentsFilterBy === 'pending' ? 'active' : ''}" onclick="handleCommentsFilter('pending')">Needs my reply</button>
-            </div>
-          </div>
-          <button class="people-filter-toggle${peopleFilterExpanded ? ' expanded' : ''}" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="Filter by people">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-              <circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-            <span id="peopleFilterCount" class="people-filter-count">${(selectedAuthorsFilter.size + selectedMentionsFilter.size) > 0 ? (selectedAuthorsFilter.size + selectedMentionsFilter.size) : ''}</span>
-          </button>
-          <span id="commentsCountDisplay" class="comments-count-display">
-            ${multiSelectEnabled ? `${selectedCommentIds.size} selected · ` : ''}${lastFilteredCount}/${lastTotalCount}
-          </span>
-          ${multiSelectEnabled ? `
-            <div class="prompt-comments-batch-actions">
-              <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="Select/Deselect all visible">
-                ${selectedCommentIds.size > 0 ? 'Deselect All' : 'Select All'}
-              </button>
-              <div class="comment-action-btn-group">
-                <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput('manual')" disabled title="Reply to all selected">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                  Reply
-                </button>
-                <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, 'batchReplyTextarea')" title="Reply templates" disabled id="batchReplyChevronBtn">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-                </button>
-                <div class="comment-more-menu hidden" id="reply-dropdown-batchReplyTextarea" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
-              </div>
-              <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="Summarize selected with AI">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                  <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/>
-                </svg>
-                Summarize
-              </button>
-              <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="Download selected as CSV">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                </svg>
-                CSV
-              </button>
-            </div>
-          ` : ''}
-        </div>
-        <div id="batchActionInputContainer" class="batch-action-container" style="display: none;">
-          <div class="people-filter-header">
-            <div class="tab-container">
-              <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab('manual')">Manual</button>
-              <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab('ai')">AI Assisted</button>
-            </div>
-          </div>
-          <div id="batchReplyInputArea" style="display: none;">
-            <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="Enter a reply to be posted to all selected comments..." 
-              onkeydown="handleBatchReplyKeydown(event, 'manual')"
-              oninput="autoExpandTextarea(this)"></textarea>
-            <div class="batch-action-footer">
-              <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>
-              <button class="comment-action-btn primary" onclick="executeBatchReply()">Send to <span id="batchReplyCountLabel">0</span> comments</button>
-            </div>
-          </div>
-          <div id="batchAiReplyInputArea" style="display: none;">
-            <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="Instruct AI how to reply (e.g. 'Thank them and say we'll check it'). AI will tailor responses to each context." 
-              onkeydown="handleBatchReplyKeydown(event, 'ai')"
-              oninput="autoExpandTextarea(this)"></textarea>
-            <div class="batch-action-footer">
-              <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>
-              <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">Run AI for <span id="batchAiReplyCountLabel">0</span> comments</button>
-            </div>
-          </div>
-        </div>
-      </div>
-        <div class="people-filter-section${peopleFilterExpanded ? ' expanded' : ''}" id="peopleFilterSection">
-          <div class="people-filter-header">
-            <div class="tab-container">
-              <button class="tab-item${peopleFilterActiveTab === 'from' ? ' active' : ''}" data-tab="from" onclick="switchPeopleFilterTab('from')">
-                From
-                <span class="tab-badge" id="fromTabBadge" style="${selectedAuthorsFilter.size > 0 ? 'display: inline-flex;' : ''}">${selectedAuthorsFilter.size || ''}</span>
-              </button>
-              <button class="tab-item${peopleFilterActiveTab === 'mentions' ? ' active' : ''}" data-tab="mentions" onclick="switchPeopleFilterTab('mentions')">
-                @Mentions
-                <span class="tab-badge" id="mentionsTabBadge" style="${selectedMentionsFilter.size > 0 ? 'display: inline-flex;' : ''}">${selectedMentionsFilter.size || ''}</span>
-              </button>
-            </div>
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div class="people-filter-include-replies-toggle ${peopleFilterActiveTab === 'from' ? (peopleFilterIncludeRepliesFrom ? 'active' : '') : (peopleFilterIncludeRepliesMentions ? 'active' : '')}" 
-                   onclick="togglePeopleIncludeReplies()" 
-                   title="Included authors/mentions in comment replies">
-                <span class="toggle-switch"></span>
-                Replies
-              </div>
-              ${(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0) ? '<button class="people-filter-clear" onclick="clearPeopleFilter(\'all\')">Clear all</button>' : ''}
-            </div>
-          </div>
-          <div class="people-chips-container" id="peopleChipsFrom" style="${peopleFilterActiveTab === 'from' ? 'display: flex;' : 'display: none;'}">
-            ${peopleList.filter(p => p.isAuthor).map(p => `
-              <button class="people-chip${selectedAuthorsFilter.has(p.name) ? ' selected' : ''}" 
-                      data-name="${escapeHtml(p.name)}"
-                      data-filter="from"
-                      onclick="togglePersonChip('${escapeHtml(p.name).replace(/'/g, "\\'")}', 'from')">
-                <div class="people-chip-avatar-mini">
-                  ${p.img_url
-          ? `<img src="${p.img_url}" alt="${p.name}" onerror="this.style.display='none';this.parentNode.textContent='${p.name.substring(0, 1).toUpperCase()}'" />`
-          : p.name.substring(0, 1).toUpperCase()
-        }
-                </div>
-                ${escapeHtml(p.name)}
-              </button>
-            `).join('')}
-          </div>
-          <div class="people-chips-container" id="peopleChipsMentions" style="${peopleFilterActiveTab === 'mentions' ? 'display: flex;' : 'display: none;'}">
-            ${peopleList.filter(p => p.isMentioned).length > 0
-          ? peopleList.filter(p => p.isMentioned).map(p => `
-                <button class="people-chip${selectedMentionsFilter.has(p.name) ? ' selected' : ''}" 
-                        data-name="${escapeHtml(p.name)}"
-                        data-filter="mentions"
-                        onclick="togglePersonChip('${escapeHtml(p.name).replace(/'/g, "\\'")}', 'mentions')">
-                  <div class="people-chip-avatar-mini">
-                    ${p.img_url
-              ? `<img src="${p.img_url}" alt="${p.name}" onerror="this.style.display='none';this.parentNode.textContent='${p.name.substring(0, 1).toUpperCase()}'" />`
-              : p.name.substring(0, 1).toUpperCase()
-            }
-                  </div>
-                  ${escapeHtml(p.name)}
-                </button>
-              `).join('')
-          : '<span class="people-filter-empty">No mentions found</span>'
-        }
-          </div>
-        </div>
-        <div id="promptCommentsListContainer">
-          ${renderCommentsListHTML(filteredComments, threads)}
-        </div>`;
-
-      container.innerHTML = html;
-      updateBatchActionsState();
+      movedRenderCommentsInDrawer(container);
     }
 
     // Auto-expand textarea based on content

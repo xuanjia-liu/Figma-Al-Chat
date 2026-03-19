@@ -13152,7 +13152,10 @@
     highlightAndLinkify,
     highlightSearchMatches,
     filterCommentsBySearch,
-    commentMatchesPeopleFilter
+    commentMatchesPeopleFilter,
+    extractPeopleFromComments,
+    setFilteredCounts,
+    updateBatchActionsState
   }) {
     function renderCommentItemHTML(comment, threads) {
       var _a, _b;
@@ -13217,6 +13220,7 @@
     function renderCommentsInDrawer(container) {
       const {
         figmaComments,
+        figmaCurrentUser,
         showResolvedComments,
         currentCommentsScope,
         commentNodePageMap,
@@ -13224,9 +13228,18 @@
         lastKnownSelectionItems,
         selectedAuthorsFilter,
         selectedMentionsFilter,
+        commentsSearchQuery,
         commentsFilterBy,
         commentsSortBy,
-        commentsWithPeopleReplyMatches
+        selectedCommentIds,
+        multiSelectEnabled,
+        cachedViewportCenter,
+        cachedNodePositions,
+        commentsWithPeopleReplyMatches,
+        peopleFilterExpanded,
+        peopleFilterActiveTab,
+        peopleFilterIncludeRepliesFrom,
+        peopleFilterIncludeRepliesMentions
       } = getState();
       const { threads, topLevelComments } = buildCommentThreads(figmaComments);
       let filteredComments = showResolvedComments ? topLevelComments : topLevelComments.filter((c) => !c.resolved_at);
@@ -13265,19 +13278,64 @@
           if (replies.length > 0) {
             const sortedReplies = [...replies].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
             const lastReply = sortedReplies[sortedReplies.length - 1];
-            return lastReply.user.handle !== c.user.handle;
+            return lastReply.user.id !== (figmaCurrentUser == null ? void 0 : figmaCurrentUser.id);
           }
-          return true;
+          return c.user.id !== (figmaCurrentUser == null ? void 0 : figmaCurrentUser.id);
         });
       }
       const sortFn = {
+        activity: (a, b) => {
+          const getLatest = (c) => {
+            const replies = threads.get(c.id) || [];
+            return replies.reduce((latest, r) => {
+              const d = new Date(r.created_at);
+              return d > latest ? d : latest;
+            }, new Date(c.created_at));
+          };
+          return getLatest(b) - getLatest(a);
+        },
         newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
         oldest: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+        replies: (a, b) => {
+          var _a, _b;
+          return (((_a = threads.get(b.id)) == null ? void 0 : _a.length) || 0) - (((_b = threads.get(a.id)) == null ? void 0 : _b.length) || 0);
+        },
+        people: (a, b) => a.user.handle.localeCompare(b.user.handle),
         burst: (a, b) => new Date(a.created_at) - new Date(b.created_at),
-        viewport: () => 0
+        viewport: (a, b) => {
+          var _a, _b;
+          if (!cachedViewportCenter) return 0;
+          const vc = cachedViewportCenter;
+          const posA = cachedNodePositions[(_a = a.client_meta) == null ? void 0 : _a.node_id];
+          const posB = cachedNodePositions[(_b = b.client_meta) == null ? void 0 : _b.node_id];
+          const distA = posA ? Math.sqrt((posA.x - vc.x) ** 2 + (posA.y - vc.y) ** 2) : Infinity;
+          const distB = posB ? Math.sqrt((posB.x - vc.x) ** 2 + (posB.y - vc.y) ** 2) : Infinity;
+          return distA - distB;
+        }
       };
       filteredComments.sort(sortFn[commentsSortBy] || sortFn.newest);
-      container.innerHTML = renderCommentsListHTML(filteredComments, threads);
+      const total = topLevelComments.length;
+      setFilteredCounts(filteredComments.length, total);
+      const commentsForPeopleExtraction = showResolvedComments ? topLevelComments : topLevelComments.filter((c) => !c.resolved_at);
+      const allCommentsForPeople = [];
+      commentsForPeopleExtraction.forEach((c) => {
+        allCommentsForPeople.push(c);
+        const replies = threads.get(c.id) || [];
+        allCommentsForPeople.push(...replies);
+      });
+      const allPeople = extractPeopleFromComments(allCommentsForPeople);
+      const peopleList = Array.from(allPeople.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([name2, info]) => __spreadValues({ name: name2 }, info));
+      const visibleAuthors = new Set(peopleList.filter((p) => p.isAuthor).map((p) => p.name));
+      const visibleMentions = new Set(peopleList.filter((p) => p.isMentioned).map((p) => p.name));
+      selectedAuthorsFilter.forEach((name2) => {
+        if (!visibleAuthors.has(name2)) selectedAuthorsFilter.delete(name2);
+      });
+      selectedMentionsFilter.forEach((name2) => {
+        if (!visibleMentions.has(name2)) selectedMentionsFilter.delete(name2);
+      });
+      const html = '\n      <div class="prompt-comments-toolbar">\n        <input type="text" class="prompt-comments-search" placeholder="Search..." \n          value="'.concat(escapeHtml(commentsSearchQuery), '" \n          oninput="handleCommentsSearchInput(this.value)"\n          oncompositionstart="handleCommentsSearchCompositionStart()"\n          oncompositionend="handleCommentsSearchCompositionEnd(event)" />\n        <div class="comments-dropdown-container">\n          <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="Sort and filter options">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <path d="M3 6h18M6 12h12M10 18h4" />\n            </svg>\n            <span>Options</span>\n          </button>\n          <div class="comments-dropdown-menu hidden" id="commentsDropdownMenu">\n            <div class="dropdown-section">Sort</div>\n            <button class="dropdown-item ').concat(commentsSortBy === "activity" ? "active" : "", '" onclick="handleCommentsSort(\'activity\')">Last Activity</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "newest" ? "active" : "", '" onclick="handleCommentsSort(\'newest\')">Newest</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "oldest" ? "active" : "", '" onclick="handleCommentsSort(\'oldest\')">Oldest</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "replies" ? "active" : "", '" onclick="handleCommentsSort(\'replies\')">Replies</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "viewport" ? "active" : "", '" onclick="handleCommentsSort(\'viewport\')">Nearest to viewport</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "burst" ? "active" : "", '" onclick="handleCommentsSort(\'burst\')">Burst</button>\n            <div class="dropdown-divider"></div>\n            <div class="dropdown-section">Filter</div>\n            <button class="dropdown-item ').concat(commentsFilterBy === "all" ? "active" : "", '" onclick="handleCommentsFilter(\'all\')">All</button>\n            <button class="dropdown-item ').concat(commentsFilterBy === "pending" ? "active" : "", '" onclick="handleCommentsFilter(\'pending\')">Needs my reply</button>\n          </div>\n        </div>\n        <button class="people-filter-toggle').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="Filter by people">\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">\n            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>\n            <circle cx="9" cy="7" r="4"/>\n            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>\n            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>\n          </svg>\n          <span id="peopleFilterCount" class="people-filter-count">').concat(selectedAuthorsFilter.size + selectedMentionsFilter.size > 0 ? selectedAuthorsFilter.size + selectedMentionsFilter.size : "", '</span>\n        </button>\n        <span id="commentsCountDisplay" class="comments-count-display">\n          ').concat(multiSelectEnabled ? "".concat(selectedCommentIds.size, " selected · ") : "").concat(filteredComments.length, "/").concat(total, "\n        </span>\n        ").concat(multiSelectEnabled ? '\n          <div class="prompt-comments-batch-actions">\n            <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="Select/Deselect all visible">\n              '.concat(selectedCommentIds.size > 0 ? "Deselect All" : "Select All", '\n            </button>\n            <div class="comment-action-btn-group">\n              <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput(\'manual\')" disabled title="Reply to all selected">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>\n                Reply\n              </button>\n              <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, \'batchReplyTextarea\')" title="Reply templates" disabled id="batchReplyChevronBtn">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="reply-dropdown-batchReplyTextarea" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n            </div>\n            <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="Summarize selected with AI">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>\n              Summarize\n            </button>\n            <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="Download selected as CSV">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>\n              CSV\n            </button>\n          </div>\n        ') : "", '\n      </div>\n      <div id="batchActionInputContainer" class="batch-action-container" style="display: none;">\n        <div class="people-filter-header">\n          <div class="tab-container">\n            <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab(\'manual\')">Manual</button>\n            <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab(\'ai\')">AI Assisted</button>\n          </div>\n        </div>\n        <div id="batchReplyInputArea" style="display: none;">\n          <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="Enter a reply to be posted to all selected comments..." onkeydown="handleBatchReplyKeydown(event, \'manual\')" oninput="autoExpandTextarea(this)"></textarea>\n          <div class="batch-action-footer">\n            <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>\n            <button class="comment-action-btn primary" onclick="executeBatchReply()">Send to <span id="batchReplyCountLabel">0</span> comments</button>\n          </div>\n        </div>\n        <div id="batchAiReplyInputArea" style="display: none;">\n          <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="Instruct AI how to reply (e.g. \'Thank them and say we\'ll check it\'). AI will tailor responses to each context." onkeydown="handleBatchReplyKeydown(event, \'ai\')" oninput="autoExpandTextarea(this)"></textarea>\n          <div class="batch-action-footer">\n            <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>\n            <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">Run AI for <span id="batchAiReplyCountLabel">0</span> comments</button>\n          </div>\n        </div>\n      </div>\n      <div class="people-filter-section').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterSection">\n        <div class="people-filter-header">\n          <div class="tab-container">\n            <button class="tab-item').concat(peopleFilterActiveTab === "from" ? " active" : "", '" data-tab="from" onclick="switchPeopleFilterTab(\'from\')">\n              From\n              <span class="tab-badge" id="fromTabBadge" style="').concat(selectedAuthorsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedAuthorsFilter.size || "", '</span>\n            </button>\n            <button class="tab-item').concat(peopleFilterActiveTab === "mentions" ? " active" : "", '" data-tab="mentions" onclick="switchPeopleFilterTab(\'mentions\')">\n              @Mentions\n              <span class="tab-badge" id="mentionsTabBadge" style="').concat(selectedMentionsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedMentionsFilter.size || "", '</span>\n            </button>\n          </div>\n          <div style="display: flex; align-items: center; gap: 8px;">\n            <div class="people-filter-include-replies-toggle ').concat(peopleFilterActiveTab === "from" ? peopleFilterIncludeRepliesFrom ? "active" : "" : peopleFilterIncludeRepliesMentions ? "active" : "", '" onclick="togglePeopleIncludeReplies()" title="Included authors/mentions in comment replies">\n              <span class="toggle-switch"></span>\n              Replies\n            </div>\n            ').concat(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0 ? '<button class="people-filter-clear" onclick="clearPeopleFilter(\'all\')">Clear all</button>' : "", '\n          </div>\n        </div>\n        <div class="people-chips-container" id="peopleChipsFrom" style="').concat(peopleFilterActiveTab === "from" ? "display: flex;" : "display: none;", '">\n          ').concat(peopleList.filter((p) => p.isAuthor).map((p) => '\n            <button class="people-chip'.concat(selectedAuthorsFilter.has(p.name) ? " selected" : "", '" data-name="').concat(escapeHtml(p.name), '" data-filter="from" onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'from')\">\n              <div class=\"people-chip-avatar-mini\">\n                ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n              </div>\n              ").concat(escapeHtml(p.name), "\n            </button>\n          ")).join(""), '\n        </div>\n        <div class="people-chips-container" id="peopleChipsMentions" style="').concat(peopleFilterActiveTab === "mentions" ? "display: flex;" : "display: none;", '">\n          ').concat(peopleList.filter((p) => p.isMentioned).length > 0 ? peopleList.filter((p) => p.isMentioned).map((p) => '\n              <button class="people-chip'.concat(selectedMentionsFilter.has(p.name) ? " selected" : "", '" data-name="').concat(escapeHtml(p.name), '" data-filter="mentions" onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'mentions')\">\n                <div class=\"people-chip-avatar-mini\">\n                  ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n                </div>\n                ").concat(escapeHtml(p.name), "\n              </button>\n            ")).join("") : '<span class="people-filter-empty">No mentions found</span>', '\n        </div>\n      </div>\n      <div id="promptCommentsListContainer">\n        ').concat(renderCommentsListHTML(filteredComments, threads), "\n      </div>");
+      container.innerHTML = html;
+      updateBatchActionsState();
     }
     return {
       renderCommentItemHTML,
@@ -23510,8 +23568,14 @@
           selectedCommentIds,
           multiSelectEnabled,
           cachedNodeNames,
+          cachedViewportCenter,
+          cachedNodePositions,
           commentsWithReplyMatches,
-          commentsWithPeopleReplyMatches
+          commentsWithPeopleReplyMatches,
+          peopleFilterExpanded,
+          peopleFilterActiveTab,
+          peopleFilterIncludeRepliesFrom,
+          peopleFilterIncludeRepliesMentions
         };
       }
       function setCommentsFeatureState(partial) {
@@ -23530,7 +23594,13 @@
         highlightAndLinkify,
         highlightSearchMatches,
         filterCommentsBySearch,
-        commentMatchesPeopleFilter
+        commentMatchesPeopleFilter,
+        extractPeopleFromComments,
+        setFilteredCounts: (filteredCount, totalCount) => {
+          lastFilteredCount = filteredCount;
+          lastTotalCount = totalCount;
+        },
+        updateBatchActionsState
       });
       var {
         loadFigmaComments: movedLoadFigmaComments,
@@ -24299,117 +24369,7 @@
         return movedRenderCommentsListHTML(filteredComments, threads);
       }
       function renderCommentsInDrawer(container) {
-        const threads = /* @__PURE__ */ new Map();
-        const topLevelComments = [];
-        figmaComments.forEach((comment) => {
-          if (comment.parent_id) {
-            if (!threads.has(comment.parent_id)) {
-              threads.set(comment.parent_id, []);
-            }
-            threads.get(comment.parent_id).push(comment);
-          } else {
-            topLevelComments.push(comment);
-          }
-        });
-        let filteredComments = showResolvedComments ? topLevelComments : topLevelComments.filter((c) => !c.resolved_at);
-        if (currentCommentsScope === "page") {
-          filteredComments = filteredComments.filter((c) => {
-            var _a2;
-            const nodeId = (_a2 = c.client_meta) == null ? void 0 : _a2.node_id;
-            if (!nodeId) return false;
-            const pageId = commentNodePageMap.get(nodeId);
-            return !pageId || pageId === figmaCurrentPageId;
-          });
-        } else if (currentCommentsScope === "selection") {
-          const selectedIds = /* @__PURE__ */ new Set();
-          const selectedNodes = lastKnownSelectionItems || [];
-          selectedNodes.forEach((node) => {
-            selectedIds.add(node.id);
-            if (node.descendantIds) {
-              node.descendantIds.forEach((id) => selectedIds.add(id));
-            }
-          });
-          filteredComments = filteredComments.filter((c) => {
-            var _a2;
-            const nodeId = (_a2 = c.client_meta) == null ? void 0 : _a2.node_id;
-            return nodeId && selectedIds.has(nodeId);
-          });
-        }
-        commentsWithPeopleReplyMatches.clear();
-        if (selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0) {
-          filteredComments = filteredComments.filter((c) => commentMatchesPeopleFilter(c, threads, true));
-        }
-        filteredComments = filterCommentsBySearch(filteredComments, commentsSearchQuery, threads);
-        if (commentsFilterBy === "pending") {
-          filteredComments = filteredComments.filter((c) => {
-            const replies = threads.get(c.id) || [];
-            if (replies.length > 0) {
-              const sortedReplies = [...replies].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-              const lastReply = sortedReplies[sortedReplies.length - 1];
-              return lastReply.user.id !== (figmaCurrentUser == null ? void 0 : figmaCurrentUser.id);
-            } else {
-              return c.user.id !== (figmaCurrentUser == null ? void 0 : figmaCurrentUser.id);
-            }
-          });
-        }
-        const sortFn = {
-          "activity": (a, b) => {
-            const getLatest = (c) => {
-              const replies = threads.get(c.id) || [];
-              return replies.reduce((latest, r) => {
-                const d = new Date(r.created_at);
-                return d > latest ? d : latest;
-              }, new Date(c.created_at));
-            };
-            return getLatest(b) - getLatest(a);
-          },
-          "newest": (a, b) => new Date(b.created_at) - new Date(a.created_at),
-          "oldest": (a, b) => new Date(a.created_at) - new Date(b.created_at),
-          "replies": (a, b) => {
-            var _a2, _b;
-            return (((_a2 = threads.get(b.id)) == null ? void 0 : _a2.length) || 0) - (((_b = threads.get(a.id)) == null ? void 0 : _b.length) || 0);
-          },
-          "people": (a, b) => a.user.handle.localeCompare(b.user.handle),
-          "viewport": (a, b) => {
-            var _a2, _b;
-            if (!cachedViewportCenter) return 0;
-            const vc = cachedViewportCenter;
-            const posA = cachedNodePositions[(_a2 = a.client_meta) == null ? void 0 : _a2.node_id];
-            const posB = cachedNodePositions[(_b = b.client_meta) == null ? void 0 : _b.node_id];
-            const distA = posA ? Math.sqrt((posA.x - vc.x) ** 2 + (posA.y - vc.y) ** 2) : Infinity;
-            const distB = posB ? Math.sqrt((posB.x - vc.x) ** 2 + (posB.y - vc.y) ** 2) : Infinity;
-            return distA - distB;
-          },
-          "burst": (a, b) => new Date(a.created_at) - new Date(b.created_at)
-        };
-        filteredComments.sort(sortFn[commentsSortBy] || sortFn["newest"]);
-        const total = topLevelComments.length;
-        lastFilteredCount = filteredComments.length;
-        lastTotalCount = total;
-        const commentsForPeopleExtraction = showResolvedComments ? topLevelComments : topLevelComments.filter((c) => !c.resolved_at);
-        const allCommentsForPeople = [];
-        commentsForPeopleExtraction.forEach((c) => {
-          allCommentsForPeople.push(c);
-          const replies = threads.get(c.id) || [];
-          allCommentsForPeople.push(...replies);
-        });
-        const allPeople = extractPeopleFromComments(allCommentsForPeople);
-        const peopleList = Array.from(allPeople.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([name2, info]) => __spreadValues({ name: name2 }, info));
-        const visibleAuthors = new Set(peopleList.filter((p) => p.isAuthor).map((p) => p.name));
-        const visibleMentions = new Set(peopleList.filter((p) => p.isMentioned).map((p) => p.name));
-        selectedAuthorsFilter.forEach((name2) => {
-          if (!visibleAuthors.has(name2)) {
-            selectedAuthorsFilter.delete(name2);
-          }
-        });
-        selectedMentionsFilter.forEach((name2) => {
-          if (!visibleMentions.has(name2)) {
-            selectedMentionsFilter.delete(name2);
-          }
-        });
-        let html = '\n      <div class="prompt-comments-toolbar">\n          <input type="text" class="prompt-comments-search" placeholder="Search..." \n            value="'.concat(escapeHtml(commentsSearchQuery), '" \n            oninput="handleCommentsSearchInput(this.value)"\n            oncompositionstart="handleCommentsSearchCompositionStart()"\n            oncompositionend="handleCommentsSearchCompositionEnd(event)" />\n          <div class="comments-dropdown-container">\n            <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="Sort and filter options">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                <path d="M3 6h18M6 12h12M10 18h4" />\n              </svg>\n              <span>Options</span>\n            </button>\n            <div class="comments-dropdown-menu hidden" id="commentsDropdownMenu">\n              <div class="dropdown-section">Sort</div>\n              <button class="dropdown-item ').concat(commentsSortBy === "activity" ? "active" : "", '" onclick="handleCommentsSort(\'activity\')">Last Activity</button>\n              <button class="dropdown-item ').concat(commentsSortBy === "newest" ? "active" : "", '" onclick="handleCommentsSort(\'newest\')">Newest</button>\n              <button class="dropdown-item ').concat(commentsSortBy === "oldest" ? "active" : "", '" onclick="handleCommentsSort(\'oldest\')">Oldest</button>\n              <button class="dropdown-item ').concat(commentsSortBy === "replies" ? "active" : "", '" onclick="handleCommentsSort(\'replies\')">Replies</button>\n              <button class="dropdown-item ').concat(commentsSortBy === "viewport" ? "active" : "", '" onclick="handleCommentsSort(\'viewport\')">Nearest to viewport</button>\n              <button class="dropdown-item ').concat(commentsSortBy === "burst" ? "active" : "", '" onclick="handleCommentsSort(\'burst\')">Burst</button>\n              <div class="dropdown-divider"></div>\n              <div class="dropdown-section">Filter</div>\n              <button class="dropdown-item ').concat(commentsFilterBy === "all" ? "active" : "", '" onclick="handleCommentsFilter(\'all\')">All</button>\n              <button class="dropdown-item ').concat(commentsFilterBy === "pending" ? "active" : "", '" onclick="handleCommentsFilter(\'pending\')">Needs my reply</button>\n            </div>\n          </div>\n          <button class="people-filter-toggle').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="Filter by people">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">\n              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>\n              <circle cx="9" cy="7" r="4"/>\n              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>\n              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>\n            </svg>\n            <span id="peopleFilterCount" class="people-filter-count">').concat(selectedAuthorsFilter.size + selectedMentionsFilter.size > 0 ? selectedAuthorsFilter.size + selectedMentionsFilter.size : "", '</span>\n          </button>\n          <span id="commentsCountDisplay" class="comments-count-display">\n            ').concat(multiSelectEnabled ? "".concat(selectedCommentIds.size, " selected · ") : "").concat(lastFilteredCount, "/").concat(lastTotalCount, "\n          </span>\n          ").concat(multiSelectEnabled ? '\n            <div class="prompt-comments-batch-actions">\n              <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="Select/Deselect all visible">\n                '.concat(selectedCommentIds.size > 0 ? "Deselect All" : "Select All", '\n              </button>\n              <div class="comment-action-btn-group">\n                <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput(\'manual\')" disabled title="Reply to all selected">\n                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>\n                  Reply\n                </button>\n                <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, \'batchReplyTextarea\')" title="Reply templates" disabled id="batchReplyChevronBtn">\n                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n                </button>\n                <div class="comment-more-menu hidden" id="reply-dropdown-batchReplyTextarea" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n              </div>\n              <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="Summarize selected with AI">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                  <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/>\n                </svg>\n                Summarize\n              </button>\n              <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="Download selected as CSV">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>\n                </svg>\n                CSV\n              </button>\n            </div>\n          ') : "", '\n        </div>\n        <div id="batchActionInputContainer" class="batch-action-container" style="display: none;">\n          <div class="people-filter-header">\n            <div class="tab-container">\n              <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab(\'manual\')">Manual</button>\n              <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab(\'ai\')">AI Assisted</button>\n            </div>\n          </div>\n          <div id="batchReplyInputArea" style="display: none;">\n            <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="Enter a reply to be posted to all selected comments..." \n              onkeydown="handleBatchReplyKeydown(event, \'manual\')"\n              oninput="autoExpandTextarea(this)"></textarea>\n            <div class="batch-action-footer">\n              <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>\n              <button class="comment-action-btn primary" onclick="executeBatchReply()">Send to <span id="batchReplyCountLabel">0</span> comments</button>\n            </div>\n          </div>\n          <div id="batchAiReplyInputArea" style="display: none;">\n            <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="Instruct AI how to reply (e.g. \'Thank them and say we\'ll check it\'). AI will tailor responses to each context." \n              onkeydown="handleBatchReplyKeydown(event, \'ai\')"\n              oninput="autoExpandTextarea(this)"></textarea>\n            <div class="batch-action-footer">\n              <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>\n              <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">Run AI for <span id="batchAiReplyCountLabel">0</span> comments</button>\n            </div>\n          </div>\n        </div>\n      </div>\n        <div class="people-filter-section').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterSection">\n          <div class="people-filter-header">\n            <div class="tab-container">\n              <button class="tab-item').concat(peopleFilterActiveTab === "from" ? " active" : "", '" data-tab="from" onclick="switchPeopleFilterTab(\'from\')">\n                From\n                <span class="tab-badge" id="fromTabBadge" style="').concat(selectedAuthorsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedAuthorsFilter.size || "", '</span>\n              </button>\n              <button class="tab-item').concat(peopleFilterActiveTab === "mentions" ? " active" : "", '" data-tab="mentions" onclick="switchPeopleFilterTab(\'mentions\')">\n                @Mentions\n                <span class="tab-badge" id="mentionsTabBadge" style="').concat(selectedMentionsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedMentionsFilter.size || "", '</span>\n              </button>\n            </div>\n            <div style="display: flex; align-items: center; gap: 8px;">\n              <div class="people-filter-include-replies-toggle ').concat(peopleFilterActiveTab === "from" ? peopleFilterIncludeRepliesFrom ? "active" : "" : peopleFilterIncludeRepliesMentions ? "active" : "", '" \n                   onclick="togglePeopleIncludeReplies()" \n                   title="Included authors/mentions in comment replies">\n                <span class="toggle-switch"></span>\n                Replies\n              </div>\n              ').concat(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0 ? '<button class="people-filter-clear" onclick="clearPeopleFilter(\'all\')">Clear all</button>' : "", '\n            </div>\n          </div>\n          <div class="people-chips-container" id="peopleChipsFrom" style="').concat(peopleFilterActiveTab === "from" ? "display: flex;" : "display: none;", '">\n            ').concat(peopleList.filter((p) => p.isAuthor).map((p) => '\n              <button class="people-chip'.concat(selectedAuthorsFilter.has(p.name) ? " selected" : "", '" \n                      data-name="').concat(escapeHtml(p.name), '"\n                      data-filter="from"\n                      onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'from')\">\n                <div class=\"people-chip-avatar-mini\">\n                  ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n                </div>\n                ").concat(escapeHtml(p.name), "\n              </button>\n            ")).join(""), '\n          </div>\n          <div class="people-chips-container" id="peopleChipsMentions" style="').concat(peopleFilterActiveTab === "mentions" ? "display: flex;" : "display: none;", '">\n            ').concat(peopleList.filter((p) => p.isMentioned).length > 0 ? peopleList.filter((p) => p.isMentioned).map((p) => '\n                <button class="people-chip'.concat(selectedMentionsFilter.has(p.name) ? " selected" : "", '" \n                        data-name="').concat(escapeHtml(p.name), '"\n                        data-filter="mentions"\n                        onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'mentions')\">\n                  <div class=\"people-chip-avatar-mini\">\n                    ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n                  </div>\n                  ").concat(escapeHtml(p.name), "\n                </button>\n              ")).join("") : '<span class="people-filter-empty">No mentions found</span>', '\n          </div>\n        </div>\n        <div id="promptCommentsListContainer">\n          ').concat(renderCommentsListHTML(filteredComments, threads), "\n        </div>");
-        container.innerHTML = html;
-        updateBatchActionsState();
+        movedRenderCommentsInDrawer(container);
       }
       function autoExpandTextarea(textarea) {
         textarea.style.height = "auto";
