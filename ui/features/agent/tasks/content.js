@@ -246,7 +246,7 @@ export const smartTextTasks = [
           prompt: '',
           isTextAction: true,
           requiredContext: ContextMode.TEXT_ONLY,
-          help: 'Converts selected text into vertical columns. column text count = 0 means use original rendered row count.',
+          help: 'Converts selected text into vertical columns. column text count = 0 means use original rendered row count. If you set a larger column count, the action now auto-inserts breaks even when the source text has no manual line breaks.',
           fields: [
             { key: 'heightPx', type: 'number', label: 'Height (px)', default: 0, min: 0, hint: '0 = auto from columns × line height' },
             { key: 'columnTextCount', type: 'number', label: 'Column text count', default: 0, min: 0, hint: '0 = use original rendered row count' },

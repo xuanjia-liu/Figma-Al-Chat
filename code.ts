@@ -5407,17 +5407,54 @@ figma.ui.onmessage = async (msg: {
             const effectiveColumnCount = reqColumnTextCount > 0 ? reqColumnTextCount : sourceRowCount;
             const effectiveHeight = reqHeightPx > 0 ? reqHeightPx : effectiveColumnCount * effectiveLineHeight;
 
-            // --- Build columns from source rows ---
-            const columns: string[] = [];
-            for (let c = 0; c < effectiveColumnCount; c++) {
-              if (c < sourceRowCount) {
-                if (c === effectiveColumnCount - 1 && effectiveColumnCount < sourceRowCount) {
-                  columns.push(lineTexts.slice(c).join(''));
-                } else {
-                  columns.push(lineTexts[c] || '');
+            const splitTextIntoColumns = (text: string, columnCount: number): string[] => {
+              const normalizedText = (text || '').replace(/\r/g, '');
+              const manualSegments = normalizedText
+                .split('\n')
+                .map(segment => segment.trim())
+                .filter(Boolean);
+              const rawChars = Array.from(normalizedText.replace(/\n/g, ''));
+
+              if (manualSegments.length === columnCount) {
+                return manualSegments;
+              }
+
+              const charChunks: string[] = [];
+              let charCursor = 0;
+
+              for (let c = 0; c < columnCount; c++) {
+                const remainingColumns = columnCount - c;
+                const remainingChars = rawChars.length - charCursor;
+                if (remainingChars <= 0) {
+                  charChunks.push('');
+                  continue;
                 }
-              } else {
-                columns.push('');
+                const chunkSize = Math.ceil(remainingChars / remainingColumns);
+                charChunks.push(rawChars.slice(charCursor, charCursor + chunkSize).join(''));
+                charCursor += chunkSize;
+              }
+
+              return charChunks;
+            };
+
+            // --- Build columns from source rows ---
+            let columns: string[] = [];
+            if (reqColumnTextCount > 0) {
+              // An explicit prompt setting should override the detected row structure,
+              // so we can generate vertical columns even when the source only wraps
+              // visually or contains no manual line breaks.
+              columns = splitTextIntoColumns(sourceText, effectiveColumnCount);
+            } else {
+              for (let c = 0; c < effectiveColumnCount; c++) {
+                if (c < sourceRowCount) {
+                  if (c === effectiveColumnCount - 1 && effectiveColumnCount < sourceRowCount) {
+                    columns.push(lineTexts.slice(c).join(''));
+                  } else {
+                    columns.push(lineTexts[c] || '');
+                  }
+                } else {
+                  columns.push('');
+                }
               }
             }
 
