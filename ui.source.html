@@ -309,18 +309,22 @@
             <div class="settings-category-panel active" id="category-ai">
               <div class="settings-group-title">Assistant Provider</div>
               <div class="setting-item">
+                <label class="audit-toggle-switch">
+                  <input type="checkbox" id="noAiModeToggle" />
+                  <span class="toggle-label">No AI (Quick Actions only)</span>
+                </label>
+              </div>
+              <div class="setting-item">
                 <label class="setting-label">Choose Assistant Mode</label>
                 <select class="setting-input" id="providerSelect">
                   <option value="gemini">Google Gemini</option>
                   <option value="openai">OpenAI</option>
                   <option value="anthropic">Anthropic Claude</option>
-                  <option value="off">No AI (Quick Actions only)</option>
                 </select>
-                <div class="setting-hint">Use No AI to focus on direct quick actions without chat-based AI generation.
-                </div>
+                <div class="setting-hint">Choose which assistant provider to use when AI is enabled.</div>
               </div>
               <div class="provider-settings" id="geminiSettings">
-                <div class="setting-item">
+                <div class="setting-item provider-api-setting">
                   <label class="setting-label">API Key</label>
                   <div class="setting-input-row">
                     <input type="password" class="setting-input" id="geminiApiKeyInput"
@@ -332,7 +336,7 @@
                       style="color: var(--accent);">Google AI Studio</a>.
                   </div>
                 </div>
-                <div class="setting-item">
+                <div class="setting-item provider-model-setting">
                   <label class="setting-label">Select Models</label>
                   <div class="model-checklist" id="geminiModelChecklist">
                   </div>
@@ -356,7 +360,7 @@
               </div>
 
               <div class="provider-settings hidden" id="openaiSettings">
-                <div class="setting-item">
+                <div class="setting-item provider-api-setting">
                   <label class="setting-label">API Key</label>
                   <div class="setting-input-row">
                     <input type="password" class="setting-input" id="openaiApiKeyInput"
@@ -368,7 +372,7 @@
                       style="color: var(--accent);">OpenAI Platform</a>.
                   </div>
                 </div>
-                <div class="setting-item">
+                <div class="setting-item provider-model-setting">
                   <label class="setting-label">Select Models</label>
                   <div class="model-checklist" id="openaiModelChecklist">
                   </div>
@@ -393,7 +397,7 @@
               </div>
 
               <div class="provider-settings hidden" id="anthropicSettings">
-                <div class="setting-item">
+                <div class="setting-item provider-api-setting">
                   <label class="setting-label">API Key</label>
                   <div class="setting-input-row">
                     <input type="password" class="setting-input" id="anthropicApiKeyInput"
@@ -405,7 +409,7 @@
                       style="color: var(--accent);">Anthropic Console</a>.
                   </div>
                 </div>
-                <div class="setting-item">
+                <div class="setting-item provider-model-setting">
                   <label class="setting-label">Select Models</label>
                   <div class="model-checklist" id="anthropicModelChecklist">
                   </div>

@@ -776,6 +776,21 @@
       color: var(--text-muted);
     }
 
+    .setting-input:disabled {
+      color: var(--text-disabled);
+      opacity: var(--disabled-opacity);
+      cursor: not-allowed;
+    }
+
+    .setting-item-disabled {
+      opacity: var(--disabled-opacity);
+    }
+
+    .setting-item-disabled .setting-label,
+    .setting-item-disabled .setting-hint {
+      color: var(--text-disabled);
+    }
+
     .model-checklist {
       display: flex;
       flex-direction: column;
@@ -6720,6 +6735,10 @@
       border-left: 2px solid transparent;
     }
 
+    .settings-menu-item svg {
+      flex-shrink: 0;
+    }
+
     .settings-menu-item:hover {
       background: var(--bg-secondary);
       color: var(--text-primary);
@@ -6745,6 +6764,25 @@
 
     .settings-category-panel.active {
       display: block;
+    }
+
+    @media (max-width: 479px) {
+      .settings-sidebar {
+        width: 40px;
+        min-width: 40px;
+      }
+
+      .settings-menu-item {
+        justify-content: center;
+        gap: 0;
+        padding: var(--space-md) var(--space-sm);
+        font-size: 0;
+      }
+
+      .settings-menu-item svg {
+        width: 18px;
+        height: 18px;
+      }
     }
 
     /* Settings Modal Overlay */

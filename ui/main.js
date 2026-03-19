@@ -1856,7 +1856,6 @@ import {
         case 'gemini': return 'Google Gemini';
         case 'openai': return 'OpenAI';
         case 'anthropic': return 'Anthropic';
-        case 'off': return 'No AI';
         default: return provider;
       }
     }
@@ -1870,8 +1869,6 @@ import {
           return '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9.195 2.282a5.276 5.276 0 0 1 4.003.525 5.3 5.3 0 0 1 .752.531 5.277 5.277 0 0 1 6.611 5.104c0 .309-.03.616-.085.919a5.274 5.274 0 0 1 .434 6.92c-.894 1.164-1.654 1.475-2.386 1.741a5.27 5.27 0 0 1-3.72 3.7 5.276 5.276 0 0 1-4.002-.526 5.296 5.296 0 0 1-.756-.533A5.275 5.275 0 0 1 3.44 15.56c0-.31.029-.617.082-.92a5.284 5.284 0 0 1-1.475-3.017 5.274 5.274 0 0 1 3.427-5.645 5.275 5.275 0 0 1 3.72-3.696Zm6.36 14.9a.752.752 0 0 1-.375.65v-.001l-3.601 2.079a3.773 3.773 0 0 0 5.561-2.555v-4.709l-1.585-.914v5.45Zm-6.22.516a.752.752 0 0 1-.75 0l-3.646-2.106a3.776 3.776 0 0 0 3.775 3.743c.411 0 .82-.07 1.21-.202l4.131-2.386v-1.775l-4.72 2.726ZM13.94 8.56l-.44.253 5.141 2.969v4.538a3.777 3.777 0 0 0 1.352-5.14 3.746 3.746 0 0 0-.787-.955l-4.077-2.352-1.189.687Zm-8.58-.878a3.774 3.774 0 0 0-1.826 3.745 3.8 3.8 0 0 0 1.258 2.347L8.96 16.18l1.538-.887-4.765-2.752a.752.752 0 0 1-.374-.65V7.682Zm4.585 3.185v2.372L12 14.426l2.055-1.187v-2.372L12 9.679l-2.055 1.188Zm2.473-6.777A3.775 3.775 0 0 0 6.86 6.644v4.813l1.585.915V6.819a.753.753 0 0 1 .375-.65l3.598-2.079Zm2.868.577a3.8 3.8 0 0 0-1.222.204L9.945 7.25v1.882l5.186-2.992 3.93 2.267a3.775 3.775 0 0 0-3.775-3.741Z" clip-rule="evenodd"/></svg>';
         case 'anthropic':
           return '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5L19 8l-7 3.5L5 8l7-3.5zM4 9.5l7 3.5v7l-7-3.5v-7zm16 0v7l-7 3.5v-7l7-3.5z"/></svg>';
-        case 'off':
-          return '<svg class="provider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16"/><path d="M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg>';
         default:
           return '';
       }
@@ -2118,7 +2115,7 @@ import {
     function getSettingsFormState() {
       return {
         provider: providerSelect.value || 'gemini',
-        aiOffMode: (providerSelect.value || 'gemini') === 'off',
+        aiOffMode: noAiModeToggle?.checked === true,
         geminiApiKey: geminiApiKeyInput.value || '',
         geminiModel: geminiModelSelect.value || 'gemini-2.0-flash',
         openaiApiKey: openaiApiKeyInput.value || '',
@@ -2164,6 +2161,9 @@ import {
       if (!lastSavedSettings) return;
       suppressSettingsDirty = true;
       providerSelect.value = lastSavedSettings.provider || 'gemini';
+      if (noAiModeToggle) {
+        noAiModeToggle.checked = lastSavedSettings.aiOffMode === true;
+      }
       geminiApiKeyInput.value = lastSavedSettings.geminiApiKey || '';
       populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, lastSavedSettings.geminiModel || 'gemini-2.0-flash');
       openaiApiKeyInput.value = lastSavedSettings.openaiApiKey || '';
@@ -2637,6 +2637,7 @@ import {
     const openSettingsBtn = document.getElementById('openSettingsBtn');
     const openSettingsBtnNoAi = document.getElementById('openSettingsBtnNoAi');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const noAiModeToggle = document.getElementById('noAiModeToggle');
     const providerSelect = document.getElementById('providerSelect');
     const chatContainer = document.querySelector('.chat-container');
     const geminiSettings = document.getElementById('geminiSettings');
@@ -3143,6 +3144,7 @@ import {
     }
 
     const settingsFields = [
+      noAiModeToggle,
       providerSelect,
       geminiApiKeyInput, geminiModelSelect,
       openaiApiKeyInput, openaiModelSelect,
@@ -3410,14 +3412,46 @@ import {
       return null;
     }
 
+    function syncNoAiSettingsUi() {
+      const isNoAi = noAiModeToggle?.checked === true;
+      providerSelect.disabled = isNoAi;
+
+      [geminiSettings, openaiSettings, anthropicSettings].forEach(panel => {
+        if (!panel) return;
+
+        panel.querySelectorAll('.provider-api-setting').forEach(section => {
+          section.classList.toggle('setting-item-disabled', isNoAi);
+        });
+
+        panel.querySelectorAll('.provider-api-setting input, .provider-api-setting button').forEach(control => {
+          if (control instanceof HTMLInputElement || control instanceof HTMLButtonElement) {
+            control.disabled = isNoAi;
+          }
+        });
+
+        panel.querySelectorAll('.provider-model-setting').forEach(section => {
+          section.classList.toggle('hidden', isNoAi);
+        });
+
+        panel.querySelectorAll('.provider-model-setting input, .provider-model-setting select, .provider-model-setting button').forEach(control => {
+          if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLButtonElement) {
+            control.disabled = isNoAi;
+          }
+        });
+      });
+    }
+
     // Show/hide provider settings based on selection
     function updateProviderSettingsVisibility() {
-      const newProvider = providerSelect.value || 'gemini';
+      const activeProvider = providerSelect.value || 'gemini';
 
-      geminiSettings.classList.toggle('hidden', providerSelect.value !== 'gemini');
-      openaiSettings.classList.toggle('hidden', providerSelect.value !== 'openai');
-      anthropicSettings.classList.toggle('hidden', providerSelect.value !== 'anthropic');
-      if (providerSelect.value === 'gemini') {
+      geminiSettings.classList.toggle('hidden', activeProvider !== 'gemini');
+      openaiSettings.classList.toggle('hidden', activeProvider !== 'openai');
+      anthropicSettings.classList.toggle('hidden', activeProvider !== 'anthropic');
+
+      syncNoAiSettingsUi();
+
+      if (activeProvider === 'gemini' && !isAiOffModeEnabled()) {
         refreshGeminiModelList({
           apiKey: geminiApiKeyInput.value || geminiApiKey,
           preferredModel: geminiModelSelect.value || geminiModel,
@@ -3430,6 +3464,12 @@ import {
 
     // Provider select change handler
     providerSelect.addEventListener('change', updateProviderSettingsVisibility);
+    if (noAiModeToggle) {
+      noAiModeToggle.addEventListener('change', () => {
+        syncNoAiSettingsUi();
+        handleSettingsChanged();
+      });
+    }
 
     // Mode toggle handlers
     function setMode(mode) {
@@ -21001,9 +21041,10 @@ Example structure:
     // Apply loaded settings to UI
     function applySettings(settings) {
       const savedProvider = settings?.provider || 'gemini';
-      const savedAiOffMode = settings?.aiOffMode === true;
-      selectedProvider = savedAiOffMode ? 'off' : savedProvider;
-      aiOffMode = selectedProvider === 'off';
+      const normalizedProvider = savedProvider === 'off' ? 'gemini' : savedProvider;
+      const savedAiOffMode = settings?.aiOffMode === true || savedProvider === 'off';
+      selectedProvider = normalizedProvider;
+      aiOffMode = savedAiOffMode;
       geminiApiKey = settings?.geminiApiKey || '';
       geminiModel = settings?.geminiModel || 'gemini-2.0-flash';
       openaiApiKey = settings?.openaiApiKey || '';
@@ -21046,6 +21087,9 @@ Example structure:
       maxSelectionSize = savedSizeLimit * 1024;
 
       suppressSettingsDirty = true;
+      if (noAiModeToggle) {
+        noAiModeToggle.checked = aiOffMode;
+      }
       providerSelect.value = selectedProvider;
       geminiApiKeyInput.value = geminiApiKey;
       populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, geminiModel);
@@ -21239,7 +21283,7 @@ Example structure:
 
       const settings = {
         provider: providerSelect.value || 'gemini',
-        aiOffMode: (providerSelect.value || 'gemini') === 'off',
+        aiOffMode: noAiModeToggle?.checked === true,
         geminiApiKey: geminiApiKeyInput.value || '',
         geminiModel: geminiModelSelect.value || 'gemini-2.0-flash',
         openaiApiKey: openaiApiKeyInput.value || '',
