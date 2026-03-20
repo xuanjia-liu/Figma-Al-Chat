@@ -61,7 +61,7 @@ export const NON_AI_LOCAL_TASKS = new Set([
   'Clean up names',
   'Format sequencer',
   'Add prefix/suffix',
-  '縦書き / Vertical text'
+  'Vertical text'
 ]);
 
 export const COMMENTS_CACHE_TTL = 60000;
