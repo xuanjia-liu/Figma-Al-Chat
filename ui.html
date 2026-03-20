@@ -1291,6 +1291,11 @@
       align-items: center;
       justify-content: center;
       transition: all 0.2s ease;
+      height: 100%;
+      width: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .comment-reply-chevron-btn:hover {
@@ -2903,6 +2908,7 @@
       gap: var(--space-xs);
       opacity: 0;
       transition: opacity 0.15s ease;
+      margin-top: var(--space-xs);
     }
 
     .message.user:hover .message-actions {
@@ -7832,13 +7838,13 @@
       width: 32px;
       height: 32px;
       border-radius: 50%;
-      background: var(--text-primary);
+      background: var(--text-on-accent);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-      border: none;
+      border: 1px solid var(--border);
       transition: scale 0.2s ease, opacity 0.2s ease;
       user-select: none;
       touch-action: none;
