@@ -340,13 +340,19 @@
       flex-direction: row;
       align-items: center;
       justify-content: flex-start;
-      padding: var(--space-2xs) 0;
     }
 
     .header-settings-ai-toggle {
-      padding: var(--space-sm) var(--space-2xs);
       width: 100%;
       justify-content: space-between;
+      background: var(--bg-secondary);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      padding: var(--space-sm) var(--space-md);
+      font-size: var(--text-sm);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s ease;
     }
 
     .header-settings-menu-divider {
@@ -7508,6 +7514,28 @@
     .command-item:not([aria-disabled="true"]):hover .command-item-desc {
       color: var(--text-secondary);
       transition: all 0.2s ease;
+    }
+
+    /* Light mode: avoid dark “pill” icon + solid purple title bar (poor contrast / harsh) */
+    body.light-mode .command-item:not([aria-disabled="true"]):hover {
+      background: var(--bg-secondary);
+    }
+
+    body.light-mode .command-item:not([aria-disabled="true"]):hover .command-item-icon {
+      background: var(--bg-tertiary);
+      color: var(--accent-agent);
+    }
+
+    /* Same underline animation as dark mode, but accent at ~10% opacity for light surfaces */
+    body.light-mode .command-item-name {
+      background-image: linear-gradient(
+        color-mix(in srgb, var(--accent-agent) 20%, transparent),
+        color-mix(in srgb, var(--accent-agent) 20%, transparent)
+      );
+    }
+
+    body.light-mode .command-item:not([aria-disabled="true"]):hover .command-item-desc {
+      color: var(--text-secondary);
     }
 
     .command-item.ai-disabled,
