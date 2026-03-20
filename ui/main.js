@@ -10159,7 +10159,7 @@ Generate ONLY the reply text, nothing else.`;
 
             infoItems.push({ label: 'Time', value: duration });
 
-            attachExecutionDetails(botMsgDiv, 'Generation Details', infoItems);
+            attachExecutionDetails(botMsgDiv, t('settings.messages.commands.generationDetails'), infoItems);
           } catch (e) { console.error('Error adding summary UI', e); }
 
           // Update history with text version for persistence
@@ -10201,7 +10201,7 @@ Generate ONLY the reply text, nothing else.`;
             label: 'Response Data',
             details: error.rawData
           }];
-          attachExecutionDetails(errorMsgDiv, 'Error Details', infoItems);
+          attachExecutionDetails(errorMsgDiv, t('settings.messages.commands.errorDetails'), infoItems);
         }
 
         await autoSaveAfterResponse();
@@ -22085,6 +22085,53 @@ Example structure:
       return div.innerHTML;
     }
 
+    function getIntentContextListItemInnerHtml(info) {
+      if (!info) return '';
+      const manualBypass = info.forced ? t('settings.messages.commands.manualBypassSuffix') : '';
+      const lockState = info.fromLock
+        ? t('settings.messages.commands.lockActive')
+        : t('settings.messages.commands.lockNone');
+      const lines = [
+        t('settings.messages.commands.intentLine', {
+          intent: escapeHtml(String(info.intent ?? '')),
+          complexity: escapeHtml(String(info.complexity ?? ''))
+        }),
+        t('settings.messages.commands.contextModeLine', {
+          mode: escapeHtml(String(info.contextMode ?? '')),
+          manualBypass
+        }),
+        t('settings.messages.commands.selectionLine', {
+          nodeCount: String(info.nodeCount ?? 0),
+          dataSize: formatBytes(info.dataSize)
+        }),
+        t('settings.messages.commands.snapshotLockLine', { lockState })
+      ];
+      const intentText = lines.join('\n');
+      return `
+          <div class="cmd-main-row">
+            <div class="status-dot skipped"></div>
+            <div class="cmd-info">
+              <span class="cmd-action">${escapeHtml(t('settings.messages.commands.contextAction'))}</span>
+              <span class="cmd-name">: ${escapeHtml(t('settings.messages.commands.contextName'))}</span>
+            </div>
+          </div>
+          <div class="cmd-change-row cmd-intent-info">${intentText}</div>
+        `;
+    }
+
+    function getUiOutlinePlanListItemInnerHtml(outlineBody) {
+      return `
+          <div class="cmd-main-row">
+            <div class="status-dot skipped"></div>
+            <div class="cmd-info">
+              <span class="cmd-action">${escapeHtml(t('settings.messages.commands.planAction'))}</span>
+              <span class="cmd-name">: ${escapeHtml(t('settings.messages.commands.planName'))}</span>
+            </div>
+          </div>
+          <div class="cmd-change-row cmd-ui-outline">${outlineBody}</div>
+        `;
+    }
+
     // Navigate to comment node in Figma
     function navigateToCommentNode(nodeId, nodeOffset = null) {
       console.log('[Figma AI] Navigating to comment node:', nodeId, 'offset:', nodeOffset);
@@ -23332,34 +23379,15 @@ Example structure:
 
       // Add Intent-Based Context information if available
       if (lastUsedContextInfo) {
-        const info = lastUsedContextInfo;
         const contextLi = document.createElement('li');
-        contextLi.innerHTML = `
-          <div class="cmd-main-row">
-            <div class="status-dot skipped"></div>
-            <div class="cmd-info">
-              <span class="cmd-action">Context</span>
-              <span class="cmd-name">: Intent-Based Context System</span>
-            </div>
-          </div>
-          <div class="cmd-change-row cmd-intent-info" >Intent: ${info.intent} (${info.complexity})\nContext Mode: ${info.contextMode}${info.forced ? ' (Manual Bypass)' : ''}\nSelection: ${info.nodeCount} nodes (${formatBytes(info.dataSize)})\nSnapshot Lock: ${info.fromLock ? 'Active' : 'None'}</div>
-        `;
+        contextLi.innerHTML = getIntentContextListItemInnerHtml(lastUsedContextInfo);
         list.appendChild(contextLi);
       }
 
       // Add UI Section Outline plan if available
       if (lastUsedUIOutline) {
         const outlineLi = document.createElement('li');
-        outlineLi.innerHTML = `
-          <div class="cmd-main-row">
-            <div class="status-dot skipped"></div>
-            <div class="cmd-info">
-              <span class="cmd-action">Plan</span>
-              <span class="cmd-name">: UI Section Outline</span>
-            </div>
-          </div>
-          <div class="cmd-change-row cmd-ui-outline">${lastUsedUIOutline}</div>
-        `;
+        outlineLi.innerHTML = getUiOutlinePlanListItemInnerHtml(lastUsedUIOutline);
         list.appendChild(outlineLi);
       }
 
@@ -23370,7 +23398,7 @@ Example structure:
 
         if (hasNode) {
           li.className = 'has-node';
-          li.title = 'Click to find in Figma';
+          li.title = t('settings.messages.commands.clickToFindInFigma');
           li.onclick = (e) => {
             e.stopPropagation();
             // Remove clicked class from all other command items
@@ -26071,7 +26099,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
         const { text: botMessage, wasTruncated } = agentResponse;
 
         // Parse and execute commands from response
-        updateThinkingIndicator('Parsing commands...');
+        updateThinkingIndicator(t('settings.messages.commands.parsing'));
         const parsed = parseAgentCommands(botMessage);
         let finalDisplayedMessage = parsed.message || botMessage;
 
@@ -26102,7 +26130,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
         if (safeCommands.length > 0) {
           removeThinkingIndicator();
           // Show AI message first
-          finalDisplayedMessage = parsed.message || 'Executing commands...';
+          finalDisplayedMessage = parsed.message || t('settings.messages.commands.executingDefault');
           lastExecutionMessageDiv = addMessage('bot', finalDisplayedMessage, null, null, wasTruncated);
 
           // Add bot message to chat history for archiving
@@ -26120,7 +26148,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
         } else if (parsed.commands && parsed.commands.length > 0) {
           removeThinkingIndicator();
           // Commands were present but were dropped (e.g., unsafe SVG)
-          const warn = 'Commands were not executed because the SVG was unsafe or invalid. Please try a simpler icon.';
+          const warn = t('settings.messages.commands.svgUnsafe');
           addMessage('bot', warn, null, null, wasTruncated);
           chatHistory.push({ role: 'model', parts: [{ text: warn }] });
         } else {
@@ -27216,7 +27244,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
                 label: 'Response Data',
                 details: error.rawData
               }];
-              attachExecutionDetails(lastExecutionMessageDiv, 'Error Details', infoItems);
+              attachExecutionDetails(lastExecutionMessageDiv, t('settings.messages.commands.errorDetails'), infoItems);
             }
           }
         }
@@ -27658,7 +27686,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
           });
 
           if (extraItems.length > 0) {
-            attachExecutionDetails(lastExecutionMessageDiv, 'Generation Details', extraItems);
+            attachExecutionDetails(lastExecutionMessageDiv, t('settings.messages.commands.generationDetails'), extraItems);
           }
         }
 
@@ -31644,19 +31672,31 @@ Based on the user's instruction, generate the appropriate commands to modify the
           }
 
           // Show toast feedback
-          const errorDetail = msg.error ? ` (${msg.error.action || 'command'}: ${msg.error.message})` : '';
+          const errorDetail = msg.error
+            ? t('settings.messages.commands.errorDetail', {
+                action: msg.error.action || t('settings.messages.commands.errorActionFallback'),
+                message: msg.error.message ?? ''
+              })
+            : '';
           let finalStatusText = '';
           if (msg.success > 0 && msg.failed === 0) {
-            finalStatusText = `Executed ${msg.success} command(s) successfully.`;
+            finalStatusText = t('settings.messages.commands.executedSuccess', { count: msg.success });
             showToast(finalStatusText, 'success');
           } else if (msg.success > 0 && msg.failed > 0) {
-            finalStatusText = `${msg.success} succeeded, ${msg.failed} failed${errorDetail}`;
+            finalStatusText = t('settings.messages.commands.executedPartial', {
+              success: msg.success,
+              failed: msg.failed,
+              errorDetail
+            });
             showToast(finalStatusText, 'warning');
           } else if (msg.failed > 0) {
-            finalStatusText = `${msg.failed} command(s) failed${errorDetail}`;
+            finalStatusText = t('settings.messages.commands.executedFailed', {
+              count: msg.failed,
+              errorDetail
+            });
             showToast(finalStatusText, 'error');
           } else if (msg.success === 0 && msg.failed === 0) {
-            finalStatusText = 'Done.';
+            finalStatusText = t('settings.messages.commands.done');
           }
 
           // Final update to progress tracking div
@@ -31679,37 +31719,15 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
                 // Add Intent-Based Context information
                 if (lastUsedContextInfo) {
-                  const info = lastUsedContextInfo;
                   const contextLi = document.createElement('li');
-                  // Use 'skipped' style for neutral info look
-                  const statusClass = 'skipped';
-
-                  contextLi.innerHTML = `
-                    <div class="cmd-main-row">
-                      <div class="status-dot ${statusClass}"></div>
-                      <div class="cmd-info">
-                        <span class="cmd-action">Context</span>
-                        <span class="cmd-name">: Intent-Based Context System</span>
-                      </div>
-                    </div>
-                    <div class="cmd-change-row cmd-intent-info">Intent: ${info.intent} (${info.complexity})\nContext Mode: ${info.contextMode}\nSelection: ${info.nodeCount} nodes (${formatBytes(info.dataSize)})\nSnapshot Lock: ${info.fromLock ? 'Active' : 'None'}</div>
-                  `;
+                  contextLi.innerHTML = getIntentContextListItemInnerHtml(lastUsedContextInfo);
                   list.appendChild(contextLi);
                 }
 
                 // Add UI Section Outline plan
                 if (lastUsedUIOutline) {
                   const outlineLi = document.createElement('li');
-                  outlineLi.innerHTML = `
-                    <div class="cmd-main-row">
-                      <div class="status-dot skipped"></div>
-                      <div class="cmd-info">
-                        <span class="cmd-action">Plan</span>
-                        <span class="cmd-name">: UI Section Outline</span>
-                      </div>
-                    </div>
-                    <div class="cmd-change-row cmd-ui-outline">${lastUsedUIOutline}</div>
-                  `;
+                  outlineLi.innerHTML = getUiOutlinePlanListItemInnerHtml(lastUsedUIOutline);
                   list.appendChild(outlineLi);
                 }
 
@@ -31721,7 +31739,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
                   if (hasNode) {
                     li.className = 'has-node';
-                    li.title = 'Click to find in Figma';
+                    li.title = t('settings.messages.commands.clickToFindInFigma');
                     li.onclick = (e) => {
                       e.stopPropagation();
                       // Remove clicked class from all other command items
@@ -31747,7 +31765,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
                       <span class="cmd-action">${cmd.action}</span>
                       <span class="cmd-name">${cmdName}</span>
                     </div>
-                    <span class="cmd-duration" title="Execution time">${durationText}</span>
+                    <span class="cmd-duration" title="${escapeHtml(t('settings.messages.commands.executionTimeTitle'))}">${durationText}</span>
                   </div>`;
 
                   if (cmd.before !== null && cmd.after !== null && cmd.before !== cmd.after) {
@@ -31813,7 +31831,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
           if (lastExecutionMessageDiv) {
             const contentDiv = lastExecutionMessageDiv.querySelector('.message-content');
             if (contentDiv) {
-              const statusText = `Executing commands (${msg.current}/${msg.total})...`;
+              const statusText = t('settings.messages.commands.executingProgress', {
+                current: msg.current,
+                total: msg.total
+              });
               let progressEl = contentDiv.querySelector('.execution-progress-status');
               if (!progressEl) {
                 progressEl = document.createElement('div');
