@@ -741,9 +741,9 @@
       pointer-events: none;
     }
 
-    .settings-loading::after {
-      content: ' (Loading...)';
+    .chat-status-loading-suffix {
       font-style: italic;
+      white-space: pre;
     }
 
     .provider-settings.hidden {

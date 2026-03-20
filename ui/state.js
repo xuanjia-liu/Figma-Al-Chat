@@ -7,8 +7,8 @@ export const INITIAL_BOT_MESSAGE_HTML = `
                 <path class="initial-message-star-small" fill="currentColor"
                   d="M19 2a1 1 0 0 1 .898.56l.048.117.35 1.026 1.027.35a1 1 0 0 1 .118 1.845l-.118.048-1.026.35-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117-.35-1.026-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048 1.026-.35.35-1.027A1 1 0 0 1 19 2Z" />
               </svg>
-              <span class="initial-message-title">Hello! I'm your Figma AI assistant.</span>
-              <span class="initial-message-body">Select Figma elements and ask a question, or just type directly.</span>
+              <span class="initial-message-title" data-i18n="settings.chat.initialMessageTitle">Hello! I'm your Figma AI assistant.</span>
+              <span class="initial-message-body" data-i18n="settings.chat.initialMessageBody">Select Figma elements and ask a question, or just type directly.</span>
             </div>
           </div>
         `;

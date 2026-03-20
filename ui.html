@@ -748,9 +748,9 @@
       pointer-events: none;
     }
 
-    .settings-loading::after {
-      content: ' (Loading...)';
+    .chat-status-loading-suffix {
       font-style: italic;
+      white-space: pre;
     }
 
     .provider-settings.hidden {
@@ -11557,9 +11557,11 @@
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
-          <input type="text" id="chatHistorySearchInput" placeholder="Search chats..." />
+          <input type="text" id="chatHistorySearchInput" data-i18n-placeholder="settings.historySidebar.searchPlaceholder"
+            placeholder="Search chats..." />
         </div>
-        <button class="sidebar-close-btn" id="sidebarCloseBtn" title="Close sidebar">
+        <button class="sidebar-close-btn" id="sidebarCloseBtn" data-i18n-title="settings.historySidebar.closeSidebarTitle"
+          title="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
           </svg>
@@ -11570,10 +11572,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
           </svg>
-          <span>No chat history yet</span>
+          <span data-i18n="settings.historySidebar.noHistoryYet">No chat history yet</span>
         </div>
       </div>
-      <button class="new-chat-fab" id="newChatBtn" title="Start a new chat (Cmd+N)">
+      <button class="new-chat-fab" id="newChatBtn" data-i18n-title="settings.historySidebar.newChatTitle"
+        title="Start a new chat (Cmd+N)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14" />
         </svg>
@@ -11582,7 +11585,7 @@
       <div class="sidebar-footer">
         <div class="storage-usage">
           <div class="storage-label">
-            <span>Storage Usage</span>
+            <span data-i18n="settings.historySidebar.storageUsage">Storage Usage</span>
             <span id="storageValue">—</span>
           </div>
           <div class="storage-meter">
@@ -11598,7 +11601,8 @@
     <!-- Main Content -->
     <div class="main-content">
       <div class="header">
-        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle chat history">
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn"
+          data-i18n-title="settings.historySidebar.toggleHistoryTitle" title="Toggle chat history">
           <svg width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
             stroke-width="2" viewBox="0 0 20 20">
             <path d="M1 10a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L1 6m0 0V1m0 5h5m4-1v5l4 2" />
@@ -11610,21 +11614,25 @@
               <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Zm0-16v7m0 2v2" />
             </svg>
 
-            <span>Configure API key in Settings to start</span>
+            <span data-i18n="settings.header.configureApiKeyPrompt">Configure API key in Settings to start</span>
+            <span id="chatStatusLoadingSuffix" class="chat-status-loading-suffix hidden"
+              data-i18n="settings.header.loadingSuffix"> (Loading...)</span>
           </div>
           <div class="selection-info hidden" id="selectionInfo">
             <span class="selection-count" id="selectionCount">0</span>
-            <span>selected:</span>
+            <span data-i18n="settings.header.selectionLabel">selected:</span>
             <span class="selection-names" id="selectionNames">Nothing selected</span>
           </div>
           <div class="token-counter paused" id="tokenCounter"
+            data-i18n-title="settings.header.tokenCounterResume"
             title="Estimated input tokens (selection + prompt) - Click to resume realtime updates">
             <span id="tokenCounterIcon">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
             </span>
-            <span id="tokenCountLabel"><span id="tokenCountValue">0</span> tokens</span>
+            <span id="tokenCountLabel"><span id="tokenCountValue">0</span> <span class="token-count-unit"
+                data-i18n="settings.header.tokensUnit">tokens</span></span>
           </div>
         </div>
         <div class="header-actions">
@@ -11699,7 +11707,7 @@
             <!-- Image Staging Area -->
             <div class="image-staging" id="imageStaging"></div>
             <div class="chat-input-row">
-              <button class="chat-input-ai-btn" id="chatInputAiBtn" title="Improve prompt with AI">
+              <button class="chat-input-ai-btn" id="chatInputAiBtn" data-i18n-title="settings.chat.improvePromptTitle" title="Improve prompt with AI">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                   <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
@@ -12989,7 +12997,7 @@
   var init_state = __esm({
     "ui/state.js"() {
       "use strict";
-      INITIAL_BOT_MESSAGE_HTML = '\n          <div class="message bot">\n            <div class="message-content initial-message">\n              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24">\n                <path class="initial-message-star-large" fill="currentColor"\n                  d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16.807 2.36a4 4 0 0 0 2.276 2.411l.217.081 2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06-2.36.807a4 4 0 0 0-2.412 2.276l-.08.216-.807 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081-2.36-.806c-1.75-.598-1.804-3.016-.16-3.724l.16-.062 2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216.806-2.361ZM11 6.094l-.806 2.36a6 6 0 0 1-3.49 3.649l-.25.091-2.36.806 2.36.806a5.999 5.999 0 0 1 3.65 3.49l.09.25.806 2.36.806-2.36a6 6 0 0 1 3.49-3.649l.25-.09 2.36-.807-2.36-.806a6 6 0 0 1-3.649-3.49l-.09-.25L11 6.094Z" />\n                <path class="initial-message-star-small" fill="currentColor"\n                  d="M19 2a1 1 0 0 1 .898.56l.048.117.35 1.026 1.027.35a1 1 0 0 1 .118 1.845l-.118.048-1.026.35-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117-.35-1.026-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048 1.026-.35.35-1.027A1 1 0 0 1 19 2Z" />\n              </svg>\n              <span class="initial-message-title">Hello! I\'m your Figma AI assistant.</span>\n              <span class="initial-message-body">Select Figma elements and ask a question, or just type directly.</span>\n            </div>\n          </div>\n        ';
+      INITIAL_BOT_MESSAGE_HTML = '\n          <div class="message bot">\n            <div class="message-content initial-message">\n              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24">\n                <path class="initial-message-star-large" fill="currentColor"\n                  d="M9.107 5.448c.598-1.75 3.016-1.803 3.725-.159l.06.16.807 2.36a4 4 0 0 0 2.276 2.411l.217.081 2.36.806c1.75.598 1.803 3.016.16 3.725l-.16.06-2.36.807a4 4 0 0 0-2.412 2.276l-.08.216-.807 2.361c-.598 1.75-3.016 1.803-3.724.16l-.062-.16-.806-2.36a4 4 0 0 0-2.276-2.412l-.216-.081-2.36-.806c-1.75-.598-1.804-3.016-.16-3.724l.16-.062 2.36-.806A4 4 0 0 0 8.22 8.025l.081-.216.806-2.361ZM11 6.094l-.806 2.36a6 6 0 0 1-3.49 3.649l-.25.091-2.36.806 2.36.806a5.999 5.999 0 0 1 3.65 3.49l.09.25.806 2.36.806-2.36a6 6 0 0 1 3.49-3.649l.25-.09 2.36-.807-2.36-.806a6 6 0 0 1-3.649-3.49l-.09-.25L11 6.094Z" />\n                <path class="initial-message-star-small" fill="currentColor"\n                  d="M19 2a1 1 0 0 1 .898.56l.048.117.35 1.026 1.027.35a1 1 0 0 1 .118 1.845l-.118.048-1.026.35-.35 1.027a1 1 0 0 1-1.845.117l-.048-.117-.35-1.026-1.027-.35a1 1 0 0 1-.118-1.845l.118-.048 1.026-.35.35-1.027A1 1 0 0 1 19 2Z" />\n              </svg>\n              <span class="initial-message-title" data-i18n="settings.chat.initialMessageTitle">Hello! I\'m your Figma AI assistant.</span>\n              <span class="initial-message-body" data-i18n="settings.chat.initialMessageBody">Select Figma elements and ask a question, or just type directly.</span>\n            </div>\n          </div>\n        ';
       DEFAULT_GEMINI_MODELS = [
         { id: "gemini-2.0-flash", displayName: "Gemini 2.0 Flash (Fast)" },
         { id: "gemini-1.5-pro-latest", displayName: "Gemini 1.5 Pro (Advanced)" },
@@ -19066,6 +19074,33 @@
           "settings.messages.commands.executionTimeTitle": "Execution time",
           "settings.messages.commands.generationDetails": "Generation Details",
           "settings.messages.commands.errorDetails": "Error Details",
+          "settings.chat.placeholderAsk": "Type your message or paste exported content...",
+          "settings.chat.placeholderAgent": "Describe what you want to do with the selected elements...",
+          "settings.chat.placeholderAudit": "Select elements and describe what to audit...",
+          "settings.chat.improvePromptTitle": "Improve prompt with AI",
+          "settings.chat.initialMessageTitle": "Hello! I'm your Figma AI assistant.",
+          "settings.chat.initialMessageBody": "Select Figma elements and ask a question, or just type directly.",
+          "settings.header.configureApiKeyPrompt": "Configure API key in Settings to start",
+          "settings.header.loadingSuffix": " (Loading...)",
+          "settings.header.selectionLabel": "selected:",
+          "settings.header.nothingSelected": "Nothing selected",
+          "settings.header.tokensUnit": "tokens",
+          "settings.header.tokenCounterShort": "Estimated input tokens (selection + prompt)",
+          "settings.header.tokenCounterLarge": "Selection is large! Consider reducing selection to avoid errors.",
+          "settings.header.tokenCounterPause": "Estimated input tokens (selection + prompt) - Click to pause realtime updates",
+          "settings.header.tokenCounterResume": "Estimated input tokens (selection + prompt) - Click to resume realtime updates",
+          "settings.historySidebar.searchPlaceholder": "Search chats...",
+          "settings.historySidebar.closeSidebarTitle": "Close sidebar",
+          "settings.historySidebar.noHistoryYet": "No chat history yet",
+          "settings.historySidebar.newChatTitle": "Start a new chat (Cmd+N)",
+          "settings.historySidebar.storageUsage": "Storage Usage",
+          "settings.historySidebar.toggleHistoryTitle": "Toggle chat history",
+          "settings.historySidebar.noChatsMatching": 'No chats found matching "{query}"',
+          "settings.historySidebar.deleteGroupTitle": "Delete all chats in this group",
+          "settings.historySidebar.editChatTitle": "Edit title",
+          "settings.historySidebar.deleteChatTitle": "Delete chat",
+          "settings.historySidebar.today": "Today",
+          "settings.historySidebar.yesterday": "Yesterday",
           "settings.provider.gemini": "Gemini",
           "settings.provider.openai": "OpenAI",
           "settings.provider.anthropic": "Anthropic"
@@ -19218,6 +19253,33 @@
           "settings.messages.commands.executionTimeTitle": "実行時間",
           "settings.messages.commands.generationDetails": "生成の詳細",
           "settings.messages.commands.errorDetails": "エラーの詳細",
+          "settings.chat.placeholderAsk": "メッセージを入力するか、エクスポートした内容を貼り付けてください…",
+          "settings.chat.placeholderAgent": "選択した要素に対して行いたいことを説明してください…",
+          "settings.chat.placeholderAudit": "要素を選択し、監査してほしい内容を説明してください…",
+          "settings.chat.improvePromptTitle": "AI でプロンプトを改善",
+          "settings.chat.initialMessageTitle": "こんにちは！Figma AI アシスタントです。",
+          "settings.chat.initialMessageBody": "Figma の要素を選択して質問するか、そのまま入力してください。",
+          "settings.header.configureApiKeyPrompt": "設定で API キーを構成して開始",
+          "settings.header.loadingSuffix": "（読み込み中…）",
+          "settings.header.selectionLabel": "選択中:",
+          "settings.header.nothingSelected": "選択なし",
+          "settings.header.tokensUnit": "トークン",
+          "settings.header.tokenCounterShort": "推定入力トークン（選択＋プロンプト）",
+          "settings.header.tokenCounterLarge": "選択範囲が大きいです。エラーを避けるため範囲を小さくしてください。",
+          "settings.header.tokenCounterPause": "推定入力トークン（選択＋プロンプト）— クリックでリアルタイム更新を一時停止",
+          "settings.header.tokenCounterResume": "推定入力トークン（選択＋プロンプト）— クリックでリアルタイム更新を再開",
+          "settings.historySidebar.searchPlaceholder": "チャットを検索…",
+          "settings.historySidebar.closeSidebarTitle": "サイドバーを閉じる",
+          "settings.historySidebar.noHistoryYet": "チャット履歴はまだありません",
+          "settings.historySidebar.newChatTitle": "新しいチャット（Cmd+N）",
+          "settings.historySidebar.storageUsage": "ストレージ使用量",
+          "settings.historySidebar.toggleHistoryTitle": "チャット履歴を表示/非表示",
+          "settings.historySidebar.noChatsMatching": "「{query}」に一致するチャットはありません",
+          "settings.historySidebar.deleteGroupTitle": "このグループのチャットをすべて削除",
+          "settings.historySidebar.editChatTitle": "タイトルを編集",
+          "settings.historySidebar.deleteChatTitle": "チャットを削除",
+          "settings.historySidebar.today": "今日",
+          "settings.historySidebar.yesterday": "昨日",
           "settings.provider.gemini": "Gemini",
           "settings.provider.openai": "OpenAI",
           "settings.provider.anthropic": "Anthropic"
@@ -19370,6 +19432,33 @@
           "settings.messages.commands.executionTimeTitle": "执行时间",
           "settings.messages.commands.generationDetails": "生成详情",
           "settings.messages.commands.errorDetails": "错误详情",
+          "settings.chat.placeholderAsk": "输入消息或粘贴导出的内容…",
+          "settings.chat.placeholderAgent": "描述要对所选元素执行的操作…",
+          "settings.chat.placeholderAudit": "选择元素并描述要审计的内容…",
+          "settings.chat.improvePromptTitle": "使用 AI 改进提示",
+          "settings.chat.initialMessageTitle": "你好！我是你的 Figma AI 助手。",
+          "settings.chat.initialMessageBody": "选择 Figma 元素并提问，或直接输入。",
+          "settings.header.configureApiKeyPrompt": "请在设置中配置 API 密钥以开始",
+          "settings.header.loadingSuffix": "（加载中…）",
+          "settings.header.selectionLabel": "已选：",
+          "settings.header.nothingSelected": "未选择任何内容",
+          "settings.header.tokensUnit": "tokens",
+          "settings.header.tokenCounterShort": "预估输入 tokens（选择 + 提示）",
+          "settings.header.tokenCounterLarge": "选择范围较大！建议缩小选择以避免错误。",
+          "settings.header.tokenCounterPause": "预估输入 tokens（选择 + 提示）— 点击暂停实时更新",
+          "settings.header.tokenCounterResume": "预估输入 tokens（选择 + 提示）— 点击恢复实时更新",
+          "settings.historySidebar.searchPlaceholder": "搜索聊天记录…",
+          "settings.historySidebar.closeSidebarTitle": "关闭侧边栏",
+          "settings.historySidebar.noHistoryYet": "暂无聊天记录",
+          "settings.historySidebar.newChatTitle": "开始新对话（Cmd+N）",
+          "settings.historySidebar.storageUsage": "存储用量",
+          "settings.historySidebar.toggleHistoryTitle": "切换聊天历史侧边栏",
+          "settings.historySidebar.noChatsMatching": "未找到与「{query}」匹配的聊天",
+          "settings.historySidebar.deleteGroupTitle": "删除此分组下的所有聊天",
+          "settings.historySidebar.editChatTitle": "编辑标题",
+          "settings.historySidebar.deleteChatTitle": "删除聊天",
+          "settings.historySidebar.today": "今天",
+          "settings.historySidebar.yesterday": "昨天",
           "settings.provider.gemini": "Gemini",
           "settings.provider.openai": "OpenAI",
           "settings.provider.anthropic": "Anthropic"
@@ -22354,6 +22443,12 @@
             expandBtn.title = tu("actions.comments.drawer.moreAiActions");
           }
         }
+        refreshChatInputPlaceholder();
+        syncTokenCounterTitle();
+        if (typeof renderChatHistoryList === "function") renderChatHistoryList();
+        if (Array.isArray(lastKnownSelectionItems) && lastKnownSelectionItems.length === 0 && selectionNames) {
+          selectionNames.textContent = t("settings.header.nothingSelected");
+        }
       }
       var CSS_COLOR_NAMES = "aliceblue,antiquewhite,aqua,aquamarine,azure,beige,bisque,black,blanchedalmond,blue,blueviolet,brown,burlywood,cadetblue,chartreuse,chocolate,coral,cornflowerblue,cornsilk,crimson,cyan,darkblue,darkcyan,darkgoldenrod,darkgray,darkgreen,darkgrey,darkkhaki,darkmagenta,darkolivegreen,darkorange,darkorchid,darkred,darksalmon,darkseagreen,darkslateblue,darkslategray,darkslategrey,darkturquoise,darkviolet,deeppink,deepskyblue,dimgray,dimgrey,dodgerblue,firebrick,floralwhite,forestgreen,fuchsia,gainsboro,ghostwhite,gold,goldenrod,gray,green,greenyellow,grey,honeydew,hotpink,indianred,indigo,ivory,khaki,lavender,lavenderblush,lawngreen,lemonchiffon,lightblue,lightcoral,lightcyan,lightgoldenrodyellow,lightgray,lightgreen,lightgrey,lightpink,lightsalmon,lightseagreen,lightskyblue,lightslategray,lightslategrey,lightsteelblue,lightyellow,lime,limegreen,linen,magenta,maroon,mediumaquamarine,mediumblue,mediumorchid,mediumpurple,mediumseagreen,mediumslateblue,mediumspringgreen,mediumturquoise,mediumvioletred,midnightblue,mintcream,mistyrose,moccasin,navajowhite,navy,oldlace,olive,olivedrab,orange,orangered,orchid,palegoldenrod,palegreen,paleturquoise,palevioletred,papayawhip,peachpuff,peru,pink,plum,powderblue,purple,rebeccapurple,red,rosybrown,royalblue,saddlebrown,salmon,sandybrown,seagreen,seashell,sienna,silver,skyblue,slateblue,slategray,slategrey,snow,springgreen,steelblue,tan,teal,thistle,tomato,turquoise,violet,wheat,white,whitesmoke,yellow,greenyellow".split(",");
       var emojiMap = {
@@ -24238,7 +24333,7 @@
           }
         });
         if (items.length === 0) {
-          selectionNames.textContent = "Nothing selected";
+          selectionNames.textContent = t("settings.header.nothingSelected");
           nodeActionsContainer.classList.remove("hidden");
           updateNodeActionsContent(items);
         } else {
@@ -24264,13 +24359,35 @@
         }
       }
       var chatStatusHeader = document.getElementById("chatStatusHeader");
+      var chatStatusLoadingSuffix = document.getElementById("chatStatusLoadingSuffix");
       var settingsCheckBadge = document.getElementById("settingsCheckBadge");
       var chatMessages = document.getElementById("chatMessages");
       var lastLocalStylesPayload = null;
       var chatInput = document.getElementById("chatInput");
+      function refreshChatInputPlaceholder() {
+        if (!chatInput) return;
+        const key = currentMode === "agent" ? "settings.chat.placeholderAgent" : currentMode === "audit" ? "settings.chat.placeholderAudit" : "settings.chat.placeholderAsk";
+        chatInput.placeholder = t(key);
+      }
+      function showInitialChatMessages() {
+        chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+        applySettingsLocale(currentSettingsLocale);
+      }
       var tokenCounter = document.getElementById("tokenCounter");
       var tokenCounterIcon = document.getElementById("tokenCounterIcon");
       var tokenCountValue = document.getElementById("tokenCountValue");
+      function syncTokenCounterTitle() {
+        if (!tokenCounter) return;
+        if (tokenCounter.classList.contains("warning")) {
+          tokenCounter.title = t("settings.header.tokenCounterLarge");
+          return;
+        }
+        if (tokenCounter.classList.contains("paused")) {
+          tokenCounter.title = t("settings.header.tokenCounterResume");
+        } else {
+          tokenCounter.title = t("settings.header.tokenCounterPause");
+        }
+      }
       var chatSendBtn = document.getElementById("chatSendBtn");
       var plusBtn = document.getElementById("plusBtn");
       var exportMenu = document.getElementById("exportMenu");
@@ -25032,10 +25149,7 @@
         if (lastKnownSelectionItems) {
           handleSelectionChange(lastKnownSelectionItems);
         }
-        if (mode === "agent") {
-          chatInput.placeholder = "Describe what you want to do with the selected elements...";
-        } else if (mode === "audit") {
-          chatInput.placeholder = "Select elements and describe what to audit...";
+        if (mode === "audit") {
           const auditSettingsBtn = document.getElementById("auditSettingsBtn");
           if (auditSettingsBtn) {
             auditSettingsBtn.classList.add("pulsing");
@@ -25043,9 +25157,8 @@
               auditSettingsBtn.classList.remove("pulsing");
             }, 3e3);
           }
-        } else {
-          chatInput.placeholder = "Type your message or paste exported content...";
         }
+        refreshChatInputPlaceholder();
       }
       modeAskBtn.addEventListener("click", () => setMode("ask"));
       modeAgentBtn.addEventListener("click", () => setMode("agent"));
@@ -38669,13 +38782,15 @@
         if (!settingsLoaded) {
           chatStatusHeader.classList.remove("hidden");
           chatStatusHeader.classList.add("settings-loading");
+          if (chatStatusLoadingSuffix) chatStatusLoadingSuffix.classList.remove("hidden");
           selectionInfo.classList.add("hidden");
           settingsCheckBadge.classList.remove("show");
           return;
         }
+        if (chatStatusLoadingSuffix) chatStatusLoadingSuffix.classList.add("hidden");
+        chatStatusHeader.classList.remove("settings-loading");
         if (isAiOffModeEnabled()) {
           chatStatusHeader.classList.add("hidden");
-          chatStatusHeader.classList.remove("settings-loading");
           selectionInfo.classList.remove("hidden");
           settingsCheckBadge.classList.add("show");
           return;
@@ -38683,12 +38798,10 @@
         const hasApiKey = getCurrentApiKey();
         if (hasApiKey) {
           chatStatusHeader.classList.add("hidden");
-          chatStatusHeader.classList.remove("settings-loading");
           selectionInfo.classList.remove("hidden");
           settingsCheckBadge.classList.add("show");
         } else {
           chatStatusHeader.classList.remove("hidden");
-          chatStatusHeader.classList.remove("settings-loading");
           selectionInfo.classList.add("hidden");
           settingsCheckBadge.classList.remove("show");
         }
@@ -38829,20 +38942,26 @@
         const min = String(date.getMinutes()).padStart(2, "0");
         return "".concat(yy, "/").concat(mm, "/").concat(dd, " ").concat(hh, ":").concat(min);
       }
+      function getChatHistoryDateLocale() {
+        if (currentSettingsLocale === "ja") return "ja-JP";
+        if (currentSettingsLocale === "zh-CN") return "zh-CN";
+        return "en-US";
+      }
       function getDateGroupLabel(timestamp) {
         const date = new Date(timestamp);
         const now = /* @__PURE__ */ new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const chatDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         const diffDays = Math.floor((today - chatDate) / (1e3 * 60 * 60 * 24));
+        const loc = getChatHistoryDateLocale();
         if (diffDays === 0) {
-          return "Today";
+          return t("settings.historySidebar.today");
         } else if (diffDays === 1) {
-          return "Yesterday";
+          return t("settings.historySidebar.yesterday");
         } else if (diffDays < 7) {
-          return date.toLocaleDateString("en-US", { weekday: "long" });
+          return date.toLocaleDateString(loc, { weekday: "long" });
         } else {
-          return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          return date.toLocaleDateString(loc, { month: "short", day: "numeric", year: "numeric" });
         }
       }
       function getDateKey(timestamp) {
@@ -39127,7 +39246,7 @@
         if (currentChatId === chatId) {
           currentChatId = null;
           chatHistory = [];
-          chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+          showInitialChatMessages();
           pendingAskBackContext = null;
           if (chatInput) chatInput.dataset.askBackActive = "false";
         }
@@ -39142,7 +39261,7 @@
         if (currentChatId && chatIdsToDelete.includes(currentChatId)) {
           currentChatId = null;
           chatHistory = [];
-          chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+          showInitialChatMessages();
           pendingAskBackContext = null;
           if (chatInput) chatInput.dataset.askBackActive = "false";
         }
@@ -39170,7 +39289,7 @@
         currentChatId = null;
         chatHistory = [];
         isFirstTurnInChat = true;
-        chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+        showInitialChatMessages();
         renderChatHistoryList();
         parent.postMessage({ pluginMessage: { type: "save-last-chat-id", chatId: null } }, "*");
         if (isSidebarOpen) {
@@ -39199,7 +39318,10 @@
         if (sortedArchives.length === 0 && chatHistorySearchQuery) {
           const emptyResults = document.createElement("div");
           emptyResults.className = "chat-history-empty chat-history-empty-results";
-          emptyResults.innerHTML = '\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n            <circle cx="11" cy="11" r="8" />\n            <path d="M21 21l-4.35-4.35" />\n          </svg>\n          <span>No chats found matching "'.concat(chatHistorySearchQuery, '"</span>\n        ');
+          emptyResults.innerHTML = '\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n            <circle cx="11" cy="11" r="8" />\n            <path d="M21 21l-4.35-4.35" />\n          </svg>';
+          const emptySearchLabel = document.createElement("span");
+          emptySearchLabel.textContent = t("settings.historySidebar.noChatsMatching", { query: chatHistorySearchQuery });
+          emptyResults.appendChild(emptySearchLabel);
           chatHistoryList.appendChild(emptyResults);
           return;
         }
@@ -39214,8 +39336,9 @@
         groupedChats.forEach((chats, dateKey) => {
           const groupHeader = document.createElement("div");
           groupHeader.className = "chat-history-date-group";
-          groupHeader.innerHTML = '\n          <span class="chat-history-group-title">'.concat(getDateGroupLabel(chats[0].updatedAt || chats[0].createdAt), '</span>\n          <button class="chat-history-group-delete-btn" title="Delete all chats in this group">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>\n            </svg>\n          </button>\n        ');
+          groupHeader.innerHTML = '\n          <span class="chat-history-group-title">'.concat(getDateGroupLabel(chats[0].updatedAt || chats[0].createdAt), '</span>\n          <button class="chat-history-group-delete-btn" type="button">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>\n            </svg>\n          </button>\n        ');
           const deleteBtn = groupHeader.querySelector(".chat-history-group-delete-btn");
+          deleteBtn.title = t("settings.historySidebar.deleteGroupTitle");
           deleteBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             if (confirm("Are you sure you want to delete all ".concat(chats.length, " chats from ").concat(getDateGroupLabel(chats[0].updatedAt || chats[0].createdAt), "?"))) {
@@ -39227,7 +39350,9 @@
             const item = document.createElement("div");
             item.className = "chat-history-item" + (chat.id === currentChatId ? " active" : "");
             item.dataset.chatId = chat.id;
-            item.innerHTML = '\n            <div class="chat-history-item-content">\n              <div class="chat-history-item-title">'.concat(escapeHtml(chat.title), '</div>\n              <div class="chat-history-item-date">').concat(formatChatDate(chat.updatedAt || chat.createdAt), '</div>\n            </div>\n            <div class="chat-history-item-actions">\n              <button class="chat-history-item-btn edit" title="Edit title">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>\n                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>\n                </svg>\n              </button>\n              <button class="chat-history-item-btn delete" title="Delete chat">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>\n                </svg>\n              </button>\n            </div>\n          ');
+            item.innerHTML = '\n            <div class="chat-history-item-content">\n              <div class="chat-history-item-title">'.concat(escapeHtml(chat.title), '</div>\n              <div class="chat-history-item-date">').concat(formatChatDate(chat.updatedAt || chat.createdAt), '</div>\n            </div>\n            <div class="chat-history-item-actions">\n              <button class="chat-history-item-btn edit" type="button">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>\n                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>\n                </svg>\n              </button>\n              <button class="chat-history-item-btn delete" type="button">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>\n                </svg>\n              </button>\n            </div>\n          ');
+            item.querySelector(".edit").title = t("settings.historySidebar.editChatTitle");
+            item.querySelector(".delete").title = t("settings.historySidebar.deleteChatTitle");
             item.addEventListener("click", (e) => {
               if (!e.target.closest(".chat-history-item-btn")) {
                 loadChatFromArchive(chat.id);
@@ -43114,11 +43239,10 @@
           }
           if (currentSelectionDataSize > maxSelectionSize * 0.8) {
             tokenCounter.classList.add("warning");
-            tokenCounter.title = "Selection is large! Consider reducing selection to avoid errors.";
           } else {
             tokenCounter.classList.remove("warning");
-            tokenCounter.title = "Estimated input tokens (selection + prompt)";
           }
+          syncTokenCounterTitle();
         };
         if (window.requestIdleCallback) {
           window.requestIdleCallback(() => performUpdate(), { timeout: 100 });
@@ -43448,12 +43572,12 @@
           isTokenCounterEnabled = !isTokenCounterEnabled;
           if (isTokenCounterEnabled) {
             tokenCounter.classList.remove("paused");
-            tokenCounter.title = "Estimated input tokens (selection + prompt) - Click to pause realtime updates";
+            tokenCounter.title = t("settings.header.tokenCounterPause");
             tokenCounterIcon.innerHTML = '\n            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <rect x="6" y="4" width="4" height="16"></rect>\n              <rect x="14" y="4" width="4" height="16"></rect>\n            </svg>\n          ';
             updateTokenCount();
           } else {
             tokenCounter.classList.add("paused");
-            tokenCounter.title = "Estimated input tokens (selection + prompt) - Click to resume realtime updates";
+            tokenCounter.title = t("settings.header.tokenCounterResume");
             tokenCounterIcon.innerHTML = '\n            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <polygon points="5 3 19 12 5 21 5 3"></polygon>\n            </svg>\n          ';
           }
         });
@@ -45438,7 +45562,7 @@
           }
         }
       };
-      chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+      showInitialChatMessages();
       initQuickActionUsage();
       populateChatModelDropdown();
       loadSettings();

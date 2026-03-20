@@ -334,6 +334,13 @@ import {
           expandBtn.title = tu('actions.comments.drawer.moreAiActions');
         }
       }
+
+      refreshChatInputPlaceholder();
+      syncTokenCounterTitle();
+      if (typeof renderChatHistoryList === 'function') renderChatHistoryList();
+      if (Array.isArray(lastKnownSelectionItems) && lastKnownSelectionItems.length === 0 && selectionNames) {
+        selectionNames.textContent = t('settings.header.nothingSelected');
+      }
     }
 
     // CSS Color Names for detection
@@ -2835,7 +2842,7 @@ import {
       });
 
       if (items.length === 0) {
-        selectionNames.textContent = 'Nothing selected';
+        selectionNames.textContent = t('settings.header.nothingSelected');
         // Always show node actions container even when nothing is selected
         // It will contain "New Chat" and "Last used" actions
         nodeActionsContainer.classList.remove('hidden');
@@ -2869,13 +2876,41 @@ import {
       }
     }
     const chatStatusHeader = document.getElementById('chatStatusHeader');
+    const chatStatusLoadingSuffix = document.getElementById('chatStatusLoadingSuffix');
     const settingsCheckBadge = document.getElementById('settingsCheckBadge');
     const chatMessages = document.getElementById('chatMessages');
     let lastLocalStylesPayload = null;
     const chatInput = document.getElementById('chatInput');
+
+    function refreshChatInputPlaceholder() {
+      if (!chatInput) return;
+      const key =
+        currentMode === 'agent' ? 'settings.chat.placeholderAgent' :
+        currentMode === 'audit' ? 'settings.chat.placeholderAudit' :
+        'settings.chat.placeholderAsk';
+      chatInput.placeholder = t(key);
+    }
+
+    function showInitialChatMessages() {
+      chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+      applySettingsLocale(currentSettingsLocale);
+    }
     const tokenCounter = document.getElementById('tokenCounter');
     const tokenCounterIcon = document.getElementById('tokenCounterIcon');
     const tokenCountValue = document.getElementById('tokenCountValue');
+
+    function syncTokenCounterTitle() {
+      if (!tokenCounter) return;
+      if (tokenCounter.classList.contains('warning')) {
+        tokenCounter.title = t('settings.header.tokenCounterLarge');
+        return;
+      }
+      if (tokenCounter.classList.contains('paused')) {
+        tokenCounter.title = t('settings.header.tokenCounterResume');
+      } else {
+        tokenCounter.title = t('settings.header.tokenCounterPause');
+      }
+    }
     const chatSendBtn = document.getElementById('chatSendBtn');
     const plusBtn = document.getElementById('plusBtn');
     const exportMenu = document.getElementById('exportMenu');
@@ -3812,10 +3847,7 @@ import {
       }
 
       // Realistic data based on mode
-      if (mode === 'agent') {
-        chatInput.placeholder = 'Describe what you want to do with the selected elements...';
-      } else if (mode === 'audit') {
-        chatInput.placeholder = 'Select elements and describe what to audit...';
+      if (mode === 'audit') {
         // Pulse audit settings button if it exists
         const auditSettingsBtn = document.getElementById('auditSettingsBtn');
         if (auditSettingsBtn) {
@@ -3825,9 +3857,8 @@ import {
             auditSettingsBtn.classList.remove('pulsing');
           }, 3000);
         }
-      } else {
-        chatInput.placeholder = 'Type your message or paste exported content...';
       }
+      refreshChatInputPlaceholder();
     }
 
     modeAskBtn.addEventListener('click', () => setMode('ask'));
@@ -22462,14 +22493,17 @@ Example structure:
         // Settings still loading - show loading state
         chatStatusHeader.classList.remove('hidden');
         chatStatusHeader.classList.add('settings-loading');
+        if (chatStatusLoadingSuffix) chatStatusLoadingSuffix.classList.remove('hidden');
         selectionInfo.classList.add('hidden');
         settingsCheckBadge.classList.remove('show');
         return;
       }
 
+      if (chatStatusLoadingSuffix) chatStatusLoadingSuffix.classList.add('hidden');
+      chatStatusHeader.classList.remove('settings-loading');
+
       if (isAiOffModeEnabled()) {
         chatStatusHeader.classList.add('hidden');
-        chatStatusHeader.classList.remove('settings-loading');
         selectionInfo.classList.remove('hidden');
         settingsCheckBadge.classList.add('show');
         return;
@@ -22479,13 +22513,11 @@ Example structure:
       if (hasApiKey) {
         // API key is set - hide status, show selection info and check badge
         chatStatusHeader.classList.add('hidden');
-        chatStatusHeader.classList.remove('settings-loading');
         selectionInfo.classList.remove('hidden');
         settingsCheckBadge.classList.add('show');
       } else {
         // No API key - show status, hide selection info and check badge
         chatStatusHeader.classList.remove('hidden');
-        chatStatusHeader.classList.remove('settings-loading');
         selectionInfo.classList.add('hidden');
         settingsCheckBadge.classList.remove('show');
       }
@@ -22663,6 +22695,12 @@ Example structure:
       return `${yy}/${mm}/${dd} ${hh}:${min}`;
     }
 
+    function getChatHistoryDateLocale() {
+      if (currentSettingsLocale === 'ja') return 'ja-JP';
+      if (currentSettingsLocale === 'zh-CN') return 'zh-CN';
+      return 'en-US';
+    }
+
     // Get date group label for grouping chats by date
     function getDateGroupLabel(timestamp) {
       const date = new Date(timestamp);
@@ -22670,15 +22708,16 @@ Example structure:
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const chatDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
       const diffDays = Math.floor((today - chatDate) / (1000 * 60 * 60 * 24));
+      const loc = getChatHistoryDateLocale();
 
       if (diffDays === 0) {
-        return 'Today';
+        return t('settings.historySidebar.today');
       } else if (diffDays === 1) {
-        return 'Yesterday';
+        return t('settings.historySidebar.yesterday');
       } else if (diffDays < 7) {
-        return date.toLocaleDateString('en-US', { weekday: 'long' });
+        return date.toLocaleDateString(loc, { weekday: 'long' });
       } else {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return date.toLocaleDateString(loc, { month: 'short', day: 'numeric', year: 'numeric' });
       }
     }
 
@@ -23071,7 +23110,7 @@ Example structure:
         // Also clear chatHistory to prevent resurrection on next load
         chatHistory = [];
         // Reset chat display to initial state
-        chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+        showInitialChatMessages();
 
         // Reset ask-back state
         pendingAskBackContext = null;
@@ -23100,7 +23139,7 @@ Example structure:
         // Also clear chatHistory to prevent resurrection on next load
         chatHistory = [];
         // Reset chat display to initial state
-        chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+        showInitialChatMessages();
 
         // Reset ask-back state
         pendingAskBackContext = null;
@@ -23152,7 +23191,7 @@ Example structure:
       isFirstTurnInChat = true; // Reset session tracking for new chat
 
       // Reset chat messages to initial state
-      chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+      showInitialChatMessages();
 
       // Update sidebar to remove active state
       renderChatHistoryList();
@@ -23202,9 +23241,10 @@ Example structure:
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
-          </svg>
-          <span>No chats found matching "${chatHistorySearchQuery}"</span>
-        `;
+          </svg>`;
+        const emptySearchLabel = document.createElement('span');
+        emptySearchLabel.textContent = t('settings.historySidebar.noChatsMatching', { query: chatHistorySearchQuery });
+        emptyResults.appendChild(emptySearchLabel);
         chatHistoryList.appendChild(emptyResults);
         return;
       }
@@ -23227,7 +23267,7 @@ Example structure:
 
         groupHeader.innerHTML = `
           <span class="chat-history-group-title">${getDateGroupLabel(chats[0].updatedAt || chats[0].createdAt)}</span>
-          <button class="chat-history-group-delete-btn" title="Delete all chats in this group">
+          <button class="chat-history-group-delete-btn" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
             </svg>
@@ -23236,6 +23276,7 @@ Example structure:
 
         // Add delete all button event listener
         const deleteBtn = groupHeader.querySelector('.chat-history-group-delete-btn');
+        deleteBtn.title = t('settings.historySidebar.deleteGroupTitle');
         deleteBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           if (confirm(`Are you sure you want to delete all ${chats.length} chats from ${getDateGroupLabel(chats[0].updatedAt || chats[0].createdAt)}?`)) {
@@ -23257,19 +23298,22 @@ Example structure:
               <div class="chat-history-item-date">${formatChatDate(chat.updatedAt || chat.createdAt)}</div>
             </div>
             <div class="chat-history-item-actions">
-              <button class="chat-history-item-btn edit" title="Edit title">
+              <button class="chat-history-item-btn edit" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
               </button>
-              <button class="chat-history-item-btn delete" title="Delete chat">
+              <button class="chat-history-item-btn delete" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                 </svg>
               </button>
             </div>
           `;
+
+          item.querySelector('.edit').title = t('settings.historySidebar.editChatTitle');
+          item.querySelector('.delete').title = t('settings.historySidebar.deleteChatTitle');
 
           // Click on item to load chat
           item.addEventListener('click', (e) => {
@@ -28501,11 +28545,10 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
 
         if (currentSelectionDataSize > maxSelectionSize * 0.8) {
           tokenCounter.classList.add('warning');
-          tokenCounter.title = "Selection is large! Consider reducing selection to avoid errors.";
         } else {
           tokenCounter.classList.remove('warning');
-          tokenCounter.title = "Estimated input tokens (selection + prompt)";
         }
+        syncTokenCounterTitle();
       };
 
       // Use requestIdleCallback if available, otherwise just run it
@@ -29459,7 +29502,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
         if (isTokenCounterEnabled) {
           tokenCounter.classList.remove('paused');
-          tokenCounter.title = "Estimated input tokens (selection + prompt) - Click to pause realtime updates";
+          tokenCounter.title = t('settings.header.tokenCounterPause');
           tokenCounterIcon.innerHTML = `
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="6" y="4" width="4" height="16"></rect>
@@ -29469,7 +29512,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           updateTokenCount();
         } else {
           tokenCounter.classList.add('paused');
-          tokenCounter.title = "Estimated input tokens (selection + prompt) - Click to resume realtime updates";
+          tokenCounter.title = t('settings.header.tokenCounterResume');
           tokenCounterIcon.innerHTML = `
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -31970,7 +32013,7 @@ Update the text content for all selected nodes accordingly.`;
     };
 
     // Initialize
-    chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+    showInitialChatMessages();
     initQuickActionUsage();
     populateChatModelDropdown();
     loadSettings();

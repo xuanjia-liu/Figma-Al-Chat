@@ -26,9 +26,11 @@
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
-          <input type="text" id="chatHistorySearchInput" placeholder="Search chats..." />
+          <input type="text" id="chatHistorySearchInput" data-i18n-placeholder="settings.historySidebar.searchPlaceholder"
+            placeholder="Search chats..." />
         </div>
-        <button class="sidebar-close-btn" id="sidebarCloseBtn" title="Close sidebar">
+        <button class="sidebar-close-btn" id="sidebarCloseBtn" data-i18n-title="settings.historySidebar.closeSidebarTitle"
+          title="Close sidebar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
           </svg>
@@ -39,10 +41,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
           </svg>
-          <span>No chat history yet</span>
+          <span data-i18n="settings.historySidebar.noHistoryYet">No chat history yet</span>
         </div>
       </div>
-      <button class="new-chat-fab" id="newChatBtn" title="Start a new chat (Cmd+N)">
+      <button class="new-chat-fab" id="newChatBtn" data-i18n-title="settings.historySidebar.newChatTitle"
+        title="Start a new chat (Cmd+N)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12h14" />
         </svg>
@@ -51,7 +54,7 @@
       <div class="sidebar-footer">
         <div class="storage-usage">
           <div class="storage-label">
-            <span>Storage Usage</span>
+            <span data-i18n="settings.historySidebar.storageUsage">Storage Usage</span>
             <span id="storageValue">—</span>
           </div>
           <div class="storage-meter">
@@ -67,7 +70,8 @@
     <!-- Main Content -->
     <div class="main-content">
       <div class="header">
-        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Toggle chat history">
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn"
+          data-i18n-title="settings.historySidebar.toggleHistoryTitle" title="Toggle chat history">
           <svg width="20" height="20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
             stroke-width="2" viewBox="0 0 20 20">
             <path d="M1 10a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L1 6m0 0V1m0 5h5m4-1v5l4 2" />
@@ -79,21 +83,25 @@
               <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Zm0-16v7m0 2v2" />
             </svg>
 
-            <span>Configure API key in Settings to start</span>
+            <span data-i18n="settings.header.configureApiKeyPrompt">Configure API key in Settings to start</span>
+            <span id="chatStatusLoadingSuffix" class="chat-status-loading-suffix hidden"
+              data-i18n="settings.header.loadingSuffix"> (Loading...)</span>
           </div>
           <div class="selection-info hidden" id="selectionInfo">
             <span class="selection-count" id="selectionCount">0</span>
-            <span>selected:</span>
+            <span data-i18n="settings.header.selectionLabel">selected:</span>
             <span class="selection-names" id="selectionNames">Nothing selected</span>
           </div>
           <div class="token-counter paused" id="tokenCounter"
+            data-i18n-title="settings.header.tokenCounterResume"
             title="Estimated input tokens (selection + prompt) - Click to resume realtime updates">
             <span id="tokenCounterIcon">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
               </svg>
             </span>
-            <span id="tokenCountLabel"><span id="tokenCountValue">0</span> tokens</span>
+            <span id="tokenCountLabel"><span id="tokenCountValue">0</span> <span class="token-count-unit"
+                data-i18n="settings.header.tokensUnit">tokens</span></span>
           </div>
         </div>
         <div class="header-actions">
@@ -168,7 +176,7 @@
             <!-- Image Staging Area -->
             <div class="image-staging" id="imageStaging"></div>
             <div class="chat-input-row">
-              <button class="chat-input-ai-btn" id="chatInputAiBtn" title="Improve prompt with AI">
+              <button class="chat-input-ai-btn" id="chatInputAiBtn" data-i18n-title="settings.chat.improvePromptTitle" title="Improve prompt with AI">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                   <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
