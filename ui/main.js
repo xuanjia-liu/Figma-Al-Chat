@@ -23819,17 +23819,61 @@ Example structure:
                 handleAskBackSelection(opt.value || opt.label || opt, card);
                 return;
               }
-              if (card.dataset.svg) {
-                // Direct insertion if we have the SVG data
-                const ctx = resolveAskBackContext(card) || pendingAskBackContext;
-                const size = ctx?.iconSize || 24;
-                handleDirectIconInsertion(opt.id || opt.value || opt.label, card.dataset.svg, size);
+              const ctx = resolveAskBackContext(card) || pendingAskBackContext;
+              const size = Number(ctx?.iconSize) || 24;
+              const iconId = opt.id || opt.value || opt.label;
+              if (!iconId) {
+                await handleAskBackSelection(opt.value || opt.label || opt, card);
+                return;
+              }
+              // Previews use theme tint (?color=text-primary); Figma insert must match drawer (no Iconify color param).
+              const insertSameAsDrawer = async () => {
+                let svg = null;
+                if (opt.source === 'antv' || (typeof iconId === 'string' && iconId.startsWith('http'))) {
+                  svg = await fetchAntVIconSvg(String(iconId), size, null);
+                } else {
+                  svg = await fetchIconifySvg(String(iconId), size, null);
+                }
+                if (!svg) return false;
+                let s = svg;
+                const issues = checkSvgQuality(s);
+                if (issues.length > 0) {
+                  s = autoFixSvgQuality(s, issues);
+                }
+                s = prepareSvgForFigma(s, size, null);
+                await executeCommands([{
+                  action: 'createNodeFromSvg',
+                  svg: s,
+                  name: String(iconId),
+                  width: size,
+                  height: size,
+                  x: 0,
+                  y: 0
+                }]);
+                return true;
+              };
 
-                // Still close the ask-back UI cleanly
-                chatInput.dataset.askBackActive = 'false';
-                pendingAskBackContext = null;
-              } else {
-                handleAskBackSelection(opt.value || opt.label || opt, card);
+              showThinkingIndicator('Fetching icon...');
+              try {
+                const ok = await insertSameAsDrawer();
+                if (ok) {
+                  showToast(`Inserted icon: ${iconId}`, 'success');
+                  chatInput.dataset.askBackActive = 'false';
+                  pendingAskBackContext = null;
+                  return;
+                }
+                if (card.dataset.svg) {
+                  await handleDirectIconInsertion(String(iconId), card.dataset.svg, size);
+                  chatInput.dataset.askBackActive = 'false';
+                  pendingAskBackContext = null;
+                  return;
+                }
+                await handleAskBackSelection(opt.value || opt.label || opt, card);
+              } catch (err) {
+                console.error('Icon grid insert failed', err);
+                showToast('Failed to insert icon.', 'error');
+              } finally {
+                removeThinkingIndicator();
               }
             });
             grid.appendChild(card);
