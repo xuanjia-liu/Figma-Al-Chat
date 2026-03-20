@@ -150,6 +150,16 @@ import {
       return keyMap[mode] ? tu(keyMap[mode]) : mode;
     }
 
+    function getCommentAiActionMeta(key) {
+      const action = commentAiActions[key];
+      if (!action) return null;
+      return {
+        ...action,
+        label: tu(action.labelKey),
+        title: tu(action.titleKey),
+      };
+    }
+
     function localizeTaskField(field) {
       if (!field || typeof field !== 'object') return field;
       const localized = { ...field };
@@ -297,6 +307,29 @@ import {
           figmaFileKeyInput.placeholder = t('settings.figma.fileKeyEditingPlaceholder');
         } else if (!figmaFileKeyInput.value) {
           figmaFileKeyInput.placeholder = t('settings.figma.fileKeyManualPlaceholder');
+        }
+      }
+
+      if (currentPromptAction?.directAction === 'listAllComments') {
+        const promptCommentsContainer = document.getElementById('promptCommentsContainer');
+        if (promptCommentsContainer && promptCommentsContainer.offsetParent !== null) {
+          renderCommentsInDrawer(promptCommentsContainer);
+        }
+        const mainBtn = document.querySelector('.prompt-action-main-btn');
+        if (mainBtn) {
+          const action = getCommentAiActionMeta(currentCommentAiAction);
+          if (action) {
+            mainBtn.innerHTML = `
+              ${action.icon}
+              ${action.label}${currentCommentAiAction === 'summarize' ? ' <span class="summarize-count">()</span>' : ''}
+            `;
+            mainBtn.title = action.title;
+            updateSummarizeAllButtonState();
+          }
+        }
+        const expandBtn = document.querySelector('.ai-action-expand-btn');
+        if (expandBtn) {
+          expandBtn.title = tu('actions.comments.drawer.moreAiActions');
         }
       }
     }
@@ -6379,20 +6412,20 @@ CRITICAL RULES:
     let currentCommentAiAction = 'summarize'; // 'summarize', 'todo', 'assistant'
     const commentAiActions = {
       'summarize': {
-        label: 'Summarize All',
-        title: 'Summarize all with AI',
+        labelKey: 'actions.comments.ai.summarizeAll',
+        titleKey: 'actions.comments.ai.summarizeAllTitle',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>',
         fn: 'summarizeCommentsFromDrawer'
       },
       'todo': {
-        label: 'Generate Todo List',
-        title: 'Generate a todo list from comments',
+        labelKey: 'actions.comments.ai.generateTodoList',
+        titleKey: 'actions.comments.ai.generateTodoListTitle',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
         fn: 'generateTodoListFromDrawer'
       },
       'assistant': {
-        label: 'AI Assistant',
-        title: 'Ask AI about these comments',
+        labelKey: 'actions.comments.ai.assistant',
+        titleKey: 'actions.comments.ai.assistantTitle',
         icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
         fn: 'showAiAssistantDrawerPopup'
       }
@@ -6963,6 +6996,7 @@ CRITICAL RULES:
         lastTotalCount = totalCount;
       },
       updateBatchActionsState,
+      tu,
     });
 
     const {
@@ -7227,7 +7261,7 @@ CRITICAL RULES:
 
       // Update count display
       if (countSpan) {
-        countSpan.textContent = `${multiSelectEnabled ? `${selectedCommentIds.size} selected · ` : ''}${lastFilteredCount}/${lastTotalCount}`;
+        countSpan.textContent = `${multiSelectEnabled ? `${tu('actions.comments.drawer.selectedCount', { count: selectedCommentIds.size })} · ` : ''}${lastFilteredCount}/${lastTotalCount}`;
       }
 
       // Render comments list only
@@ -7332,7 +7366,7 @@ CRITICAL RULES:
       }
 
       if (selectAllBtn) {
-        selectAllBtn.textContent = count > 0 ? 'Deselect All' : 'Select All';
+        selectAllBtn.textContent = count > 0 ? tu('actions.comments.drawer.deselectAll') : tu('actions.comments.drawer.selectAll');
       }
 
       // Update count labels in input areas
@@ -7347,7 +7381,7 @@ CRITICAL RULES:
       // Update the main count display
       const countSpan = document.getElementById('commentsCountDisplay');
       if (countSpan) {
-        countSpan.textContent = `${multiSelectEnabled ? `${count} selected · ` : ''}${lastFilteredCount}/${lastTotalCount}`;
+        countSpan.textContent = `${multiSelectEnabled ? `${tu('actions.comments.drawer.selectedCount', { count })} · ` : ''}${lastFilteredCount}/${lastTotalCount}`;
       }
     }
 
@@ -7375,7 +7409,7 @@ CRITICAL RULES:
       const currentActionKey = isStyles ? currentStyleAiAction : currentCommentAiAction;
 
       Object.keys(actions).forEach(key => {
-        const action = actions[key];
+        const action = isStyles ? actions[key] : getCommentAiActionMeta(key);
         const item = document.createElement('div');
         item.className = `ai-action-menu-item${currentActionKey === key ? ' active' : ''}`;
         item.innerHTML = `
@@ -7417,7 +7451,7 @@ CRITICAL RULES:
       // Update button in footer
       const btn = document.querySelector('.prompt-action-main-btn');
       if (btn) {
-        const action = commentAiActions[key];
+        const action = getCommentAiActionMeta(key);
         btn.innerHTML = `
           ${action.icon}
           ${action.label}${key === 'summarize' ? ' <span class="summarize-count">()</span>' : ''}
@@ -7501,15 +7535,15 @@ ${commentsList}`;
       popup.innerHTML = `
         <div class="ai-assistant-popup-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>AI Assistant (${selectedComments.length} comments)</span>
+          <span>${escapeHtml(tu('actions.comments.ai.assistantPopupTitle', { count: selectedComments.length }))}</span>
           ${createModelSelectDropdownHTML('drawerAssistant')}
         </div>
-        <textarea class="ai-assistant-popup-input" id="aiAssistantPrompt" placeholder="Ask a question or give a specific instruction..." rows="3"></textarea>
+        <textarea class="ai-assistant-popup-input" id="aiAssistantPrompt" placeholder="${escapeHtml(tu('actions.comments.ai.assistantPlaceholder'))}" rows="3"></textarea>
         <div class="ai-assistant-popup-footer">
-          <button class="ai-assistant-popup-cancel" id="aiAssistantDrawerCancel">Cancel</button>
+          <button class="ai-assistant-popup-cancel" id="aiAssistantDrawerCancel">${escapeHtml(tu('actions.comments.drawer.cancel'))}</button>
           <button class="ai-assistant-popup-submit" id="aiAssistantSubmit">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            Ask AI
+            ${escapeHtml(tu('actions.comments.ai.ask'))}
           </button>
         </div>
       `;
@@ -8321,7 +8355,7 @@ Generate a suitable, professional response.
       // Find the comment
       const comment = figmaComments.find(c => c.id === commentId);
       if (!comment) {
-        showToast('Comment not found', 'error');
+        showToast(tu('actions.comments.drawer.commentNotFound'), 'error');
         return;
       }
 
@@ -8331,7 +8365,7 @@ Generate a suitable, professional response.
       // Show loading state
       aiBtn.disabled = true;
       aiBtn.classList.add('loading');
-      input.placeholder = 'Generating reply...';
+      input.placeholder = tu('actions.comments.drawer.generatingReply');
       input.disabled = true;
 
       try {
@@ -8379,16 +8413,16 @@ ${existingText ? `User's draft/notes: "${existingText}"` : ''}
         if (generatedText) {
           input.value = generatedText;
           input.focus();
-          showToast('Reply generated! Review and click Send.', 'success');
+          showToast(tu('actions.comments.drawer.replyGeneratedToast'), 'success');
         } else {
           throw new Error('No response generated');
         }
       } catch (error) {
-        showToast(`Failed to generate: ${error.message}`, 'error');
+        showToast(tu('actions.comments.drawer.failedToGenerate', { message: error.message }), 'error');
       } finally {
         aiBtn.disabled = false;
         aiBtn.classList.remove('loading');
-        input.placeholder = 'Write a reply...';
+        input.placeholder = tu('actions.comments.drawer.replyPlaceholder');
         input.disabled = false;
       }
     }
@@ -8549,7 +8583,7 @@ Requirements:
       const rawMessage = manualMessage !== null ? manualMessage.trim() : textarea?.value.trim();
 
       if (!rawMessage) {
-        showToast('Please enter a reply message', 'error');
+        showToast(tu('actions.comments.drawer.replyRequired'), 'error');
         return;
       }
 
@@ -8557,7 +8591,7 @@ Requirements:
       const fileKey = figmaFileKeyInput?.value?.trim() || figmaFileKey;
 
       if (!token || !fileKey) {
-        showToast('Missing token or file key', 'error');
+        showToast(tu('actions.comments.drawer.missingTokenOrFileKey'), 'error');
         return;
       }
 
@@ -8566,7 +8600,7 @@ Requirements:
 
       const sendBtn = replyInput.querySelector('button');
       sendBtn.disabled = true;
-      sendBtn.textContent = 'Sending...';
+      sendBtn.textContent = tu('actions.comments.drawer.sending');
 
       try {
         const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
@@ -8586,7 +8620,7 @@ Requirements:
           throw new Error(error.message || 'Failed to post reply');
         }
 
-        showToast('Reply posted!', 'success');
+        showToast(tu('actions.comments.drawer.replyPostedToast'), 'success');
         textarea.value = '';
         textarea.style.height = 'auto';
         replyInput.style.display = 'none';
@@ -8600,10 +8634,10 @@ Requirements:
           if (container) renderCommentsInDrawer(container);
         }
       } catch (error) {
-        showToast(`Failed to post reply: ${error.message}`, 'error');
+        showToast(tu('actions.comments.drawer.failedToPostReply', { message: error.message }), 'error');
       } finally {
         sendBtn.disabled = false;
-        sendBtn.textContent = 'Send';
+        sendBtn.textContent = tu('actions.comments.drawer.send');
       }
     }
 
@@ -8627,10 +8661,10 @@ Requirements:
       const token = figmaPersonalTokenInput?.value?.trim() || figmaPersonalToken;
       const fileKey = figmaFileKeyInput?.value?.trim() || figmaFileKey;
       if (!token || !fileKey) {
-        showToast('Please configure Figma token and file key in Settings', 'error');
+        showToast(tu('actions.comments.drawer.figmaAuthRequired'), 'error');
         return;
       }
-      if (!confirm('Delete this comment?')) return;
+      if (!confirm(tu('actions.comments.drawer.deleteConfirm'))) return;
       try {
         const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments/${commentId}`, {
           method: 'DELETE',
@@ -8989,7 +9023,7 @@ Requirements:
       const rawMessage = manualMessage !== null ? manualMessage.trim() : textarea?.value.trim();
 
       if (!rawMessage) {
-        showToast('Please enter a reply message', 'error');
+        showToast(tu('actions.comments.drawer.replyRequired'), 'error');
         return;
       }
 
@@ -8997,7 +9031,7 @@ Requirements:
       const fileKey = figmaFileKeyInput?.value?.trim() || figmaFileKey;
 
       if (!token || !fileKey) {
-        showToast('Missing token or file key', 'error');
+        showToast(tu('actions.comments.drawer.missingTokenOrFileKey'), 'error');
         return;
       }
 
@@ -9006,7 +9040,7 @@ Requirements:
 
       const sendBtn = replyInput.querySelector('button');
       sendBtn.disabled = true;
-      sendBtn.textContent = 'Sending...';
+      sendBtn.textContent = tu('actions.comments.drawer.sending');
 
       try {
         const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
@@ -9026,7 +9060,7 @@ Requirements:
           throw new Error(error.message || 'Failed to post reply');
         }
 
-        showToast('Reply posted!', 'success');
+        showToast(tu('actions.comments.drawer.replyPostedToast'), 'success');
         textarea.value = '';
         textarea.style.height = 'auto';
         replyInput.style.display = 'none';
@@ -9034,10 +9068,10 @@ Requirements:
         // Refresh only this thread
         await refreshCommentThread(commentId);
       } catch (error) {
-        showToast(`Failed to post reply: ${error.message}`, 'error');
+        showToast(tu('actions.comments.drawer.failedToPostReply', { message: error.message }), 'error');
       } finally {
         sendBtn.disabled = false;
-        sendBtn.textContent = 'Send';
+        sendBtn.textContent = tu('actions.comments.drawer.send');
       }
     }
 
@@ -12193,14 +12227,14 @@ Generate ONLY the reply text, nothing else.`;
             const group = document.createElement('div');
             group.className = 'ai-action-group';
 
-            const action = commentAiActions[currentCommentAiAction];
+            const action = getCommentAiActionMeta(currentCommentAiAction);
 
             group.innerHTML = `
             <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" onclick="executeCurrentAiAction()" title="${action.title}">
               ${action.icon}
               ${action.label}${currentCommentAiAction === 'summarize' ? ' <span class="summarize-count">(0)</span>' : ''}
             </button>
-            <button class="ai-action-expand-btn" type="button" onclick="toggleAiActionMenu(event)" title="More AI actions">
+            <button class="ai-action-expand-btn" type="button" onclick="toggleAiActionMenu(event)" title="${tu('actions.comments.drawer.moreAiActions')}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
           `;

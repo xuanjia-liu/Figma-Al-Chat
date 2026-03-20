@@ -27,7 +27,22 @@ export function createCommentsDrawerHelpers({
   extractPeopleFromComments,
   setFilteredCounts,
   updateBatchActionsState,
+  tu,
 }) {
+  function getReplyCountLabel(count) {
+    return count === 1
+      ? tu('actions.comments.drawer.replySingle', { count })
+      : tu('actions.comments.drawer.replyPlural', { count });
+  }
+
+  function getSelectedCountLabel(count) {
+    return tu('actions.comments.drawer.selectedCount', { count });
+  }
+
+  function getAttachedLayerLabel(layerName) {
+    return tu('actions.comments.drawer.onLayer', { layer: layerName });
+  }
+
   function renderCommentItemHTML(comment, threads) {
     const {
       selectedCommentIds,
@@ -44,6 +59,8 @@ export function createCommentsDrawerHelpers({
     const isResolved = !!comment.resolved_at;
     const replyCount = replies.length;
     const isSelected = selectedCommentIds.has(comment.id);
+    const replyCountLabel = escapeHtml(getReplyCountLabel(replyCount));
+    const replyMatchLabel = escapeHtml(tu('actions.comments.drawer.replyMatch'));
 
     const itemClasses = ['prompt-comment-item'];
     if (multiSelectEnabled) itemClasses.push('selectable');
@@ -66,14 +83,14 @@ export function createCommentsDrawerHelpers({
             </div>
             <div class="comment-header-text">
               <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(comment.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(comment.user.handle, commentsSearchQuery)}</span>
-              ${comment.client_meta?.node_id ? `<span class="comment-attached-layer">on ${escapeHtml(cachedNodeNames[comment.client_meta.node_id] || '…')}</span>` : ''}
+              ${comment.client_meta?.node_id ? `<span class="comment-attached-layer">${escapeHtml(getAttachedLayerLabel(cachedNodeNames[comment.client_meta.node_id] || '…'))}</span>` : ''}
             </div>
             ${isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : ''}
             <span class="comment-date">${formatCommentDate(comment.created_at)}</span>
           </div>
           <div class="comment-body">${highlightAndLinkify(comment.message, commentsSearchQuery)}</div>
           ${(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle) && replyCount === 0) ? `
-            <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${comment.id}', 'drawer')" title="Rewrite with AI">
+            <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${comment.id}', 'drawer')" title="${escapeHtml(tu('actions.comments.drawer.rewriteWithAi'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
               </svg>
@@ -81,16 +98,16 @@ export function createCommentsDrawerHelpers({
           ` : ''}
           <div class="comment-actions">
             ${comment.client_meta?.node_id ? `
-              <button class="comment-action-btn icon-only" onclick="navigateToCommentNode('${comment.client_meta.node_id}', ${comment.client_meta.node_offset ? `{x: ${comment.client_meta.node_offset.x}, y: ${comment.client_meta.node_offset.y}}` : 'null'})" title="Go to">
+              <button class="comment-action-btn icon-only" onclick="navigateToCommentNode('${comment.client_meta.node_id}', ${comment.client_meta.node_offset ? `{x: ${comment.client_meta.node_offset.x}, y: ${comment.client_meta.node_offset.y}}` : 'null'})" title="${escapeHtml(tu('actions.comments.drawer.goTo'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
                 </svg>
               </button>
-              <button class="comment-action-btn" onclick="solveCommentWithAI('${comment.id}', null, this)" title="Solve with AI">
+              <button class="comment-action-btn" onclick="solveCommentWithAI('${comment.id}', null, this)" title="${escapeHtml(tu('actions.comments.drawer.solveWithAi'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
                 </svg>
-                Solve
+                ${escapeHtml(tu('actions.comments.drawer.solve'))}
               </button>
             ` : ''}
             <div class="comment-action-btn-group">
@@ -98,40 +115,40 @@ export function createCommentsDrawerHelpers({
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>
                 </svg>
-                Reply
+                ${escapeHtml(tu('actions.comments.drawer.reply'))}
               </button>
-              <button class="comment-reply-chevron-btn" onclick="toggleReplyTemplatesDropdown(event, '${comment.id}')">
+              <button class="comment-reply-chevron-btn" onclick="toggleReplyTemplatesDropdown(event, '${comment.id}')" title="${escapeHtml(tu('actions.comments.drawer.replyTemplates'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <div class="comment-more-menu hidden" id="reply-dropdown-${comment.id}" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
             </div>
             <div class="comment-more-container">
-              <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="More options">
+              <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="${escapeHtml(tu('actions.comments.drawer.moreOptions'))}">
                 <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
               </button>
               <div class="comment-more-menu hidden" id="comment-more-menu-${comment.id}">
-                <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${comment.id}'); closePromptDrawer();">Add to Chat</button>
+                <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${comment.id}'); closePromptDrawer();">${escapeHtml(tu('actions.comments.drawer.addToChat'))}</button>
                 ${(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle)) ? `
-                  <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${comment.id}', 'drawer')">Delete</button>
+                  <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${comment.id}', 'drawer')">${escapeHtml(tu('actions.comments.drawer.delete'))}</button>
                 ` : ''}
               </div>
             </div>
           </div>
       <div class="comment-reply-input" id="drawer-reply-input-${comment.id}" style="display: none;">
         <div class="comment-reply-input-wrapper">
-          <textarea placeholder="Write a reply..." onkeydown="handleDrawerReplyKeydown(event, '${comment.id}')" oninput="autoExpandTextarea(this); handleCommentAiBtnVisibility(this, '${comment.id}'); handleMentionInput(this, 'drawer', '${comment.id}')" onfocus="startCommentAiTimer('${comment.id}'); cancelMentionBlur()" onblur="hideCommentAiBtn('${comment.id}'); handleMentionBlur()" id="drawer-reply-text-${comment.id}" rows="1"></textarea>
-          <button class="comment-ai-gen-btn" onclick="generateAIReplyInline('${comment.id}')" title="Generate reply with AI" id="drawer-ai-btn-${comment.id}">
+          <textarea placeholder="${escapeHtml(tu('actions.comments.drawer.replyPlaceholder'))}" onkeydown="handleDrawerReplyKeydown(event, '${comment.id}')" oninput="autoExpandTextarea(this); handleCommentAiBtnVisibility(this, '${comment.id}'); handleMentionInput(this, 'drawer', '${comment.id}')" onfocus="startCommentAiTimer('${comment.id}'); cancelMentionBlur()" onblur="hideCommentAiBtn('${comment.id}'); handleMentionBlur()" id="drawer-reply-text-${comment.id}" rows="1"></textarea>
+          <button class="comment-ai-gen-btn" onclick="generateAIReplyInline('${comment.id}')" title="${escapeHtml(tu('actions.comments.drawer.generateReplyWithAi'))}" id="drawer-ai-btn-${comment.id}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
             </svg>
           </button>
         </div>
-        <button class="comment-action-btn" onclick="postDrawerReply('${comment.id}')">Send</button>
+        <button class="comment-action-btn" onclick="postDrawerReply('${comment.id}')">${escapeHtml(tu('actions.comments.drawer.send'))}</button>
       </div>
           ${replyCount > 0 ? `
             <button class="comment-replies-toggle${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ' has-match' : ''}" id="replies-toggle-${comment.id}" onclick="toggleReplies('${comment.id}')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-              ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ' <span class="reply-match-indicator">• match</span>' : ''}
+              ${replyCountLabel}${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ` <span class="reply-match-indicator">${replyMatchLabel}</span>` : ''}
             </button>
             <div class="comment-replies collapsed" id="replies-${comment.id}">
               ${replies.map(reply => `
@@ -153,37 +170,37 @@ export function createCommentsDrawerHelpers({
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>
                         </svg>
-                        Reply
+                        ${escapeHtml(tu('actions.comments.drawer.reply'))}
                       </button>
-                      <button class="comment-reply-chevron-btn" onclick="toggleReplyItemTemplatesDropdown(event, 'drawer', '${comment.id}', '${reply.id}')" title="Reply templates">
+                      <button class="comment-reply-chevron-btn" onclick="toggleReplyItemTemplatesDropdown(event, 'drawer', '${comment.id}', '${reply.id}')" title="${escapeHtml(tu('actions.comments.drawer.replyTemplates'))}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
                       </button>
                       <div class="comment-more-menu hidden" id="reply-dropdown-drawer-${comment.id}-${reply.id}" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
                     </div>
                     ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
-                      <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${reply.id}', 'drawer')" title="Rewrite with AI">
+                      <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${reply.id}', 'drawer')" title="${escapeHtml(tu('actions.comments.drawer.rewriteWithAi'))}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                           <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
                         </svg>
                       </button>
                     ` : ''}
                     <div class="comment-more-container">
-                      <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="More options">
+                      <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="${escapeHtml(tu('actions.comments.drawer.moreOptions'))}">
                         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                       </button>
                       <div class="comment-more-menu hidden" id="comment-more-menu-${reply.id}">
-                        <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${reply.id}'); closePromptDrawer();">Add to Chat</button>
+                        <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${reply.id}'); closePromptDrawer();">${escapeHtml(tu('actions.comments.drawer.addToChat'))}</button>
                         ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
-                          <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${reply.id}', 'drawer')">Delete</button>
+                          <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${reply.id}', 'drawer')">${escapeHtml(tu('actions.comments.drawer.delete'))}</button>
                         ` : ''}
                       </div>
                     </div>
                   </div>
                   <div class="comment-reply-input" id="drawer-reply-item-input-${comment.id}-${reply.id}" style="display: none;">
                     <div class="comment-reply-input-wrapper">
-                      <textarea placeholder="Write a reply..." onkeydown="handleReplyItemKeydown(event, 'drawer', '${comment.id}', '${reply.id}')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-${comment.id}-${reply.id}" rows="1"></textarea>
+                      <textarea placeholder="${escapeHtml(tu('actions.comments.drawer.replyPlaceholder'))}" onkeydown="handleReplyItemKeydown(event, 'drawer', '${comment.id}', '${reply.id}')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-${comment.id}-${reply.id}" rows="1"></textarea>
                     </div>
-                    <button class="comment-action-btn" onclick="postDrawerReplyItem('${comment.id}', '${reply.id}')">Send</button>
+                    <button class="comment-action-btn" onclick="postDrawerReplyItem('${comment.id}', '${reply.id}')">${escapeHtml(tu('actions.comments.drawer.send'))}</button>
                   </div>
                 </div>
               `).join('')}
@@ -198,7 +215,7 @@ export function createCommentsDrawerHelpers({
     const { commentsSortBy } = getState();
 
     if (filteredComments.length === 0) {
-      return '<div class="prompt-comments-empty">No comments match your filters.</div>';
+      return `<div class="prompt-comments-empty">${escapeHtml(tu('actions.comments.drawer.emptyFiltered'))}</div>`;
     }
 
     if (commentsSortBy === 'burst') {
@@ -378,33 +395,33 @@ export function createCommentsDrawerHelpers({
 
     const html = `
       <div class="prompt-comments-toolbar">
-        <input type="text" class="prompt-comments-search" placeholder="Search..." 
+        <input type="text" class="prompt-comments-search" placeholder="${escapeHtml(tu('actions.comments.drawer.search'))}" 
           value="${escapeHtml(commentsSearchQuery)}" 
           oninput="handleCommentsSearchInput(this.value)"
           oncompositionstart="handleCommentsSearchCompositionStart()"
           oncompositionend="handleCommentsSearchCompositionEnd(event)" />
         <div class="comments-dropdown-container">
-          <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="Sort and filter options">
+          <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="${escapeHtml(tu('actions.comments.drawer.sortFilterTitle'))}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18M6 12h12M10 18h4" />
             </svg>
-            <span>Options</span>
+            <span>${escapeHtml(tu('actions.comments.drawer.options'))}</span>
           </button>
           <div class="comments-dropdown-menu hidden" id="commentsDropdownMenu">
-            <div class="dropdown-section">Sort</div>
-            <button class="dropdown-item ${commentsSortBy === 'activity' ? 'active' : ''}" onclick="handleCommentsSort('activity')">Last Activity</button>
-            <button class="dropdown-item ${commentsSortBy === 'newest' ? 'active' : ''}" onclick="handleCommentsSort('newest')">Newest</button>
-            <button class="dropdown-item ${commentsSortBy === 'oldest' ? 'active' : ''}" onclick="handleCommentsSort('oldest')">Oldest</button>
-            <button class="dropdown-item ${commentsSortBy === 'replies' ? 'active' : ''}" onclick="handleCommentsSort('replies')">Replies</button>
-            <button class="dropdown-item ${commentsSortBy === 'viewport' ? 'active' : ''}" onclick="handleCommentsSort('viewport')">Nearest to viewport</button>
-            <button class="dropdown-item ${commentsSortBy === 'burst' ? 'active' : ''}" onclick="handleCommentsSort('burst')">Burst</button>
+            <div class="dropdown-section">${escapeHtml(tu('actions.comments.drawer.sort'))}</div>
+            <button class="dropdown-item ${commentsSortBy === 'activity' ? 'active' : ''}" onclick="handleCommentsSort('activity')">${escapeHtml(tu('actions.comments.drawer.sortActivity'))}</button>
+            <button class="dropdown-item ${commentsSortBy === 'newest' ? 'active' : ''}" onclick="handleCommentsSort('newest')">${escapeHtml(tu('actions.comments.drawer.sortNewest'))}</button>
+            <button class="dropdown-item ${commentsSortBy === 'oldest' ? 'active' : ''}" onclick="handleCommentsSort('oldest')">${escapeHtml(tu('actions.comments.drawer.sortOldest'))}</button>
+            <button class="dropdown-item ${commentsSortBy === 'replies' ? 'active' : ''}" onclick="handleCommentsSort('replies')">${escapeHtml(tu('actions.comments.drawer.sortReplies'))}</button>
+            <button class="dropdown-item ${commentsSortBy === 'viewport' ? 'active' : ''}" onclick="handleCommentsSort('viewport')">${escapeHtml(tu('actions.comments.drawer.sortViewport'))}</button>
+            <button class="dropdown-item ${commentsSortBy === 'burst' ? 'active' : ''}" onclick="handleCommentsSort('burst')">${escapeHtml(tu('actions.comments.drawer.sortBurst'))}</button>
             <div class="dropdown-divider"></div>
-            <div class="dropdown-section">Filter</div>
-            <button class="dropdown-item ${commentsFilterBy === 'all' ? 'active' : ''}" onclick="handleCommentsFilter('all')">All</button>
-            <button class="dropdown-item ${commentsFilterBy === 'pending' ? 'active' : ''}" onclick="handleCommentsFilter('pending')">Needs my reply</button>
+            <div class="dropdown-section">${escapeHtml(tu('actions.comments.drawer.filter'))}</div>
+            <button class="dropdown-item ${commentsFilterBy === 'all' ? 'active' : ''}" onclick="handleCommentsFilter('all')">${escapeHtml(tu('actions.comments.drawer.filterAll'))}</button>
+            <button class="dropdown-item ${commentsFilterBy === 'pending' ? 'active' : ''}" onclick="handleCommentsFilter('pending')">${escapeHtml(tu('actions.comments.drawer.filterPending'))}</button>
           </div>
         </div>
-        <button class="people-filter-toggle${peopleFilterExpanded ? ' expanded' : ''}" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="Filter by people">
+        <button class="people-filter-toggle${peopleFilterExpanded ? ' expanded' : ''}" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="${escapeHtml(tu('actions.comments.drawer.peopleFilter'))}">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -415,30 +432,30 @@ export function createCommentsDrawerHelpers({
           <span id="peopleFilterCount" class="people-filter-count">${(selectedAuthorsFilter.size + selectedMentionsFilter.size) > 0 ? (selectedAuthorsFilter.size + selectedMentionsFilter.size) : ''}</span>
         </button>
         <span id="commentsCountDisplay" class="comments-count-display">
-          ${multiSelectEnabled ? `${selectedCommentIds.size} selected · ` : ''}${filteredComments.length}/${total}
+          ${multiSelectEnabled ? `${escapeHtml(getSelectedCountLabel(selectedCommentIds.size))} · ` : ''}${filteredComments.length}/${total}
         </span>
         ${multiSelectEnabled ? `
           <div class="prompt-comments-batch-actions">
-            <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="Select/Deselect all visible">
-              ${selectedCommentIds.size > 0 ? 'Deselect All' : 'Select All'}
+            <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="${escapeHtml(tu('actions.comments.drawer.selectAllTitle'))}">
+              ${escapeHtml(selectedCommentIds.size > 0 ? tu('actions.comments.drawer.deselectAll') : tu('actions.comments.drawer.selectAll'))}
             </button>
             <div class="comment-action-btn-group">
-              <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput('manual')" disabled title="Reply to all selected">
+              <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput('manual')" disabled title="${escapeHtml(tu('actions.comments.drawer.replySelectedTitle'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                Reply
+                ${escapeHtml(tu('actions.comments.drawer.reply'))}
               </button>
-              <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, 'batchReplyTextarea')" title="Reply templates" disabled id="batchReplyChevronBtn">
+              <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, 'batchReplyTextarea')" title="${escapeHtml(tu('actions.comments.drawer.replyTemplates'))}" disabled id="batchReplyChevronBtn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
               </button>
               <div class="comment-more-menu hidden" id="reply-dropdown-batchReplyTextarea" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
             </div>
-            <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="Summarize selected with AI">
+            <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="${escapeHtml(tu('actions.comments.drawer.summarizeSelectedTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>
-              Summarize
+              ${escapeHtml(tu('actions.comments.drawer.summarize'))}
             </button>
-            <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="Download selected as CSV">
+            <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="${escapeHtml(tu('actions.comments.drawer.downloadCsvTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-              CSV
+              ${escapeHtml(tu('actions.comments.drawer.csv'))}
             </button>
           </div>
         ` : ''}
@@ -446,22 +463,22 @@ export function createCommentsDrawerHelpers({
       <div id="batchActionInputContainer" class="batch-action-container" style="display: none;">
         <div class="people-filter-header">
           <div class="tab-container">
-            <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab('manual')">Manual</button>
-            <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab('ai')">AI Assisted</button>
+            <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab('manual')">${escapeHtml(tu('actions.comments.drawer.manual'))}</button>
+            <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab('ai')">${escapeHtml(tu('actions.comments.drawer.aiAssisted'))}</button>
           </div>
         </div>
         <div id="batchReplyInputArea" style="display: none;">
-          <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="Enter a reply to be posted to all selected comments..." onkeydown="handleBatchReplyKeydown(event, 'manual')" oninput="autoExpandTextarea(this)"></textarea>
+          <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="${escapeHtml(tu('actions.comments.drawer.batchReplyPlaceholder'))}" onkeydown="handleBatchReplyKeydown(event, 'manual')" oninput="autoExpandTextarea(this)"></textarea>
           <div class="batch-action-footer">
-            <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>
-            <button class="comment-action-btn primary" onclick="executeBatchReply()">Send to <span id="batchReplyCountLabel">0</span> comments</button>
+            <button class="comment-action-btn" onclick="closeBatchInput()">${escapeHtml(tu('actions.comments.drawer.cancel'))}</button>
+            <button class="comment-action-btn primary" onclick="executeBatchReply()">${tu('actions.comments.drawer.sendToCount', { count: '<span id="batchReplyCountLabel">0</span>' })}</button>
           </div>
         </div>
         <div id="batchAiReplyInputArea" style="display: none;">
-          <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="Instruct AI how to reply (e.g. 'Thank them and say we'll check it'). AI will tailor responses to each context." onkeydown="handleBatchReplyKeydown(event, 'ai')" oninput="autoExpandTextarea(this)"></textarea>
+          <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="${escapeHtml(tu('actions.comments.drawer.batchAiPlaceholder'))}" onkeydown="handleBatchReplyKeydown(event, 'ai')" oninput="autoExpandTextarea(this)"></textarea>
           <div class="batch-action-footer">
-            <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>
-            <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">Run AI for <span id="batchAiReplyCountLabel">0</span> comments</button>
+            <button class="comment-action-btn" onclick="closeBatchInput()">${escapeHtml(tu('actions.comments.drawer.cancel'))}</button>
+            <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">${tu('actions.comments.drawer.runAiForCount', { count: '<span id="batchAiReplyCountLabel">0</span>' })}</button>
           </div>
         </div>
       </div>
@@ -469,20 +486,20 @@ export function createCommentsDrawerHelpers({
         <div class="people-filter-header">
           <div class="tab-container">
             <button class="tab-item${peopleFilterActiveTab === 'from' ? ' active' : ''}" data-tab="from" onclick="switchPeopleFilterTab('from')">
-              From
+              ${escapeHtml(tu('actions.comments.drawer.from'))}
               <span class="tab-badge" id="fromTabBadge" style="${selectedAuthorsFilter.size > 0 ? 'display: inline-flex;' : ''}">${selectedAuthorsFilter.size || ''}</span>
             </button>
             <button class="tab-item${peopleFilterActiveTab === 'mentions' ? ' active' : ''}" data-tab="mentions" onclick="switchPeopleFilterTab('mentions')">
-              @Mentions
+              ${escapeHtml(tu('actions.comments.drawer.mentions'))}
               <span class="tab-badge" id="mentionsTabBadge" style="${selectedMentionsFilter.size > 0 ? 'display: inline-flex;' : ''}">${selectedMentionsFilter.size || ''}</span>
             </button>
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="people-filter-include-replies-toggle ${peopleFilterActiveTab === 'from' ? (peopleFilterIncludeRepliesFrom ? 'active' : '') : (peopleFilterIncludeRepliesMentions ? 'active' : '')}" onclick="togglePeopleIncludeReplies()" title="Included authors/mentions in comment replies">
+            <div class="people-filter-include-replies-toggle ${peopleFilterActiveTab === 'from' ? (peopleFilterIncludeRepliesFrom ? 'active' : '') : (peopleFilterIncludeRepliesMentions ? 'active' : '')}" onclick="togglePeopleIncludeReplies()" title="${escapeHtml(tu('actions.comments.drawer.includeRepliesTitle'))}">
               <span class="toggle-switch"></span>
-              Replies
+              ${escapeHtml(tu('actions.comments.drawer.replies'))}
             </div>
-            ${(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0) ? `<button class="people-filter-clear" onclick="clearPeopleFilter('all')">Clear all</button>` : ''}
+            ${(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0) ? `<button class="people-filter-clear" onclick="clearPeopleFilter('all')">${escapeHtml(tu('actions.comments.drawer.clearAll'))}</button>` : ''}
           </div>
         </div>
         <div class="people-chips-container" id="peopleChipsFrom" style="${peopleFilterActiveTab === 'from' ? 'display: flex;' : 'display: none;'}">
@@ -511,7 +528,7 @@ export function createCommentsDrawerHelpers({
                 ${escapeHtml(p.name)}
               </button>
             `).join('')
-        : '<span class="people-filter-empty">No mentions found</span>'
+        : `<span class="people-filter-empty">${escapeHtml(tu('actions.comments.drawer.noMentions'))}</span>`
       }
         </div>
       </div>

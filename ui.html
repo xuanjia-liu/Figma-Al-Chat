@@ -13201,8 +13201,18 @@
     commentMatchesPeopleFilter,
     extractPeopleFromComments,
     setFilteredCounts,
-    updateBatchActionsState
+    updateBatchActionsState,
+    tu
   }) {
+    function getReplyCountLabel(count) {
+      return count === 1 ? tu("actions.comments.drawer.replySingle", { count }) : tu("actions.comments.drawer.replyPlural", { count });
+    }
+    function getSelectedCountLabel(count) {
+      return tu("actions.comments.drawer.selectedCount", { count });
+    }
+    function getAttachedLayerLabel(layerName) {
+      return tu("actions.comments.drawer.onLayer", { layer: layerName });
+    }
     function renderCommentItemHTML(comment, threads) {
       var _a, _b;
       const {
@@ -13219,16 +13229,18 @@
       const isResolved = !!comment.resolved_at;
       const replyCount = replies.length;
       const isSelected = selectedCommentIds.has(comment.id);
+      const replyCountLabel = escapeHtml(getReplyCountLabel(replyCount));
+      const replyMatchLabel = escapeHtml(tu("actions.comments.drawer.replyMatch"));
       const itemClasses = ["prompt-comment-item"];
       if (multiSelectEnabled) itemClasses.push("selectable");
       if (isResolved) itemClasses.push("resolved");
       else itemClasses.push("unresolved");
-      return '\n        <div class="'.concat(itemClasses.join(" "), '" data-comment-id="').concat(comment.id, '" onclick="handleCommentItemClick(event, \'').concat(comment.id, "')\">\n          ").concat(multiSelectEnabled ? '\n            <input type="checkbox" class="comment-select-checkbox" \n              '.concat(isSelected ? "checked" : "", " \n              onchange=\"toggleCommentSelection('").concat(comment.id, "', this)\" />\n          ") : "", '\n          <div class="comment-header">\n            <div class="comment-avatar">\n              ').concat(comment.user.img_url ? '<img src="'.concat(comment.user.img_url, '" alt="').concat(comment.user.handle, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(comment.user.handle.substring(0, 1).toUpperCase(), "'\" />") : comment.user.handle.substring(0, 1).toUpperCase(), '\n            </div>\n            <div class="comment-header-text">\n              <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip(\'').concat(escapeHtml(comment.user.handle).replace(/'/g, "\\'"), "', 'from')\">").concat(highlightSearchMatches(comment.user.handle, commentsSearchQuery), "</span>\n              ").concat(((_a = comment.client_meta) == null ? void 0 : _a.node_id) ? '<span class="comment-attached-layer">on '.concat(escapeHtml(cachedNodeNames[comment.client_meta.node_id] || "…"), "</span>") : "", "\n            </div>\n            ").concat(isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : "", '\n            <span class="comment-date">').concat(formatCommentDate(comment.created_at), '</span>\n          </div>\n          <div class="comment-body">').concat(highlightAndLinkify(comment.message, commentsSearchQuery), "</div>\n          ").concat(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle) && replyCount === 0 ? '\n            <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI(\''.concat(comment.id, '\', \'drawer\')" title="Rewrite with AI">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>\n              </svg>\n            </button>\n          ') : "", '\n          <div class="comment-actions">\n            ').concat(((_b = comment.client_meta) == null ? void 0 : _b.node_id) ? '\n              <button class="comment-action-btn icon-only" onclick="navigateToCommentNode(\''.concat(comment.client_meta.node_id, "', ").concat(comment.client_meta.node_offset ? "{x: ".concat(comment.client_meta.node_offset.x, ", y: ").concat(comment.client_meta.node_offset.y, "}") : "null", ')" title="Go to">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>\n                </svg>\n              </button>\n              <button class="comment-action-btn" onclick="solveCommentWithAI(\'').concat(comment.id, '\', null, this)" title="Solve with AI">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                  <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>\n                </svg>\n                Solve\n              </button>\n            ') : "", '\n            <div class="comment-action-btn-group">\n              <button class="comment-action-btn" onclick="toggleDrawerReplyInput(\'').concat(comment.id, '\')">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>\n                </svg>\n                Reply\n              </button>\n              <button class="comment-reply-chevron-btn" onclick="toggleReplyTemplatesDropdown(event, \'').concat(comment.id, '\')">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="reply-dropdown-').concat(comment.id, '" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n            </div>\n            <div class="comment-more-container">\n              <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, \'').concat(comment.id, '\')" title="More options">\n                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="comment-more-menu-').concat(comment.id, '">\n                <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat(\'').concat(comment.id, "'); closePromptDrawer();\">Add to Chat</button>\n                ").concat(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle) ? '\n                  <button class="dropdown-item dropdown-item-danger" onclick="deleteComment(\''.concat(comment.id, "', 'drawer')\">Delete</button>\n                ") : "", '\n              </div>\n            </div>\n          </div>\n      <div class="comment-reply-input" id="drawer-reply-input-').concat(comment.id, '" style="display: none;">\n        <div class="comment-reply-input-wrapper">\n          <textarea placeholder="Write a reply..." onkeydown="handleDrawerReplyKeydown(event, \'').concat(comment.id, "')\" oninput=\"autoExpandTextarea(this); handleCommentAiBtnVisibility(this, '").concat(comment.id, "'); handleMentionInput(this, 'drawer', '").concat(comment.id, "')\" onfocus=\"startCommentAiTimer('").concat(comment.id, "'); cancelMentionBlur()\" onblur=\"hideCommentAiBtn('").concat(comment.id, '\'); handleMentionBlur()" id="drawer-reply-text-').concat(comment.id, '" rows="1"></textarea>\n          <button class="comment-ai-gen-btn" onclick="generateAIReplyInline(\'').concat(comment.id, '\')" title="Generate reply with AI" id="drawer-ai-btn-').concat(comment.id, '">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n              <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />\n            </svg>\n          </button>\n        </div>\n        <button class="comment-action-btn" onclick="postDrawerReply(\'').concat(comment.id, "')\">Send</button>\n      </div>\n          ").concat(replyCount > 0 ? '\n            <button class="comment-replies-toggle'.concat(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id) ? " has-match" : "", '" id="replies-toggle-').concat(comment.id, '" onclick="toggleReplies(\'').concat(comment.id, '\')">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>\n              ').concat(replyCount, " ").concat(replyCount === 1 ? "reply" : "replies").concat(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id) ? ' <span class="reply-match-indicator">• match</span>' : "", '\n            </button>\n            <div class="comment-replies collapsed" id="replies-').concat(comment.id, '">\n              ').concat(replies.map((reply) => '\n                <div class="comment-reply-item" data-comment-id="'.concat(reply.id, '">\n                  <div class="comment-header">\n                    <div class="comment-avatar">\n                      ').concat(reply.user.img_url ? '<img src="'.concat(reply.user.img_url, '" alt="').concat(reply.user.handle, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(reply.user.handle.substring(0, 1).toUpperCase(), "'\" />") : reply.user.handle.substring(0, 1).toUpperCase(), '\n                    </div>\n                    <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip(\'').concat(escapeHtml(reply.user.handle).replace(/'/g, "\\'"), "', 'from')\">").concat(highlightSearchMatches(reply.user.handle, commentsSearchQuery), '</span>\n                    <span class="comment-date">').concat(formatCommentDate(reply.created_at), '</span>\n                  </div>\n                  <div class="comment-body">').concat(highlightAndLinkify(reply.message, commentsSearchQuery), '</div>\n                  <div class="comment-reply-actions">\n                    <div class="comment-action-btn-group">\n                      <button class="comment-action-btn" onclick="toggleDrawerReplyItemInput(\'').concat(comment.id, "', '").concat(reply.id, "', '").concat(escapeHtml(reply.user.handle).replace(/'/g, "\\'"), '\')">\n                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                          <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>\n                        </svg>\n                        Reply\n                      </button>\n                      <button class="comment-reply-chevron-btn" onclick="toggleReplyItemTemplatesDropdown(event, \'drawer\', \'').concat(comment.id, "', '").concat(reply.id, '\')" title="Reply templates">\n                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n                      </button>\n                      <div class="comment-more-menu hidden" id="reply-dropdown-drawer-').concat(comment.id, "-").concat(reply.id, '" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n                    </div>\n                    ').concat(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle) ? '\n                      <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI(\''.concat(reply.id, '\', \'drawer\')" title="Rewrite with AI">\n                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                          <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>\n                        </svg>\n                      </button>\n                    ') : "", '\n                    <div class="comment-more-container">\n                      <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, \'').concat(reply.id, '\')" title="More options">\n                        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>\n                      </button>\n                      <div class="comment-more-menu hidden" id="comment-more-menu-').concat(reply.id, '">\n                        <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat(\'').concat(reply.id, "'); closePromptDrawer();\">Add to Chat</button>\n                        ").concat(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle) ? '\n                          <button class="dropdown-item dropdown-item-danger" onclick="deleteComment(\''.concat(reply.id, "', 'drawer')\">Delete</button>\n                        ") : "", '\n                      </div>\n                    </div>\n                  </div>\n                  <div class="comment-reply-input" id="drawer-reply-item-input-').concat(comment.id, "-").concat(reply.id, '" style="display: none;">\n                    <div class="comment-reply-input-wrapper">\n                      <textarea placeholder="Write a reply..." onkeydown="handleReplyItemKeydown(event, \'drawer\', \'').concat(comment.id, "', '").concat(reply.id, '\')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-').concat(comment.id, "-").concat(reply.id, '" rows="1"></textarea>\n                    </div>\n                    <button class="comment-action-btn" onclick="postDrawerReplyItem(\'').concat(comment.id, "', '").concat(reply.id, "')\">Send</button>\n                  </div>\n                </div>\n              ")).join(""), "\n            </div>\n          ") : "", "\n        </div>\n      ");
+      return '\n        <div class="'.concat(itemClasses.join(" "), '" data-comment-id="').concat(comment.id, '" onclick="handleCommentItemClick(event, \'').concat(comment.id, "')\">\n          ").concat(multiSelectEnabled ? '\n            <input type="checkbox" class="comment-select-checkbox" \n              '.concat(isSelected ? "checked" : "", " \n              onchange=\"toggleCommentSelection('").concat(comment.id, "', this)\" />\n          ") : "", '\n          <div class="comment-header">\n            <div class="comment-avatar">\n              ').concat(comment.user.img_url ? '<img src="'.concat(comment.user.img_url, '" alt="').concat(comment.user.handle, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(comment.user.handle.substring(0, 1).toUpperCase(), "'\" />") : comment.user.handle.substring(0, 1).toUpperCase(), '\n            </div>\n            <div class="comment-header-text">\n              <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip(\'').concat(escapeHtml(comment.user.handle).replace(/'/g, "\\'"), "', 'from')\">").concat(highlightSearchMatches(comment.user.handle, commentsSearchQuery), "</span>\n              ").concat(((_a = comment.client_meta) == null ? void 0 : _a.node_id) ? '<span class="comment-attached-layer">'.concat(escapeHtml(getAttachedLayerLabel(cachedNodeNames[comment.client_meta.node_id] || "…")), "</span>") : "", "\n            </div>\n            ").concat(isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : "", '\n            <span class="comment-date">').concat(formatCommentDate(comment.created_at), '</span>\n          </div>\n          <div class="comment-body">').concat(highlightAndLinkify(comment.message, commentsSearchQuery), "</div>\n          ").concat(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle) && replyCount === 0 ? '\n            <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI(\''.concat(comment.id, "', 'drawer')\" title=\"").concat(escapeHtml(tu("actions.comments.drawer.rewriteWithAi")), '">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>\n              </svg>\n            </button>\n          ') : "", '\n          <div class="comment-actions">\n            ').concat(((_b = comment.client_meta) == null ? void 0 : _b.node_id) ? '\n              <button class="comment-action-btn icon-only" onclick="navigateToCommentNode(\''.concat(comment.client_meta.node_id, "', ").concat(comment.client_meta.node_offset ? "{x: ".concat(comment.client_meta.node_offset.x, ", y: ").concat(comment.client_meta.node_offset.y, "}") : "null", ')" title="').concat(escapeHtml(tu("actions.comments.drawer.goTo")), '">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>\n                </svg>\n              </button>\n              <button class="comment-action-btn" onclick="solveCommentWithAI(\'').concat(comment.id, '\', null, this)" title="').concat(escapeHtml(tu("actions.comments.drawer.solveWithAi")), '">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                  <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>\n                </svg>\n                ').concat(escapeHtml(tu("actions.comments.drawer.solve")), "\n              </button>\n            ") : "", '\n            <div class="comment-action-btn-group">\n              <button class="comment-action-btn" onclick="toggleDrawerReplyInput(\'').concat(comment.id, '\')">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>\n                </svg>\n                ').concat(escapeHtml(tu("actions.comments.drawer.reply")), '\n              </button>\n              <button class="comment-reply-chevron-btn" onclick="toggleReplyTemplatesDropdown(event, \'').concat(comment.id, '\')" title="').concat(escapeHtml(tu("actions.comments.drawer.replyTemplates")), '">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="reply-dropdown-').concat(comment.id, '" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n            </div>\n            <div class="comment-more-container">\n              <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, \'').concat(comment.id, '\')" title="').concat(escapeHtml(tu("actions.comments.drawer.moreOptions")), '">\n                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="comment-more-menu-').concat(comment.id, '">\n                <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat(\'').concat(comment.id, "'); closePromptDrawer();\">").concat(escapeHtml(tu("actions.comments.drawer.addToChat")), "</button>\n                ").concat(figmaCurrentUser && (comment.user.id === figmaCurrentUser.id || comment.user.handle === figmaCurrentUser.handle) ? '\n                  <button class="dropdown-item dropdown-item-danger" onclick="deleteComment(\''.concat(comment.id, "', 'drawer')\">").concat(escapeHtml(tu("actions.comments.drawer.delete")), "</button>\n                ") : "", '\n              </div>\n            </div>\n          </div>\n      <div class="comment-reply-input" id="drawer-reply-input-').concat(comment.id, '" style="display: none;">\n        <div class="comment-reply-input-wrapper">\n          <textarea placeholder="').concat(escapeHtml(tu("actions.comments.drawer.replyPlaceholder")), '" onkeydown="handleDrawerReplyKeydown(event, \'').concat(comment.id, "')\" oninput=\"autoExpandTextarea(this); handleCommentAiBtnVisibility(this, '").concat(comment.id, "'); handleMentionInput(this, 'drawer', '").concat(comment.id, "')\" onfocus=\"startCommentAiTimer('").concat(comment.id, "'); cancelMentionBlur()\" onblur=\"hideCommentAiBtn('").concat(comment.id, '\'); handleMentionBlur()" id="drawer-reply-text-').concat(comment.id, '" rows="1"></textarea>\n          <button class="comment-ai-gen-btn" onclick="generateAIReplyInline(\'').concat(comment.id, '\')" title="').concat(escapeHtml(tu("actions.comments.drawer.generateReplyWithAi")), '" id="drawer-ai-btn-').concat(comment.id, '">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n              <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />\n            </svg>\n          </button>\n        </div>\n        <button class="comment-action-btn" onclick="postDrawerReply(\'').concat(comment.id, "')\">").concat(escapeHtml(tu("actions.comments.drawer.send")), "</button>\n      </div>\n          ").concat(replyCount > 0 ? '\n            <button class="comment-replies-toggle'.concat(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id) ? " has-match" : "", '" id="replies-toggle-').concat(comment.id, '" onclick="toggleReplies(\'').concat(comment.id, '\')">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>\n              ').concat(replyCountLabel).concat(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id) ? ' <span class="reply-match-indicator">'.concat(replyMatchLabel, "</span>") : "", '\n            </button>\n            <div class="comment-replies collapsed" id="replies-').concat(comment.id, '">\n              ').concat(replies.map((reply) => '\n                <div class="comment-reply-item" data-comment-id="'.concat(reply.id, '">\n                  <div class="comment-header">\n                    <div class="comment-avatar">\n                      ').concat(reply.user.img_url ? '<img src="'.concat(reply.user.img_url, '" alt="').concat(reply.user.handle, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(reply.user.handle.substring(0, 1).toUpperCase(), "'\" />") : reply.user.handle.substring(0, 1).toUpperCase(), '\n                    </div>\n                    <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip(\'').concat(escapeHtml(reply.user.handle).replace(/'/g, "\\'"), "', 'from')\">").concat(highlightSearchMatches(reply.user.handle, commentsSearchQuery), '</span>\n                    <span class="comment-date">').concat(formatCommentDate(reply.created_at), '</span>\n                  </div>\n                  <div class="comment-body">').concat(highlightAndLinkify(reply.message, commentsSearchQuery), '</div>\n                  <div class="comment-reply-actions">\n                    <div class="comment-action-btn-group">\n                      <button class="comment-action-btn" onclick="toggleDrawerReplyItemInput(\'').concat(comment.id, "', '").concat(reply.id, "', '").concat(escapeHtml(reply.user.handle).replace(/'/g, "\\'"), '\')">\n                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                          <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>\n                        </svg>\n                        ').concat(escapeHtml(tu("actions.comments.drawer.reply")), "\n                      </button>\n                      <button class=\"comment-reply-chevron-btn\" onclick=\"toggleReplyItemTemplatesDropdown(event, 'drawer', '").concat(comment.id, "', '").concat(reply.id, '\')" title="').concat(escapeHtml(tu("actions.comments.drawer.replyTemplates")), '">\n                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n                      </button>\n                      <div class="comment-more-menu hidden" id="reply-dropdown-drawer-').concat(comment.id, "-").concat(reply.id, '" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n                    </div>\n                    ').concat(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle) ? '\n                      <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI(\''.concat(reply.id, "', 'drawer')\" title=\"").concat(escapeHtml(tu("actions.comments.drawer.rewriteWithAi")), '">\n                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n                          <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>\n                        </svg>\n                      </button>\n                    ') : "", '\n                    <div class="comment-more-container">\n                      <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, \'').concat(reply.id, '\')" title="').concat(escapeHtml(tu("actions.comments.drawer.moreOptions")), '">\n                        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>\n                      </button>\n                      <div class="comment-more-menu hidden" id="comment-more-menu-').concat(reply.id, '">\n                        <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat(\'').concat(reply.id, "'); closePromptDrawer();\">").concat(escapeHtml(tu("actions.comments.drawer.addToChat")), "</button>\n                        ").concat(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle) ? '\n                          <button class="dropdown-item dropdown-item-danger" onclick="deleteComment(\''.concat(reply.id, "', 'drawer')\">").concat(escapeHtml(tu("actions.comments.drawer.delete")), "</button>\n                        ") : "", '\n                      </div>\n                    </div>\n                  </div>\n                  <div class="comment-reply-input" id="drawer-reply-item-input-').concat(comment.id, "-").concat(reply.id, '" style="display: none;">\n                    <div class="comment-reply-input-wrapper">\n                      <textarea placeholder="').concat(escapeHtml(tu("actions.comments.drawer.replyPlaceholder")), "\" onkeydown=\"handleReplyItemKeydown(event, 'drawer', '").concat(comment.id, "', '").concat(reply.id, '\')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-').concat(comment.id, "-").concat(reply.id, '" rows="1"></textarea>\n                    </div>\n                    <button class="comment-action-btn" onclick="postDrawerReplyItem(\'').concat(comment.id, "', '").concat(reply.id, "')\">").concat(escapeHtml(tu("actions.comments.drawer.send")), "</button>\n                  </div>\n                </div>\n              ")).join(""), "\n            </div>\n          ") : "", "\n        </div>\n      ");
     }
     function renderCommentsListHTML(filteredComments, threads) {
       const { commentsSortBy } = getState();
       if (filteredComments.length === 0) {
-        return '<div class="prompt-comments-empty">No comments match your filters.</div>';
+        return '<div class="prompt-comments-empty">'.concat(escapeHtml(tu("actions.comments.drawer.emptyFiltered")), "</div>");
       }
       if (commentsSortBy === "burst") {
         const BURST_WINDOW_MS = 30 * 60 * 1e3;
@@ -13379,7 +13391,7 @@
       selectedMentionsFilter.forEach((name2) => {
         if (!visibleMentions.has(name2)) selectedMentionsFilter.delete(name2);
       });
-      const html = '\n      <div class="prompt-comments-toolbar">\n        <input type="text" class="prompt-comments-search" placeholder="Search..." \n          value="'.concat(escapeHtml(commentsSearchQuery), '" \n          oninput="handleCommentsSearchInput(this.value)"\n          oncompositionstart="handleCommentsSearchCompositionStart()"\n          oncompositionend="handleCommentsSearchCompositionEnd(event)" />\n        <div class="comments-dropdown-container">\n          <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="Sort and filter options">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <path d="M3 6h18M6 12h12M10 18h4" />\n            </svg>\n            <span>Options</span>\n          </button>\n          <div class="comments-dropdown-menu hidden" id="commentsDropdownMenu">\n            <div class="dropdown-section">Sort</div>\n            <button class="dropdown-item ').concat(commentsSortBy === "activity" ? "active" : "", '" onclick="handleCommentsSort(\'activity\')">Last Activity</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "newest" ? "active" : "", '" onclick="handleCommentsSort(\'newest\')">Newest</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "oldest" ? "active" : "", '" onclick="handleCommentsSort(\'oldest\')">Oldest</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "replies" ? "active" : "", '" onclick="handleCommentsSort(\'replies\')">Replies</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "viewport" ? "active" : "", '" onclick="handleCommentsSort(\'viewport\')">Nearest to viewport</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "burst" ? "active" : "", '" onclick="handleCommentsSort(\'burst\')">Burst</button>\n            <div class="dropdown-divider"></div>\n            <div class="dropdown-section">Filter</div>\n            <button class="dropdown-item ').concat(commentsFilterBy === "all" ? "active" : "", '" onclick="handleCommentsFilter(\'all\')">All</button>\n            <button class="dropdown-item ').concat(commentsFilterBy === "pending" ? "active" : "", '" onclick="handleCommentsFilter(\'pending\')">Needs my reply</button>\n          </div>\n        </div>\n        <button class="people-filter-toggle').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="Filter by people">\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">\n            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>\n            <circle cx="9" cy="7" r="4"/>\n            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>\n            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>\n          </svg>\n          <span id="peopleFilterCount" class="people-filter-count">').concat(selectedAuthorsFilter.size + selectedMentionsFilter.size > 0 ? selectedAuthorsFilter.size + selectedMentionsFilter.size : "", '</span>\n        </button>\n        <span id="commentsCountDisplay" class="comments-count-display">\n          ').concat(multiSelectEnabled ? "".concat(selectedCommentIds.size, " selected · ") : "").concat(filteredComments.length, "/").concat(total, "\n        </span>\n        ").concat(multiSelectEnabled ? '\n          <div class="prompt-comments-batch-actions">\n            <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="Select/Deselect all visible">\n              '.concat(selectedCommentIds.size > 0 ? "Deselect All" : "Select All", '\n            </button>\n            <div class="comment-action-btn-group">\n              <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput(\'manual\')" disabled title="Reply to all selected">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>\n                Reply\n              </button>\n              <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, \'batchReplyTextarea\')" title="Reply templates" disabled id="batchReplyChevronBtn">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="reply-dropdown-batchReplyTextarea" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n            </div>\n            <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="Summarize selected with AI">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>\n              Summarize\n            </button>\n            <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="Download selected as CSV">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>\n              CSV\n            </button>\n          </div>\n        ') : "", '\n      </div>\n      <div id="batchActionInputContainer" class="batch-action-container" style="display: none;">\n        <div class="people-filter-header">\n          <div class="tab-container">\n            <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab(\'manual\')">Manual</button>\n            <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab(\'ai\')">AI Assisted</button>\n          </div>\n        </div>\n        <div id="batchReplyInputArea" style="display: none;">\n          <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="Enter a reply to be posted to all selected comments..." onkeydown="handleBatchReplyKeydown(event, \'manual\')" oninput="autoExpandTextarea(this)"></textarea>\n          <div class="batch-action-footer">\n            <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>\n            <button class="comment-action-btn primary" onclick="executeBatchReply()">Send to <span id="batchReplyCountLabel">0</span> comments</button>\n          </div>\n        </div>\n        <div id="batchAiReplyInputArea" style="display: none;">\n          <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="Instruct AI how to reply (e.g. \'Thank them and say we\'ll check it\'). AI will tailor responses to each context." onkeydown="handleBatchReplyKeydown(event, \'ai\')" oninput="autoExpandTextarea(this)"></textarea>\n          <div class="batch-action-footer">\n            <button class="comment-action-btn" onclick="closeBatchInput()">Cancel</button>\n            <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">Run AI for <span id="batchAiReplyCountLabel">0</span> comments</button>\n          </div>\n        </div>\n      </div>\n      <div class="people-filter-section').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterSection">\n        <div class="people-filter-header">\n          <div class="tab-container">\n            <button class="tab-item').concat(peopleFilterActiveTab === "from" ? " active" : "", '" data-tab="from" onclick="switchPeopleFilterTab(\'from\')">\n              From\n              <span class="tab-badge" id="fromTabBadge" style="').concat(selectedAuthorsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedAuthorsFilter.size || "", '</span>\n            </button>\n            <button class="tab-item').concat(peopleFilterActiveTab === "mentions" ? " active" : "", '" data-tab="mentions" onclick="switchPeopleFilterTab(\'mentions\')">\n              @Mentions\n              <span class="tab-badge" id="mentionsTabBadge" style="').concat(selectedMentionsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedMentionsFilter.size || "", '</span>\n            </button>\n          </div>\n          <div style="display: flex; align-items: center; gap: 8px;">\n            <div class="people-filter-include-replies-toggle ').concat(peopleFilterActiveTab === "from" ? peopleFilterIncludeRepliesFrom ? "active" : "" : peopleFilterIncludeRepliesMentions ? "active" : "", '" onclick="togglePeopleIncludeReplies()" title="Included authors/mentions in comment replies">\n              <span class="toggle-switch"></span>\n              Replies\n            </div>\n            ').concat(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0 ? '<button class="people-filter-clear" onclick="clearPeopleFilter(\'all\')">Clear all</button>' : "", '\n          </div>\n        </div>\n        <div class="people-chips-container" id="peopleChipsFrom" style="').concat(peopleFilterActiveTab === "from" ? "display: flex;" : "display: none;", '">\n          ').concat(peopleList.filter((p) => p.isAuthor).map((p) => '\n            <button class="people-chip'.concat(selectedAuthorsFilter.has(p.name) ? " selected" : "", '" data-name="').concat(escapeHtml(p.name), '" data-filter="from" onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'from')\">\n              <div class=\"people-chip-avatar-mini\">\n                ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n              </div>\n              ").concat(escapeHtml(p.name), "\n            </button>\n          ")).join(""), '\n        </div>\n        <div class="people-chips-container" id="peopleChipsMentions" style="').concat(peopleFilterActiveTab === "mentions" ? "display: flex;" : "display: none;", '">\n          ').concat(peopleList.filter((p) => p.isMentioned).length > 0 ? peopleList.filter((p) => p.isMentioned).map((p) => '\n              <button class="people-chip'.concat(selectedMentionsFilter.has(p.name) ? " selected" : "", '" data-name="').concat(escapeHtml(p.name), '" data-filter="mentions" onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'mentions')\">\n                <div class=\"people-chip-avatar-mini\">\n                  ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n                </div>\n                ").concat(escapeHtml(p.name), "\n              </button>\n            ")).join("") : '<span class="people-filter-empty">No mentions found</span>', '\n        </div>\n      </div>\n      <div id="promptCommentsListContainer">\n        ').concat(renderCommentsListHTML(filteredComments, threads), "\n      </div>");
+      const html = '\n      <div class="prompt-comments-toolbar">\n        <input type="text" class="prompt-comments-search" placeholder="'.concat(escapeHtml(tu("actions.comments.drawer.search")), '" \n          value="').concat(escapeHtml(commentsSearchQuery), '" \n          oninput="handleCommentsSearchInput(this.value)"\n          oncompositionstart="handleCommentsSearchCompositionStart()"\n          oncompositionend="handleCommentsSearchCompositionEnd(event)" />\n        <div class="comments-dropdown-container">\n          <button class="comments-dropdown-btn" onclick="toggleCommentsDropdown(event)" title="').concat(escapeHtml(tu("actions.comments.drawer.sortFilterTitle")), '">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n              <path d="M3 6h18M6 12h12M10 18h4" />\n            </svg>\n            <span>').concat(escapeHtml(tu("actions.comments.drawer.options")), '</span>\n          </button>\n          <div class="comments-dropdown-menu hidden" id="commentsDropdownMenu">\n            <div class="dropdown-section">').concat(escapeHtml(tu("actions.comments.drawer.sort")), '</div>\n            <button class="dropdown-item ').concat(commentsSortBy === "activity" ? "active" : "", '" onclick="handleCommentsSort(\'activity\')">').concat(escapeHtml(tu("actions.comments.drawer.sortActivity")), '</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "newest" ? "active" : "", '" onclick="handleCommentsSort(\'newest\')">').concat(escapeHtml(tu("actions.comments.drawer.sortNewest")), '</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "oldest" ? "active" : "", '" onclick="handleCommentsSort(\'oldest\')">').concat(escapeHtml(tu("actions.comments.drawer.sortOldest")), '</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "replies" ? "active" : "", '" onclick="handleCommentsSort(\'replies\')">').concat(escapeHtml(tu("actions.comments.drawer.sortReplies")), '</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "viewport" ? "active" : "", '" onclick="handleCommentsSort(\'viewport\')">').concat(escapeHtml(tu("actions.comments.drawer.sortViewport")), '</button>\n            <button class="dropdown-item ').concat(commentsSortBy === "burst" ? "active" : "", '" onclick="handleCommentsSort(\'burst\')">').concat(escapeHtml(tu("actions.comments.drawer.sortBurst")), '</button>\n            <div class="dropdown-divider"></div>\n            <div class="dropdown-section">').concat(escapeHtml(tu("actions.comments.drawer.filter")), '</div>\n            <button class="dropdown-item ').concat(commentsFilterBy === "all" ? "active" : "", '" onclick="handleCommentsFilter(\'all\')">').concat(escapeHtml(tu("actions.comments.drawer.filterAll")), '</button>\n            <button class="dropdown-item ').concat(commentsFilterBy === "pending" ? "active" : "", '" onclick="handleCommentsFilter(\'pending\')">').concat(escapeHtml(tu("actions.comments.drawer.filterPending")), '</button>\n          </div>\n        </div>\n        <button class="people-filter-toggle').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="').concat(escapeHtml(tu("actions.comments.drawer.peopleFilter")), '">\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">\n            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>\n            <circle cx="9" cy="7" r="4"/>\n            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>\n            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>\n          </svg>\n          <span id="peopleFilterCount" class="people-filter-count">').concat(selectedAuthorsFilter.size + selectedMentionsFilter.size > 0 ? selectedAuthorsFilter.size + selectedMentionsFilter.size : "", '</span>\n        </button>\n        <span id="commentsCountDisplay" class="comments-count-display">\n          ').concat(multiSelectEnabled ? "".concat(escapeHtml(getSelectedCountLabel(selectedCommentIds.size)), " · ") : "").concat(filteredComments.length, "/").concat(total, "\n        </span>\n        ").concat(multiSelectEnabled ? '\n          <div class="prompt-comments-batch-actions">\n            <button class="prompt-comments-batch-btn" id="selectAllBtn" onclick="selectAllVisibleComments()" title="'.concat(escapeHtml(tu("actions.comments.drawer.selectAllTitle")), '">\n              ').concat(escapeHtml(selectedCommentIds.size > 0 ? tu("actions.comments.drawer.deselectAll") : tu("actions.comments.drawer.selectAll")), '\n            </button>\n            <div class="comment-action-btn-group">\n              <button class="prompt-comments-batch-btn" id="batchReplyBtn" onclick="toggleBatchReplyInput(\'manual\')" disabled title="').concat(escapeHtml(tu("actions.comments.drawer.replySelectedTitle")), '">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>\n                ').concat(escapeHtml(tu("actions.comments.drawer.reply")), '\n              </button>\n              <button class="comment-reply-chevron-btn batch-reply-chevron-btn" onclick="toggleBatchReplyTemplatesDropdown(event, \'batchReplyTextarea\')" title="').concat(escapeHtml(tu("actions.comments.drawer.replyTemplates")), '" disabled id="batchReplyChevronBtn">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n              </button>\n              <div class="comment-more-menu hidden" id="reply-dropdown-batchReplyTextarea" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>\n            </div>\n            <button class="prompt-comments-batch-btn" id="batchSummarizeBtn" onclick="batchSummarizeSelected()" disabled title="').concat(escapeHtml(tu("actions.comments.drawer.summarizeSelectedTitle")), '">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>\n              ').concat(escapeHtml(tu("actions.comments.drawer.summarize")), '\n            </button>\n            <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="').concat(escapeHtml(tu("actions.comments.drawer.downloadCsvTitle")), '">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>\n              ').concat(escapeHtml(tu("actions.comments.drawer.csv")), "\n            </button>\n          </div>\n        ") : "", '\n      </div>\n      <div id="batchActionInputContainer" class="batch-action-container" style="display: none;">\n        <div class="people-filter-header">\n          <div class="tab-container">\n            <button class="tab-item active" id="batchTabManual" onclick="switchBatchActionTab(\'manual\')">').concat(escapeHtml(tu("actions.comments.drawer.manual")), '</button>\n            <button class="tab-item" id="batchTabAi" onclick="switchBatchActionTab(\'ai\')">').concat(escapeHtml(tu("actions.comments.drawer.aiAssisted")), '</button>\n          </div>\n        </div>\n        <div id="batchReplyInputArea" style="display: none;">\n          <textarea id="batchReplyTextarea" class="batch-reply-textarea" placeholder="').concat(escapeHtml(tu("actions.comments.drawer.batchReplyPlaceholder")), '" onkeydown="handleBatchReplyKeydown(event, \'manual\')" oninput="autoExpandTextarea(this)"></textarea>\n          <div class="batch-action-footer">\n            <button class="comment-action-btn" onclick="closeBatchInput()">').concat(escapeHtml(tu("actions.comments.drawer.cancel")), '</button>\n            <button class="comment-action-btn primary" onclick="executeBatchReply()">').concat(tu("actions.comments.drawer.sendToCount", { count: '<span id="batchReplyCountLabel">0</span>' }), '</button>\n          </div>\n        </div>\n        <div id="batchAiReplyInputArea" style="display: none;">\n          <textarea id="batchAiReplyInstruction" class="batch-reply-textarea" placeholder="').concat(escapeHtml(tu("actions.comments.drawer.batchAiPlaceholder")), '" onkeydown="handleBatchReplyKeydown(event, \'ai\')" oninput="autoExpandTextarea(this)"></textarea>\n          <div class="batch-action-footer">\n            <button class="comment-action-btn" onclick="closeBatchInput()">').concat(escapeHtml(tu("actions.comments.drawer.cancel")), '</button>\n            <button class="comment-action-btn primary" id="executeBatchAiReplyBtn" onclick="executeBatchAiReply()">').concat(tu("actions.comments.drawer.runAiForCount", { count: '<span id="batchAiReplyCountLabel">0</span>' }), '</button>\n          </div>\n        </div>\n      </div>\n      <div class="people-filter-section').concat(peopleFilterExpanded ? " expanded" : "", '" id="peopleFilterSection">\n        <div class="people-filter-header">\n          <div class="tab-container">\n            <button class="tab-item').concat(peopleFilterActiveTab === "from" ? " active" : "", '" data-tab="from" onclick="switchPeopleFilterTab(\'from\')">\n              ').concat(escapeHtml(tu("actions.comments.drawer.from")), '\n              <span class="tab-badge" id="fromTabBadge" style="').concat(selectedAuthorsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedAuthorsFilter.size || "", '</span>\n            </button>\n            <button class="tab-item').concat(peopleFilterActiveTab === "mentions" ? " active" : "", '" data-tab="mentions" onclick="switchPeopleFilterTab(\'mentions\')">\n              ').concat(escapeHtml(tu("actions.comments.drawer.mentions")), '\n              <span class="tab-badge" id="mentionsTabBadge" style="').concat(selectedMentionsFilter.size > 0 ? "display: inline-flex;" : "", '">').concat(selectedMentionsFilter.size || "", '</span>\n            </button>\n          </div>\n          <div style="display: flex; align-items: center; gap: 8px;">\n            <div class="people-filter-include-replies-toggle ').concat(peopleFilterActiveTab === "from" ? peopleFilterIncludeRepliesFrom ? "active" : "" : peopleFilterIncludeRepliesMentions ? "active" : "", '" onclick="togglePeopleIncludeReplies()" title="').concat(escapeHtml(tu("actions.comments.drawer.includeRepliesTitle")), '">\n              <span class="toggle-switch"></span>\n              ').concat(escapeHtml(tu("actions.comments.drawer.replies")), "\n            </div>\n            ").concat(selectedAuthorsFilter.size > 0 || selectedMentionsFilter.size > 0 ? '<button class="people-filter-clear" onclick="clearPeopleFilter(\'all\')">'.concat(escapeHtml(tu("actions.comments.drawer.clearAll")), "</button>") : "", '\n          </div>\n        </div>\n        <div class="people-chips-container" id="peopleChipsFrom" style="').concat(peopleFilterActiveTab === "from" ? "display: flex;" : "display: none;", '">\n          ').concat(peopleList.filter((p) => p.isAuthor).map((p) => '\n            <button class="people-chip'.concat(selectedAuthorsFilter.has(p.name) ? " selected" : "", '" data-name="').concat(escapeHtml(p.name), '" data-filter="from" onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'from')\">\n              <div class=\"people-chip-avatar-mini\">\n                ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n              </div>\n              ").concat(escapeHtml(p.name), "\n            </button>\n          ")).join(""), '\n        </div>\n        <div class="people-chips-container" id="peopleChipsMentions" style="').concat(peopleFilterActiveTab === "mentions" ? "display: flex;" : "display: none;", '">\n          ').concat(peopleList.filter((p) => p.isMentioned).length > 0 ? peopleList.filter((p) => p.isMentioned).map((p) => '\n              <button class="people-chip'.concat(selectedMentionsFilter.has(p.name) ? " selected" : "", '" data-name="').concat(escapeHtml(p.name), '" data-filter="mentions" onclick="togglePersonChip(\'').concat(escapeHtml(p.name).replace(/'/g, "\\'"), "', 'mentions')\">\n                <div class=\"people-chip-avatar-mini\">\n                  ").concat(p.img_url ? '<img src="'.concat(p.img_url, '" alt="').concat(p.name, "\" onerror=\"this.style.display='none';this.parentNode.textContent='").concat(p.name.substring(0, 1).toUpperCase(), "'\" />") : p.name.substring(0, 1).toUpperCase(), "\n                </div>\n                ").concat(escapeHtml(p.name), "\n              </button>\n            ")).join("") : '<span class="people-filter-empty">'.concat(escapeHtml(tu("actions.comments.drawer.noMentions")), "</span>"), '\n        </div>\n      </div>\n      <div id="promptCommentsListContainer">\n        ').concat(renderCommentsListHTML(filteredComments, threads), "\n      </div>");
       container.innerHTML = html;
       updateBatchActionsState();
     }
@@ -19178,6 +19190,80 @@
           "actions.comments.loading": "Loading comments...",
           "actions.comments.error": "Unable to load comments.",
           "actions.comments.empty": "No comments found in this file.",
+          "actions.comments.drawer.rewriteWithAi": "Rewrite with AI",
+          "actions.comments.drawer.goTo": "Go to",
+          "actions.comments.drawer.solveWithAi": "Solve with AI",
+          "actions.comments.drawer.solve": "Solve",
+          "actions.comments.drawer.reply": "Reply",
+          "actions.comments.drawer.replyTemplates": "Reply templates",
+          "actions.comments.drawer.moreOptions": "More options",
+          "actions.comments.drawer.addToChat": "Add to Chat",
+          "actions.comments.drawer.delete": "Delete",
+          "actions.comments.drawer.replyPlaceholder": "Write a reply...",
+          "actions.comments.drawer.generateReplyWithAi": "Generate reply with AI",
+          "actions.comments.drawer.generatingReply": "Generating reply...",
+          "actions.comments.drawer.send": "Send",
+          "actions.comments.drawer.sending": "Sending...",
+          "actions.comments.drawer.commentNotFound": "Comment not found",
+          "actions.comments.drawer.replyRequired": "Please enter a reply message",
+          "actions.comments.drawer.missingTokenOrFileKey": "Missing token or file key",
+          "actions.comments.drawer.figmaAuthRequired": "Please configure Figma token and file key in Settings",
+          "actions.comments.drawer.replyGeneratedToast": "Reply generated! Review and click Send.",
+          "actions.comments.drawer.failedToGenerate": "Failed to generate: {message}",
+          "actions.comments.drawer.replyPostedToast": "Reply posted!",
+          "actions.comments.drawer.failedToPostReply": "Failed to post reply: {message}",
+          "actions.comments.drawer.deleteConfirm": "Delete this comment?",
+          "actions.comments.drawer.replySingle": "{count} reply",
+          "actions.comments.drawer.replyPlural": "{count} replies",
+          "actions.comments.drawer.replyMatch": "• match",
+          "actions.comments.drawer.emptyFiltered": "No comments match your filters.",
+          "actions.comments.drawer.search": "Search...",
+          "actions.comments.drawer.options": "Options",
+          "actions.comments.drawer.sortFilterTitle": "Sort and filter options",
+          "actions.comments.drawer.sort": "Sort",
+          "actions.comments.drawer.sortActivity": "Last Activity",
+          "actions.comments.drawer.sortNewest": "Newest",
+          "actions.comments.drawer.sortOldest": "Oldest",
+          "actions.comments.drawer.sortReplies": "Replies",
+          "actions.comments.drawer.sortViewport": "Nearest to viewport",
+          "actions.comments.drawer.sortBurst": "Burst",
+          "actions.comments.drawer.filter": "Filter",
+          "actions.comments.drawer.filterAll": "All",
+          "actions.comments.drawer.filterPending": "Needs my reply",
+          "actions.comments.drawer.peopleFilter": "Filter by people",
+          "actions.comments.drawer.selectedCount": "{count} selected",
+          "actions.comments.drawer.selectAll": "Select All",
+          "actions.comments.drawer.deselectAll": "Deselect All",
+          "actions.comments.drawer.selectAllTitle": "Select/Deselect all visible",
+          "actions.comments.drawer.replySelectedTitle": "Reply to all selected",
+          "actions.comments.drawer.summarizeSelectedTitle": "Summarize selected with AI",
+          "actions.comments.drawer.summarize": "Summarize",
+          "actions.comments.drawer.downloadCsvTitle": "Download selected as CSV",
+          "actions.comments.drawer.csv": "CSV",
+          "actions.comments.drawer.manual": "Manual",
+          "actions.comments.drawer.aiAssisted": "AI Assisted",
+          "actions.comments.drawer.batchReplyPlaceholder": "Enter a reply to be posted to all selected comments...",
+          "actions.comments.drawer.batchAiPlaceholder": "Instruct AI how to reply (e.g. 'Thank them and say we'll check it'). AI will tailor responses to each context.",
+          "actions.comments.drawer.cancel": "Cancel",
+          "actions.comments.drawer.sendToCount": "Send to {count} comments",
+          "actions.comments.drawer.runAiForCount": "Run AI for {count} comments",
+          "actions.comments.drawer.from": "From",
+          "actions.comments.drawer.mentions": "@Mentions",
+          "actions.comments.drawer.includeRepliesTitle": "Include authors/mentions in comment replies",
+          "actions.comments.drawer.replies": "Replies",
+          "actions.comments.drawer.clearAll": "Clear all",
+          "actions.comments.drawer.noMentions": "No mentions found",
+          "actions.comments.drawer.onLayer": "on {layer}",
+          "actions.comments.drawer.moreAiActions": "More AI actions",
+          "actions.comments.ai.summarizeAll": "Summarize All",
+          "actions.comments.ai.summarizeAllTitle": "Summarize all with AI",
+          "actions.comments.ai.generateTodoList": "Generate Todo List",
+          "actions.comments.ai.generateTodoListTitle": "Generate a todo list from comments",
+          "actions.comments.ai.assistant": "AI Assistant",
+          "actions.comments.ai.assistantTitle": "Ask AI about these comments",
+          "actions.comments.ai.assistantPopupTitle": "AI Assistant ({count} comments)",
+          "actions.comments.ai.assistantPlaceholder": "Ask a question or give a specific instruction...",
+          "actions.comments.ai.ask": "Ask AI",
           "actions.camera.lockStyle": "Lock Style",
           "actions.camera.on": "On",
           "actions.camera.off": "Off",
@@ -19424,6 +19510,80 @@
           "actions.comments.loading": "コメントを読み込み中...",
           "actions.comments.error": "コメントを読み込めませんでした。",
           "actions.comments.empty": "このファイルにコメントはありません。",
+          "actions.comments.drawer.rewriteWithAi": "AIで書き換え",
+          "actions.comments.drawer.goTo": "移動",
+          "actions.comments.drawer.solveWithAi": "AIで解決",
+          "actions.comments.drawer.solve": "解決",
+          "actions.comments.drawer.reply": "返信",
+          "actions.comments.drawer.replyTemplates": "返信テンプレート",
+          "actions.comments.drawer.moreOptions": "その他のオプション",
+          "actions.comments.drawer.addToChat": "チャットに追加",
+          "actions.comments.drawer.delete": "削除",
+          "actions.comments.drawer.replyPlaceholder": "返信を入力...",
+          "actions.comments.drawer.generateReplyWithAi": "AIで返信文を生成",
+          "actions.comments.drawer.generatingReply": "返信文を生成中...",
+          "actions.comments.drawer.send": "送信",
+          "actions.comments.drawer.sending": "送信中...",
+          "actions.comments.drawer.commentNotFound": "コメントが見つかりません",
+          "actions.comments.drawer.replyRequired": "返信内容を入力してください",
+          "actions.comments.drawer.missingTokenOrFileKey": "トークンまたはファイルキーがありません",
+          "actions.comments.drawer.figmaAuthRequired": "設定で Figma トークンとファイルキーを設定してください",
+          "actions.comments.drawer.replyGeneratedToast": "返信文を生成しました。内容を確認して送信してください。",
+          "actions.comments.drawer.failedToGenerate": "生成に失敗しました: {message}",
+          "actions.comments.drawer.replyPostedToast": "返信を投稿しました",
+          "actions.comments.drawer.failedToPostReply": "返信の投稿に失敗しました: {message}",
+          "actions.comments.drawer.deleteConfirm": "このコメントを削除しますか？",
+          "actions.comments.drawer.replySingle": "返信 {count} 件",
+          "actions.comments.drawer.replyPlural": "返信 {count} 件",
+          "actions.comments.drawer.replyMatch": "• 一致",
+          "actions.comments.drawer.emptyFiltered": "フィルターに一致するコメントはありません。",
+          "actions.comments.drawer.search": "検索...",
+          "actions.comments.drawer.options": "オプション",
+          "actions.comments.drawer.sortFilterTitle": "並び替えとフィルター",
+          "actions.comments.drawer.sort": "並び替え",
+          "actions.comments.drawer.sortActivity": "最終更新",
+          "actions.comments.drawer.sortNewest": "新しい順",
+          "actions.comments.drawer.sortOldest": "古い順",
+          "actions.comments.drawer.sortReplies": "返信",
+          "actions.comments.drawer.sortViewport": "ビューポートに近い順",
+          "actions.comments.drawer.sortBurst": "バースト",
+          "actions.comments.drawer.filter": "フィルター",
+          "actions.comments.drawer.filterAll": "すべて",
+          "actions.comments.drawer.filterPending": "自分の返信が必要",
+          "actions.comments.drawer.peopleFilter": "人で絞り込む",
+          "actions.comments.drawer.selectedCount": "{count}件選択",
+          "actions.comments.drawer.selectAll": "すべて選択",
+          "actions.comments.drawer.deselectAll": "選択解除",
+          "actions.comments.drawer.selectAllTitle": "表示中をすべて選択/解除",
+          "actions.comments.drawer.replySelectedTitle": "選択したコメントに返信",
+          "actions.comments.drawer.summarizeSelectedTitle": "選択したコメントをAIで要約",
+          "actions.comments.drawer.summarize": "要約",
+          "actions.comments.drawer.downloadCsvTitle": "選択したコメントをCSVでダウンロード",
+          "actions.comments.drawer.csv": "CSV",
+          "actions.comments.drawer.manual": "手動",
+          "actions.comments.drawer.aiAssisted": "AI支援",
+          "actions.comments.drawer.batchReplyPlaceholder": "選択したすべてのコメントに投稿する返信を入力...",
+          "actions.comments.drawer.batchAiPlaceholder": "AI への返信指示を入力してください（例:「お礼を伝えて、確認しますと返答」）。AI が各コメントの文脈に合わせて返信を作成します。",
+          "actions.comments.drawer.cancel": "キャンセル",
+          "actions.comments.drawer.sendToCount": "{count}件のコメントに送信",
+          "actions.comments.drawer.runAiForCount": "{count}件のコメントに AI を実行",
+          "actions.comments.drawer.from": "投稿者",
+          "actions.comments.drawer.mentions": "@メンション",
+          "actions.comments.drawer.includeRepliesTitle": "コメント返信内の投稿者/メンションも含める",
+          "actions.comments.drawer.replies": "返信",
+          "actions.comments.drawer.clearAll": "すべてクリア",
+          "actions.comments.drawer.noMentions": "メンションは見つかりません",
+          "actions.comments.drawer.onLayer": "{layer} 上",
+          "actions.comments.drawer.moreAiActions": "AIアクションをもっと見る",
+          "actions.comments.ai.summarizeAll": "すべて要約",
+          "actions.comments.ai.summarizeAllTitle": "すべてのコメントをAIで要約",
+          "actions.comments.ai.generateTodoList": "Todoリストを生成",
+          "actions.comments.ai.generateTodoListTitle": "コメントからTodoリストを生成",
+          "actions.comments.ai.assistant": "AIアシスタント",
+          "actions.comments.ai.assistantTitle": "これらのコメントについてAIに質問",
+          "actions.comments.ai.assistantPopupTitle": "AIアシスタント（{count}件のコメント）",
+          "actions.comments.ai.assistantPlaceholder": "質問または具体的な指示を入力...",
+          "actions.comments.ai.ask": "AIに質問",
           "actions.camera.lockStyle": "スタイルを固定",
           "actions.camera.on": "オン",
           "actions.camera.off": "オフ",
@@ -19670,6 +19830,80 @@
           "actions.comments.loading": "正在加载评论...",
           "actions.comments.error": "无法加载评论。",
           "actions.comments.empty": "此文件中没有评论。",
+          "actions.comments.drawer.rewriteWithAi": "用 AI 改写",
+          "actions.comments.drawer.goTo": "跳转到",
+          "actions.comments.drawer.solveWithAi": "用 AI 解决",
+          "actions.comments.drawer.solve": "解决",
+          "actions.comments.drawer.reply": "回复",
+          "actions.comments.drawer.replyTemplates": "回复模板",
+          "actions.comments.drawer.moreOptions": "更多选项",
+          "actions.comments.drawer.addToChat": "添加到聊天",
+          "actions.comments.drawer.delete": "删除",
+          "actions.comments.drawer.replyPlaceholder": "输入回复...",
+          "actions.comments.drawer.generateReplyWithAi": "用 AI 生成回复",
+          "actions.comments.drawer.generatingReply": "正在生成回复...",
+          "actions.comments.drawer.send": "发送",
+          "actions.comments.drawer.sending": "发送中...",
+          "actions.comments.drawer.commentNotFound": "未找到评论",
+          "actions.comments.drawer.replyRequired": "请输入回复内容",
+          "actions.comments.drawer.missingTokenOrFileKey": "缺少令牌或文件 Key",
+          "actions.comments.drawer.figmaAuthRequired": "请先在设置中配置 Figma 令牌和文件 Key",
+          "actions.comments.drawer.replyGeneratedToast": "回复已生成，请确认后发送。",
+          "actions.comments.drawer.failedToGenerate": "生成失败：{message}",
+          "actions.comments.drawer.replyPostedToast": "回复已发送！",
+          "actions.comments.drawer.failedToPostReply": "发送回复失败：{message}",
+          "actions.comments.drawer.deleteConfirm": "要删除这条评论吗？",
+          "actions.comments.drawer.replySingle": "{count} 条回复",
+          "actions.comments.drawer.replyPlural": "{count} 条回复",
+          "actions.comments.drawer.replyMatch": "• 匹配",
+          "actions.comments.drawer.emptyFiltered": "没有符合当前筛选条件的评论。",
+          "actions.comments.drawer.search": "搜索...",
+          "actions.comments.drawer.options": "选项",
+          "actions.comments.drawer.sortFilterTitle": "排序和筛选选项",
+          "actions.comments.drawer.sort": "排序",
+          "actions.comments.drawer.sortActivity": "最近活动",
+          "actions.comments.drawer.sortNewest": "最新",
+          "actions.comments.drawer.sortOldest": "最旧",
+          "actions.comments.drawer.sortReplies": "回复",
+          "actions.comments.drawer.sortViewport": "距离视口最近",
+          "actions.comments.drawer.sortBurst": "集中时段",
+          "actions.comments.drawer.filter": "筛选",
+          "actions.comments.drawer.filterAll": "全部",
+          "actions.comments.drawer.filterPending": "需要我回复",
+          "actions.comments.drawer.peopleFilter": "按人员筛选",
+          "actions.comments.drawer.selectedCount": "已选 {count} 条",
+          "actions.comments.drawer.selectAll": "全选",
+          "actions.comments.drawer.deselectAll": "取消全选",
+          "actions.comments.drawer.selectAllTitle": "全选/取消当前可见项",
+          "actions.comments.drawer.replySelectedTitle": "回复所有已选评论",
+          "actions.comments.drawer.summarizeSelectedTitle": "用 AI 总结所选评论",
+          "actions.comments.drawer.summarize": "总结",
+          "actions.comments.drawer.downloadCsvTitle": "将所选评论下载为 CSV",
+          "actions.comments.drawer.csv": "CSV",
+          "actions.comments.drawer.manual": "手动",
+          "actions.comments.drawer.aiAssisted": "AI 辅助",
+          "actions.comments.drawer.batchReplyPlaceholder": "输入要发布到所有已选评论的回复...",
+          "actions.comments.drawer.batchAiPlaceholder": "告诉 AI 要如何回复（例如：“感谢对方，并说明我们会检查”）。AI 会根据每条评论的上下文调整回复。",
+          "actions.comments.drawer.cancel": "取消",
+          "actions.comments.drawer.sendToCount": "发送到 {count} 条评论",
+          "actions.comments.drawer.runAiForCount": "对 {count} 条评论运行 AI",
+          "actions.comments.drawer.from": "发布者",
+          "actions.comments.drawer.mentions": "@提及",
+          "actions.comments.drawer.includeRepliesTitle": "包含评论回复中的作者/@提及",
+          "actions.comments.drawer.replies": "回复",
+          "actions.comments.drawer.clearAll": "全部清除",
+          "actions.comments.drawer.noMentions": "未找到提及",
+          "actions.comments.drawer.onLayer": "位于 {layer}",
+          "actions.comments.drawer.moreAiActions": "更多 AI 操作",
+          "actions.comments.ai.summarizeAll": "总结全部",
+          "actions.comments.ai.summarizeAllTitle": "用 AI 总结全部评论",
+          "actions.comments.ai.generateTodoList": "生成待办清单",
+          "actions.comments.ai.generateTodoListTitle": "根据评论生成待办清单",
+          "actions.comments.ai.assistant": "AI 助手",
+          "actions.comments.ai.assistantTitle": "就这些评论向 AI 提问",
+          "actions.comments.ai.assistantPopupTitle": "AI 助手（{count} 条评论）",
+          "actions.comments.ai.assistantPlaceholder": "输入问题或具体指令...",
+          "actions.comments.ai.ask": "询问 AI",
           "actions.camera.lockStyle": "锁定风格",
           "actions.camera.on": "开",
           "actions.camera.off": "关",
@@ -20552,6 +20786,14 @@
         };
         return keyMap[mode] ? tu(keyMap[mode]) : mode;
       }
+      function getCommentAiActionMeta(key) {
+        const action = commentAiActions[key];
+        if (!action) return null;
+        return __spreadProps(__spreadValues({}, action), {
+          label: tu(action.labelKey),
+          title: tu(action.titleKey)
+        });
+      }
       function localizeTaskField(field) {
         if (!field || typeof field !== "object") return field;
         const localized = __spreadValues({}, field);
@@ -20680,6 +20922,25 @@
             figmaFileKeyInput.placeholder = t("settings.figma.fileKeyEditingPlaceholder");
           } else if (!figmaFileKeyInput.value) {
             figmaFileKeyInput.placeholder = t("settings.figma.fileKeyManualPlaceholder");
+          }
+        }
+        if ((currentPromptAction == null ? void 0 : currentPromptAction.directAction) === "listAllComments") {
+          const promptCommentsContainer = document.getElementById("promptCommentsContainer");
+          if (promptCommentsContainer && promptCommentsContainer.offsetParent !== null) {
+            renderCommentsInDrawer(promptCommentsContainer);
+          }
+          const mainBtn = document.querySelector(".prompt-action-main-btn");
+          if (mainBtn) {
+            const action = getCommentAiActionMeta(currentCommentAiAction);
+            if (action) {
+              mainBtn.innerHTML = "\n              ".concat(action.icon, "\n              ").concat(action.label).concat(currentCommentAiAction === "summarize" ? ' <span class="summarize-count">()</span>' : "", "\n            ");
+              mainBtn.title = action.title;
+              updateSummarizeAllButtonState();
+            }
+          }
+          const expandBtn = document.querySelector(".ai-action-expand-btn");
+          if (expandBtn) {
+            expandBtn.title = tu("actions.comments.drawer.moreAiActions");
           }
         }
       }
@@ -25370,20 +25631,20 @@
       var currentCommentAiAction = "summarize";
       var commentAiActions = {
         "summarize": {
-          label: "Summarize All",
-          title: "Summarize all with AI",
+          labelKey: "actions.comments.ai.summarizeAll",
+          titleKey: "actions.comments.ai.summarizeAllTitle",
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>',
           fn: "summarizeCommentsFromDrawer"
         },
         "todo": {
-          label: "Generate Todo List",
-          title: "Generate a todo list from comments",
+          labelKey: "actions.comments.ai.generateTodoList",
+          titleKey: "actions.comments.ai.generateTodoListTitle",
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
           fn: "generateTodoListFromDrawer"
         },
         "assistant": {
-          label: "AI Assistant",
-          title: "Ask AI about these comments",
+          labelKey: "actions.comments.ai.assistant",
+          titleKey: "actions.comments.ai.assistantTitle",
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
           fn: "showAiAssistantDrawerPopup"
         }
@@ -25811,7 +26072,8 @@
           lastFilteredCount = filteredCount;
           lastTotalCount = totalCount;
         },
-        updateBatchActionsState
+        updateBatchActionsState,
+        tu
       });
       var {
         loadFigmaComments: movedLoadFigmaComments,
@@ -26022,7 +26284,7 @@
         lastFilteredCount = filteredComments.length;
         lastTotalCount = total;
         if (countSpan) {
-          countSpan.textContent = "".concat(multiSelectEnabled ? "".concat(selectedCommentIds.size, " selected · ") : "").concat(lastFilteredCount, "/").concat(lastTotalCount);
+          countSpan.textContent = "".concat(multiSelectEnabled ? "".concat(tu("actions.comments.drawer.selectedCount", { count: selectedCommentIds.size }), " · ") : "").concat(lastFilteredCount, "/").concat(lastTotalCount);
         }
         listContainer.innerHTML = renderCommentsListHTML(filteredComments, threads);
         updateBatchActionsState();
@@ -26092,7 +26354,7 @@
           csvBtn.disabled = filteredComments.length === 0;
         }
         if (selectAllBtn) {
-          selectAllBtn.textContent = count > 0 ? "Deselect All" : "Select All";
+          selectAllBtn.textContent = count > 0 ? tu("actions.comments.drawer.deselectAll") : tu("actions.comments.drawer.selectAll");
         }
         const replyLabel = document.getElementById("batchReplyCountLabel");
         if (replyLabel) replyLabel.textContent = count;
@@ -26101,7 +26363,7 @@
         updateSummarizeAllButtonState();
         const countSpan = document.getElementById("commentsCountDisplay");
         if (countSpan) {
-          countSpan.textContent = "".concat(multiSelectEnabled ? "".concat(count, " selected · ") : "").concat(lastFilteredCount, "/").concat(lastTotalCount);
+          countSpan.textContent = "".concat(multiSelectEnabled ? "".concat(tu("actions.comments.drawer.selectedCount", { count }), " · ") : "").concat(lastFilteredCount, "/").concat(lastTotalCount);
         }
       }
       function removeAiActionMenu() {
@@ -26121,7 +26383,7 @@
         const actions = isStyles ? styleAiActions : commentAiActions;
         const currentActionKey = isStyles ? currentStyleAiAction : currentCommentAiAction;
         Object.keys(actions).forEach((key) => {
-          const action = actions[key];
+          const action = isStyles ? actions[key] : getCommentAiActionMeta(key);
           const item = document.createElement("div");
           item.className = "ai-action-menu-item".concat(currentActionKey === key ? " active" : "");
           item.innerHTML = "\n          ".concat(action.icon, "\n          <span>").concat(action.label, "</span>\n        ");
@@ -26154,7 +26416,7 @@
         if (menu) menu.remove();
         const btn = document.querySelector(".prompt-action-main-btn");
         if (btn) {
-          const action = commentAiActions[key];
+          const action = getCommentAiActionMeta(key);
           btn.innerHTML = "\n          ".concat(action.icon, "\n          ").concat(action.label).concat(key === "summarize" ? ' <span class="summarize-count">()</span>' : "", "\n        ");
           btn.title = action.title;
           updateSummarizeAllButtonState();
@@ -26209,7 +26471,7 @@
         overlay.style.zIndex = "10001";
         const popup = document.createElement("div");
         popup.className = "ai-assistant-popup ai-assistant-popup--centered";
-        popup.innerHTML = '\n        <div class="ai-assistant-popup-header">\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>\n          <span>AI Assistant ('.concat(selectedComments.length, " comments)</span>\n          ").concat(createModelSelectDropdownHTML("drawerAssistant"), '\n        </div>\n        <textarea class="ai-assistant-popup-input" id="aiAssistantPrompt" placeholder="Ask a question or give a specific instruction..." rows="3"></textarea>\n        <div class="ai-assistant-popup-footer">\n          <button class="ai-assistant-popup-cancel" id="aiAssistantDrawerCancel">Cancel</button>\n          <button class="ai-assistant-popup-submit" id="aiAssistantSubmit">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>\n            Ask AI\n          </button>\n        </div>\n      ');
+        popup.innerHTML = '\n        <div class="ai-assistant-popup-header">\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>\n          <span>'.concat(escapeHtml(tu("actions.comments.ai.assistantPopupTitle", { count: selectedComments.length })), "</span>\n          ").concat(createModelSelectDropdownHTML("drawerAssistant"), '\n        </div>\n        <textarea class="ai-assistant-popup-input" id="aiAssistantPrompt" placeholder="').concat(escapeHtml(tu("actions.comments.ai.assistantPlaceholder")), '" rows="3"></textarea>\n        <div class="ai-assistant-popup-footer">\n          <button class="ai-assistant-popup-cancel" id="aiAssistantDrawerCancel">').concat(escapeHtml(tu("actions.comments.drawer.cancel")), '</button>\n          <button class="ai-assistant-popup-submit" id="aiAssistantSubmit">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>\n            ').concat(escapeHtml(tu("actions.comments.ai.ask")), "\n          </button>\n        </div>\n      ");
         overlay.appendChild(popup);
         document.body.appendChild(overlay);
         setupModelSelectInPopup(popup, "drawerAssistant", overlay);
@@ -26808,13 +27070,13 @@
         if (!input || !aiBtn) return;
         const comment = figmaComments.find((c) => c.id === commentId);
         if (!comment) {
-          showToast("Comment not found", "error");
+          showToast(tu("actions.comments.drawer.commentNotFound"), "error");
           return;
         }
         const existingText = input.value.trim();
         aiBtn.disabled = true;
         aiBtn.classList.add("loading");
-        input.placeholder = "Generating reply...";
+        input.placeholder = tu("actions.comments.drawer.generatingReply");
         input.disabled = true;
         try {
           const prompt = "You are helping reply to a design feedback comment in Figma.Generate a professional, helpful, and concise reply.\n\nComment from ".concat(comment.user.handle, ':\n    "').concat(comment.message, '"\n\n').concat(existingText ? "User's draft/notes: \"".concat(existingText, '"') : "", "\n\n    Requirements:\n    - Be professional and friendly\n      - Address the feedback directly\n        - Keep the reply concise(1 - 3 sentences)\n          - Don't use emojis unless the original comment has them\n            - Output ONLY the reply text, nothing else ");
@@ -26842,16 +27104,16 @@
           if (generatedText) {
             input.value = generatedText;
             input.focus();
-            showToast("Reply generated! Review and click Send.", "success");
+            showToast(tu("actions.comments.drawer.replyGeneratedToast"), "success");
           } else {
             throw new Error("No response generated");
           }
         } catch (error) {
-          showToast("Failed to generate: ".concat(error.message), "error");
+          showToast(tu("actions.comments.drawer.failedToGenerate", { message: error.message }), "error");
         } finally {
           aiBtn.disabled = false;
           aiBtn.classList.remove("loading");
-          input.placeholder = "Write a reply...";
+          input.placeholder = tu("actions.comments.drawer.replyPlaceholder");
           input.disabled = false;
         }
       }
@@ -26958,19 +27220,19 @@
         const textarea = replyInput == null ? void 0 : replyInput.querySelector("textarea");
         const rawMessage = manualMessage !== null ? manualMessage.trim() : textarea == null ? void 0 : textarea.value.trim();
         if (!rawMessage) {
-          showToast("Please enter a reply message", "error");
+          showToast(tu("actions.comments.drawer.replyRequired"), "error");
           return;
         }
         const token = ((_a2 = figmaPersonalTokenInput == null ? void 0 : figmaPersonalTokenInput.value) == null ? void 0 : _a2.trim()) || figmaPersonalToken;
         const fileKey = ((_b = figmaFileKeyInput == null ? void 0 : figmaFileKeyInput.value) == null ? void 0 : _b.trim()) || figmaFileKey;
         if (!token || !fileKey) {
-          showToast("Missing token or file key", "error");
+          showToast(tu("actions.comments.drawer.missingTokenOrFileKey"), "error");
           return;
         }
         const message = convertMentionsToFigmaFormat(rawMessage);
         const sendBtn = replyInput.querySelector("button");
         sendBtn.disabled = true;
-        sendBtn.textContent = "Sending...";
+        sendBtn.textContent = tu("actions.comments.drawer.sending");
         try {
           const response = await fetch("https://api.figma.com/v1/files/".concat(fileKey, "/comments"), {
             method: "POST",
@@ -26987,7 +27249,7 @@
             const error = await response.json().catch(() => ({}));
             throw new Error(error.message || "Failed to post reply");
           }
-          showToast("Reply posted!", "success");
+          showToast(tu("actions.comments.drawer.replyPostedToast"), "success");
           textarea.value = "";
           textarea.style.height = "auto";
           replyInput.style.display = "none";
@@ -26997,10 +27259,10 @@
             if (container) renderCommentsInDrawer(container);
           }
         } catch (error) {
-          showToast("Failed to post reply: ".concat(error.message), "error");
+          showToast(tu("actions.comments.drawer.failedToPostReply", { message: error.message }), "error");
         } finally {
           sendBtn.disabled = false;
-          sendBtn.textContent = "Send";
+          sendBtn.textContent = tu("actions.comments.drawer.send");
         }
       }
       function toggleCommentMoreMenu(event, commentId) {
@@ -27020,10 +27282,10 @@
         const token = ((_a2 = figmaPersonalTokenInput == null ? void 0 : figmaPersonalTokenInput.value) == null ? void 0 : _a2.trim()) || figmaPersonalToken;
         const fileKey = ((_b = figmaFileKeyInput == null ? void 0 : figmaFileKeyInput.value) == null ? void 0 : _b.trim()) || figmaFileKey;
         if (!token || !fileKey) {
-          showToast("Please configure Figma token and file key in Settings", "error");
+          showToast(tu("actions.comments.drawer.figmaAuthRequired"), "error");
           return;
         }
-        if (!confirm("Delete this comment?")) return;
+        if (!confirm(tu("actions.comments.drawer.deleteConfirm"))) return;
         try {
           const response = await fetch("https://api.figma.com/v1/files/".concat(fileKey, "/comments/").concat(commentId), {
             method: "DELETE",
@@ -27191,19 +27453,19 @@
         const textarea = replyInput == null ? void 0 : replyInput.querySelector("textarea");
         const rawMessage = manualMessage !== null ? manualMessage.trim() : textarea == null ? void 0 : textarea.value.trim();
         if (!rawMessage) {
-          showToast("Please enter a reply message", "error");
+          showToast(tu("actions.comments.drawer.replyRequired"), "error");
           return;
         }
         const token = ((_a2 = figmaPersonalTokenInput == null ? void 0 : figmaPersonalTokenInput.value) == null ? void 0 : _a2.trim()) || figmaPersonalToken;
         const fileKey = ((_b = figmaFileKeyInput == null ? void 0 : figmaFileKeyInput.value) == null ? void 0 : _b.trim()) || figmaFileKey;
         if (!token || !fileKey) {
-          showToast("Missing token or file key", "error");
+          showToast(tu("actions.comments.drawer.missingTokenOrFileKey"), "error");
           return;
         }
         const message = convertMentionsToFigmaFormat(rawMessage);
         const sendBtn = replyInput.querySelector("button");
         sendBtn.disabled = true;
-        sendBtn.textContent = "Sending...";
+        sendBtn.textContent = tu("actions.comments.drawer.sending");
         try {
           const response = await fetch("https://api.figma.com/v1/files/".concat(fileKey, "/comments"), {
             method: "POST",
@@ -27220,16 +27482,16 @@
             const error = await response.json().catch(() => ({}));
             throw new Error(error.message || "Failed to post reply");
           }
-          showToast("Reply posted!", "success");
+          showToast(tu("actions.comments.drawer.replyPostedToast"), "success");
           textarea.value = "";
           textarea.style.height = "auto";
           replyInput.style.display = "none";
           await refreshCommentThread(commentId);
         } catch (error) {
-          showToast("Failed to post reply: ".concat(error.message), "error");
+          showToast(tu("actions.comments.drawer.failedToPostReply", { message: error.message }), "error");
         } finally {
           sendBtn.disabled = false;
-          sendBtn.textContent = "Send";
+          sendBtn.textContent = tu("actions.comments.drawer.send");
         }
       }
       async function postDrawerReplyItem(commentId, replyId) {
@@ -29719,8 +29981,8 @@
               const cancelBtn = footer.querySelector(".prompt-drawer-cancel");
               const group = document.createElement("div");
               group.className = "ai-action-group";
-              const action = commentAiActions[currentCommentAiAction];
-              group.innerHTML = '\n            <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" onclick="executeCurrentAiAction()" title="'.concat(action.title, '">\n              ').concat(action.icon, "\n              ").concat(action.label).concat(currentCommentAiAction === "summarize" ? ' <span class="summarize-count">(0)</span>' : "", '\n            </button>\n            <button class="ai-action-expand-btn" type="button" onclick="toggleAiActionMenu(event)" title="More AI actions">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n            </button>\n          ');
+              const action = getCommentAiActionMeta(currentCommentAiAction);
+              group.innerHTML = '\n            <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" onclick="executeCurrentAiAction()" title="'.concat(action.title, '">\n              ').concat(action.icon, "\n              ").concat(action.label).concat(currentCommentAiAction === "summarize" ? ' <span class="summarize-count">(0)</span>' : "", '\n            </button>\n            <button class="ai-action-expand-btn" type="button" onclick="toggleAiActionMenu(event)" title="').concat(tu("actions.comments.drawer.moreAiActions"), '">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n            </button>\n          ');
               if (cancelBtn) {
                 footer.insertBefore(group, cancelBtn);
               } else {
