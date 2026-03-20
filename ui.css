@@ -6086,6 +6086,26 @@
       color: var(--text-on-accent);
     }
 
+    /* Light mode: chat input shadow ~½ dark-mode strength (rest + focus glow) */
+    body.light-mode .chat-input-container {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+    }
+
+    body.light-mode .chat-input-container:hover,
+    body.light-mode .chat-input-container:focus-within {
+      box-shadow: -0.000px -18.000px 78.000px -8.000px rgba(0, 96, 255, 0.32), -0.000px -6.273px 28.032px -7.128px rgba(0, 110, 255, 0.22), -0.000px -2.690px 13.536px -5.642px rgba(0, 123, 255, 0.185), -0.000px -1.130px 7.290px -4.000px rgba(0, 137, 255, 0.16), -0.000px -0.395px 4.230px -2.358px rgba(0, 150, 255, 0.135), -0.000px -0.081px 2.208px -0.872px rgba(0, 164, 255, 0.1);
+    }
+
+    body.light-mode.agent-mode .chat-input-container:hover,
+    body.light-mode.agent-mode .chat-input-container:focus-within {
+      box-shadow: -0.000px -18.000px 78.000px -8.000px rgba(78, 0, 255, 0.32), -0.000px -6.273px 28.032px -7.128px rgba(104, 0, 255, 0.22), -0.000px -2.690px 13.536px -5.642px rgba(130, 0, 255, 0.185), -0.000px -1.130px 7.290px -4.000px rgba(156, 0, 255, 0.16), -0.000px -0.395px 4.230px -2.358px rgba(181, 0, 255, 0.135), -0.000px -0.081px 2.208px -0.872px rgba(207, 0, 255, 0.1);
+    }
+
+    body.light-mode.audit-mode .chat-input-container:hover,
+    body.light-mode.audit-mode .chat-input-container:focus-within {
+      box-shadow: -0.000px -18.000px 78.000px -8.000px rgba(0, 149, 63, 0.32), -0.000px -6.273px 28.032px -7.128px rgba(0, 149, 63, 0.22), -0.000px -2.690px 13.536px -5.642px rgba(0, 149, 63, 0.185), -0.000px -1.130px 7.290px -4.000px rgba(0, 149, 63, 0.16), -0.000px -0.395px 4.230px -2.358px rgba(0, 149, 63, 0.135), -0.000px -0.081px 2.208px -0.872px rgba(0, 149, 63, 0.1);
+    }
+
     /* Audit Modal */
 
     .audit-apply-btn {
