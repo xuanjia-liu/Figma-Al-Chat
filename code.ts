@@ -53,7 +53,8 @@ const SETTINGS_KEYS = {
   MAXIMIZED_PROMPT_DRAWER_DATA: 'figma-maximized-prompt-drawer-data',
   UNSPLASH_API_KEY: 'figma-unsplash-api-key',
   PIXABAY_API_KEY: 'figma-pixabay-api-key',
-  PEXELS_API_KEY: 'figma-pexels-api-key'
+  PEXELS_API_KEY: 'figma-pexels-api-key',
+  UI_LANGUAGE: 'figma-ui-language'
 };
 
 figma.showUI(__html__, {
@@ -4089,6 +4090,7 @@ figma.ui.onmessage = async (msg: {
         const unsplashApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.UNSPLASH_API_KEY) || '';
         const pixabayApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.PIXABAY_API_KEY) || '';
         const pexelsApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.PEXELS_API_KEY) || '';
+        const language = await figma.clientStorage.getAsync(SETTINGS_KEYS.UI_LANGUAGE) || 'en';
         const replyTemplates = await figma.clientStorage.getAsync(SETTINGS_KEYS.REPLY_TEMPLATES) || [];
         const lastChatId = await figma.clientStorage.getAsync(SETTINGS_KEYS.LAST_CHAT_ID) || null;
         const lastCommandsCategory = await figma.clientStorage.getAsync(SETTINGS_KEYS.LAST_COMMANDS_CATEGORY) || null;
@@ -4098,14 +4100,14 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
         });
       }
       break;
@@ -4278,7 +4280,7 @@ figma.ui.onmessage = async (msg: {
           return;
         }
 
-        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey } = msg.settings;
+        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language } = msg.settings;
 
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PROVIDER, provider || 'gemini');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.AI_OFF_MODE, aiOffMode === true);
@@ -4296,6 +4298,7 @@ figma.ui.onmessage = async (msg: {
         await figma.clientStorage.setAsync(SETTINGS_KEYS.UNSPLASH_API_KEY, unsplashApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PIXABAY_API_KEY, pixabayApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PEXELS_API_KEY, pexelsApiKey || '');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.UI_LANGUAGE, language || 'en');
 
         figma.ui.postMessage({ type: 'settings-saved' });
       } catch (error) {

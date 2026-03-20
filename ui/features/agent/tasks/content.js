@@ -241,7 +241,7 @@ export const smartTextTasks = [
           requiredContext: ContextMode.TEXT_ONLY
         },
 {
-          name: '縦書き / Vertical text',
+          name: 'Vertical text',
           desc: 'Convert text to vertical composition',
           prompt: '',
           isTextAction: true,
@@ -400,11 +400,11 @@ GENERAL RULES:
           promptTemplate: 'For each selected element, use rename to translate the current layer name to {targetLanguage}. {keepOriginal ? "Append the original name in parentheses, e.g. \'Button (ボタン)\'." : "Replace the name entirely with the translation."}'
         },
 {
-          name: 'Romaji converter (ヘボン体)',
+          name: 'Romaji converter (Hepburn)',
           desc: 'Convert Japanese to Romaji',
           requiredContext: ContextMode.MINIMAL,
-          prompt: 'For each selected element, convert any Japanese text in its name to Romaji using Hepburn style (ヘボン式). Keep non-Japanese parts unchanged. Use rename to apply the converted name.',
-          help: 'Hebon-style romanization for Japanese names. Examples: ありがとう → arigatou, 東京 → Tokyo, 学校 → gakkou. Preserve punctuation and non-Japanese words.',
+          prompt: 'For each selected element, convert any Japanese text in its name to Romaji using Hepburn romanization. Keep non-Japanese parts unchanged. Use rename to apply the converted name.',
+          help: 'Hepburn-style romanization for Japanese names. Examples: ありがとう → arigatou, 東京 → Tokyo, 学校 → gakkou. Preserve punctuation and non-Japanese words.',
           examples: ['送信ボタン → soushin button', '東京/ヘッダー → Tokyo/header', '設定-開く → settei-hiraku'],
         }
 ];
@@ -1115,16 +1115,16 @@ Present all collected feedback in a structured list, and provide at the end:
           noSelection: true
         },
 {
-          name: 'デザイン提案書',
-          desc: 'クライアントに対して効果的なデザイン提案書を作成します',
+          name: 'Design proposal deck',
+          desc: 'Create a persuasive design proposal for a client',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>',
           askMode: true,
           requiredContext: ContextMode.ALL,
           fields: [
-            { key: 'designType', type: 'text', label: 'デザインの種類', placeholder: '企業のコーポレートサイトのリニューアル', default: '企業のコーポレートサイトのリニューアル' },
-            { key: 'clientName', type: 'text', label: 'クライアント名', placeholder: '株式会社デザインOK', default: '株式会社デザインOK' },
-            { key: 'purpose', type: 'text', label: 'デザインの目的', placeholder: 'ブランドイメージの向上とユーザーの利便性向上', default: 'ブランドイメージの向上とユーザーの利便性向上' },
-            { key: 'targetAudience', type: 'text', label: 'ターゲット層', placeholder: '30〜50代のビジネスパーソン', default: '30〜50代のビジネスパーソン' }
+            { key: 'designType', type: 'text', label: 'Design type', placeholder: 'Corporate website redesign', default: 'Corporate website redesign' },
+            { key: 'clientName', type: 'text', label: 'Client name', placeholder: 'Design OK Inc.', default: 'Design OK Inc.' },
+            { key: 'purpose', type: 'text', label: 'Project goal', placeholder: 'Improve brand perception and usability', default: 'Improve brand perception and usability' },
+            { key: 'targetAudience', type: 'text', label: 'Target audience', placeholder: 'Business professionals in their 30s to 50s', default: 'Business professionals in their 30s to 50s' }
           ],
           promptTemplate: function (values) {
             return `# 前提条件:
@@ -1223,15 +1223,15 @@ ${values.targetAudience || '30〜50代のビジネスパーソン'}
           noSelection: true
         },
 {
-          name: 'キャラクターのネーミング案',
-          desc: 'キャラクターの個性にマッチした印象的な名前を提案します',
+          name: 'Character naming ideas',
+          desc: 'Suggest memorable names that fit the character',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
           askMode: true,
           requiredContext: ContextMode.ALL,
           fields: [
-            { key: 'charSummary', type: 'text', label: 'キャラクターの概要', placeholder: 'ファンタジー世界の魔法使いの女の子', default: 'ファンタジー世界の魔法使いの女の子' },
-            { key: 'sound', type: 'text', label: '名前の響き', placeholder: '和風', default: '和風' },
-            { key: 'targetAudience', type: 'text', label: 'ターゲット層', placeholder: '10代', default: '10代' }
+            { key: 'charSummary', type: 'text', label: 'Character summary', placeholder: 'A young mage girl in a fantasy world', default: 'A young mage girl in a fantasy world' },
+            { key: 'sound', type: 'text', label: 'Name style', placeholder: 'Japanese-inspired', default: 'Japanese-inspired' },
+            { key: 'targetAudience', type: 'text', label: 'Target audience', placeholder: 'Teenagers', default: 'Teenagers' }
           ],
           promptTemplate: function (values) {
             return `# 前提条件:
@@ -1271,17 +1271,17 @@ ${values.targetAudience || '10代'}
           noSelection: true
         },
 {
-          name: 'デザイナーポートフォリオ用の自己紹介文',
-          desc: 'デザイナーとしての強みを伝える魅力的な自己紹介文を作成します',
+          name: 'Designer portfolio bio',
+          desc: 'Write a compelling self-introduction for a designer portfolio',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
           askMode: true,
           requiredContext: ContextMode.ALL,
           fields: [
-            { key: 'name', type: 'text', label: '名前（ハンドルネーム可）', placeholder: '名前', default: '名前' },
-            { key: 'exp', type: 'text', label: 'デザイナー歴', placeholder: 'デザイン歴15年、フリーランス歴3年 など', default: 'デザイン歴15年、フリーランス歴3年' },
-            { key: 'job', type: 'text', label: '職種', placeholder: 'グラフィックデザイナー/UIデザイナー/イラストレーター など', default: 'グラフィックデザイナー/UIデザイナー/イラストレーター' },
-            { key: 'specialty', type: 'text', label: '得意分野', placeholder: 'ロゴデザイン/パッケージデザイン/Webデザイン など', default: 'ロゴデザイン/パッケージデザイン/Webデザイン' },
-            { key: 'tools', type: 'text', label: '使用ツール', placeholder: 'Photoshop/Illustrator/Figma/Procreate など', default: 'Photoshop/Illustrator/Figma/Procreate' }
+            { key: 'name', type: 'text', label: 'Name (or handle)', placeholder: 'Your name', default: 'Your name' },
+            { key: 'exp', type: 'text', label: 'Years of design experience', placeholder: '15 years in design, 3 years freelance, etc.', default: '15 years in design, 3 years freelance' },
+            { key: 'job', type: 'text', label: 'Role', placeholder: 'Graphic designer / UI designer / Illustrator, etc.', default: 'Graphic designer / UI designer / Illustrator' },
+            { key: 'specialty', type: 'text', label: 'Specialties', placeholder: 'Logo design / Packaging / Web design, etc.', default: 'Logo design / Packaging / Web design' },
+            { key: 'tools', type: 'text', label: 'Tools used', placeholder: 'Photoshop / Illustrator / Figma / Procreate, etc.', default: 'Photoshop / Illustrator / Figma / Procreate' }
           ],
           promptTemplate: function (values) {
             return `# 前提条件:
@@ -1337,13 +1337,13 @@ ${values.tools || 'Figma'}
           noSelection: true
         },
 {
-          name: 'デザイン依頼のヒアリングシート',
-          desc: 'デザイン制作をスムーズに進めるためのヒアリング項目を作成します',
+          name: 'Design project intake sheet',
+          desc: 'Create a client questionnaire for a design request',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
           askMode: true,
           requiredContext: ContextMode.ALL,
           fields: [
-            { key: 'projectContent', type: 'text', label: '案件内容', placeholder: 'ロゴ/ウェブサイト/チラシ/パッケージ など', default: 'ロゴ/ウェブサイト/チラシ/パッケージ' }
+            { key: 'projectContent', type: 'text', label: 'Project type', placeholder: 'Logo / Website / Flyer / Packaging, etc.', default: 'Logo / Website / Flyer / Packaging' }
           ],
           promptTemplate: function (values) {
             return `# 前提条件:
@@ -1382,15 +1382,15 @@ ${values.projectContent || 'ロゴ/ウェブサイト/チラシ/パッケージ'
           noSelection: true
         },
 {
-          name: 'スケジュール・工程表',
-          desc: 'プロジェクトのスケジュールやタイムラインをテーブル形式で作成します',
+          name: 'Project schedule / timeline',
+          desc: 'Create a project schedule or timeline in table format',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/></svg>',
           askMode: true,
           requiredContext: ContextMode.ALL,
           fields: [
-            { key: 'projectTitle', type: 'text', label: 'プロジェクト名', placeholder: 'Webサイトリニューアル', default: 'Webサイトリニューアル' },
-            { key: 'duration', type: 'text', label: '期間', placeholder: '3ヶ月', default: '3ヶ月' },
-            { key: 'phases', type: 'text', label: '主なフェーズ', placeholder: '要件定義、デザイン、開発、テスト', default: '要件定義、デザイン、開発、テスト' }
+            { key: 'projectTitle', type: 'text', label: 'Project name', placeholder: 'Website redesign', default: 'Website redesign' },
+            { key: 'duration', type: 'text', label: 'Duration', placeholder: '3 months', default: '3 months' },
+            { key: 'phases', type: 'text', label: 'Main phases', placeholder: 'Requirements, design, development, testing', default: 'Requirements, design, development, testing' }
           ],
           promptTemplate: function (values) {
             return `# プロジェクトスケジュール作成依頼

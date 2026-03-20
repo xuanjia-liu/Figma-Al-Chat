@@ -43,6 +43,15 @@ import {
   STYLE_DEFAULT_TOKENS,
   UX_GUIDELINES,
 } from './config/agent-data.js';
+import {
+  DEFAULT_SETTINGS_LOCALE,
+  getSettingsTranslation,
+  normalizeSettingsLocale,
+} from './i18n/settings.js';
+import {
+  getActionUiTranslation,
+  getLocalizedActionText,
+} from './i18n/actions.js';
 
     // State
     let currentPreviewData = null;
@@ -57,6 +66,7 @@ import {
     let openaiModel = 'gpt-4o';
     let anthropicApiKey = '';
     let anthropicModel = 'claude-3-5-sonnet-20241022';
+    let currentSettingsLocale = DEFAULT_SETTINGS_LOCALE;
     let enabledModels = {
       gemini: [],
       openai: [],
@@ -109,6 +119,157 @@ import {
       const sizes = ['B', 'KB', 'MB', 'GB'];
       const i = Math.floor(Math.log(bytes) / Math.log(k));
       return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    function t(key, vars = {}) {
+      return getSettingsTranslation(currentSettingsLocale, key, vars);
+    }
+
+    function getLocalizedProviderName(provider) {
+      return t(`settings.provider.${provider}`) || provider;
+    }
+
+    function tu(key, vars = {}) {
+      return getActionUiTranslation(currentSettingsLocale, key, vars);
+    }
+
+    function localizeActionString(value) {
+      return getLocalizedActionText(currentSettingsLocale, value);
+    }
+
+    function localizeTaskField(field) {
+      if (!field || typeof field !== 'object') return field;
+      const localized = { ...field };
+      ['name', 'desc', 'help', 'label', 'placeholder', 'hint', 'title', 'detail', 'inputSuffix'].forEach((key) => {
+        if (typeof localized[key] === 'string') {
+          localized[key] = localizeActionString(localized[key]);
+        }
+      });
+      if (Array.isArray(localized.examples)) {
+        localized.examples = localized.examples.map((example) => (
+          typeof example === 'string' ? localizeActionString(example) : example
+        ));
+      }
+      if (Array.isArray(localized.tags)) {
+        localized.tags = localized.tags.map((tag) => (
+          typeof tag === 'string' ? localizeActionString(tag) : tag
+        ));
+      }
+      if (Array.isArray(localized.customAiButtons)) {
+        localized.customAiButtons = localized.customAiButtons.map((button) => {
+          if (!button || typeof button !== 'object') return button;
+          const localizedButton = { ...button };
+          if (typeof localizedButton.label === 'string') localizedButton.label = localizeActionString(localizedButton.label);
+          if (typeof localizedButton.title === 'string') localizedButton.title = localizeActionString(localizedButton.title);
+          return localizedButton;
+        });
+      }
+      if (Array.isArray(localized.fields)) {
+        localized.fields = localized.fields.map(localizeTaskField);
+      }
+      if (Array.isArray(localized.options)) {
+        localized.options = localized.options.map((option) => {
+          if (!option || typeof option !== 'object') return option;
+          const localizedOption = { ...option };
+          if (typeof localizedOption.label === 'string') {
+            localizedOption.label = localizeActionString(localizedOption.label);
+          }
+          if (typeof localizedOption.title === 'string') {
+            localizedOption.title = localizeActionString(localizedOption.title);
+          }
+          if (typeof localizedOption.detail === 'string') {
+            localizedOption.detail = localizeActionString(localizedOption.detail);
+          }
+          return localizedOption;
+        });
+      }
+      return localized;
+    }
+
+    function getLocalizedTask(task) {
+      if (!task) return task;
+      return {
+        ...task,
+        displayName: localizeActionString(task.name || ''),
+        displayDesc: localizeActionString(task.desc || ''),
+        displayHelp: localizeActionString(task.help || ''),
+        displayFields: Array.isArray(task.fields) ? task.fields.map(localizeTaskField) : task.fields,
+      };
+    }
+
+    function applySettingsLocale(locale) {
+      currentSettingsLocale = normalizeSettingsLocale(locale);
+
+      document.querySelectorAll('[data-i18n]').forEach((element) => {
+        element.textContent = t(element.dataset.i18n);
+      });
+
+      document.querySelectorAll('[data-i18n-placeholder]').forEach((element) => {
+        element.placeholder = t(element.dataset.i18nPlaceholder);
+      });
+
+      document.querySelectorAll('[data-i18n-title]').forEach((element) => {
+        element.title = t(element.dataset.i18nTitle);
+      });
+
+      document.querySelectorAll('[data-i18n-html]').forEach((element) => {
+        element.innerHTML = t(element.dataset.i18nHtml);
+      });
+
+      const commandsDrawerTitle = document.querySelector('.commands-drawer-title');
+      if (commandsDrawerTitle) {
+        commandsDrawerTitle.textContent = tu('actions.commands.title');
+      }
+      if (commandsSearch) {
+        commandsSearch.placeholder = tu('actions.commands.search');
+      }
+      if (promptDrawerTitle && !currentPromptAction) {
+        promptDrawerTitle.textContent = tu('actions.prompt.title');
+      }
+      const promptDrawerHelpTitle = document.querySelector('.prompt-drawer-help-title span');
+      if (promptDrawerHelpTitle) {
+        promptDrawerHelpTitle.textContent = tu('actions.prompt.helpTitle');
+      }
+      if (promptDrawerReset) {
+        promptDrawerReset.textContent = tu('actions.prompt.reset');
+        promptDrawerReset.title = tu('actions.prompt.resetTitle');
+      }
+      if (promptDrawerBack && !promptDrawerBack.classList.contains('hidden')) {
+        promptDrawerBack.textContent = tu('actions.prompt.back');
+      }
+      if (promptDrawerCancel) {
+        promptDrawerCancel.textContent = tu('actions.prompt.backToList');
+      }
+      if (promptDrawerSubmit) {
+        promptDrawerSubmit.textContent = tu('actions.prompt.run');
+      }
+
+      const titleBindings = [
+        ['promptDrawerMinimize', 'actions.prompt.minimize'],
+        ['promptDrawerMaximize', 'actions.prompt.maximize'],
+        ['promptDrawerMaxFooterMinimize', 'actions.prompt.minimize'],
+        ['promptDrawerMaxFooterRestore', 'actions.prompt.restore'],
+        ['promptDrawerMaxFooterClose', 'actions.prompt.close'],
+      ];
+      titleBindings.forEach(([id, key]) => {
+        const el = document.getElementById(id);
+        if (el) el.title = tu(key);
+      });
+
+      ['gemini', 'openai', 'anthropic'].forEach((provider) => {
+        updateShowAllButtonLabel(provider);
+        updateCheckAllToggle(provider);
+      });
+
+      if (figmaFileKeyInput) {
+        if (figmaFileKey) {
+          figmaFileKeyInput.placeholder = t('settings.figma.fileKeyAutoDetectedPlaceholder');
+        } else if (!figmaFileKeyInput.readOnly) {
+          figmaFileKeyInput.placeholder = t('settings.figma.fileKeyEditingPlaceholder');
+        } else if (!figmaFileKeyInput.value) {
+          figmaFileKeyInput.placeholder = t('settings.figma.fileKeyManualPlaceholder');
+        }
+      }
     }
 
     // CSS Color Names for detection
@@ -1461,7 +1622,7 @@ import {
 
       const loadingOption = document.createElement('option');
       loadingOption.value = '';
-      loadingOption.textContent = 'Loading models...';
+      loadingOption.textContent = t('settings.models.loading');
       geminiModelSelect.innerHTML = '';
       geminiModelSelect.appendChild(loadingOption);
       geminiModelSelect.disabled = true;
@@ -1469,14 +1630,16 @@ import {
       try {
         const models = await listGeminiModels(apiKey);
         if (!models.length && !silent) {
-          showToast('No Gemini models returned for this key', 'info');
+          showToast(t('settings.messages.noGeminiModels'), 'info');
         }
         populateGeminiModelSelect(models.length ? models : DEFAULT_GEMINI_MODELS, fallbackValue);
       } catch (error) {
         console.warn('Gemini model fetch failed:', error);
         populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, fallbackValue);
         if (!silent) {
-          showToast('Could not refresh Gemini models. Using defaults.', 'info');
+          showToast(t('settings.messages.refreshUsingDefaults', {
+            provider: getLocalizedProviderName('gemini')
+          }), 'info');
         }
       } finally {
         geminiModelSelect.disabled = false;
@@ -1501,7 +1664,9 @@ import {
       } catch (error) {
         console.warn('OpenAI model fetch failed:', error);
         populateOpenAIModelSelect(DEFAULT_OPENAI_MODELS, fallbackValue);
-        if (!silent) showToast('Could not refresh OpenAI models. Using defaults.', 'info');
+        if (!silent) showToast(t('settings.messages.refreshUsingDefaults', {
+          provider: getLocalizedProviderName('openai')
+        }), 'info');
       } finally {
         openaiModelSelect.disabled = false;
         if (selectedProvider === 'openai') populateChatModelDropdown();
@@ -1522,7 +1687,9 @@ import {
       } catch (error) {
         console.warn('Anthropic model fetch failed:', error);
         populateAnthropicModelSelect(DEFAULT_ANTHROPIC_MODELS, fallbackValue);
-        if (!silent) showToast('Could not refresh Anthropic models. Using defaults.', 'info');
+        if (!silent) showToast(t('settings.messages.refreshUsingDefaults', {
+          provider: getLocalizedProviderName('anthropic')
+        }), 'info');
       } finally {
         anthropicModelSelect.disabled = false;
         if (selectedProvider === 'anthropic') populateChatModelDropdown();
@@ -1723,7 +1890,7 @@ import {
         const labelContainer = document.createElement('label');
         labelContainer.htmlFor = `model-${provider}-${modelId}`;
         labelContainer.className = 'model-checklist-label';
-        labelContainer.title = `Model ID: ${modelId}`;
+        labelContainer.title = t('settings.models.modelIdTitle', { id: modelId });
 
         const labelName = document.createElement('div');
         labelName.className = 'model-checklist-name';
@@ -1758,10 +1925,21 @@ import {
       updateCheckAllToggle(provider);
 
       // Reset "Show All" button text when checklist is repopulated
+      updateShowAllButtonLabel(provider);
+    }
+
+    function updateShowAllButtonLabel(provider) {
       const showAllBtn = document.querySelector(`.model-show-all-btn[data-provider="${provider}"]`);
-      if (showAllBtn) {
-        showAllBtn.textContent = 'Show All';
-      }
+      if (!showAllBtn) return;
+
+      const checklistId = `${provider}ModelChecklist`;
+      const checklist = document.getElementById(checklistId);
+      const hiddenItems = checklist ? checklist.querySelectorAll('.model-checklist-item.hidden-by-default') : [];
+      const isShowingAll = Array.from(hiddenItems).some((item) => item.classList.contains('show-all'));
+      const textKey = isShowingAll ? 'settings.models.hideFiltered' : 'settings.models.showAll';
+      const titleKey = isShowingAll ? 'settings.models.hideFilteredTitle' : 'settings.models.showAllTitle';
+      showAllBtn.textContent = t(textKey);
+      showAllBtn.title = t(titleKey);
     }
 
     // Get enabled models for a provider from checklist
@@ -1800,7 +1978,7 @@ import {
 
       const checkboxes = checklist.querySelectorAll('input[type="checkbox"]');
       if (checkboxes.length === 0) {
-        toggle.querySelector('.check-all-text').textContent = 'Check All';
+        toggle.querySelector('.check-all-text').textContent = t('settings.models.checkAll');
         return;
       }
 
@@ -1808,12 +1986,16 @@ import {
       const totalCount = checkboxes.length;
 
       if (checkedCount === 0) {
-        toggle.querySelector('.check-all-text').textContent = 'Check All';
+        toggle.querySelector('.check-all-text').textContent = t('settings.models.checkAll');
       } else if (checkedCount === totalCount) {
-        toggle.querySelector('.check-all-text').textContent = 'Uncheck All';
+        toggle.querySelector('.check-all-text').textContent = t('settings.models.uncheckAll');
       } else {
-        toggle.querySelector('.check-all-text').textContent = `Check All (${checkedCount}/${totalCount})`;
+        toggle.querySelector('.check-all-text').textContent = t('settings.models.checkAllProgress', {
+          checked: checkedCount,
+          total: totalCount
+        });
       }
+      toggle.title = t('settings.models.checkAllTitle');
     }
 
     // Toggle all checkboxes for a provider
@@ -2114,6 +2296,7 @@ import {
 
     function getSettingsFormState() {
       return {
+        language: languageSelect?.value || DEFAULT_SETTINGS_LOCALE,
         provider: providerSelect.value || 'gemini',
         aiOffMode: noAiModeToggle?.checked === true,
         geminiApiKey: geminiApiKeyInput.value || '',
@@ -2135,7 +2318,8 @@ import {
 
     function areSettingsEqual(a, b) {
       if (!a || !b) return false;
-      return a.provider === b.provider &&
+      return a.language === b.language &&
+        a.provider === b.provider &&
         a.aiOffMode === b.aiOffMode &&
         a.geminiApiKey === b.geminiApiKey &&
         a.geminiModel === b.geminiModel &&
@@ -2160,6 +2344,9 @@ import {
     function restoreSettingsFormFromSaved() {
       if (!lastSavedSettings) return;
       suppressSettingsDirty = true;
+      if (languageSelect) {
+        languageSelect.value = lastSavedSettings.language || DEFAULT_SETTINGS_LOCALE;
+      }
       providerSelect.value = lastSavedSettings.provider || 'gemini';
       if (noAiModeToggle) {
         noAiModeToggle.checked = lastSavedSettings.aiOffMode === true;
@@ -2174,6 +2361,7 @@ import {
       quiverApiKeyInput.value = lastSavedSettings.quiverApiKey || '';
       selectionSizeLimitSelect.value = (lastSavedSettings.selectionSizeLimit ?? 200).toString();
       updateProviderSettingsVisibility();
+      applySettingsLocale(languageSelect?.value || lastSavedSettings.language || DEFAULT_SETTINGS_LOCALE);
       suppressSettingsDirty = false;
       refreshSettingsBaselineFromForm();
 
@@ -2637,6 +2825,7 @@ import {
     const openSettingsBtn = document.getElementById('openSettingsBtn');
     const openSettingsBtnNoAi = document.getElementById('openSettingsBtnNoAi');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const languageSelect = document.getElementById('settingsLanguageSelect');
     const noAiModeToggle = document.getElementById('noAiModeToggle');
     const providerSelect = document.getElementById('providerSelect');
     const chatContainer = document.querySelector('.chat-container');
@@ -3144,6 +3333,7 @@ import {
     }
 
     const settingsFields = [
+      languageSelect,
       noAiModeToggle,
       providerSelect,
       geminiApiKeyInput, geminiModelSelect,
@@ -3190,14 +3380,13 @@ import {
           hiddenItems.forEach(item => {
             item.classList.remove('show-all');
           });
-          btn.textContent = 'Show All';
         } else {
           // Show all models
           hiddenItems.forEach(item => {
             item.classList.add('show-all');
           });
-          btn.textContent = 'Hide Filtered';
         }
+        updateShowAllButtonLabel(provider);
       });
     });
 
@@ -3218,7 +3407,9 @@ import {
           if (provider === 'gemini') {
             const apiKey = geminiApiKeyInput?.value || geminiApiKey;
             if (!apiKey) {
-              showToast('Please enter a Gemini API key first', 'info');
+              showToast(t('settings.messages.enterProviderApiKey', {
+                provider: getLocalizedProviderName('gemini')
+              }), 'info');
               btn.classList.remove('refreshing');
               return;
             }
@@ -3229,11 +3420,13 @@ import {
               preferredModel: geminiModelSelect?.value || geminiModel,
               silent: false
             });
-            showToast('Model list refreshed', 'success');
+            showToast(t('settings.messages.modelListRefreshed'), 'success');
           } else if (provider === 'openai') {
             const apiKey = openaiApiKeyInput?.value || openaiApiKey;
             if (!apiKey) {
-              showToast('Please enter an OpenAI API key first', 'info');
+              showToast(t('settings.messages.enterProviderApiKey', {
+                provider: getLocalizedProviderName('openai')
+              }), 'info');
               btn.classList.remove('refreshing');
               return;
             }
@@ -3244,11 +3437,13 @@ import {
               preferredModel: openaiModelSelect?.value || openaiModel,
               silent: false
             });
-            showToast('Model list refreshed', 'success');
+            showToast(t('settings.messages.modelListRefreshed'), 'success');
           } else if (provider === 'anthropic') {
             const apiKey = anthropicApiKeyInput?.value || anthropicApiKey;
             if (!apiKey) {
-              showToast('Please enter an Anthropic API key first', 'info');
+              showToast(t('settings.messages.enterProviderApiKey', {
+                provider: getLocalizedProviderName('anthropic')
+              }), 'info');
               btn.classList.remove('refreshing');
               return;
             }
@@ -3259,11 +3454,13 @@ import {
               preferredModel: anthropicModelSelect?.value || anthropicModel,
               silent: false
             });
-            showToast('Model list refreshed', 'success');
+            showToast(t('settings.messages.modelListRefreshed'), 'success');
           }
         } catch (error) {
           console.error(`Failed to refresh ${provider} models:`, error);
-          showToast(`Failed to refresh ${provider} models`, 'error');
+          showToast(t('settings.messages.failedRefreshModels', {
+            provider: getLocalizedProviderName(provider)
+          }), 'error');
         } finally {
           btn.classList.remove('refreshing');
         }
@@ -3464,6 +3661,12 @@ import {
 
     // Provider select change handler
     providerSelect.addEventListener('change', updateProviderSettingsVisibility);
+    if (languageSelect) {
+      languageSelect.addEventListener('change', () => {
+        applySettingsLocale(languageSelect.value);
+        handleSettingsChanged();
+      });
+    }
     if (noAiModeToggle) {
       noAiModeToggle.addEventListener('change', () => {
         syncNoAiSettingsUi();
@@ -5653,7 +5856,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         html += `
           <button class="commands-sidebar-item ${isActive ? 'active' : ''}" data-category="${category}">
             ${icon}
-            <span>${category}</span>
+            <span>${localizeActionString(category)}</span>
           </button>
         `;
       });
@@ -5680,13 +5883,14 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
       if (lowerFilter) {
         // Global search - collect and score matches from all categories
-        headerText = `Results for "${filter}"`;
+        headerText = tu('actions.commands.results', { filter });
 
         const scoredMatches = [];
         Object.entries(agentTasks).forEach(([category, tasks]) => {
           tasks.forEach(task => {
-            const nameLower = (task.name || '').toLowerCase();
-            const descLower = (task.desc || '').toLowerCase();
+            const localizedTask = getLocalizedTask(task);
+            const nameLower = `${localizedTask.displayName || ''} ${task.name || ''}`.toLowerCase();
+            const descLower = `${localizedTask.displayDesc || ''} ${task.desc || ''}`.toLowerCase();
             const promptLower = (task.prompt || '').toLowerCase();
 
             let score = 0;
@@ -5739,17 +5943,18 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       } else {
         // Category view
         filteredTasks = agentTasks[selectedCategory] || [];
-        headerText = selectedCategory;
+        headerText = localizeActionString(selectedCategory);
       }
 
       if (filteredTasks.length === 0) {
+        const suffix = filter ? tu('actions.commands.emptySuffix', { filter }) : '';
         commandsContent.innerHTML = `
           <div class="commands-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="11" cy="11" r="8"/>
               <path d="M21 21l-4.35-4.35"/>
                 </svg>
-            <span>No actions found${filter ? ' for "' + filter + '"' : ''}</span>
+            <span>${tu('actions.commands.empty', { suffix })}</span>
             </div>
         `;
         return;
@@ -5759,25 +5964,26 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       html += '<div class="commands-items-grid">';
 
       filteredTasks.forEach((task, taskIndex) => {
+        const localizedTask = getLocalizedTask(task);
         const taskCategory = task.category || selectedCategory;
         const icon = getActionIconForTask(task, taskCategory);
         const noSelectionClass = task.noSelection ? ' no-selection' : '';
         const aiDisabled = !isTaskAvailableInAiOff(task, task.name);
         const aiDisabledClass = aiDisabled ? ' ai-disabled' : '';
-        const noSelectionBadge = task.noSelection ? '<span class="no-selection-badge" title="No selection required">✨</span>' : '';
+        const noSelectionBadge = task.noSelection ? `<span class="no-selection-badge" title="${tu('actions.commands.noSelectionRequired')}">✨</span>` : '';
         // Escape icon for data attribute (encode HTML)
         const iconEncoded = encodeURIComponent(icon);
         // Check if this action has fields (needs custom drawer)
         const hasFields = task.fields && task.fields.length > 0;
-        const fieldsIndicator = hasFields ? '<span class="fields-badge" title="Opens settings panel">⚙️</span>' : '';
-        const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${task.category}</div>` : '';
+        const fieldsIndicator = hasFields ? `<span class="fields-badge" title="${tu('actions.commands.opensSettingsPanel')}">⚙️</span>` : '';
+        const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${localizeActionString(task.category)}</div>` : '';
         const disabledAttrs = aiDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
         html += `
-                <button class="command-item${noSelectionClass}${aiDisabledClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="${aiDisabled ? 'true' : 'false'}" title="${aiDisabled ? getAiOffBlockedMessage(task.name || 'Quick action') : (task.desc || task.name)}"${disabledAttrs}>
+                <button class="command-item${noSelectionClass}${aiDisabledClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="${aiDisabled ? 'true' : 'false'}" title="${aiDisabled ? getAiOffBlockedMessage(localizedTask.displayName || task.name || 'Quick action') : (localizedTask.displayDesc || localizedTask.displayName || task.name)}"${disabledAttrs}>
             <div class="command-item-icon">${icon}${noSelectionBadge}${fieldsIndicator}</div>
             <div class="command-item-text">
-              <div class="command-item-name">${task.name}</div>
-              <div class="command-item-desc">${task.desc}</div>
+              <div class="command-item-name">${localizedTask.displayName}</div>
+              <div class="command-item-desc">${localizedTask.displayDesc}</div>
               ${categoryLabel}
             </div>
           </button>
@@ -11743,6 +11949,7 @@ Generate ONLY the reply text, nothing else.`;
       _personaContextVars = [];
       _pendingContextVarsCombinations = null;
       try {
+        const localizedAction = getLocalizedTask(actionData);
         promptDrawer.classList.remove('minimized', 'maximized');
 
         lastSelectedCategoryBeforePrompt = selectedCategory;
@@ -11754,13 +11961,13 @@ Generate ONLY the reply text, nothing else.`;
         currentPromptAction = { ...actionData, promptTemplate: template };
 
         // Set title and icon
-        promptDrawerTitle.textContent = actionData.name;
+        promptDrawerTitle.textContent = localizedAction.displayName || actionData.name;
         promptDrawerIcon.innerHTML = actionData.icon || '';
 
         // Set help text - only show if help exists and this action uses the help panel
-        const hidePromptDrawerHelp = actionData.name === '縦書き / Vertical text';
+        const hidePromptDrawerHelp = actionData.name === 'Vertical text';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
-          promptDrawerHelpText.textContent = actionData.help.trim();
+          promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
         } else {
           promptDrawerHelpText.textContent = '';
@@ -11803,7 +12010,7 @@ Generate ONLY the reply text, nothing else.`;
           currentDirectUIPageIndex = 0;
           directUIFieldValues = null;
           directUIHydratedFields = null;
-          promptDrawerSubmit.textContent = 'Next →';
+          promptDrawerSubmit.textContent = tu('actions.prompt.next');
           promptDrawerBack.classList.add('hidden');
           promptDrawerReset.classList.remove('hidden');
         } else if (actionData.name === 'UI Section Outline') {
@@ -11829,16 +12036,16 @@ Generate ONLY the reply text, nothing else.`;
             directUIFieldValues = history?.fieldValues || {};
           }
           directUIHydratedFields = hydratedFields;
-          promptDrawerSubmit.textContent = 'Run Action';
+          promptDrawerSubmit.textContent = tu('actions.prompt.run');
           promptDrawerBack.classList.add('hidden');
           promptDrawerReset.classList.remove('hidden');
 
           // Special titles/UI for this standalone phase
-          promptDrawerTitle.textContent = 'UI Section Outline';
+          promptDrawerTitle.textContent = tu('actions.prompt.outline');
           promptDrawerExamples.style.display = 'none';
         } else {
           directUIPhase = 0;
-          promptDrawerSubmit.textContent = 'Run Action';
+          promptDrawerSubmit.textContent = tu('actions.prompt.run');
           promptDrawerBack.classList.add('hidden');
           promptDrawerReset.classList.remove('hidden');
         }
@@ -11852,7 +12059,7 @@ Generate ONLY the reply text, nothing else.`;
           hydratedFields = await hydrateImageGenerationFields(actionData.fields, true); // true = skip wait for instant open
         } else if (actionData.name === 'Create Graph') {
           hydratedFields = await hydrateCreateGraphFields(actionData.fields);
-        } else if (actionData.name === '縦書き / Vertical text') {
+        } else if (actionData.name === 'Vertical text') {
           hydratedFields = await hydrateVerticalTextFields(actionData.fields);
         }
 
@@ -11877,20 +12084,20 @@ Generate ONLY the reply text, nothing else.`;
         }
 
         // Render fields (Screen type, Platform, etc.)
+        const localizedHydratedFields = hydratedFields.map(localizeTaskField);
         if (actionData.name === 'UI Section Outline') {
-          renderPromptFields(hydratedFields, directUIFieldValues);
+          renderPromptFields(localizedHydratedFields, directUIFieldValues);
           promptDrawerFields.classList.remove('hidden');
           // Render editor into the sub-container
           renderPhase2OutlineEditor();
         } else {
-
-          renderPromptFields(hydratedFields);
+          renderPromptFields(localizedHydratedFields);
           promptDrawerFields.classList.remove('hidden');
         }
 
         // Cache hydrated fields for Direct UI "Back" button and Outline editor
         if (actionData.name === 'Direct UI Creation' || actionData.name === 'UI Section Outline') {
-          directUIHydratedFields = hydratedFields;
+          directUIHydratedFields = localizedHydratedFields;
         }
 
         // Sync custom select states (important for searchable ones to show selected value in input)
@@ -11908,7 +12115,7 @@ Generate ONLY the reply text, nothing else.`;
           attachCreateIconFieldBehaviors();
         }
 
-        if (actionData.name === '縦書き / Vertical text') {
+        if (actionData.name === 'Vertical text') {
           attachVerticalTextLinkedFields();
         }
 
@@ -11989,19 +12196,19 @@ Generate ONLY the reply text, nothing else.`;
 
           promptDrawerFields.innerHTML = `
             <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">Paint Styles</div>
+              <div class="prompt-field-label">${tu('actions.styles.paint')}</div>
               <div class="styles-list" id="paintStylesList"></div>
             </div>
             <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">Text Styles</div>
+              <div class="prompt-field-label">${tu('actions.styles.text')}</div>
               <div class="styles-list" id="textStylesList"></div>
             </div>
             <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">Effect Styles</div>
+              <div class="prompt-field-label">${tu('actions.styles.effect')}</div>
               <div class="styles-list" id="effectStylesList"></div>
             </div>
             <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">Variables</div>
+              <div class="prompt-field-label">${tu('actions.styles.variables')}</div>
               <div class="styles-list" id="variablesList"></div>
             </div>
           `;
@@ -12010,14 +12217,14 @@ Generate ONLY the reply text, nothing else.`;
           // Show loader initially
           ['paintStylesList', 'textStylesList', 'effectStylesList', 'variablesList'].forEach(id => {
             const list = document.getElementById(id);
-            if (list) list.innerHTML = '<div class="styles-empty">Loading...</div>';
+            if (list) list.innerHTML = `<div class="styles-empty">${tu('actions.prompt.loading')}</div>`;
           });
 
           // Update footer buttons
           const resetBtn = document.getElementById('promptDrawerReset');
           if (resetBtn) {
-            resetBtn.textContent = 'Refresh';
-            resetBtn.title = 'Refresh local styles';
+            resetBtn.textContent = tu('actions.prompt.refresh');
+            resetBtn.title = tu('actions.prompt.refresh');
             resetBtn.style.display = '';
             resetBtn.onclick = (e) => {
               e.preventDefault();
@@ -12027,7 +12234,7 @@ Generate ONLY the reply text, nothing else.`;
 
           const cancelBtn = document.getElementById('promptDrawerCancel');
           if (cancelBtn) {
-            cancelBtn.textContent = 'Close';
+            cancelBtn.textContent = tu('actions.prompt.close');
           }
 
           requestLocalStyles();
@@ -12071,13 +12278,13 @@ Generate ONLY the reply text, nothing else.`;
           // Restore refresh/close buttons if they were changed
           const resetBtn = document.getElementById('promptDrawerReset');
           if (resetBtn) {
-            resetBtn.textContent = 'Reset';
-            resetBtn.title = 'Reset all fields';
+            resetBtn.textContent = tu('actions.prompt.reset');
+            resetBtn.title = tu('actions.prompt.resetTitle');
             resetBtn.onclick = null;
           }
           const cancelBtn = document.getElementById('promptDrawerCancel');
           if (cancelBtn) {
-            cancelBtn.textContent = 'Back to List';
+            cancelBtn.textContent = tu('actions.prompt.backToList');
           }
 
           // Remove AI action group if exists
@@ -12089,7 +12296,7 @@ Generate ONLY the reply text, nothing else.`;
         }
       } catch (error) {
         console.error('Failed to open prompt drawer:', error);
-        showToast('Error opening action details: ' + error.message, 'error');
+        showToast(tu('actions.prompt.errorOpening', { message: error.message }), 'error');
       }
     }
 
@@ -12149,7 +12356,7 @@ Generate ONLY the reply text, nothing else.`;
       for (const [id, entry] of minimizedDrawers) {
         const fab = document.createElement('div');
         fab.className = 'prompt-drawer-mini-fab' + (entry.isRunning ? ' loading' : '');
-        fab.title = entry.title || 'Restore drawer';
+        fab.title = entry.title || tu('actions.prompt.restoreDrawer');
         fab.dataset.miniFabId = id;
         fab.style.color = entry.color || 'var(--accent-agent)';
 
@@ -12161,7 +12368,7 @@ Generate ONLY the reply text, nothing else.`;
         // Close button
         const closeBtn = document.createElement('button');
         closeBtn.className = 'mini-fab-close';
-        closeBtn.title = 'Close';
+        closeBtn.title = tu('actions.prompt.close');
         closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 6L6 18M6 6l12 12"/></svg>';
         closeBtn.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -12241,13 +12448,13 @@ Generate ONLY the reply text, nothing else.`;
             directUISections = savedSections;
             directUIFieldValues = savedFieldValues;
             directUIHydratedFields = savedHydratedFields;
-            promptDrawerTitle.textContent = 'UI Section Outline';
+            promptDrawerTitle.textContent = tu('actions.prompt.outline');
             promptDrawerFields.innerHTML = getDirectUILoaderHtml(
-              'Creating your UI...',
-              'Generating Figma nodes based on your outline.<br>This may take a moment.'
+              tu('actions.prompt.creatingUi'),
+              tu('actions.prompt.creatingUiSub')
             );
             promptDrawerSubmit.disabled = true;
-            promptDrawerSubmit.textContent = 'Creating UI...';
+            promptDrawerSubmit.textContent = tu('actions.prompt.creatingUi');
             promptDrawerBack.classList.add('hidden');
             promptDrawerExamples.style.display = 'none';
           } else if (isDirectUI && savedPhase === 2) {
@@ -12263,14 +12470,14 @@ Generate ONLY the reply text, nothing else.`;
             promptDrawerFields.innerHTML = `
               <div class="phase2-outline-loading" style="padding: 40px 20px;">
                 <div class="spinner"></div>
-                <div style="font-weight: 500; font-size: 14px; margin-top: 8px;">Analyzing requirements...</div>
+                <div style="font-weight: 500; font-size: 14px; margin-top: 8px;">${tu('actions.prompt.analyzing')}</div>
               </div>
             `;
             promptDrawerSubmit.disabled = true;
-            promptDrawerSubmit.textContent = 'Generating outline...';
+            promptDrawerSubmit.textContent = tu('actions.prompt.generatingOutline');
           } else if (wasRunning) {
             promptDrawerSubmit.disabled = true;
-            promptDrawerSubmit.textContent = 'Running...';
+            promptDrawerSubmit.textContent = tu('actions.prompt.running');
           }
         });
       }
@@ -12795,11 +13002,11 @@ Generate ONLY the reply text, nothing else.`;
           const fieldHeaderHtml = canAddOption ? `
             <div class="prompt-field-label-row">
               <label class="prompt-field-label">${field.label}</label>
-              <button class="add-option-btn" data-add-for="${field.key}" title="Add custom ${field.key}"${forceDisabled ? ' disabled' : ''}>
+              <button class="add-option-btn" data-add-for="${field.key}" title="${tu('actions.prompt.add')} ${field.key}"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
-                <span>Add</span>
+                <span>${tu('actions.prompt.add')}</span>
               </button>
             </div>
           ` : `<label class="prompt-field-label">${field.label}</label>`;
@@ -12843,26 +13050,26 @@ Generate ONLY the reply text, nothing else.`;
 
           if (field.aiButtons) {
             aiButtons.push(`
-              <button class="prompt-ai-btn" data-ai-action="generate" title="Generate description based on screen type and context" type="button"${forceDisabled ? ' disabled' : ''}>
+              <button class="prompt-ai-btn" data-ai-action="generate" title="${tu('actions.prompt.generateTitle')}" type="button"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"></path></svg>
-                <span>Generate</span>
+                <span>${tu('actions.prompt.generate')}</span>
               </button>
-              <button class="prompt-ai-btn" data-ai-action="improve" title="Improve writing (without changing too much)" type="button"${forceDisabled ? ' disabled' : ''}>
+              <button class="prompt-ai-btn" data-ai-action="improve" title="${tu('actions.prompt.improveTitle')}" type="button"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
-                <span>Improve</span>
+                <span>${tu('actions.prompt.improve')}</span>
               </button>
-              <button class="prompt-ai-btn" data-ai-action="expand" title="Add details or suggestions" type="button"${forceDisabled ? ' disabled' : ''}>
+              <button class="prompt-ai-btn" data-ai-action="expand" title="${tu('actions.prompt.expandTitle')}" type="button"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
-                <span>Expand</span>
+                <span>${tu('actions.prompt.expand')}</span>
               </button>
             `);
           }
 
           if (field.translate) {
             aiButtons.push(`
-              <button class="prompt-ai-btn" data-ai-action="translate" title="Translate to English" type="button">
+              <button class="prompt-ai-btn" data-ai-action="translate" title="${tu('actions.prompt.translateTitle')}" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
-                <span>Translate</span>
+                <span>${tu('actions.prompt.translate')}</span>
               </button>
             `);
           }
@@ -12883,9 +13090,9 @@ Generate ONLY the reply text, nothing else.`;
 
           if (field.personaHistoryButton) {
             aiButtons.push(`
-              <button class="prompt-ai-btn" data-ai-action="load-persona" title="Load from Persona History" type="button" onclick="renderPersonaHistory(); return false;">
+              <button class="prompt-ai-btn" data-ai-action="load-persona" title="${tu('actions.prompt.loadPersonaTitle')}" type="button" onclick="renderPersonaHistory(); return false;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
-                <span>Load Persona</span>
+                <span>${tu('actions.prompt.loadPersona')}</span>
               </button>
             `);
           }
@@ -12913,9 +13120,9 @@ Generate ONLY the reply text, nothing else.`;
               <textarea id="${fieldId}" data-field-key="${field.key}" placeholder="${field.placeholder || ''}"${field.disabled || forceDisabled ? ' disabled' : ''}>${textareaValue}</textarea>
               <div class="prompt-field-image-chips" data-chips-for="${field.key}"></div>
               <div class="prompt-field-indicator" data-indicator-for="${field.key}">
-                <span class="prompt-indicator-text">Custom text</span>
+                <span class="prompt-indicator-text">${tu('actions.prompt.clearText')}</span>
                 <button class="prompt-indicator-delete" title="Clear text" type="button">
-                  Clear
+                  ${tu('actions.prompt.clear')}
                 </button>
               </div>
             </div>
@@ -12926,9 +13133,9 @@ Generate ONLY the reply text, nothing else.`;
               <div class="prompt-field-header">
                 <label class="prompt-field-label">${field.label}</label>
                 <div class="prompt-ai-actions">
-                  <button class="prompt-ai-btn" id="ctx-vars-generate-btn" title="Generate context variables from inputs" type="button" onclick="_handleGenerateContextVars()">
+                  <button class="prompt-ai-btn" id="ctx-vars-generate-btn" title="${localizeActionString('Generate context variables from inputs')}" type="button" onclick="_handleGenerateContextVars()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"></path></svg>
-                    <span>Generate</span>
+                    <span>${tu('actions.prompt.generate')}</span>
                   </button>
                 </div>
               </div>
@@ -13065,13 +13272,13 @@ Generate ONLY the reply text, nothing else.`;
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     </svg>
-                    Remove All
+                    ${tu('actions.prompt.removeAll')}
                   </button>
                   <button class="prompt-add-image-btn" id="${fieldId}-add-btn" type="button">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
-                    Add Slot
+                    ${tu('actions.prompt.addSlot')}
                   </button>
                 </div>
               </div>
@@ -18456,7 +18663,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Add prefix/suffix failed', 'Please select at least one text layer.']
           });
-        case '縦書き / Vertical text':
+        case 'Vertical text':
           return runLocalActionRequest({
             requestType: 'local-verticalize-text',
             resultType: 'local-verticalize-text-result',
@@ -21172,6 +21379,7 @@ Example structure:
 
     // Apply loaded settings to UI
     function applySettings(settings) {
+      currentSettingsLocale = normalizeSettingsLocale(settings?.language || DEFAULT_SETTINGS_LOCALE);
       const savedProvider = settings?.provider || 'gemini';
       const normalizedProvider = savedProvider === 'off' ? 'gemini' : savedProvider;
       const savedAiOffMode = settings?.aiOffMode === true || savedProvider === 'off';
@@ -21219,6 +21427,9 @@ Example structure:
       maxSelectionSize = savedSizeLimit * 1024;
 
       suppressSettingsDirty = true;
+      if (languageSelect) {
+        languageSelect.value = currentSettingsLocale;
+      }
       if (noAiModeToggle) {
         noAiModeToggle.checked = aiOffMode;
       }
@@ -21236,6 +21447,7 @@ Example structure:
       pixabayApiKeyInput.value = pixabayApiKey;
       pexelsApiKeyInput.value = pexelsApiKey;
       selectionSizeLimitSelect.value = savedSizeLimit.toString();
+      applySettingsLocale(currentSettingsLocale);
 
       // Request file info from plugin for auto-detecting file key
       parent.postMessage({ pluginMessage: { type: 'get-file-info' } }, '*');
@@ -21272,6 +21484,7 @@ Example structure:
       // Populate chat dropdown
       populateChatModelDropdown();
       lastSavedSettings = {
+        language: currentSettingsLocale,
         provider: selectedProvider,
         aiOffMode,
         geminiApiKey,
@@ -21414,6 +21627,7 @@ Example structure:
       };
 
       const settings = {
+        language: normalizeSettingsLocale(languageSelect?.value || currentSettingsLocale),
         provider: providerSelect.value || 'gemini',
         aiOffMode: noAiModeToggle?.checked === true,
         geminiApiKey: geminiApiKeyInput.value || '',
@@ -21443,6 +21657,8 @@ Example structure:
       }, '*');
 
       // Update local state immediately
+      currentSettingsLocale = settings.language;
+      applySettingsLocale(currentSettingsLocale);
       selectedProvider = settings.provider;
       aiOffMode = settings.aiOffMode === true;
       geminiApiKey = settings.geminiApiKey;
@@ -21497,13 +21713,13 @@ Example structure:
         figmaFileKey = data.fileKey;
         if (figmaFileKeyInput) {
           figmaFileKeyInput.value = data.fileKey;
-          figmaFileKeyInput.placeholder = 'Auto-detected';
+          figmaFileKeyInput.placeholder = t('settings.figma.fileKeyAutoDetectedPlaceholder');
         }
         console.log('File key auto-detected:', data.fileKey);
       } else {
         // fileKey not available (public plugins don't have access)
         if (figmaFileKeyInput && !figmaFileKeyInput.value) {
-          figmaFileKeyInput.placeholder = 'Paste file key from URL (not auto-detected)';
+          figmaFileKeyInput.placeholder = t('settings.figma.fileKeyManualPlaceholder');
         }
         console.log('File key not available - plugin may not have access. File name:', data.fileName);
       }
@@ -21518,12 +21734,12 @@ Example structure:
     async function testFigmaToken() {
       const token = figmaPersonalTokenInput.value.trim();
       if (!token) {
-        showToast('Please enter a Figma Personal Access Token', 'error');
+        showToast(t('settings.messages.enterFigmaToken'), 'error');
         return;
       }
 
       btnTestFigmaToken.disabled = true;
-      btnTestFigmaToken.textContent = 'Testing...';
+      btnTestFigmaToken.textContent = t('settings.testing');
 
       try {
         const response = await fetch('https://api.figma.com/v1/me', {
@@ -21534,18 +21750,22 @@ Example structure:
 
         if (response.ok) {
           const user = await response.json();
-          showToast(`Token valid! Connected as ${user.handle || user.email}`, 'success');
+          showToast(t('settings.messages.tokenValid', {
+            user: user.handle || user.email
+          }), 'success');
           figmaPersonalToken = token;
           figmaCurrentUser = user; // Store the current user info
         } else {
           const error = await response.json().catch(() => ({}));
-          showToast(`Invalid token: ${error.message || response.statusText}`, 'error');
+          showToast(t('settings.messages.invalidToken', {
+            message: error.message || response.statusText
+          }), 'error');
         }
       } catch (error) {
-        showToast(`Failed to test token: ${error.message}`, 'error');
+        showToast(t('settings.messages.failedTestToken', { message: error.message }), 'error');
       } finally {
         btnTestFigmaToken.disabled = false;
-        btnTestFigmaToken.textContent = 'Test';
+        btnTestFigmaToken.textContent = t('settings.test');
       }
     }
 
@@ -21556,11 +21776,12 @@ Example structure:
       // Check after a short delay if we got the file key
       setTimeout(() => {
         if (figmaFileKey) {
-          showToast(`File key detected: ${figmaFileKey}`, 'success');
+          showToast(t('settings.messages.fileKeyDetected', { fileKey: figmaFileKey }), 'success');
         } else {
-          showToast('File key not auto-detected. Please paste from your Figma URL.', 'info');
+          showToast(t('settings.messages.fileKeyNotDetected'), 'info');
           figmaFileKeyInput.readOnly = false;
           figmaFileKeyInput.focus();
+          figmaFileKeyInput.placeholder = t('settings.figma.fileKeyEditingPlaceholder');
         }
       }, 300);
     }
@@ -21573,7 +21794,7 @@ Example structure:
     // Render comments list
     function renderComments() {
       if (!figmaComments || figmaComments.length === 0) {
-        commentsList.innerHTML = '<div class="comments-empty">No comments found in this file.</div>';
+        commentsList.innerHTML = `<div class="comments-empty">${t('settings.messages.commentsEmpty')}</div>`;
         return;
       }
 
@@ -28566,18 +28787,20 @@ Based on the user's instruction, generate the appropriate commands to modify the
         const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
         const disabledAttrs = isDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
-        const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
+        const displayName = localizeActionString(action.name || '');
+        const displayDesc = localizeActionString(action.desc || '');
+        const title = isDisabled ? getAiOffBlockedMessage(displayName || 'Quick action') : (displayDesc || displayName || action.name);
         return `
           <button class="slash-action-item ${isActive ? 'active' : ''}${disabledClass}" data-index="${idx}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" title="${title}"${disabledAttrs}>
             <div class="slash-action-icon">${action.icon || defaultActionIcon}</div>
-            <div class="slash-action-name">${action.name}</div>
+            <div class="slash-action-name">${displayName || action.name}</div>
           </button>
         `;
       }).join('');
 
       slashActionsMenu.innerHTML = `
         <div class="slash-actions-list">
-          ${itemsHtml || '<div class="slash-actions-empty">No quick actions found</div>'}
+          ${itemsHtml || `<div class="slash-actions-empty">${tu('actions.commands.none')}</div>`}
         </div>
       `;
 
@@ -30680,7 +30903,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
     // Make file key input editable when clicked
     figmaFileKeyInput.addEventListener('click', () => {
       figmaFileKeyInput.readOnly = false;
-      figmaFileKeyInput.placeholder = 'Enter file key from URL';
+      figmaFileKeyInput.placeholder = t('settings.figma.fileKeyEditingPlaceholder');
     });
 
     // Parse file key from pasted URL
@@ -30692,7 +30915,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         if (urlMatch) {
           figmaFileKeyInput.value = urlMatch[1];
           figmaFileKey = urlMatch[1];
-          showToast('File key extracted from URL', 'success');
+          showToast(t('settings.messages.fileKeyExtracted'), 'success');
         }
       }, 0);
     });
@@ -30701,11 +30924,11 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (!button) return;
       if (isLoading) {
         button.classList.add('loading');
-        button.textContent = 'Testing...';
+        button.textContent = t('settings.testing');
         button.disabled = true;
       } else {
         button.classList.remove('loading');
-        button.textContent = 'Test';
+        button.textContent = t('settings.test');
         button.disabled = false;
       }
     }
@@ -30731,7 +30954,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         }
 
         if (!testApiKey) {
-          showToast('Please enter an API key first', 'error');
+          showToast(t('settings.messages.enterApiKey'), 'error');
           return;
         }
 
@@ -30792,13 +31015,17 @@ Based on the user's instruction, generate the appropriate commands to modify the
                 console.log('Gemini models for this key:', listedModels);
                 if (listedModels.length > 0) {
                   const modelNames = listedModels.slice(0, 5).map(m => m.displayName || m.id).join(', ');
-                  showToast(`Models available (${listedModels.length}): ${modelNames}${listedModels.length > 5 ? '…' : ''}`);
+                  showToast(t('settings.messages.modelsAvailable', {
+                    count: listedModels.length,
+                    models: modelNames,
+                    suffix: listedModels.length > 5 ? '…' : ''
+                  }));
                 } else {
-                  showToast('Connected, but no models returned for this key', 'info');
+                  showToast(t('settings.messages.connectedNoModels'), 'info');
                 }
               } catch (e) {
                 console.warn('Model list failed:', e);
-                showToast('Connected, but could not list models: ' + e.message, 'info');
+                showToast(t('settings.messages.connectedModelListFailed', { message: e.message }), 'info');
               }
               populateGeminiModelSelect(listedModels.length ? listedModels : DEFAULT_GEMINI_MODELS, testModel);
               // Update chat dropdown if Gemini is current provider
@@ -30813,7 +31040,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
               anthropicModel = testModel;
             }
 
-            showToast('Connection successful!');
+            showToast(t('settings.messages.connectionSuccessful'));
             updateChatStatus();
 
             // Update chat dropdown
@@ -30823,7 +31050,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
             throw new Error(error.error?.message || 'Connection failed');
           }
         } catch (error) {
-          showToast('Connection failed: ' + error.message, 'error');
+          showToast(t('settings.messages.connectionFailed', { message: error.message }), 'error');
         } finally {
           setTestButtonLoading(button, false);
         }
@@ -30981,7 +31208,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           break;
 
         case 'settings-saved':
-          showToast('Settings saved!');
+          showToast(t('settings.messages.settingsSaved'));
           break;
 
         case 'current-context':
@@ -30995,7 +31222,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           break;
 
         case 'navigate-success':
-          showToast('Navigated to comment location');
+          showToast(t('settings.messages.navigatedToComment'));
           break;
 
         case 'chat-archives-saved':

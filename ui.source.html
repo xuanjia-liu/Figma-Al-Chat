@@ -97,7 +97,7 @@
           </div>
         </div>
         <div class="header-actions">
-          <button class="settings-btn" id="openSettingsBtn" title="Settings">
+          <button class="settings-btn" id="openSettingsBtn" title="Settings" data-i18n-title="settings.openButtonTitle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="3" />
               <path
@@ -258,7 +258,7 @@
   <div class="settings-modal" id="settingsModal">
     <div class="settings-modal-content">
       <div class="settings-modal-header">
-        <span class="settings-modal-title">Settings</span>
+        <span class="settings-modal-title" data-i18n="settings.modalTitle">Settings</span>
         <button class="settings-modal-close" id="closeSettingsBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12" />
@@ -273,19 +273,19 @@
                 <path
                   d="m12 12.001 8.073-4.625M12 12.001 3.926 7.376M12 12.001v9.25m8.073-13.875a3.17 3.17 0 0 0-1.165-1.156l-5.316-3.046a3.2 3.2 0 0 0-3.184 0L5.092 6.221c-.493.282-.89.683-1.166 1.155m16.147 0a3.14 3.14 0 0 1 .427 1.581v6.09a3.15 3.15 0 0 1-1.592 2.736l-5.316 3.046a3.2 3.2 0 0 1-1.592.422M3.926 7.376a3.14 3.14 0 0 0-.426 1.58v6.09c0 1.13.607 2.172 1.592 2.736l5.316 3.046a3.2 3.2 0 0 0 1.592.423" />
               </svg>
-              Models
+              <span data-i18n="settings.sidebar.models">Models</span>
             </div>
             <div class="settings-menu-item" data-category="export">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
               </svg>
-              Export
+              <span data-i18n="settings.sidebar.export">Export</span>
             </div>
             <div class="settings-menu-item" data-category="limits">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                 <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
               </svg>
-              Limits
+              <span data-i18n="settings.sidebar.limits">Limits</span>
             </div>
             <div class="settings-menu-item" data-category="image-apis">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -293,7 +293,7 @@
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <path d="M21 15l-5-5L5 21" />
               </svg>
-              Image APIs
+              <span data-i18n="settings.sidebar.imageApis">Image APIs</span>
             </div>
             <div class="settings-menu-item" data-category="figma-api">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
@@ -301,54 +301,65 @@
                 <path d="M12 11.998a3.001 3.001 0 1 1 6 .006 3.001 3.001 0 0 1-5.999-.006" />
                 <path d="M12 3h3a3 3 0 0 1 0 6h-3m0-6v6m0-6H9a3 3 0 1 0 0 6h3" />
               </svg>
-              Figma API
+              <span data-i18n="settings.sidebar.figmaApi">Figma API</span>
             </div>
           </div>
           <div class="settings-main-content">
             <!-- AI Provider Category -->
             <div class="settings-category-panel active" id="category-ai">
-              <div class="settings-group-title">Assistant Provider</div>
+              <div class="settings-group-title" data-i18n="settings.languageGroupTitle">Display Language</div>
+              <div class="setting-item">
+                <label class="setting-label" for="settingsLanguageSelect" data-i18n="settings.languageLabel">Language</label>
+                <select class="setting-input" id="settingsLanguageSelect">
+                  <option value="en" data-i18n="settings.languageOption.en">English</option>
+                  <option value="ja" data-i18n="settings.languageOption.ja">Japanese</option>
+                  <option value="zh-CN" data-i18n="settings.languageOption.zh-CN">Simplified Chinese</option>
+                </select>
+                <div class="setting-hint" data-i18n="settings.languageHint">Choose the language used in the Settings interface.</div>
+              </div>
+
+              <div class="settings-group-title" data-i18n="settings.ai.groupTitle">Assistant Provider</div>
               <div class="setting-item">
                 <label class="audit-toggle-switch">
                   <input type="checkbox" id="noAiModeToggle" />
-                  <span class="toggle-label">No AI (Quick Actions only)</span>
+                  <span class="toggle-label" data-i18n="settings.ai.noAiToggle">No AI (Quick Actions only)</span>
                 </label>
               </div>
               <div class="setting-item">
-                <label class="setting-label">Choose Assistant Mode</label>
+                <label class="setting-label" data-i18n="settings.ai.providerLabel">Choose Assistant Mode</label>
                 <select class="setting-input" id="providerSelect">
-                  <option value="gemini">Google Gemini</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="gemini" data-i18n="settings.ai.providerOption.gemini">Google Gemini</option>
+                  <option value="openai" data-i18n="settings.ai.providerOption.openai">OpenAI</option>
+                  <option value="anthropic" data-i18n="settings.ai.providerOption.anthropic">Anthropic Claude</option>
                 </select>
-                <div class="setting-hint">Choose which assistant provider to use when AI is enabled.</div>
+                <div class="setting-hint" data-i18n="settings.ai.providerHint">Choose which assistant provider to use when AI is enabled.</div>
               </div>
               <div class="provider-settings" id="geminiSettings">
                 <div class="setting-item provider-api-setting">
-                  <label class="setting-label">API Key</label>
+                  <label class="setting-label" data-i18n="settings.apiKeyLabel">API Key</label>
                   <div class="setting-input-row">
                     <input type="password" class="setting-input" id="geminiApiKeyInput"
-                      placeholder="Enter your Google AI Studio API key" />
-                    <button class="setting-btn" id="btnTestGemini" data-test-provider="gemini">Test</button>
+                      placeholder="Enter your Google AI Studio API key" data-i18n-placeholder="settings.gemini.apiPlaceholder" />
+                    <button class="setting-btn" id="btnTestGemini" data-test-provider="gemini" data-i18n="settings.test">Test</button>
                   </div>
-                  <div class="setting-hint">
+                  <div class="setting-hint" data-i18n-html="settings.gemini.apiHintHtml">
                     Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank"
                       style="color: var(--accent);">Google AI Studio</a>.
                   </div>
                 </div>
                 <div class="setting-item provider-model-setting">
-                  <label class="setting-label">Select Models</label>
+                  <label class="setting-label" data-i18n="settings.selectModelsLabel">Select Models</label>
                   <div class="model-checklist" id="geminiModelChecklist">
                   </div>
                   <div class="model-actions">
-                    <button class="model-refresh-btn" data-provider="gemini" title="Refresh model list">
-                      <span>↻</span> Refresh
+                    <button class="model-refresh-btn" data-provider="gemini" title="Refresh model list" data-i18n-title="settings.models.refreshTitle">
+                      <span>↻</span> <span data-i18n="settings.models.refresh">Refresh</span>
                     </button>
-                    <button class="model-show-all-btn" data-provider="gemini" title="Show all models">
-                      Show All
+                    <button class="model-show-all-btn" data-provider="gemini" title="Show all models" data-i18n-title="settings.models.showAllTitle">
+                      <span data-i18n="settings.models.showAll">Show All</span>
                     </button>
-                    <span class="check-all-toggle" data-provider="gemini" title="Check/Uncheck all">
-                      <span class="check-all-text">Check All</span>
+                    <span class="check-all-toggle" data-provider="gemini" title="Check/Uncheck all" data-i18n-title="settings.models.checkAllTitle">
+                      <span class="check-all-text" data-i18n="settings.models.checkAll">Check All</span>
                     </span>
                   </div>
                   <select class="setting-input hidden" id="geminiModelSelect">
@@ -361,30 +372,30 @@
 
               <div class="provider-settings hidden" id="openaiSettings">
                 <div class="setting-item provider-api-setting">
-                  <label class="setting-label">API Key</label>
+                  <label class="setting-label" data-i18n="settings.apiKeyLabel">API Key</label>
                   <div class="setting-input-row">
                     <input type="password" class="setting-input" id="openaiApiKeyInput"
-                      placeholder="Enter your OpenAI API key" />
-                    <button class="setting-btn" id="btnTestOpenAI" data-test-provider="openai">Test</button>
+                      placeholder="Enter your OpenAI API key" data-i18n-placeholder="settings.openai.apiPlaceholder" />
+                    <button class="setting-btn" id="btnTestOpenAI" data-test-provider="openai" data-i18n="settings.test">Test</button>
                   </div>
-                  <div class="setting-hint">
+                  <div class="setting-hint" data-i18n-html="settings.openai.apiHintHtml">
                     Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank"
                       style="color: var(--accent);">OpenAI Platform</a>.
                   </div>
                 </div>
                 <div class="setting-item provider-model-setting">
-                  <label class="setting-label">Select Models</label>
+                  <label class="setting-label" data-i18n="settings.selectModelsLabel">Select Models</label>
                   <div class="model-checklist" id="openaiModelChecklist">
                   </div>
                   <div class="model-actions">
-                    <button class="model-refresh-btn" data-provider="openai" title="Refresh model list">
-                      <span>↻</span> Refresh
+                    <button class="model-refresh-btn" data-provider="openai" title="Refresh model list" data-i18n-title="settings.models.refreshTitle">
+                      <span>↻</span> <span data-i18n="settings.models.refresh">Refresh</span>
                     </button>
-                    <button class="model-show-all-btn" data-provider="openai" title="Show all models">
-                      Show All
+                    <button class="model-show-all-btn" data-provider="openai" title="Show all models" data-i18n-title="settings.models.showAllTitle">
+                      <span data-i18n="settings.models.showAll">Show All</span>
                     </button>
-                    <span class="check-all-toggle" data-provider="openai" title="Check/Uncheck all">
-                      <span class="check-all-text">Check All</span>
+                    <span class="check-all-toggle" data-provider="openai" title="Check/Uncheck all" data-i18n-title="settings.models.checkAllTitle">
+                      <span class="check-all-text" data-i18n="settings.models.checkAll">Check All</span>
                     </span>
                   </div>
                   <select class="setting-input hidden" id="openaiModelSelect">
@@ -398,30 +409,30 @@
 
               <div class="provider-settings hidden" id="anthropicSettings">
                 <div class="setting-item provider-api-setting">
-                  <label class="setting-label">API Key</label>
+                  <label class="setting-label" data-i18n="settings.apiKeyLabel">API Key</label>
                   <div class="setting-input-row">
                     <input type="password" class="setting-input" id="anthropicApiKeyInput"
-                      placeholder="Enter your Anthropic API key" />
-                    <button class="setting-btn" id="btnTestAnthropic" data-test-provider="anthropic">Test</button>
+                      placeholder="Enter your Anthropic API key" data-i18n-placeholder="settings.anthropic.apiPlaceholder" />
+                    <button class="setting-btn" id="btnTestAnthropic" data-test-provider="anthropic" data-i18n="settings.test">Test</button>
                   </div>
-                  <div class="setting-hint">
+                  <div class="setting-hint" data-i18n-html="settings.anthropic.apiHintHtml">
                     Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank"
                       style="color: var(--accent);">Anthropic Console</a>.
                   </div>
                 </div>
                 <div class="setting-item provider-model-setting">
-                  <label class="setting-label">Select Models</label>
+                  <label class="setting-label" data-i18n="settings.selectModelsLabel">Select Models</label>
                   <div class="model-checklist" id="anthropicModelChecklist">
                   </div>
                   <div class="model-actions">
-                    <button class="model-refresh-btn" data-provider="anthropic" title="Refresh model list">
-                      <span>↻</span> Refresh
+                    <button class="model-refresh-btn" data-provider="anthropic" title="Refresh model list" data-i18n-title="settings.models.refreshTitle">
+                      <span>↻</span> <span data-i18n="settings.models.refresh">Refresh</span>
                     </button>
-                    <button class="model-show-all-btn" data-provider="anthropic" title="Show all models">
-                      Show All
+                    <button class="model-show-all-btn" data-provider="anthropic" title="Show all models" data-i18n-title="settings.models.showAllTitle">
+                      <span data-i18n="settings.models.showAll">Show All</span>
                     </button>
-                    <span class="check-all-toggle" data-provider="anthropic" title="Check/Uncheck all">
-                      <span class="check-all-text">Check All</span>
+                    <span class="check-all-toggle" data-provider="anthropic" title="Check/Uncheck all" data-i18n-title="settings.models.checkAllTitle">
+                      <span class="check-all-text" data-i18n="settings.models.checkAll">Check All</span>
                     </span>
                   </div>
                   <select class="setting-input hidden" id="anthropicModelSelect">
@@ -437,104 +448,104 @@
 
             <!-- Export Category -->
             <div class="settings-category-panel" id="category-export">
-              <div class="settings-group-title">Export Settings</div>
+              <div class="settings-group-title" data-i18n="settings.export.groupTitle">Export Settings</div>
               <div class="setting-item">
-                <label class="setting-label">CSS Generation</label>
+                <label class="setting-label" data-i18n="settings.export.cssGenerationLabel">CSS Generation</label>
                 <select class="setting-input" id="cssFormatSelect">
-                  <option value="classes">CSS Classes</option>
-                  <option value="inline">Inline Styles</option>
-                  <option value="tailwind">Tailwind Classes</option>
+                  <option value="classes" data-i18n="settings.export.cssOption.classes">CSS Classes</option>
+                  <option value="inline" data-i18n="settings.export.cssOption.inline">Inline Styles</option>
+                  <option value="tailwind" data-i18n="settings.export.cssOption.tailwind">Tailwind Classes</option>
                 </select>
               </div>
             </div>
 
             <!-- Limits Category -->
             <div class="settings-category-panel" id="category-limits">
-              <div class="settings-group-title">Selection Limits</div>
+              <div class="settings-group-title" data-i18n="settings.limits.selectionGroupTitle">Selection Limits</div>
               <div class="setting-item">
-                <label class="setting-label">Selection Size Limit</label>
+                <label class="setting-label" data-i18n="settings.limits.selectionSizeLabel">Selection Size Limit</label>
                 <select class="setting-input" id="selectionSizeLimitSelect">
-                  <option value="50">50 KB — ~70-150 nodes (Fast)</option>
-                  <option value="100">100 KB — ~150-300 nodes (Balanced)</option>
-                  <option value="200" selected>200 KB — ~300-600 nodes (Default)</option>
-                  <option value="500">500 KB — ~800-1500 nodes (Large)</option>
-                  <option value="1024">1 MB — ~1500-3000 nodes</option>
-                  <option value="2048">2 MB — ~3000-6000 nodes</option>
-                  <option value="5120">5 MB — Extreme limit</option>
+                  <option value="50" data-i18n="settings.limits.selectionOption.50">50 KB — ~70-150 nodes (Fast)</option>
+                  <option value="100" data-i18n="settings.limits.selectionOption.100">100 KB — ~150-300 nodes (Balanced)</option>
+                  <option value="200" selected data-i18n="settings.limits.selectionOption.200">200 KB — ~300-600 nodes (Default)</option>
+                  <option value="500" data-i18n="settings.limits.selectionOption.500">500 KB — ~800-1500 nodes (Large)</option>
+                  <option value="1024" data-i18n="settings.limits.selectionOption.1024">1 MB — ~1500-3000 nodes</option>
+                  <option value="2048" data-i18n="settings.limits.selectionOption.2048">2 MB — ~3000-6000 nodes</option>
+                  <option value="5120" data-i18n="settings.limits.selectionOption.5120">5 MB — Extreme limit</option>
                 </select>
-                <div class="setting-hint">
+                <div class="setting-hint" data-i18n="settings.limits.selectionHint">
                   Controls how many elements can be selected at once in Agent/Audit mode.
                 </div>
               </div>
 
-              <div class="settings-group-title" style="margin-top: 24px;">Output Token Limits</div>
+              <div class="settings-group-title" style="margin-top: 24px;" data-i18n="settings.limits.outputGroupTitle">Output Token Limits</div>
               <div class="setting-item">
-                <label class="setting-label">Agent Mode Limit</label>
+                <label class="setting-label" data-i18n="settings.limits.agentLabel">Agent Mode Limit</label>
                 <input type="number" class="setting-input" id="agentMaxTokensInput" placeholder="65536" min="1024"
                   step="1024" />
-                <div class="setting-hint">Max tokens for Direct UI Creation.</div>
+                <div class="setting-hint" data-i18n="settings.limits.agentHint">Max tokens for Direct UI Creation.</div>
               </div>
               <div class="setting-item">
-                <label class="setting-label">Audit Mode Limit</label>
+                <label class="setting-label" data-i18n="settings.limits.auditLabel">Audit Mode Limit</label>
                 <input type="number" class="setting-input" id="auditMaxTokensInput" placeholder="16384" min="1024"
                   step="1024" />
-                <div class="setting-hint">Max tokens for UI/UX Audit reports.</div>
+                <div class="setting-hint" data-i18n="settings.limits.auditHint">Max tokens for UI/UX Audit reports.</div>
               </div>
               <div class="setting-item">
-                <label class="setting-label">Chat/General Limit</label>
+                <label class="setting-label" data-i18n="settings.limits.chatLabel">Chat/General Limit</label>
                 <input type="number" class="setting-input" id="chatMaxTokensInput" placeholder="16384" min="1024"
                   step="1024" />
-                <div class="setting-hint">Max tokens for standard chat responses.</div>
+                <div class="setting-hint" data-i18n="settings.limits.chatHint">Max tokens for standard chat responses.</div>
               </div>
             </div>
 
             <!-- Image APIs Category -->
             <div class="settings-category-panel" id="category-image-apis">
-              <div class="settings-group-title">Vector Generation</div>
+              <div class="settings-group-title" data-i18n="settings.imageApis.vectorGroupTitle">Vector Generation</div>
               <div class="setting-item">
-                <label class="setting-label">Quiver API Key</label>
+                <label class="setting-label" data-i18n="settings.imageApis.quiverLabel">Quiver API Key</label>
                 <input type="password" class="setting-input" id="quiverApiKeyInput"
-                  placeholder="Enter your Quiver API key" />
-                <div class="setting-hint">
+                  placeholder="Enter your Quiver API key" data-i18n-placeholder="settings.imageApis.quiverPlaceholder" />
+                <div class="setting-hint" data-i18n-html="settings.imageApis.quiverHintHtml">
                   Get your API key from <a href="https://app.quiver.ai/settings/api-keys" target="_blank"
                     style="color: var(--accent);">Quiver API Keys</a>.
                 </div>
               </div>
 
-              <div class="settings-group-title">Unsplash</div>
+              <div class="settings-group-title" data-i18n="settings.imageApis.unsplashGroupTitle">Unsplash</div>
               <div class="setting-item">
-                <label class="setting-label">Unsplash Access Key</label>
+                <label class="setting-label" data-i18n="settings.imageApis.unsplashLabel">Unsplash Access Key</label>
                 <div class="setting-input-row">
                   <input type="password" class="setting-input" id="unsplashApiKeyInput"
-                    placeholder="Enter your Unsplash Access Key" />
+                    placeholder="Enter your Unsplash Access Key" data-i18n-placeholder="settings.imageApis.unsplashPlaceholder" />
                 </div>
-                <div class="setting-hint">
+                <div class="setting-hint" data-i18n-html="settings.imageApis.unsplashHintHtml">
                   Get your key from <a href="https://unsplash.com/oauth/applications" target="_blank"
                     style="color: var(--accent);">Unsplash Developers</a>. Only the Access Key is needed.
                 </div>
               </div>
 
-              <div class="settings-group-title" style="margin-top: 24px;">Pixabay</div>
+              <div class="settings-group-title" style="margin-top: 24px;" data-i18n="settings.imageApis.pixabayGroupTitle">Pixabay</div>
               <div class="setting-item">
-                <label class="setting-label">Pixabay API Key</label>
+                <label class="setting-label" data-i18n="settings.imageApis.pixabayLabel">Pixabay API Key</label>
                 <div class="setting-input-row">
                   <input type="password" class="setting-input" id="pixabayApiKeyInput"
-                    placeholder="Enter your Pixabay API Key" />
+                    placeholder="Enter your Pixabay API Key" data-i18n-placeholder="settings.imageApis.pixabayPlaceholder" />
                 </div>
-                <div class="setting-hint">
+                <div class="setting-hint" data-i18n-html="settings.imageApis.pixabayHintHtml">
                   Get your key from <a href="https://pixabay.com/api/docs/" target="_blank"
                     style="color: var(--accent);">Pixabay API Docs</a>. Free with attribution.
                 </div>
               </div>
 
-              <div class="settings-group-title" style="margin-top: 24px;">Pexels</div>
+              <div class="settings-group-title" style="margin-top: 24px;" data-i18n="settings.imageApis.pexelsGroupTitle">Pexels</div>
               <div class="setting-item">
-                <label class="setting-label">Pexels API Key</label>
+                <label class="setting-label" data-i18n="settings.imageApis.pexelsLabel">Pexels API Key</label>
                 <div class="setting-input-row">
                   <input type="password" class="setting-input" id="pexelsApiKeyInput"
-                    placeholder="Enter your Pexels API Key" />
+                    placeholder="Enter your Pexels API Key" data-i18n-placeholder="settings.imageApis.pexelsPlaceholder" />
                 </div>
-                <div class="setting-hint">
+                <div class="setting-hint" data-i18n-html="settings.imageApis.pexelsHintHtml">
                   Get your key from <a href="https://www.pexels.com/api/" target="_blank"
                     style="color: var(--accent);">Pexels API</a>. Free with attribution.
                 </div>
@@ -543,32 +554,32 @@
 
             <!-- Figma API Category -->
             <div class="settings-category-panel" id="category-figma-api">
-              <div class="settings-group-title">Figma REST API</div>
+              <div class="settings-group-title" data-i18n="settings.figma.groupTitle">Figma REST API</div>
               <div class="setting-item">
-                <label class="setting-label">Personal Access Token</label>
+                <label class="setting-label" data-i18n="settings.figma.tokenLabel">Personal Access Token</label>
                 <div class="setting-input-row">
                   <input type="password" class="setting-input" id="figmaPersonalTokenInput"
-                    placeholder="Enter your Figma Personal Access Token" />
-                  <button class="setting-btn" id="btnTestFigmaToken">Test</button>
+                    placeholder="Enter your Figma Personal Access Token" data-i18n-placeholder="settings.figma.tokenPlaceholder" />
+                  <button class="setting-btn" id="btnTestFigmaToken" data-i18n="settings.test">Test</button>
                 </div>
-                <div class="setting-hint">
+                <div class="setting-hint" data-i18n-html="settings.figma.tokenHintHtml">
                   Get your token from <a href="https://www.figma.com/developers/api#access-tokens" target="_blank"
                     style="color: var(--accent);">Figma Account Settings</a>. Required for Comments API.
                 </div>
               </div>
               <div class="setting-item">
-                <label class="setting-label">File Key</label>
+                <label class="setting-label" data-i18n="settings.figma.fileKeyLabel">File Key</label>
                 <div class="setting-input-row">
                   <input type="text" class="setting-input" id="figmaFileKeyInput"
-                    placeholder="Auto-detected or paste from URL" readonly />
-                  <button class="setting-btn" id="btnDetectFileKey">Detect</button>
+                    placeholder="Auto-detected or paste from URL" readonly data-i18n-placeholder="settings.figma.fileKeyPlaceholder" />
+                  <button class="setting-btn" id="btnDetectFileKey" data-i18n="settings.figma.detect">Detect</button>
                 </div>
-                <div class="setting-hint">
+                <div class="setting-hint" data-i18n-html="settings.figma.fileKeyHintHtml">
                   File key from your Figma URL: figma.com/file/<strong>[FILE_KEY]</strong>/...
                 </div>
               </div>
 
-              <div class="settings-group-title" style="margin-top: 24px;">Comments</div>
+              <div class="settings-group-title" style="margin-top: 24px;" data-i18n="settings.figma.commentsGroupTitle">Comments</div>
               <div class="setting-item">
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                   <button class="setting-btn" id="btnLoadComments">
@@ -576,7 +587,7 @@
                       style="margin-right: 4px;">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                     </svg>
-                    Load Comments
+                    <span data-i18n="settings.figma.loadComments">Load Comments</span>
                   </button>
                   <button class="setting-btn" id="btnRefreshComments" disabled>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
@@ -584,10 +595,10 @@
                       <path d="M23 4v6h-6M1 20v-6h6" />
                       <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                     </svg>
-                    Refresh
+                    <span data-i18n="settings.figma.refreshComments">Refresh</span>
                   </button>
                 </div>
-                <div class="setting-hint" style="margin-top: 8px;">
+                <div class="setting-hint" style="margin-top: 8px;" data-i18n="settings.figma.commentsHint">
                   Load comments from the current file to view, reply to, or use in AI context.
                 </div>
               </div>
@@ -600,7 +611,7 @@
         </div>
       </div>
       <div class="settings-modal-footer">
-        <button class="setting-btn primary" id="btnSaveSettings">Save Settings</button>
+        <button class="setting-btn primary" id="btnSaveSettings" data-i18n="settings.save">Save Settings</button>
       </div>
     </div>
   </div>
@@ -1043,7 +1054,7 @@
       <div class="commands-drawer-search">
         <input type="text" id="commandsSearch" placeholder="Search actions..." />
       </div>
-      <button class="settings-btn no-ai-settings-btn" id="openSettingsBtnNoAi" title="Settings">
+      <button class="settings-btn no-ai-settings-btn" id="openSettingsBtnNoAi" title="Settings" data-i18n-title="settings.openButtonTitle">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path
