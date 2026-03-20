@@ -1,3 +1,5 @@
+import { TASK_FIELD_EXACT } from './task-field-exact-translations.js';
+
 const uiTranslations = {
   en: {
     'actions.commands.title': 'Quick Actions',
@@ -1376,6 +1378,11 @@ const exactTranslations = {
     'e.g. checkout conversion rate, sign-up rate, engagement time': '例: チェックアウト完了率、登録率、エンゲージメント時間',
     'e.g. 3.2% conversion rate, 45s avg session duration': '例: CVR 3.2%、平均セッション時間 45秒',
     'e.g. Audience size, platform constraints, previous test results, seasonal considerations...': '例: オーディエンス規模、プラットフォーム制約、過去のテスト結果、季節要因...',
+    'A/B Test Design': 'A/B テスト設計',
+    'Design a rigorous A/B test with hypothesis, metrics, and analysis plan':
+      '仮説・指標・分析計画を含む厳密な A/B テストを設計',
+    'Creates a comprehensive A/B test plan including hypothesis, metrics framework, sample size calculations, success criteria, and risk mitigations.':
+      '仮説、指標フレームワーク、サンプルサイズ算出、成功基準、リスク対策を含む包括的な A/B テスト計画を作成します。',
   },
   'zh-CN': {
     'UI & Layout': 'UI 与布局',
@@ -1396,7 +1403,7 @@ const exactTranslations = {
     'Set image fill': '设置图像填充',
     'Fill with stock photos': '用图库照片填充',
     'Styles and variables': '样式与变量',
-    'Map raw values to tokens': '将原始值映射为设计令牌',
+    'Map raw values to tokens': '将原始值映射为 token',
     'text link/color': '文本链接/颜色',
     'Remove unused properties': '删除未使用属性',
     'Translate text': '翻译文本',
@@ -1578,11 +1585,11 @@ const exactTranslations = {
     'One-way replace or two-way swap across fills, strokes, gradients, and effects.': '支持在填充、描边、渐变和效果中进行单向替换或双向交换。',
     'Strip shadows & blur': '移除阴影和模糊',
     'Local colors, text and effects tokens.': '浏览本地颜色、文本和效果令牌。',
-    'Swap raw color/size to design tokens': '将原始颜色或尺寸替换为设计令牌',
+    'Swap raw color/size to design tokens': '将原始颜色或尺寸替换为 token',
     'Add link or recolor text substrings (one per line)': '为文本子串添加链接或改色（每行一个）',
     'Delete unused component properties': '删除未使用的组件属性',
     'Extract colors, typography, components, effects, spacing from your design': '从设计中提取颜色、字体、组件、效果和间距',
-    'Scans your selection, current page, or entire file to extract a comprehensive design system including colors, typography, components, effects, and spacing. Supports output to design tokens, downloadable files, chat, or a visual Figma document.': '扫描所选内容、当前页面或整个文件，提取包含颜色、字体、组件、效果和间距的完整设计系统。支持输出为设计令牌、可下载文件、聊天结果或可视化 Figma 文档。',
+    'Scans your selection, current page, or entire file to extract a comprehensive design system including colors, typography, components, effects, and spacing. Supports output to design tokens, downloadable files, chat, or a visual Figma document.': '扫描所选内容、当前页面或整个文件，提取包含颜色、字体、组件、效果和间距的完整设计系统。支持输出为 token、可下载文件、聊天结果或可视化 Figma 文档。',
     'Generate seamless, UI-safe background textures': '生成适合 UI 使用的无缝背景纹理',
     'Generate color palettes using AI': '使用 AI 生成配色方案',
     'Create color palettes as styles or variables using AI - primary shades, semantic colors, or complete design systems.': '使用 AI 生成颜色样式或变量，可用于主色阶、语义色或完整设计系统。',
@@ -1787,8 +1794,16 @@ const exactTranslations = {
     'e.g. checkout conversion rate, sign-up rate, engagement time': '例如: 结账转化率、注册率、互动时长',
     'e.g. 3.2% conversion rate, 45s avg session duration': '例如: 转化率 3.2%，平均会话时长 45 秒',
     'e.g. Audience size, platform constraints, previous test results, seasonal considerations...': '例如: 受众规模、平台限制、以往测试结果、季节性因素...',
+    'A/B Test Design': 'A/B 测试设计',
+    'Design a rigorous A/B test with hypothesis, metrics, and analysis plan':
+      '设计严谨的 A/B 测试（含假设、指标与分析计划）',
+    'Creates a comprehensive A/B test plan including hypothesis, metrics framework, sample size calculations, success criteria, and risk mitigations.':
+      '生成完整的 A/B 测试方案，包括假设、指标框架、样本量估算、成功标准与风险应对。',
   },
 };
+
+Object.assign(exactTranslations.ja, TASK_FIELD_EXACT.ja);
+Object.assign(exactTranslations['zh-CN'], TASK_FIELD_EXACT['zh-CN']);
 
 export function getActionUiTranslation(locale, key, vars = {}) {
   const table = uiTranslations[locale] || uiTranslations.en;
