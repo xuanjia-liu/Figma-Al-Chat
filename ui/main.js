@@ -2425,6 +2425,7 @@ import {
       updateProviderSettingsVisibility();
       applySettingsLocale(languageSelect?.value || lastSavedSettings.language || DEFAULT_SETTINGS_LOCALE);
       suppressSettingsDirty = false;
+      syncQuickSettingsMenusFromForm();
       refreshSettingsBaselineFromForm();
 
       // Populate checklists
@@ -2889,6 +2890,14 @@ import {
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const languageSelect = document.getElementById('settingsLanguageSelect');
     const noAiModeToggle = document.getElementById('noAiModeToggle');
+    const headerSettingsMenu = document.getElementById('headerSettingsMenu');
+    const drawerSettingsMenu = document.getElementById('drawerSettingsMenu');
+    const headerLanguageSelect = document.getElementById('headerLanguageSelect');
+    const drawerLanguageSelect = document.getElementById('drawerLanguageSelect');
+    const headerAiEnabledToggle = document.getElementById('headerAiEnabledToggle');
+    const drawerAiEnabledToggle = document.getElementById('drawerAiEnabledToggle');
+    const headerOpenFullSettingsBtn = document.getElementById('headerOpenFullSettingsBtn');
+    const drawerOpenFullSettingsBtn = document.getElementById('drawerOpenFullSettingsBtn');
     const providerSelect = document.getElementById('providerSelect');
     const chatContainer = document.querySelector('.chat-container');
     const geminiSettings = document.getElementById('geminiSettings');
@@ -2925,6 +2934,34 @@ import {
     const sidebarOverlay = document.getElementById('sidebarOverlay');
     const btnSaveSettings = document.getElementById('btnSaveSettings');
     const testConnectionButtons = document.querySelectorAll('[data-test-provider]');
+
+    function syncQuickSettingsMenusFromForm() {
+      const lang = languageSelect?.value;
+      if (headerLanguageSelect && lang) headerLanguageSelect.value = lang;
+      if (drawerLanguageSelect && lang) drawerLanguageSelect.value = lang;
+      const aiOn = !(noAiModeToggle?.checked === true);
+      if (headerAiEnabledToggle) headerAiEnabledToggle.checked = aiOn;
+      if (drawerAiEnabledToggle) drawerAiEnabledToggle.checked = aiOn;
+    }
+
+    function closeAllHeaderSettingsMenus() {
+      if (headerSettingsMenu) headerSettingsMenu.classList.remove('show');
+      if (drawerSettingsMenu) drawerSettingsMenu.classList.remove('show');
+      if (openSettingsBtn) openSettingsBtn.setAttribute('aria-expanded', 'false');
+      if (openSettingsBtnNoAi) openSettingsBtnNoAi.setAttribute('aria-expanded', 'false');
+    }
+
+    function toggleHeaderSettingsMenu(menuEl, triggerBtn) {
+      if (!menuEl || !triggerBtn) return;
+      const willOpen = !menuEl.classList.contains('show');
+      closeAllHeaderSettingsMenus();
+      if (willOpen) {
+        syncQuickSettingsMenusFromForm();
+        menuEl.classList.add('show');
+        triggerBtn.setAttribute('aria-expanded', 'true');
+      }
+    }
+
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toastMessage');
     const toastCloseBtn = document.getElementById('toastCloseBtn');
@@ -3727,12 +3764,14 @@ import {
       languageSelect.addEventListener('change', () => {
         applySettingsLocale(languageSelect.value);
         handleSettingsChanged();
+        syncQuickSettingsMenusFromForm();
       });
     }
     if (noAiModeToggle) {
       noAiModeToggle.addEventListener('change', () => {
         syncNoAiSettingsUi();
         handleSettingsChanged();
+        syncQuickSettingsMenusFromForm();
       });
     }
 
@@ -21512,6 +21551,7 @@ Example structure:
       pexelsApiKeyInput.value = pexelsApiKey;
       selectionSizeLimitSelect.value = savedSizeLimit.toString();
       applySettingsLocale(currentSettingsLocale);
+      syncQuickSettingsMenusFromForm();
 
       // Request file info from plugin for auto-detecting file key
       parent.postMessage({ pluginMessage: { type: 'get-file-info' } }, '*');
@@ -22421,11 +22461,71 @@ Example structure:
       settingsModal.classList.add('show');
     }
 
+    function openFullSettingsFromQuickMenu() {
+      closeAllHeaderSettingsMenus();
+      openSettingsModalFromButton();
+    }
+
+    function applyQuickLanguageChange(newLang) {
+      if (!newLang) return;
+      currentSettingsLocale = normalizeSettingsLocale(newLang);
+      if (languageSelect) languageSelect.value = currentSettingsLocale;
+      applySettingsLocale(currentSettingsLocale);
+      syncQuickSettingsMenusFromForm();
+      saveSettings();
+    }
+
+    function applyQuickAiToggleChange(aiEnabled) {
+      const wantNoAi = !aiEnabled;
+      if (aiOffMode === wantNoAi) return;
+      aiOffMode = wantNoAi;
+      if (noAiModeToggle) noAiModeToggle.checked = wantNoAi;
+      syncQuickSettingsMenusFromForm();
+      syncNoAiSettingsUi();
+      updateAiOffUiState();
+      updateAiOffLayoutState();
+      saveSettings();
+    }
+
+    function bindQuickLanguageSelect(sel) {
+      if (!sel) return;
+      sel.addEventListener('change', () => applyQuickLanguageChange(sel.value));
+    }
+
+    function bindQuickAiToggle(toggle) {
+      if (!toggle) return;
+      toggle.addEventListener('change', () => applyQuickAiToggleChange(toggle.checked));
+    }
+
+    bindQuickLanguageSelect(headerLanguageSelect);
+    bindQuickLanguageSelect(drawerLanguageSelect);
+    bindQuickAiToggle(headerAiEnabledToggle);
+    bindQuickAiToggle(drawerAiEnabledToggle);
+
+    if (headerOpenFullSettingsBtn) {
+      headerOpenFullSettingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openFullSettingsFromQuickMenu();
+      });
+    }
+    if (drawerOpenFullSettingsBtn) {
+      drawerOpenFullSettingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openFullSettingsFromQuickMenu();
+      });
+    }
+
     if (openSettingsBtn) {
-      openSettingsBtn.addEventListener('click', openSettingsModalFromButton);
+      openSettingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHeaderSettingsMenu(headerSettingsMenu, openSettingsBtn);
+      });
     }
     if (openSettingsBtnNoAi) {
-      openSettingsBtnNoAi.addEventListener('click', openSettingsModalFromButton);
+      openSettingsBtnNoAi.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHeaderSettingsMenu(drawerSettingsMenu, openSettingsBtnNoAi);
+      });
     }
 
     closeSettingsBtn.addEventListener('click', attemptCloseSettingsModal);
@@ -30112,6 +30212,15 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (!e.target.closest('.plus-menu-container')) {
         plusBtn.classList.remove('active');
         exportMenu.classList.remove('show');
+      }
+      if (!e.target.closest('.header-settings-dropdown')) {
+        closeAllHeaderSettingsMenus();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAllHeaderSettingsMenus();
       }
     });
 

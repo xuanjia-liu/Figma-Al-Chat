@@ -251,6 +251,103 @@
       margin-left: auto;
     }
 
+    .header-settings-dropdown {
+      position: relative;
+    }
+
+    .header-settings-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 180px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      padding: var(--space-md);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      opacity: 0;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 200;
+    }
+
+    .header-settings-menu.show {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: all;
+    }
+
+    .header-settings-menu-section {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2xs);
+    }
+
+    .header-settings-menu-label {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .header-settings-select {
+      width: 100%;
+      padding: var(--space-sm);
+      font-size: var(--text-sm);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .header-settings-ai-row {
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      padding: var(--space-2xs) 0;
+    }
+
+    .header-settings-ai-toggle {
+      padding: var(--space-sm) var(--space-2xs);
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .header-settings-menu-divider {
+      height: 1px;
+      margin: var(--space-2xs) 0;
+      background: var(--border);
+      border: none;
+    }
+
+    .header-settings-menu-item {
+      margin: 0;
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-align: left;
+      width: 100%;
+    }
+
+    .header-settings-menu-item:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
     .settings-btn {
       width: 32px;
       height: 32px;
@@ -11432,18 +11529,41 @@
           </div>
         </div>
         <div class="header-actions">
-          <button class="settings-btn" id="openSettingsBtn" title="Settings" data-i18n-title="settings.openButtonTitle">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-            </svg>
-            <span class="check-badge" id="settingsCheckBadge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                <path d="M20 6L9 17l-5-5" />
+          <div class="header-settings-dropdown">
+            <button class="settings-btn" type="button" id="openSettingsBtn" title="Settings"
+              data-i18n-title="settings.openButtonTitle" aria-haspopup="menu" aria-expanded="false"
+              aria-controls="headerSettingsMenu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
               </svg>
-            </span>
-          </button>
+              <span class="check-badge" id="settingsCheckBadge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </span>
+            </button>
+            <div class="header-settings-menu" id="headerSettingsMenu" role="menu" aria-label="Quick settings">
+              <div class="header-settings-menu-section" role="none">
+                <div class="header-settings-menu-label" data-i18n="settings.languageGroupTitle">Display Language</div>
+                <select class="header-settings-select" id="headerLanguageSelect" data-i18n-title="settings.languageLabel">
+                  <option value="en" data-i18n="settings.languageOption.en">English</option>
+                  <option value="ja" data-i18n="settings.languageOption.ja">Japanese</option>
+                  <option value="zh-CN" data-i18n="settings.languageOption.zh-CN">Simplified Chinese</option>
+                </select>
+              </div>
+              <div class="header-settings-menu-section header-settings-ai-row" role="none">
+                <label class="audit-toggle-switch header-settings-ai-toggle">
+                  <input type="checkbox" id="headerAiEnabledToggle" checked />
+                  <span class="toggle-label" data-i18n="settings.headerMenu.aiEnabled">AI</span>
+                </label>
+              </div>
+              <div class="header-settings-menu-divider" role="separator"></div>
+              <button type="button" class="header-settings-menu-item" id="headerOpenFullSettingsBtn" role="menuitem"
+                data-i18n="settings.headerMenu.allSettings">Settings</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -11642,24 +11762,15 @@
           <div class="settings-main-content">
             <!-- AI Provider Category -->
             <div class="settings-category-panel active" id="category-ai">
-              <div class="settings-group-title" data-i18n="settings.languageGroupTitle">Display Language</div>
-              <div class="setting-item">
-                <label class="setting-label" for="settingsLanguageSelect" data-i18n="settings.languageLabel">Language</label>
-                <select class="setting-input" id="settingsLanguageSelect">
-                  <option value="en" data-i18n="settings.languageOption.en">English</option>
-                  <option value="ja" data-i18n="settings.languageOption.ja">Japanese</option>
-                  <option value="zh-CN" data-i18n="settings.languageOption.zh-CN">Simplified Chinese</option>
-                </select>
-                <div class="setting-hint" data-i18n="settings.languageHint">Choose the language used in the Settings interface.</div>
-              </div>
+              <!-- Hidden elements kept for JS compatibility -->
+              <select class="setting-input" id="settingsLanguageSelect" style="display:none">
+                <option value="en">English</option>
+                <option value="ja">Japanese</option>
+                <option value="zh-CN">Simplified Chinese</option>
+              </select>
+              <input type="checkbox" id="noAiModeToggle" style="display:none" />
 
               <div class="settings-group-title" data-i18n="settings.ai.groupTitle">Assistant Provider</div>
-              <div class="setting-item">
-                <label class="audit-toggle-switch">
-                  <input type="checkbox" id="noAiModeToggle" />
-                  <span class="toggle-label" data-i18n="settings.ai.noAiToggle">No AI (Quick Actions only)</span>
-                </label>
-              </div>
               <div class="setting-item">
                 <label class="setting-label" data-i18n="settings.ai.providerLabel">Choose Assistant Mode</label>
                 <select class="setting-input" id="providerSelect">
@@ -12389,13 +12500,36 @@
       <div class="commands-drawer-search">
         <input type="text" id="commandsSearch" placeholder="Search actions..." />
       </div>
-      <button class="settings-btn no-ai-settings-btn" id="openSettingsBtnNoAi" title="Settings" data-i18n-title="settings.openButtonTitle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3" />
-          <path
-            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-        </svg>
-      </button>
+      <div class="header-settings-dropdown">
+        <button class="settings-btn no-ai-settings-btn" type="button" id="openSettingsBtnNoAi" title="Settings"
+          data-i18n-title="settings.openButtonTitle" aria-haspopup="menu" aria-expanded="false"
+          aria-controls="drawerSettingsMenu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
+          </svg>
+        </button>
+        <div class="header-settings-menu" id="drawerSettingsMenu" role="menu" aria-label="Quick settings">
+          <div class="header-settings-menu-section" role="none">
+            <div class="header-settings-menu-label" data-i18n="settings.languageGroupTitle">Display Language</div>
+            <select class="header-settings-select" id="drawerLanguageSelect" data-i18n-title="settings.languageLabel">
+              <option value="en" data-i18n="settings.languageOption.en">English</option>
+              <option value="ja" data-i18n="settings.languageOption.ja">Japanese</option>
+              <option value="zh-CN" data-i18n="settings.languageOption.zh-CN">Simplified Chinese</option>
+            </select>
+          </div>
+          <div class="header-settings-menu-section header-settings-ai-row" role="none">
+            <label class="audit-toggle-switch header-settings-ai-toggle">
+              <input type="checkbox" id="drawerAiEnabledToggle" checked />
+              <span class="toggle-label" data-i18n="settings.headerMenu.aiEnabled">AI</span>
+            </label>
+          </div>
+          <div class="header-settings-menu-divider" role="separator"></div>
+          <button type="button" class="header-settings-menu-item" id="drawerOpenFullSettingsBtn" role="menuitem"
+            data-i18n="settings.headerMenu.allSettings">Settings</button>
+        </div>
+      </div>
       <button class="commands-drawer-close" id="commandsDrawerClose">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 6L6 18M6 6l12 12" />
@@ -18682,6 +18816,8 @@
           "settings.languageOption.en": "English",
           "settings.languageOption.ja": "Japanese",
           "settings.languageOption.zh-CN": "Simplified Chinese",
+          "settings.headerMenu.aiEnabled": "AI",
+          "settings.headerMenu.allSettings": "Settings",
           "settings.sidebar.models": "Models",
           "settings.sidebar.export": "Export",
           "settings.sidebar.limits": "Limits",
@@ -18806,6 +18942,8 @@
           "settings.languageOption.en": "英語",
           "settings.languageOption.ja": "日本語",
           "settings.languageOption.zh-CN": "中国語（簡体字）",
+          "settings.headerMenu.aiEnabled": "AI",
+          "settings.headerMenu.allSettings": "設定",
           "settings.sidebar.models": "モデル",
           "settings.sidebar.export": "エクスポート",
           "settings.sidebar.limits": "上限",
@@ -18930,6 +19068,8 @@
           "settings.languageOption.en": "英语",
           "settings.languageOption.ja": "日语",
           "settings.languageOption.zh-CN": "简体中文",
+          "settings.headerMenu.aiEnabled": "AI",
+          "settings.headerMenu.allSettings": "设置",
           "settings.sidebar.models": "模型",
           "settings.sidebar.export": "导出",
           "settings.sidebar.limits": "限制",
@@ -23642,6 +23782,7 @@
         updateProviderSettingsVisibility();
         applySettingsLocale((languageSelect == null ? void 0 : languageSelect.value) || lastSavedSettings.language || DEFAULT_SETTINGS_LOCALE);
         suppressSettingsDirty = false;
+        syncQuickSettingsMenusFromForm();
         refreshSettingsBaselineFromForm();
         const geminiModels = getAvailableModels("gemini");
         const openaiModels = getAvailableModels("openai");
@@ -23943,6 +24084,14 @@
       var closeSettingsBtn = document.getElementById("closeSettingsBtn");
       var languageSelect = document.getElementById("settingsLanguageSelect");
       var noAiModeToggle = document.getElementById("noAiModeToggle");
+      var headerSettingsMenu = document.getElementById("headerSettingsMenu");
+      var drawerSettingsMenu = document.getElementById("drawerSettingsMenu");
+      var headerLanguageSelect = document.getElementById("headerLanguageSelect");
+      var drawerLanguageSelect = document.getElementById("drawerLanguageSelect");
+      var headerAiEnabledToggle = document.getElementById("headerAiEnabledToggle");
+      var drawerAiEnabledToggle = document.getElementById("drawerAiEnabledToggle");
+      var headerOpenFullSettingsBtn = document.getElementById("headerOpenFullSettingsBtn");
+      var drawerOpenFullSettingsBtn = document.getElementById("drawerOpenFullSettingsBtn");
       var providerSelect = document.getElementById("providerSelect");
       var chatContainer = document.querySelector(".chat-container");
       var geminiSettings = document.getElementById("geminiSettings");
@@ -23977,6 +24126,30 @@
       var sidebarOverlay = document.getElementById("sidebarOverlay");
       var btnSaveSettings = document.getElementById("btnSaveSettings");
       var testConnectionButtons = document.querySelectorAll("[data-test-provider]");
+      function syncQuickSettingsMenusFromForm() {
+        const lang = languageSelect == null ? void 0 : languageSelect.value;
+        if (headerLanguageSelect && lang) headerLanguageSelect.value = lang;
+        if (drawerLanguageSelect && lang) drawerLanguageSelect.value = lang;
+        const aiOn = !((noAiModeToggle == null ? void 0 : noAiModeToggle.checked) === true);
+        if (headerAiEnabledToggle) headerAiEnabledToggle.checked = aiOn;
+        if (drawerAiEnabledToggle) drawerAiEnabledToggle.checked = aiOn;
+      }
+      function closeAllHeaderSettingsMenus() {
+        if (headerSettingsMenu) headerSettingsMenu.classList.remove("show");
+        if (drawerSettingsMenu) drawerSettingsMenu.classList.remove("show");
+        if (openSettingsBtn) openSettingsBtn.setAttribute("aria-expanded", "false");
+        if (openSettingsBtnNoAi) openSettingsBtnNoAi.setAttribute("aria-expanded", "false");
+      }
+      function toggleHeaderSettingsMenu(menuEl, triggerBtn) {
+        if (!menuEl || !triggerBtn) return;
+        const willOpen = !menuEl.classList.contains("show");
+        closeAllHeaderSettingsMenus();
+        if (willOpen) {
+          syncQuickSettingsMenusFromForm();
+          menuEl.classList.add("show");
+          triggerBtn.setAttribute("aria-expanded", "true");
+        }
+      }
       var toast = document.getElementById("toast");
       var toastMessage = document.getElementById("toastMessage");
       var toastCloseBtn = document.getElementById("toastCloseBtn");
@@ -24622,12 +24795,14 @@
         languageSelect.addEventListener("change", () => {
           applySettingsLocale(languageSelect.value);
           handleSettingsChanged();
+          syncQuickSettingsMenusFromForm();
         });
       }
       if (noAiModeToggle) {
         noAiModeToggle.addEventListener("change", () => {
           syncNoAiSettingsUi();
           handleSettingsChanged();
+          syncQuickSettingsMenusFromForm();
         });
       }
       function setMode(mode) {
@@ -37667,6 +37842,7 @@
         pexelsApiKeyInput.value = pexelsApiKey;
         selectionSizeLimitSelect.value = savedSizeLimit.toString();
         applySettingsLocale(currentSettingsLocale);
+        syncQuickSettingsMenusFromForm();
         parent.postMessage({ pluginMessage: { type: "get-file-info" } }, "*");
         agentMaxTokensInput.value = agentMaxTokens;
         auditMaxTokensInput.value = auditMaxTokens;
@@ -38293,11 +38469,64 @@
         restoreSettingsFormFromSaved();
         settingsModal.classList.add("show");
       }
+      function openFullSettingsFromQuickMenu() {
+        closeAllHeaderSettingsMenus();
+        openSettingsModalFromButton();
+      }
+      function applyQuickLanguageChange(newLang) {
+        if (!newLang) return;
+        currentSettingsLocale = normalizeSettingsLocale(newLang);
+        if (languageSelect) languageSelect.value = currentSettingsLocale;
+        applySettingsLocale(currentSettingsLocale);
+        syncQuickSettingsMenusFromForm();
+        saveSettings();
+      }
+      function applyQuickAiToggleChange(aiEnabled) {
+        const wantNoAi = !aiEnabled;
+        if (aiOffMode === wantNoAi) return;
+        aiOffMode = wantNoAi;
+        if (noAiModeToggle) noAiModeToggle.checked = wantNoAi;
+        syncQuickSettingsMenusFromForm();
+        syncNoAiSettingsUi();
+        updateAiOffUiState();
+        updateAiOffLayoutState();
+        saveSettings();
+      }
+      function bindQuickLanguageSelect(sel) {
+        if (!sel) return;
+        sel.addEventListener("change", () => applyQuickLanguageChange(sel.value));
+      }
+      function bindQuickAiToggle(toggle) {
+        if (!toggle) return;
+        toggle.addEventListener("change", () => applyQuickAiToggleChange(toggle.checked));
+      }
+      bindQuickLanguageSelect(headerLanguageSelect);
+      bindQuickLanguageSelect(drawerLanguageSelect);
+      bindQuickAiToggle(headerAiEnabledToggle);
+      bindQuickAiToggle(drawerAiEnabledToggle);
+      if (headerOpenFullSettingsBtn) {
+        headerOpenFullSettingsBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openFullSettingsFromQuickMenu();
+        });
+      }
+      if (drawerOpenFullSettingsBtn) {
+        drawerOpenFullSettingsBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openFullSettingsFromQuickMenu();
+        });
+      }
       if (openSettingsBtn) {
-        openSettingsBtn.addEventListener("click", openSettingsModalFromButton);
+        openSettingsBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleHeaderSettingsMenu(headerSettingsMenu, openSettingsBtn);
+        });
       }
       if (openSettingsBtnNoAi) {
-        openSettingsBtnNoAi.addEventListener("click", openSettingsModalFromButton);
+        openSettingsBtnNoAi.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleHeaderSettingsMenu(drawerSettingsMenu, openSettingsBtnNoAi);
+        });
       }
       closeSettingsBtn.addEventListener("click", attemptCloseSettingsModal);
       settingsModal.addEventListener("click", (e) => {
@@ -43586,6 +43815,14 @@
         if (!e.target.closest(".plus-menu-container")) {
           plusBtn.classList.remove("active");
           exportMenu.classList.remove("show");
+        }
+        if (!e.target.closest(".header-settings-dropdown")) {
+          closeAllHeaderSettingsMenus();
+        }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          closeAllHeaderSettingsMenus();
         }
       });
       if (uploadImageBtn && uploadImageInput) {
