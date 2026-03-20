@@ -50,6 +50,7 @@ import {
 } from './i18n/settings.js';
 import {
   getActionUiTranslation,
+  getExactTranslationVariantsForSearch,
   getLocalizedActionText,
 } from './i18n/actions.js';
 
@@ -5883,46 +5884,64 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return deduped.slice(0, limit);
     }
 
-    function searchQuickActions(query, limit = 8) {
-      const q = (query || '').toLowerCase().trim();
-      if (!q) return getMostUsedQuickActions(limit);
+    function scoreSlashQueryAgainstNameVariants(variants, qLower) {
+      let best = 0;
+      let matched = false;
+      for (const raw of variants) {
+        const nameLower = String(raw || '').toLowerCase();
+        if (!nameLower) continue;
+        if (nameLower === qLower) {
+          matched = true;
+          best = Math.max(best, 100);
+        } else if (nameLower.startsWith(qLower)) {
+          matched = true;
+          best = Math.max(best, 95);
+        } else {
+          const words = nameLower.split(/[\s\-_]+/);
+          if (words.includes(qLower)) {
+            matched = true;
+            best = Math.max(best, 85);
+          } else if (nameLower.includes(qLower)) {
+            matched = true;
+            best = Math.max(best, 30);
+          }
+        }
+      }
+      return { score: best, matched };
+    }
 
-      // Score and filter matches
+    function searchQuickActions(query, limit = 8) {
+      const qLower = (query || '').toLowerCase().trim();
+      if (!qLower) return getMostUsedQuickActions(limit);
+
+      // Score and filter matches (English keys + all exact i18n strings, e.g. /縦書き /竖排文字)
       const scoredMatches = allQuickActions.map(action => {
-        const nameLower = action.name.toLowerCase();
-        const descLower = (action.desc || '').toLowerCase();
-        const helpLower = (action.help || '').toLowerCase();
+        const task = action.task;
+        const nameVariants = getExactTranslationVariantsForSearch(task.name || '');
+        const descVariants = getExactTranslationVariantsForSearch(task.desc || '');
+        const helpVariants = getExactTranslationVariantsForSearch(task.help || '');
+        const promptLower = (task.prompt || '').toLowerCase();
 
         let score = 0;
         let matched = false;
 
-        // Matching logic in name (the primary field)
-        if (nameLower === q) {
-          score += 100; // Exact name match
+        const nameResult = scoreSlashQueryAgainstNameVariants(nameVariants, qLower);
+        if (nameResult.matched) {
+          score += nameResult.score;
           matched = true;
-        } else if (nameLower.startsWith(q)) {
-          score += 95; // Name starts with query
-          matched = true;
-        } else {
-          // Check for whole word match in name
-          const words = nameLower.split(/[\s\-_]+/);
-          if (words.includes(q)) {
-            score += 85; // Whole word match in name
-            matched = true;
-          } else if (nameLower.includes(q)) {
-            score += 30; // Partial inclusion in name
-            matched = true;
-          }
         }
 
-        // Additional matches in description
-        if (descLower.includes(q)) {
+        if (descVariants.some(v => String(v).toLowerCase().includes(qLower))) {
           score += 10;
           matched = true;
         }
 
-        // Additional matches in help text
-        if (helpLower.includes(q)) {
+        if (helpVariants.some(v => String(v).toLowerCase().includes(qLower))) {
+          score += 5;
+          matched = true;
+        }
+
+        if (promptLower.includes(qLower)) {
           score += 5;
           matched = true;
         }

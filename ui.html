@@ -20254,6 +20254,19 @@
   });
 
   // ui/i18n/actions.js
+  function getExactTranslationVariantsForSearch(sourceText) {
+    if (sourceText == null || sourceText === "") return [];
+    const key = String(sourceText);
+    const out = /* @__PURE__ */ new Set([key]);
+    for (const table of Object.values(exactTranslations)) {
+      if (!table || typeof table !== "object") continue;
+      const translated = table[key];
+      if (translated != null && String(translated).trim() !== "") {
+        out.add(String(translated));
+      }
+    }
+    return [...out];
+  }
   function getActionUiTranslation(locale, key, vars = {}) {
     const table = uiTranslations[locale] || uiTranslations.en;
     const fallback = uiTranslations.en[key] || key;
@@ -26658,36 +26671,56 @@
         }
         return deduped.slice(0, limit);
       }
-      function searchQuickActions(query2, limit = 8) {
-        const q = (query2 || "").toLowerCase().trim();
-        if (!q) return getMostUsedQuickActions(limit);
-        const scoredMatches = allQuickActions.map((action) => {
-          const nameLower = action.name.toLowerCase();
-          const descLower = (action.desc || "").toLowerCase();
-          const helpLower = (action.help || "").toLowerCase();
-          let score = 0;
-          let matched = false;
-          if (nameLower === q) {
-            score += 100;
+      function scoreSlashQueryAgainstNameVariants(variants, qLower) {
+        let best = 0;
+        let matched = false;
+        for (const raw of variants) {
+          const nameLower = String(raw || "").toLowerCase();
+          if (!nameLower) continue;
+          if (nameLower === qLower) {
             matched = true;
-          } else if (nameLower.startsWith(q)) {
-            score += 95;
+            best = Math.max(best, 100);
+          } else if (nameLower.startsWith(qLower)) {
             matched = true;
+            best = Math.max(best, 95);
           } else {
             const words = nameLower.split(/[\s\-_]+/);
-            if (words.includes(q)) {
-              score += 85;
+            if (words.includes(qLower)) {
               matched = true;
-            } else if (nameLower.includes(q)) {
-              score += 30;
+              best = Math.max(best, 85);
+            } else if (nameLower.includes(qLower)) {
               matched = true;
+              best = Math.max(best, 30);
             }
           }
-          if (descLower.includes(q)) {
+        }
+        return { score: best, matched };
+      }
+      function searchQuickActions(query2, limit = 8) {
+        const qLower = (query2 || "").toLowerCase().trim();
+        if (!qLower) return getMostUsedQuickActions(limit);
+        const scoredMatches = allQuickActions.map((action) => {
+          const task = action.task;
+          const nameVariants = getExactTranslationVariantsForSearch(task.name || "");
+          const descVariants = getExactTranslationVariantsForSearch(task.desc || "");
+          const helpVariants = getExactTranslationVariantsForSearch(task.help || "");
+          const promptLower = (task.prompt || "").toLowerCase();
+          let score = 0;
+          let matched = false;
+          const nameResult = scoreSlashQueryAgainstNameVariants(nameVariants, qLower);
+          if (nameResult.matched) {
+            score += nameResult.score;
+            matched = true;
+          }
+          if (descVariants.some((v) => String(v).toLowerCase().includes(qLower))) {
             score += 10;
             matched = true;
           }
-          if (helpLower.includes(q)) {
+          if (helpVariants.some((v) => String(v).toLowerCase().includes(qLower))) {
+            score += 5;
+            matched = true;
+          }
+          if (promptLower.includes(qLower)) {
             score += 5;
             matched = true;
           }

@@ -1805,6 +1805,21 @@ const exactTranslations = {
 Object.assign(exactTranslations.ja, TASK_FIELD_EXACT.ja);
 Object.assign(exactTranslations['zh-CN'], TASK_FIELD_EXACT['zh-CN']);
 
+/** English source string plus every exact translation (ja, zh-CN, …) for slash/command search in any language. */
+export function getExactTranslationVariantsForSearch(sourceText) {
+  if (sourceText == null || sourceText === '') return [];
+  const key = String(sourceText);
+  const out = new Set([key]);
+  for (const table of Object.values(exactTranslations)) {
+    if (!table || typeof table !== 'object') continue;
+    const translated = table[key];
+    if (translated != null && String(translated).trim() !== '') {
+      out.add(String(translated));
+    }
+  }
+  return [...out];
+}
+
 export function getActionUiTranslation(locale, key, vars = {}) {
   const table = uiTranslations[locale] || uiTranslations.en;
   const fallback = uiTranslations.en[key] || key;
