@@ -3206,6 +3206,11 @@
       height: 100%;
       object-fit: contain;
       transition: all 0.15s ease;
+      filter: brightness(0) invert(1);
+    }
+
+    body.light-mode .icon-preview-card img {
+      filter: brightness(0);
     }
 
     .icon-preview-card:hover img {
@@ -8003,7 +8008,7 @@
       justify-content: space-between;
       padding-top: var(--space-md);
       padding-bottom: var(--space-sm);
-      background: linear-gradient(0deg, #0d0d0f00 0%, #0d0d0fcf 30%, #0d0d0f 100%);
+      background: linear-gradient(0deg, rgba(var(--header-fade-rgb), 0) 0%, rgba(var(--header-fade-rgb), 0.81) 30%, rgb(var(--header-fade-rgb)) 100%);
       position: sticky;
       top: -12px;
       z-index: 5;
@@ -8087,6 +8092,11 @@
       width: 24px;
       height: 24px;
       pointer-events: none;
+      filter: brightness(0) invert(1);
+    }
+
+    body.light-mode .icon-browse-item img {
+      filter: brightness(0);
     }
 
     .icon-browse-item::after {
@@ -8118,7 +8128,7 @@
       bottom: -12px;
       left: -12px;
       right: -12px;
-      background: linear-gradient(180deg, #0d0d0f00 0%, #0d0d0fcf 30%, #0d0d0f 100%);
+      background: linear-gradient(180deg, rgba(var(--header-fade-rgb), 0) 0%, rgba(var(--header-fade-rgb), 0.81) 30%, rgb(var(--header-fade-rgb)) 100%);
       padding: var(--space-md);
       display: flex;
       align-items: center;
@@ -9915,9 +9925,14 @@
       height: 22px;
       border-radius: 6px;
       border: 1px solid var(--border);
-      background: white;
+      background: var(--bg-tertiary);
       padding: 2px;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      filter: brightness(0) invert(1);
+    }
+
+    body.light-mode .icon-set-preview img {
+      filter: brightness(0);
     }
 
     /* Custom Color Input */
@@ -24335,6 +24350,11 @@
         document.body.classList.toggle("light-mode", lightMode);
         syncQuickSettingsMenusFromForm();
       }
+      function getResolvedTextPrimaryColor() {
+        const fromBody = getComputedStyle(document.body).getPropertyValue("--text-primary").trim();
+        if (fromBody) return fromBody;
+        return getComputedStyle(document.documentElement).getPropertyValue("--text-primary").trim() || "#111827";
+      }
       function closeAllHeaderSettingsMenus() {
         if (headerSettingsMenu) headerSettingsMenu.classList.remove("show");
         if (drawerSettingsMenu) drawerSettingsMenu.classList.remove("show");
@@ -33386,7 +33406,7 @@
             const previewHtml = previewIcons.length ? '< span class="icon-set-preview" > '.concat(previewIcons.slice(0, 3).map((sample) => {
               const safePrefix = encodeURIComponent(String(valueRaw));
               const safeSample = encodeURIComponent(String(sample));
-              const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue("--text-primary").trim();
+              const textPrimaryColor = getResolvedTextPrimaryColor();
               return '<img src="https://api.iconify.design/'.concat(safePrefix, ":").concat(safeSample, ".svg?height=20&color=").concat(encodeURIComponent(textPrimaryColor), '" alt="').concat(escapeHtml(sample), '" loading="lazy">');
             }).join(""), "</span > ") : "";
             const bodyHtml = '\n                  <div class="prompt-select-option-main">\n                    <span class="option-title">'.concat(escapeHtml(labelRaw), "</span>\n              ").concat(opt.detail ? '<span class="option-sub">'.concat(escapeHtml(opt.detail), "</span>") : "", "\n            </div >\n          ").concat(previewHtml, "\n        ");
@@ -33866,7 +33886,7 @@
         grid.className = "icon-browse-grid";
         container.appendChild(grid);
         let isInserting = false;
-        const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue("--text-primary").trim() || "#111827";
+        const textPrimaryColor = getResolvedTextPrimaryColor();
         const safeSize = clampNumber(size || 24, 16, 512);
         let lastFontFamily = null;
         matches.forEach((match) => {
@@ -33893,7 +33913,7 @@
           previewBox.style.alignItems = "center";
           previewBox.style.justifyContent = "center";
           previewBox.style.borderRadius = "6px";
-          previewBox.style.background = "rgba(255,255,255,0.04)";
+          previewBox.style.background = "var(--bg-primary)";
           item.title = match.label || match.id;
           if (match.id === "__generate__") {
             previewBox.textContent = "AI";
@@ -35153,6 +35173,7 @@
         let selectedIcons = /* @__PURE__ */ new Set();
         const MAX_SELECTION = 5e3;
         const isLargeSet = iconsList.length > 5e3;
+        const iconBrowsePreviewColor = getResolvedTextPrimaryColor();
         const statsEl = document.createElement("div");
         statsEl.className = "icon-browse-stats";
         const selectionBar = document.createElement("div");
@@ -35268,8 +35289,7 @@
             item.className = "icon-browse-item".concat(selectedIcons.has(iconName) ? " selected" : "");
             item.dataset.name = iconName;
             const img = document.createElement("img");
-            const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue("--text-primary").trim();
-            img.dataset.src = "https://api.iconify.design/".concat(collectionData.prefix, ":").concat(iconName, ".svg?color=").concat(encodeURIComponent(textPrimaryColor));
+            img.dataset.src = "https://api.iconify.design/".concat(collectionData.prefix, ":").concat(iconName, ".svg?color=").concat(encodeURIComponent(iconBrowsePreviewColor));
             item.onclick = () => {
               if (selectedIcons.has(iconName)) {
                 selectedIcons.delete(iconName);
@@ -39571,7 +39591,7 @@
               if (!card || !opt) return;
               const img = card.querySelector("img");
               if (!img || img.dataset.loaded === "true") return;
-              const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue("--text-primary").trim();
+              const textPrimaryColor = getResolvedTextPrimaryColor();
               const result = await loadPreviewForOption(opt, textPrimaryColor);
               if (result && result.preview) {
                 img.src = result.preview;

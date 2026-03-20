@@ -2956,6 +2956,13 @@ import {
       syncQuickSettingsMenusFromForm();
     }
 
+    /** Light/dark tokens live on body.light-mode; :root keeps dark defaults, so read from body for Iconify ?color= */
+    function getResolvedTextPrimaryColor() {
+      const fromBody = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
+      if (fromBody) return fromBody;
+      return getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#111827';
+    }
+
     function closeAllHeaderSettingsMenus() {
       if (headerSettingsMenu) headerSettingsMenu.classList.remove('show');
       if (drawerSettingsMenu) drawerSettingsMenu.classList.remove('show');
@@ -15246,7 +15253,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
             ? `< span class="icon-set-preview" > ${previewIcons.slice(0, 3).map(sample => {
               const safePrefix = encodeURIComponent(String(valueRaw));
               const safeSample = encodeURIComponent(String(sample));
-              const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim();
+              const textPrimaryColor = getResolvedTextPrimaryColor();
               return `<img src="https://api.iconify.design/${safePrefix}:${safeSample}.svg?height=20&color=${encodeURIComponent(textPrimaryColor)}" alt="${escapeHtml(sample)}" loading="lazy">`;
             }).join('')
             }</span > `
@@ -15850,7 +15857,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       container.appendChild(grid);
 
       let isInserting = false;
-      const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim() || '#111827';
+      const textPrimaryColor = getResolvedTextPrimaryColor();
       const safeSize = clampNumber(size || 24, 16, 512);
       let lastFontFamily = null;
 
@@ -15881,7 +15888,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         previewBox.style.alignItems = 'center';
         previewBox.style.justifyContent = 'center';
         previewBox.style.borderRadius = '6px';
-        previewBox.style.background = 'rgba(255,255,255,0.04)';
+        previewBox.style.background = 'var(--bg-primary)';
 
         item.title = match.label || match.id;
 
@@ -17453,6 +17460,8 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       let selectedIcons = new Set();
       const MAX_SELECTION = 5000;
       const isLargeSet = iconsList.length > 5000;
+      // Grid previews must follow UI theme (import still uses Color field in doImport).
+      const iconBrowsePreviewColor = getResolvedTextPrimaryColor();
 
       const statsEl = document.createElement('div');
       statsEl.className = 'icon-browse-stats';
@@ -17598,8 +17607,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
           const img = document.createElement('img');
           // Get the text-primary color value from CSS variables
-          const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim();
-          img.dataset.src = `https://api.iconify.design/${collectionData.prefix}:${iconName}.svg?color=${encodeURIComponent(textPrimaryColor)}`;
+          img.dataset.src = `https://api.iconify.design/${collectionData.prefix}:${iconName}.svg?color=${encodeURIComponent(iconBrowsePreviewColor)}`;
 
           item.onclick = () => {
             if (selectedIcons.has(iconName)) {
@@ -23755,7 +23763,7 @@ Example structure:
             if (!card || !opt) return;
             const img = card.querySelector('img');
             if (!img || img.dataset.loaded === 'true') return;
-            const textPrimaryColor = getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim();
+            const textPrimaryColor = getResolvedTextPrimaryColor();
             const result = await loadPreviewForOption(opt, textPrimaryColor);
             if (result && result.preview) {
               img.src = result.preview;
