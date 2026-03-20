@@ -137,10 +137,23 @@ import {
       return getLocalizedActionText(currentSettingsLocale, value);
     }
 
+    function getLocalizedContextModeLabel(mode) {
+      const keyMap = {
+        smart: 'aux.audit.context.smart',
+        all: 'aux.audit.context.all',
+        minimal: 'aux.audit.context.minimal',
+        textOnly: 'aux.audit.context.textOnly',
+        hierarchy: 'aux.audit.context.hierarchy',
+        styleOnly: 'aux.context.styleOnlyTitle',
+        layoutOnly: 'aux.context.layoutOnlyTitle',
+      };
+      return keyMap[mode] ? tu(keyMap[mode]) : mode;
+    }
+
     function localizeTaskField(field) {
       if (!field || typeof field !== 'object') return field;
       const localized = { ...field };
-      ['name', 'desc', 'help', 'label', 'placeholder', 'hint', 'title', 'detail', 'inputSuffix'].forEach((key) => {
+      ['name', 'desc', 'help', 'label', 'placeholder', 'hint', 'title', 'detail', 'inputSuffix', 'inputPlaceholder'].forEach((key) => {
         if (typeof localized[key] === 'string') {
           localized[key] = localizeActionString(localized[key]);
         }
@@ -214,6 +227,22 @@ import {
 
       document.querySelectorAll('[data-i18n-html]').forEach((element) => {
         element.innerHTML = t(element.dataset.i18nHtml);
+      });
+
+      document.querySelectorAll('[data-i18n-action]').forEach((element) => {
+        element.textContent = tu(element.dataset.i18nAction);
+      });
+
+      document.querySelectorAll('[data-i18n-action-placeholder]').forEach((element) => {
+        element.placeholder = tu(element.dataset.i18nActionPlaceholder);
+      });
+
+      document.querySelectorAll('[data-i18n-action-title]').forEach((element) => {
+        element.title = tu(element.dataset.i18nActionTitle);
+      });
+
+      document.querySelectorAll('[data-i18n-action-html]').forEach((element) => {
+        element.innerHTML = tu(element.dataset.i18nActionHtml);
       });
 
       const commandsDrawerTitle = document.querySelector('.commands-drawer-title');
@@ -3761,7 +3790,7 @@ import {
     auditApplyBtn.addEventListener('click', () => {
       saveCurrentAuditSettings();
       auditModal.classList.remove('show');
-      showToast('Audit settings applied!');
+      showToast(tu('aux.audit.applied'));
     });
 
     // Load preset when selection changes
@@ -4229,7 +4258,7 @@ import {
       auditPresetSelectMode.classList.add('hidden');
       auditPresetInputMode.classList.remove('hidden');
       auditPresetNameInput.value = '';
-      auditPresetNameInput.placeholder = 'Enter preset name...';
+      auditPresetNameInput.placeholder = tu('aux.audit.presetNamePlaceholder');
       auditPresetNameInput.focus();
     });
 
@@ -4243,7 +4272,7 @@ import {
       auditPresetSelectMode.classList.add('hidden');
       auditPresetInputMode.classList.remove('hidden');
       auditPresetNameInput.value = preset.name;
-      auditPresetNameInput.placeholder = 'Edit preset name...';
+      auditPresetNameInput.placeholder = tu('aux.audit.presetNameEditPlaceholder');
       auditPresetNameInput.select();
       auditPresetNameInput.focus();
     });
@@ -4260,7 +4289,7 @@ import {
     auditPresetConfirmBtn.addEventListener('click', () => {
       const name = auditPresetNameInput.value.trim();
       if (!name) {
-        showToast('Please enter a preset name', 'error');
+        showToast(tu('aux.audit.presetNameRequired'), 'error');
         auditPresetNameInput.focus();
         return;
       }
@@ -4280,7 +4309,7 @@ import {
             }
           }, '*');
 
-          showToast(`Preset renamed to "${name}"`);
+          showToast(tu('aux.audit.presetRenamed', { name }));
         }
       } else {
         const presetId = 'user-' + Date.now();
@@ -4322,7 +4351,7 @@ import {
           }
         }, '*');
 
-        showToast(`Preset "${name}" saved!`);
+        showToast(tu('aux.audit.presetSaved', { name }));
       }
 
       // Switch back to select mode
@@ -4379,7 +4408,7 @@ import {
         }
       }, '*');
 
-      showToast(`Preset "${presetName}" updated!`);
+      showToast(tu('aux.audit.presetUpdated', { name: presetName }));
     });
 
     // Delete preset
@@ -4401,7 +4430,7 @@ import {
         }
       }, '*');
 
-      showToast(`Preset "${presetName}" deleted`);
+      showToast(tu('aux.audit.presetDeleted', { name: presetName }));
     });
 
     // Ensure initial toggle UI state
@@ -4453,7 +4482,7 @@ import {
     auditAutoFillInstructions.addEventListener('click', async () => {
       const apiKey = getCurrentApiKey();
       if (!apiKey) {
-        showToast('Please configure your API key in Settings', 'error');
+        showToast(tu('aux.audit.apiKeyRequired'), 'error');
         return;
       }
 
@@ -4487,16 +4516,16 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
           const instructions = await generateAuditContent(systemPrompt, contextInfo, apiKey);
           setInputValueWithUndo(auditInstructions, instructions);
-          showToast('Instructions auto-filled!');
+          showToast(tu('aux.audit.instructionsAutofilled'));
         } else {
           const enhancedText = await enhanceAuditPrompt(currentText, apiKey, presetName);
           setInputValueWithUndo(auditInstructions, enhancedText);
-          showToast('Instructions enhanced!');
+          showToast(tu('aux.audit.instructionsEnhanced'));
         }
         updateAuditInstructionsModifiedState();
       } catch (error) {
         console.error('Auto-fill/Enhance instructions error:', error);
-        showToast('Failed to update instructions: ' + error.message, 'error');
+        showToast(tu('aux.audit.instructionsFailed', { message: error.message }), 'error');
       } finally {
         auditAutoFillInstructions.classList.remove('loading');
       }
@@ -4506,7 +4535,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     auditAutoFillViewport.addEventListener('click', async () => {
       const apiKey = getCurrentApiKey();
       if (!apiKey) {
-        showToast('Please configure your API key in Settings', 'error');
+        showToast(tu('aux.audit.apiKeyRequired'), 'error');
         return;
       }
 
@@ -4529,7 +4558,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
                 auditTargetHeight.value = dimensions.targetHeight;
                 if (dimensions.minWidth) auditMinWidth.value = dimensions.minWidth;
                 if (dimensions.minHeight) auditMinHeight.value = dimensions.minHeight;
-                showToast('Viewport settings extracted from instructions!');
+                showToast(tu('aux.audit.viewportExtracted'));
                 return;
               }
             }
@@ -4540,10 +4569,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
         // Fallback: try to get from selection
         parent.postMessage({ pluginMessage: { type: 'get-selection-data' } }, '*');
-        showToast('Getting dimensions from selection...', 'info');
+        showToast(tu('aux.audit.gettingDimensions'), 'info');
       } catch (error) {
         console.error('Auto-fill viewport error:', error);
-        showToast('Failed to auto-fill: ' + error.message, 'error');
+        showToast(tu('aux.audit.autofillFailed', { message: error.message }), 'error');
       } finally {
         auditAutoFillViewport.classList.remove('loading');
       }
@@ -4553,7 +4582,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     auditAutoFillColors.addEventListener('click', async () => {
       const apiKey = getCurrentApiKey();
       if (!apiKey) {
-        showToast('Please configure your API key in Settings', 'error');
+        showToast(tu('aux.audit.apiKeyRequired'), 'error');
         return;
       }
 
@@ -4600,7 +4629,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
               }
 
               if (colorsFound) {
-                showToast('Colors extracted from instructions!');
+                showToast(tu('aux.audit.colorsExtracted'));
                 return;
               }
               // No colors found in instructions, fall through to selection-based extraction
@@ -4612,10 +4641,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
         // Fallback: try to get colors from selection
         parent.postMessage({ pluginMessage: { type: 'get-selection-colors' } }, '*');
-        showToast('Getting colors from selection...', 'info');
+        showToast(tu('aux.audit.gettingColors'), 'info');
       } catch (error) {
         console.error('Auto-fill colors error:', error);
-        showToast('Failed to auto-fill: ' + error.message, 'error');
+        showToast(tu('aux.audit.autofillFailed', { message: error.message }), 'error');
       } finally {
         auditAutoFillColors.classList.remove('loading');
       }
@@ -4840,8 +4869,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     function renderReplyTemplatesDropdownHtml(commentId) {
       if (!replyTemplates || replyTemplates.length === 0) {
         return `
-          <button class="dropdown-item" style="color: var(--text-muted); cursor: default;">No templates yet</button>
-          <button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">+ Manage Templates</button>
+          <button class="dropdown-item" style="color: var(--text-muted); cursor: default;">${escapeHtml(tu('aux.reply.emptyDropdown'))}</button>
+          <button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">${escapeHtml(tu('aux.reply.manage'))}</button>
         `;
       }
 
@@ -4855,15 +4884,15 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         return `<button class="dropdown-item" title="${escapedTitle}" onclick="useReplyTemplateDirect('${escapedTextForJs}', '${commentId}')">${escapedLabel}</button>`;
       }).join('');
 
-      html += `<button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">+ Manage Templates</button>`;
+      html += `<button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">${escapeHtml(tu('aux.reply.manage'))}</button>`;
       return html;
     }
 
     function renderBatchReplyTemplatesDropdownHtml(targetTextareaId) {
       if (!replyTemplates || replyTemplates.length === 0) {
         return `
-          <button class="dropdown-item" style="color: var(--text-muted); cursor: default;">No templates yet</button>
-          <button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">+ Manage Templates</button>
+          <button class="dropdown-item" style="color: var(--text-muted); cursor: default;">${escapeHtml(tu('aux.reply.emptyDropdown'))}</button>
+          <button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">${escapeHtml(tu('aux.reply.manage'))}</button>
         `;
       }
 
@@ -4877,15 +4906,15 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         return `<button class="dropdown-item" title="${escapedTitle}" onclick="useBatchReplyTemplate('${escapedTextForJs}', '${targetTextareaId}')">${escapedLabel}</button>`;
       }).join('');
 
-      html += `<button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">+ Manage Templates</button>`;
+      html += `<button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">${escapeHtml(tu('aux.reply.manage'))}</button>`;
       return html;
     }
 
     function renderReplyItemTemplatesDropdownHtml(mode, commentId, replyId) {
       if (!replyTemplates || replyTemplates.length === 0) {
         return `
-          <button class="dropdown-item" style="color: var(--text-muted); cursor: default;">No templates yet</button>
-          <button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">+ Manage Templates</button>
+          <button class="dropdown-item" style="color: var(--text-muted); cursor: default;">${escapeHtml(tu('aux.reply.emptyDropdown'))}</button>
+          <button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">${escapeHtml(tu('aux.reply.manage'))}</button>
         `;
       }
 
@@ -4899,7 +4928,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         return `<button class="dropdown-item" title="${escapedTitle}" onclick="useReplyItemTemplate('${escapedTextForJs}', '${mode}', '${commentId}', '${replyId}')">${escapedLabel}</button>`;
       }).join('');
 
-      html += `<button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">+ Manage Templates</button>`;
+      html += `<button class="dropdown-item" onclick="openReplyTemplateManager()" style="color:var(--accent)">${escapeHtml(tu('aux.reply.manage'))}</button>`;
       return html;
     }
 
@@ -4950,7 +4979,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       if (!list) return;
 
       if (replyTemplates.length === 0) {
-        list.innerHTML = '<div class="template-manager-empty-state">No templates yet. Add one below!</div>';
+        list.innerHTML = `<div class="template-manager-empty-state">${escapeHtml(tu('aux.reply.emptyManager'))}</div>`;
         return;
       }
 
@@ -4958,9 +4987,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         const text = typeof t === 'string' ? t : (t.value || '');
         return `
           <div class="template-manager-item">
-            <textarea placeholder="Template text..." onchange="updateTemplate(${i}, this.value)">${text}</textarea>
+            <textarea placeholder="${escapeHtml(tu('aux.reply.itemPlaceholder'))}" onchange="updateTemplate(${i}, this.value)">${text}</textarea>
             <div class="template-manager-item-actions">
-              <button class="comment-action-btn icon-only" onclick="removeTemplate(${i})" title="Delete">
+              <button class="comment-action-btn icon-only" onclick="removeTemplate(${i})" title="${escapeHtml(tu('aux.reply.deleteTitle'))}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
             </div>
@@ -5305,7 +5334,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           return {
             ...field,
             options: [
-              { value: '', label: 'None (Custom)' },
+              { value: '', label: tu('actions.option.noneCustom') },
               ...Object.keys(IMAGE_GEN_PRESETS).map(name => ({
                 value: name,
                 label: name,
@@ -5364,7 +5393,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         .map(t => ({ value: t, label: t }));
 
       // Get current selection size for default
-      let selectionSizeLabel = 'Auto (selection)';
+      let selectionSizeLabel = tu('actions.chart.autoSelection');
       let selectionSizeValue = '';
       try {
         const result = await requestSelectionData(true, false, 'layoutOnly');
@@ -5384,7 +5413,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             const w = Math.round(maxX - minX);
             const h = Math.round(maxY - minY);
             selectionSizeValue = `${w}x${h}`;
-            selectionSizeLabel = `Selection size (${selectionSizeValue})`;
+            selectionSizeLabel = tu('actions.chart.selectionSize', { size: selectionSizeValue });
           }
         }
       } catch (e) {
@@ -5398,7 +5427,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         if (field.key === 'chartSize') {
           const options = [
             { value: 'Auto', label: selectionSizeLabel },
-            { value: '__custom__', label: 'Custom...', inputKey: 'customChartSize', inputDefault: selectionSizeValue, inputType: 'text', inputPlaceholder: 'WxH' }
+            { value: '__custom__', label: tu('actions.option.custom'), inputKey: 'customChartSize', inputDefault: selectionSizeValue, inputType: 'text', inputPlaceholder: 'WxH' }
           ];
           return { ...field, options, default: 'Auto' };
         }
@@ -6216,7 +6245,7 @@ CRITICAL RULES:
       if (!container) return;
 
       // Show loading state
-      container.innerHTML = '<div class="prompt-comments-loading">Loading comments...</div>';
+      container.innerHTML = `<div class="prompt-comments-loading">${tu('actions.comments.loading')}</div>`;
 
       try {
         const commentsLoaded = await ensureCommentsLoaded();
@@ -6224,7 +6253,7 @@ CRITICAL RULES:
         if (!commentsLoaded) {
           container.innerHTML = `
           <div class="prompt-comments-error">
-              <p>Unable to load comments.</p>
+              <p>${tu('actions.comments.error')}</p>
               <p style="font-size: var(--text-xs); margin-top: 8px;">
                 Please configure your Figma API token in Settings → Figma API
               </p>
@@ -6234,7 +6263,7 @@ CRITICAL RULES:
         }
 
         if (!figmaComments || figmaComments.length === 0) {
-          container.innerHTML = '<div class="prompt-comments-empty">No comments found in this file.</div>';
+          container.innerHTML = `<div class="prompt-comments-empty">${tu('actions.comments.empty')}</div>`;
           return;
         }
 
@@ -6254,7 +6283,7 @@ CRITICAL RULES:
 
         renderCommentsInDrawer(container);
       } catch (error) {
-        container.innerHTML = `<div class="prompt-comments-error">Failed to load comments: ${error.message}</div>`;
+        container.innerHTML = `<div class="prompt-comments-error">${tu('actions.comments.error')} ${escapeHtml(error.message)}</div>`;
       }
     }
 
@@ -8725,7 +8754,7 @@ Requirements:
                           Reply
                         </button>
                         <div class="comment-more-container">
-                          <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="More options">
+                          <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="${tu('actions.option.more')}">
                             <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                           </button>
                           <div class="comment-more-menu hidden" id="comment-more-menu-${comment.id}">
@@ -8783,7 +8812,7 @@ Requirements:
                                   </button>
                                 ` : ''}
                                 <div class="comment-more-container">
-                                  <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="More options">
+                                  <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="${tu('actions.option.more')}">
                                     <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                                   </button>
                                   <div class="comment-more-menu hidden" id="comment-more-menu-${reply.id}">
@@ -10310,7 +10339,7 @@ Generate ONLY the reply text, nothing else.`;
 
         // For comment-related actions like "Solve Comment", load and inject comments context
         if (actionData && actionData.name === 'Solve Comment') {
-          showToast('Loading comments...', 'info');
+          showToast(tu('actions.comments.loading'), 'info');
           const commentsLoaded = await ensureCommentsLoaded();
 
           if (commentsLoaded && figmaComments && figmaComments.length > 0) {
@@ -11060,7 +11089,7 @@ Generate ONLY the reply text, nothing else.`;
         inputs.enabled.onchange = () => {
           const isEnabled = inputs.enabled.checked;
           const toggleLabel = inputs.enabled.parentElement.querySelector('.camera-toggle-label');
-          if (toggleLabel) toggleLabel.textContent = isEnabled ? 'On' : 'Off';
+          if (toggleLabel) toggleLabel.textContent = isEnabled ? tu('actions.camera.on') : tu('actions.camera.off');
 
           if (isEnabled) {
             wrapper.classList.remove('disabled');
@@ -11243,7 +11272,7 @@ Generate ONLY the reply text, nothing else.`;
           camBtn?.classList.add('active');
           lightBtn?.classList.remove('active');
           colorBtn && (colorBtn.style.display = 'none');
-          distLabel && (distLabel.textContent = 'Distance/Zoom (↔)');
+          distLabel && (distLabel.textContent = tu('actions.camera.distanceZoom'));
           if (this.camGroup) this.camGroup.visible = true;
           if (this.lightGroup) this.lightGroup.visible = false;
           if (this.connectors) this.connectors.visible = true;
@@ -11251,7 +11280,7 @@ Generate ONLY the reply text, nothing else.`;
           camBtn?.classList.remove('active');
           lightBtn?.classList.add('active');
           colorBtn && (colorBtn.style.display = 'block');
-          distLabel && (distLabel.textContent = 'Light Strength (↔)');
+          distLabel && (distLabel.textContent = tu('actions.camera.lightStrength'));
           if (this.camGroup) this.camGroup.visible = false;
           if (this.lightGroup) this.lightGroup.visible = true;
           if (this.connectors) this.connectors.visible = false;
@@ -12745,16 +12774,16 @@ Generate ONLY the reply text, nothing else.`;
           // Special handling for tone field - get dynamic options
           if (field.key === 'tone') {
             const defaultTones = [
-              { value: 'Casual', label: 'Casual' },
-              { value: 'Neutral', label: 'Neutral' },
-              { value: 'Funny', label: 'Funny' },
-              { value: 'Formal', label: 'Formal' },
-              { value: 'Academic', label: 'Academic' },
-              { value: 'Curiosity', label: 'Curiosity' },
-              { value: 'Urgent', label: 'Urgent' },
-              { value: 'Benefit-driven', label: 'Benefit-driven' },
-              { value: 'Empathetic but clear', label: 'Empathetic but clear' },
-              { value: 'For Kids', label: 'For Kids' },
+              { value: 'Casual', label: localizeActionString('Casual') },
+              { value: 'Neutral', label: localizeActionString('Neutral') },
+              { value: 'Funny', label: localizeActionString('Funny') },
+              { value: 'Formal', label: localizeActionString('Formal') },
+              { value: 'Academic', label: localizeActionString('Academic') },
+              { value: 'Curiosity', label: localizeActionString('Curiosity') },
+              { value: 'Urgent', label: localizeActionString('Urgent') },
+              { value: 'Benefit-driven', label: localizeActionString('Benefit-driven') },
+              { value: 'Empathetic but clear', label: localizeActionString('Empathetic but clear') },
+              { value: 'For Kids', label: localizeActionString('For Kids') },
             ];
 
             // Add custom tones (mark them as custom for removal button) - PUT IN FRONT
@@ -12767,7 +12796,7 @@ Generate ONLY the reply text, nothing else.`;
             // Add custom tone input option at the very end
             allTones.push({
               value: '__custom__',
-              label: 'Custom...',
+              label: tu('actions.option.custom'),
               inputKey: 'customTone',
               inputDefault: '',
               inputSuffix: '',
@@ -12780,7 +12809,7 @@ Generate ONLY the reply text, nothing else.`;
           // Special handling for imagePreset field
           if (field.key === 'imagePreset') {
             const allPresets = [
-              { value: '', label: 'None (Custom)' }
+              { value: '', label: tu('actions.option.noneCustom') }
             ];
 
             // Add custom presets - PUT IN FRONT (after None)
@@ -12821,7 +12850,7 @@ Generate ONLY the reply text, nothing else.`;
           // Special handling for reStylePreset field
           if (field.key === 'reStylePreset') {
             const allPresets = [
-              { value: '', label: 'None (Custom)' }
+              { value: '', label: tu('actions.option.noneCustom') }
             ];
 
             // Add custom presets - PUT IN FRONT (after None)
@@ -12844,7 +12873,7 @@ Generate ONLY the reply text, nothing else.`;
 
           if (field.key === 'renamePreset') {
             const allPresets = [
-              { value: '', label: 'None (Custom)' }
+              { value: '', label: tu('actions.option.noneCustom') }
             ];
 
             if (typeof customSmartRenamePresets !== 'undefined' && customSmartRenamePresets && customSmartRenamePresets.length > 0) {
@@ -12871,7 +12900,7 @@ Generate ONLY the reply text, nothing else.`;
             const isDisabledInAiOffMode = forceDisabled;
             const disabledAttr = isDisabledInAiOffMode ? ' data-disabled="true"' : '';
             const disabledTitleAttr = isDisabledInAiOffMode
-              ? ' title="Unavailable in No AI mode. Use Case only (keep text)."'
+              ? ` title="${escapeHtml(tu('actions.option.unavailableNoAi'))}"`
               : '';
 
             // Handle provider header options
@@ -12896,7 +12925,7 @@ Generate ONLY the reply text, nothing else.`;
 
             // More options button for custom options
             const moreBtnHtml = opt.isCustom ? `
-              <button class="option-more-btn" data-field-key="${field.key}" data-option-value="${escapeHtml(String(valueRaw))}" data-option-id="${escapeHtml(String(opt.id || ''))}" title="More options">
+              <button class="option-more-btn" data-field-key="${field.key}" data-option-value="${escapeHtml(String(valueRaw))}" data-option-id="${escapeHtml(String(opt.id || ''))}" title="${escapeHtml(tu('actions.option.more'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
                 </svg>
@@ -12923,6 +12952,7 @@ Generate ONLY the reply text, nothing else.`;
                   <span>${escapeHtml(labelRaw)}</span>
                   <input type="${opt.inputType || 'number'}" class="embedded-input"
                          value="${escapeHtml(String(inputDefault))}"
+                         ${opt.inputPlaceholder ? `placeholder="${escapeHtml(String(opt.inputPlaceholder))}"` : ''}
                          ${opt.inputMin !== undefined ? `min="${opt.inputMin}"` : ''}
                          ${opt.inputMax !== undefined ? `max="${opt.inputMax}"` : ''}
                          data-embedded-key="${opt.inputKey}">
@@ -12974,7 +13004,7 @@ Generate ONLY the reply text, nothing else.`;
           const searchHtml = field.searchable ? `
             <div class="prompt-select-search-wrapper">
               <div class="prompt-select-search">
-                <input type="text" placeholder="${isMulti ? `Select ${escapeHtml(field.label || '')}...` : `Search ${escapeHtml(field.label || '')}`}" data-select-search="${fieldId}" autocomplete="off"${selectDisabledAttr}>
+                <input type="text" placeholder="${escapeHtml(isMulti ? tu('actions.select.choose', { label: field.label || '' }) : tu('actions.select.search', { label: field.label || '' }))}" data-select-search="${fieldId}" autocomplete="off"${selectDisabledAttr}>
               </div>
               <svg class="prompt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M6 9l6 6 6-6" />
@@ -13002,7 +13032,7 @@ Generate ONLY the reply text, nothing else.`;
           const fieldHeaderHtml = canAddOption ? `
             <div class="prompt-field-label-row">
               <label class="prompt-field-label">${field.label}</label>
-              <button class="add-option-btn" data-add-for="${field.key}" title="${tu('actions.prompt.add')} ${field.key}"${forceDisabled ? ' disabled' : ''}>
+              <button class="add-option-btn" data-add-for="${field.key}" title="${tu('actions.prompt.add')} ${field.label || field.key}"${forceDisabled ? ' disabled' : ''}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
@@ -13036,7 +13066,7 @@ Generate ONLY the reply text, nothing else.`;
               <div class="prompt-color-input-wrapper">
                 <input type="color" class="prompt-color-picker" id="${fieldId}-picker" value="${colorValue}" data-field-key="${field.key}"${disabledAttr}>
                 <input type="text" class="prompt-color-hex" id="${fieldId}-hex" value="${colorValue}" placeholder="#000000" data-color-hex="${field.key}"${disabledAttr}>
-                <button class="audit-pick-btn prompt-color-pick-btn" title="Use selected element's fill"${disabledAttr}>
+                <button class="audit-pick-btn prompt-color-pick-btn" title="${escapeHtml(tu('actions.color.useSelectionFill'))}"${disabledAttr}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
                   </svg>
@@ -13121,7 +13151,7 @@ Generate ONLY the reply text, nothing else.`;
               <div class="prompt-field-image-chips" data-chips-for="${field.key}"></div>
               <div class="prompt-field-indicator" data-indicator-for="${field.key}">
                 <span class="prompt-indicator-text">${tu('actions.prompt.clearText')}</span>
-                <button class="prompt-indicator-delete" title="Clear text" type="button">
+                <button class="prompt-indicator-delete" title="${escapeHtml(tu('actions.prompt.clearTitle'))}" type="button">
                   ${tu('actions.prompt.clear')}
                 </button>
               </div>
@@ -13225,34 +13255,34 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}${isCamEnabled ? '' : ' camera-off'}"${conditionalAttrs} data-field-type="cameraControl">
               <div class="prompt-field-label-row">
                 <label class="prompt-field-label">${field.label}</label>
-                <label class="camera-lock-style-toggle" title="Lock the visual style of the original image">
+                <label class="camera-lock-style-toggle" title="${escapeHtml(tu('actions.camera.lockStyle'))}">
                   <input type="checkbox" data-field-key="camLockStyle" ${camLockStyle ? 'checked' : ''}>
-                  <span class="camera-lock-style-label">Lock Style</span>
+                  <span class="camera-lock-style-label">${tu('actions.camera.lockStyle')}</span>
                 </label>
                 <label class="camera-toggle-switch">
                   <input type="checkbox" id="${fieldId}-toggle" data-field-key="camEnabled" ${isCamEnabled ? 'checked' : ''}>
-                  <span class="camera-toggle-label">${isCamEnabled ? 'On' : 'Off'}</span>
+                  <span class="camera-toggle-label">${isCamEnabled ? tu('actions.camera.on') : tu('actions.camera.off')}</span>
                 </label>
               </div>
               <div class="camera-control-3d-wrapper${isCamEnabled ? '' : ' disabled'}" id="${fieldId}-wrapper">
                 <div class="camera-mode-toggle-container">
-                  <button class="camera-mode-btn ${camMode === 'camera' ? 'active' : ''}" id="${fieldId}-mode-cam" title="Camera Perspective">
+                  <button class="camera-mode-btn ${camMode === 'camera' ? 'active' : ''}" id="${fieldId}-mode-cam" title="${escapeHtml(tu('actions.camera.cameraPerspective'))}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                     CAM
                   </button>
-                  <button class="camera-mode-btn ${camMode === 'relight' ? 'active' : ''}" id="${fieldId}-mode-light" title="Relighting Control">
+                  <button class="camera-mode-btn ${camMode === 'relight' ? 'active' : ''}" id="${fieldId}-mode-light" title="${escapeHtml(tu('actions.camera.relightingControl'))}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                     LIGHT
                   </button>
-                  <div class="camera-control-color-btn" id="${fieldId}-color-btn" title="Light Color" style="display:${camMode === 'relight' ? 'block' : 'none'}; background-color:${camLightColor}"></div>
+                  <div class="camera-control-color-btn" id="${fieldId}-color-btn" title="${escapeHtml(tu('actions.camera.lightColor'))}" style="display:${camMode === 'relight' ? 'block' : 'none'}; background-color:${camLightColor}"></div>
                 </div>
                 <canvas class="camera-control-3d-canvas" id="${fieldId}-canvas"></canvas>
                 <div class="camera-control-hud">
-                  <div class="hud-item"><span class="hud-dot distance"></span><span class="hud-label">${camMode === 'relight' ? 'Light Strength (↔)' : 'Distance/Zoom (↔)'}</span></div>
-                  <div class="hud-item"><span class="hud-dot tilt"></span>Vertical Tilt (↕)</div>
-                  <div class="hud-item"><span class="hud-dot rotation"></span>Rotation Ring</div>
+                  <div class="hud-item"><span class="hud-dot distance"></span><span class="hud-label">${camMode === 'relight' ? tu('actions.camera.lightStrength') : tu('actions.camera.distanceZoom')}</span></div>
+                  <div class="hud-item"><span class="hud-dot tilt"></span>${tu('actions.camera.verticalTilt')}</div>
+                  <div class="hud-item"><span class="hud-dot rotation"></span>${tu('actions.camera.rotationRing')}</div>
                 </div>
-                <div class="camera-control-status" id="${fieldId}-status">Rotate 0° Front</div>
+                <div class="camera-control-status" id="${fieldId}-status">${tu('actions.camera.statusFront')}</div>
               </div>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <input type="hidden" id="${fieldId}-rotation" data-field-key="camRotation" value="${camRot}">
@@ -13295,9 +13325,9 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field${wrapperClass} prompt-field-comments"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <div class="pill-tab-container">
-                  <button class="pill-tab ${currentCommentsScope === 'all' ? 'active' : ''}" onclick="switchCommentScope('all', this)" type="button">File</button>
-                  <button class="pill-tab ${currentCommentsScope === 'page' ? 'active' : ''}" onclick="switchCommentScope('page', this)" type="button">This page</button>
-                  <button class="pill-tab ${currentCommentsScope === 'selection' ? 'active' : ''}" onclick="switchCommentScope('selection', this)" type="button">Selection</button>
+                  <button class="pill-tab ${currentCommentsScope === 'all' ? 'active' : ''}" onclick="switchCommentScope('all', this)" type="button">${tu('actions.comments.fileTab')}</button>
+                  <button class="pill-tab ${currentCommentsScope === 'page' ? 'active' : ''}" onclick="switchCommentScope('page', this)" type="button">${tu('actions.comments.pageTab')}</button>
+                  <button class="pill-tab ${currentCommentsScope === 'selection' ? 'active' : ''}" onclick="switchCommentScope('selection', this)" type="button">${tu('actions.comments.selectionTab')}</button>
                 </div>
                 <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
                   <button class="prompt-comments-toggle-btn" id="multiSelectToggle" type="button" onclick="toggleMultiSelect()">
@@ -13305,13 +13335,13 @@ Generate ONLY the reply text, nothing else.`;
                       <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
                       <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
                     </svg>
-                    Select
+                    ${tu('actions.comments.select')}
                   </button>
                   <button class="prompt-comments-toggle-btn" id="showResolvedToggle" type="button" onclick="toggleShowResolved()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                       <path d="M20 6L9 17l-5-5"/>
                     </svg>
-                    Resolved
+                    ${tu('actions.comments.resolved')}
                   </button>
                   <button class="prompt-comments-refresh-btn" type="button" onclick="refreshCommentsInDrawer()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
@@ -13322,7 +13352,7 @@ Generate ONLY the reply text, nothing else.`;
                 </div>
               </div>
               <div class="prompt-comments-container" id="promptCommentsContainer">
-                <div class="prompt-comments-loading">Loading comments...</div>
+                <div class="prompt-comments-loading">${tu('actions.comments.loading')}</div>
               </div>
             </div>
           `;
@@ -13334,9 +13364,9 @@ Generate ONLY the reply text, nothing else.`;
 
           const translateBtnHtml = field.translate ? `
             <div class="prompt-ai-actions">
-              <button class="prompt-ai-btn" data-ai-action="translate" title="Translate to English" type="button">
+              <button class="prompt-ai-btn" data-ai-action="translate" title="${escapeHtml(tu('actions.prompt.translateTitle'))}" type="button">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>
-                <span>Translate</span>
+                <span>${tu('actions.prompt.translate')}</span>
               </button>
             </div>
           ` : '';
@@ -13431,8 +13461,8 @@ Generate ONLY the reply text, nothing else.`;
         const currentPrompt = (renamePromptTextarea.value || '').trim();
         updatePromptFieldIndicator('renamePrompt', {
           visible: !!selectedPreset && !!currentPrompt && currentPrompt !== presetPrompt,
-          text: 'Preset modified',
-          buttonText: 'Reset'
+          text: tu('actions.prompt.presetModified'),
+          buttonText: tu('actions.prompt.reset')
         });
       }
 
@@ -13469,8 +13499,8 @@ Generate ONLY the reply text, nothing else.`;
             const currentPrompt = (e.target.value || '').trim();
             updatePromptFieldIndicator('renamePrompt', {
               visible: !!selectedPresetValue && currentPrompt !== presetPrompt,
-              text: 'Preset modified',
-              buttonText: 'Reset'
+              text: tu('actions.prompt.presetModified'),
+              buttonText: tu('actions.prompt.reset')
             });
           }
         }
@@ -13533,7 +13563,7 @@ Generate ONLY the reply text, nothing else.`;
           chip.className = 'prompt-field-chip';
           chip.type = 'button';
           chip.innerHTML = `<img src="${img.src}"> <span>${img.ref}</span>`;
-          chip.title = `Add ${img.ref} reference`;
+          chip.title = tu('actions.image.refTitle', { ref: img.ref });
           chip.onclick = (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -13570,7 +13600,7 @@ Generate ONLY the reply text, nothing else.`;
       // Re-open (this will use actionToReset.fields which are the original defaults)
       await openPromptDrawer(actionToReset);
 
-      showToast(`${originalName} reset to defaults`);
+      showToast(tu('actions.prompt.resetToast', { name: localizeActionString(originalName) }));
     }
 
     function setupIndicatorListeners() {
@@ -13968,7 +13998,7 @@ Generate ONLY the reply text, nothing else.`;
           addImageSlot(grid, currentSlots + 1, fieldKey);
           targetSlot = grid.querySelector('.prompt-image-upload-slot:last-child');
         } else {
-          showToast('Maximum images reached', 'warning');
+          showToast(tu('actions.image.maxReached'), 'warning');
           break;
         }
 
@@ -14013,35 +14043,35 @@ Generate ONLY the reply text, nothing else.`;
               <path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21M14 19.5l3-3m0 0 3 3m-3-3V22"/>
               <path d="M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/>
             </svg>
-            <span>Image ${slotNumber}</span>
+            <span>${tu('actions.image.slot', { number: slotNumber })}</span>
           </div>
-          <button class="prompt-image-slot-remove" title="Remove image" type="button">
+          <button class="prompt-image-slot-remove" title="${escapeHtml(tu('actions.image.remove'))}" type="button">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
           <div class="prompt-slot-actions prompt-add-figma-wrapper" data-selection-count="0">
-            <button class="prompt-add-figma-separate-btn" type="button" title="Add from Figma selection as separate images">
+            <button class="prompt-add-figma-separate-btn" type="button" title="${escapeHtml(tu('actions.image.addFigmaSeparateTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
                 <rect x="14" y="3" width="7" height="7" rx="1"/>
                 <rect x="3" y="14" width="7" height="7" rx="1"/>
                 <rect x="14" y="14" width="7" height="7" rx="1"/>
               </svg>
-              Add separately
+              ${tu('actions.image.addFigmaSeparate')}
             </button>
-            <button class="prompt-add-figma-btn" type="button" title="Add from Figma selection as single image">
+            <button class="prompt-add-figma-btn" type="button" title="${escapeHtml(tu('actions.image.addFigmaSelectionTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
                 <circle cx="12" cy="12" r="3"/>
               </svg>
-              Add selection
+              ${tu('actions.image.addFigmaSelection')}
             </button>
-            <button class="prompt-upload-btn" type="button" title="Upload image">
+            <button class="prompt-upload-btn" type="button" title="${escapeHtml(tu('actions.image.uploadTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7m4 0h6m-3-3v6M5 21l7-7 7 7"/>
               </svg>
-              Upload image
+              ${tu('actions.image.upload')}
             </button>
           </div>
           <input type="file" class="prompt-image-hidden-input" id="${slotId}-input" accept="image/*" style="display: none;">
@@ -14148,7 +14178,7 @@ Generate ONLY the reply text, nothing else.`;
               }
 
               if (!targetSlot) {
-                showToast('Maximum images reached', 'warning');
+                showToast(tu('actions.image.maxReached'), 'warning');
                 break;
               }
 
@@ -14289,7 +14319,7 @@ Generate ONLY the reply text, nothing else.`;
         if (input) input.id = `${newId}-input`;
 
         slot.querySelector('.prompt-image-slot-number').textContent = newNumber;
-        slot.querySelector('.prompt-image-slot-placeholder span').textContent = `Image ${newNumber}`;
+        slot.querySelector('.prompt-image-slot-placeholder span').textContent = tu('actions.image.slot', { number: newNumber });
       });
       updateRemoveButtonVisibility(grid);
       updateGridLayout(grid);
@@ -21869,7 +21899,7 @@ Example structure:
                 Reply
               </button>
               <div class="comment-more-container">
-                <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="More options">
+                <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${comment.id}')" title="${tu('actions.option.more')}">
                   <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                 </button>
                 <div class="comment-more-menu hidden" id="comment-more-menu-${comment.id}">
@@ -21920,7 +21950,7 @@ Example structure:
                                 </button>
                               ` : ''}
                               <div class="comment-more-container">
-                                <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="More options">
+                                <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="${tu('actions.option.more')}">
                                   <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                                 </button>
                                 <div class="comment-more-menu hidden" id="comment-more-menu-${reply.id}">
@@ -24622,7 +24652,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         }
       }
 
-      showToast('Code updated', 'success');
+      showToast(tu('aux.code.updated'), 'success');
       closeCodeEditor();
     }
 
@@ -24646,10 +24676,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       }
       const btn = this;
       const label = btn.querySelector('span');
-      if (label) label.textContent = 'Copied!';
+      if (label) label.textContent = tu('aux.code.copied');
       btn.classList.add('copied');
       setTimeout(() => {
-        if (label) label.textContent = 'Copy';
+        if (label) label.textContent = tu('aux.code.copy');
         btn.classList.remove('copied');
       }, 2000);
     });
@@ -24833,7 +24863,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         if (!wasTruncated) break;
 
         if (attempt === maxAttempts - 1) {
-          showToast('AI output may be incomplete — code was too long for a single response', 'warning');
+          showToast(tu('aux.code.incomplete'), 'warning');
         }
       }
 
@@ -24871,15 +24901,15 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const label = btn.querySelector('span');
       const origLabel = label.textContent;
       btn.disabled = true;
-      label.textContent = 'Fixing...';
+      label.textContent = tu('aux.code.fixing');
       hideAIAssistantPopup();
       try {
         const lang = getCodeEditorLang();
         const fixed = await callAIForCode('Fix any bugs, errors, or issues in this code. Maintain the original intent.', _codeEditorSelectedText, lang);
         replaceSelectedCode(fixed);
-        showToast('Code fixed by AI', 'success');
+        showToast(tu('aux.code.fixed'), 'success');
       } catch (err) {
-        showToast('AI fix failed: ' + err.message, 'error');
+        showToast(tu('aux.code.fixFailed', { message: err.message }), 'error');
       } finally {
         btn.disabled = false;
         label.textContent = origLabel;
@@ -24901,19 +24931,19 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const submitBtn = document.getElementById('aiAssistantSubmitBtn');
       submitBtn.disabled = true;
       submitBtn.querySelector('span')?.remove();
-      submitBtn.textContent = 'Applying...';
+      submitBtn.textContent = tu('aux.code.applying');
       try {
         const lang = getCodeEditorLang();
         const edited = await callAIForCode(instruction, _codeEditorSelectedText, lang);
         replaceSelectedCode(edited);
-        showToast('Code edited by AI', 'success');
+        showToast(tu('aux.code.edited'), 'success');
         hideAIAssistantPopup();
         hideSelectionToolbar();
       } catch (err) {
-        showToast('AI edit failed: ' + err.message, 'error');
+        showToast(tu('aux.code.editFailed', { message: err.message }), 'error');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Apply';
+        submitBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> <span>${escapeHtml(tu('aux.code.apply'))}</span>`;
       }
     }
 
@@ -24954,18 +24984,18 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
       const submitBtn = document.getElementById('codeEditorAISubmitBtn');
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Applying...';
+      submitBtn.textContent = tu('aux.code.applying');
       try {
         const lang = getCodeEditorLang();
         const edited = await callAIForCode(instruction, fullCode, lang);
         replaceFullCode(edited);
-        showToast('Code edited by AI', 'success');
+        showToast(tu('aux.code.edited'), 'success');
         document.getElementById('codeEditorAIPopup').classList.remove('visible');
       } catch (err) {
-        showToast('AI edit failed: ' + err.message, 'error');
+        showToast(tu('aux.code.editFailed', { message: err.message }), 'error');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Apply';
+        submitBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> <span>${escapeHtml(tu('aux.code.apply'))}</span>`;
       }
     }
 
@@ -29638,7 +29668,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           // ============================================
           let commentsContext = '';
           if (isCommentRelatedQuery(finalMessage)) {
-            updateThinkingIndicator('Loading comments...');
+            updateThinkingIndicator(tu('actions.comments.loading'));
             const commentsLoaded = await ensureCommentsLoaded();
             // We'll calculate the actual context string later when we have selectionData
           }
@@ -30436,17 +30466,17 @@ Based on the user's instruction, generate the appropriate commands to modify the
       editingOptionOriginalValue = editData ? editData.value : null;
 
       const isEdit = !!editData;
-      const titlePrefix = isEdit ? 'Edit' : 'Add';
-      addOptionModalTitle.textContent = fieldKey === 'tone'
-        ? `${titlePrefix} Custom Tone`
+      const titleKey = fieldKey === 'tone'
+        ? (isEdit ? 'actions.modal.editCustomTone' : 'actions.modal.addCustomTone')
         : (fieldKey === 'styleCategory'
-          ? `${titlePrefix} Design Style`
+          ? (isEdit ? 'actions.modal.editDesignStyle' : 'actions.modal.addDesignStyle')
           : (fieldKey === 'imagePreset'
-            ? `${titlePrefix} Style Preset`
+            ? (isEdit ? 'actions.modal.editStylePreset' : 'actions.modal.addStylePreset')
             : (fieldKey === 'renamePreset'
-              ? `${titlePrefix} Rename Prompt Preset`
-              : `${titlePrefix} ReStyle Preset`)));
-      btnConfirmAddOption.textContent = isEdit ? 'Update Option' : 'Add Option';
+              ? (isEdit ? 'actions.modal.editRenamePromptPreset' : 'actions.modal.addRenamePromptPreset')
+              : (isEdit ? 'actions.modal.editReStylePreset' : 'actions.modal.addReStylePreset'))));
+      addOptionModalTitle.textContent = tu(titleKey);
+      btnConfirmAddOption.textContent = tu(isEdit ? 'actions.modal.updateOptionButton' : 'actions.modal.addOptionButton');
 
       // Reset all fields
       if (customToneName) customToneName.value = editData && fieldKey === 'tone' ? editData.label : '';
@@ -30497,13 +30527,13 @@ Based on the user's instruction, generate the appropriate commands to modify the
         const value = customToneValue.value.trim();
 
         if (!name || !value) {
-          showToast('Tone Name and Value are required', 'error');
+          showToast(tu('actions.validation.toneRequired'), 'error');
           return;
         }
 
         // Check for duplicates (excluding the one we're editing)
         if (customTones.some(t => t.value === value && t.value !== editingOptionOriginalValue)) {
-          showToast('A tone with this value already exists', 'error');
+          showToast(tu('actions.validation.toneExists'), 'error');
           return;
         }
 
@@ -30543,17 +30573,17 @@ Based on the user's instruction, generate the appropriate commands to modify the
         const thumbnail = customPresetThumbnail.value.trim();
 
         if (!name) {
-          showToast('Preset Name is required', 'error');
+          showToast(tu('actions.validation.presetNameRequired'), 'error');
           return;
         }
 
         if (currentAddingFor === 'imagePreset' && !subject && !style) {
-          showToast('At least Subject or Style is required', 'error');
+          showToast(tu('actions.validation.presetNeedsSubjectOrStyle'), 'error');
           return;
         }
 
         if ((currentAddingFor === 'reStylePreset' || currentAddingFor === 'renamePreset') && !style) {
-          showToast('Style (Prompt) is required', 'error');
+          showToast(tu('actions.validation.presetStyleRequired'), 'error');
           return;
         }
 
@@ -30563,7 +30593,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
         // Check for duplicates (excluding the one we're editing)
         if (targetList.some(p => p.value === name && (editingOptionOriginalId ? p.id !== editingOptionOriginalId : p.value !== editingOptionOriginalValue))) {
-          showToast('A preset with this name already exists', 'error');
+          showToast(tu('actions.validation.presetExists'), 'error');
           return;
         }
 
@@ -30632,12 +30662,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
         const effects = customStyleEffects.value.trim();
 
         if (!name) {
-          showToast('Name is required', 'error');
+          showToast(tu('actions.validation.styleNameRequired'), 'error');
           return;
         }
 
         if (customStyleCategories.some(s => s.name === name && (editingOptionOriginalId ? s.id !== editingOptionOriginalId : s.name !== editingOptionOriginalValue))) {
-          showToast('A style with this name already exists', 'error');
+          showToast(tu('actions.validation.styleExists'), 'error');
           return;
         }
 
@@ -30749,7 +30779,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           const newOption = {
             ...optionData,
             id: `tone_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            label: `${optionData.label} (Copy)`
+            label: tu('actions.option.copyName', { name: optionData.label })
           };
           customTones.unshift(newOption);
           saveCustomOptions('tone', customTones);
@@ -30760,7 +30790,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           const newOption = {
             ...optionData,
             id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            label: `${optionData.label} (Copy)`
+            label: tu('actions.option.copyName', { name: optionData.label })
           };
           customImagePresets.unshift(newOption);
           saveCustomOptions('imagePreset', customImagePresets);
@@ -30771,7 +30801,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           const newOption = {
             ...optionData,
             id: `rst_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            label: `${optionData.label} (Copy)`
+            label: tu('actions.option.copyName', { name: optionData.label })
           };
           customReStylePresets.unshift(newOption);
           saveCustomOptions('reStylePreset', customReStylePresets);
@@ -30782,7 +30812,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           const newOption = {
             ...optionData,
             id: `rnp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            label: `${optionData.label} (Copy)`
+            label: tu('actions.option.copyName', { name: optionData.label })
           };
           customSmartRenamePresets.unshift(newOption);
           saveCustomOptions('renamePreset', customSmartRenamePresets);
@@ -30793,7 +30823,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           const newOption = {
             ...optionData,
             id: `style_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            name: `${optionData.name} (Copy)`
+            name: tu('actions.option.copyName', { name: optionData.name })
           };
           customStyleCategories.unshift(newOption);
           saveCustomOptions('styleCategory', customStyleCategories);
@@ -31305,7 +31335,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           if (msg.data) {
             auditTargetWidth.value = msg.data.width || 390;
             auditTargetHeight.value = msg.data.height || 844;
-            showToast('Dimensions set from selection!');
+            showToast(tu('aux.audit.dimensionsSet'));
           }
           auditAutoFillViewport.classList.remove('loading');
           break;
@@ -31317,8 +31347,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
               const autoOption = chartSizeSelect.querySelector('.prompt-custom-select-option[data-value="Auto"]');
               if (autoOption) {
                 const label = (msg.width != null && msg.height != null)
-                  ? `Selection size (${msg.width}x${msg.height})`
-                  : 'Auto (selection)';
+                  ? tu('actions.chart.selectionSize', { size: `${msg.width}x${msg.height}` })
+                  : tu('actions.chart.autoSelection');
                 autoOption.textContent = label;
                 autoOption.dataset.text = label;
               }
@@ -31760,9 +31790,9 @@ Update the text content for all selected nodes accordingly.`;
 
         // Visual feedback
         if (manualContextMode) {
-          showToast(`Context forced to: ${mode}`, 'info');
+          showToast(tu('aux.context.forced', { mode: getLocalizedContextModeLabel(mode) }), 'info');
         } else {
-          showToast(`Context reset to Smart Focus`, 'info');
+          showToast(tu('aux.context.reset'), 'info');
         }
 
         // If there's text in the input, auto-send with selected mode

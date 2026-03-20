@@ -236,21 +236,21 @@
         <path
           d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
       </svg>
-      Edit
+      <span data-i18n-action="actions.option.edit">Edit</span>
     </div>
     <div class="option-context-item" id="ctxDuplicateOption">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
         <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
       </svg>
-      Duplicate
+      <span data-i18n-action="actions.option.duplicate">Duplicate</span>
     </div>
     <div class="option-context-item danger" id="ctxRemoveOption">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path
           d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
       </svg>
-      Remove
+      <span data-i18n-action="actions.option.remove">Remove</span>
     </div>
   </div>
 
@@ -620,7 +620,7 @@
   <div class="add-option-modal" id="addOptionModal">
     <div class="add-option-modal-content">
       <div class="add-option-modal-header">
-        <span class="settings-modal-title" id="addOptionModalTitle">Add Custom Option</span>
+        <span class="settings-modal-title" id="addOptionModalTitle" data-i18n-action="actions.modal.addCustomOption">Add Custom Option</span>
         <button class="add-option-modal-close" id="closeAddOptionBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12" />
@@ -631,64 +631,64 @@
         <!-- Tone fields (shown for tone) -->
         <div id="toneOnlyFields">
           <div class="setting-item">
-            <label class="setting-label">Tone Name</label>
-            <input type="text" class="setting-input" id="customToneName" placeholder="e.g. Professional" />
+            <label class="setting-label" data-i18n-action="actions.modal.toneName">Tone Name</label>
+            <input type="text" class="setting-input" id="customToneName" placeholder="e.g. Professional" data-i18n-action-placeholder="actions.modal.toneNamePlaceholder" />
           </div>
           <div class="setting-item">
-            <label class="setting-label">Tone Value (used in prompt)</label>
+            <label class="setting-label" data-i18n-action="actions.modal.toneValue">Tone Value (used in prompt)</label>
             <input type="text" class="setting-input" id="customToneValue"
-              placeholder="e.g. Professional and business-like" />
+              placeholder="e.g. Professional and business-like" data-i18n-action-placeholder="actions.modal.toneValuePlaceholder" />
           </div>
         </div>
         <!-- Image preset fields (shown for imagePreset) -->
         <div id="imagePresetOnlyFields" style="display: none;">
           <div class="setting-item">
-            <label class="setting-label">Preset Name</label>
-            <input type="text" class="setting-input" id="customPresetName" placeholder="e.g. Cyberpunk Neon" />
+            <label class="setting-label" data-i18n-action="actions.modal.presetName">Preset Name</label>
+            <input type="text" class="setting-input" id="customPresetName" placeholder="e.g. Cyberpunk Neon" data-i18n-action-placeholder="actions.modal.presetNamePlaceholder" />
           </div>
           <div class="setting-item">
-            <label class="setting-label">Subject / Content</label>
+            <label class="setting-label" data-i18n-action="actions.modal.subject">Subject / Content</label>
             <textarea class="setting-input" id="customPresetSubject" style="height: 60px; resize: none;"
-              placeholder="e.g. A futuristic cityscape at night..."></textarea>
+              placeholder="e.g. A futuristic cityscape at night..." data-i18n-action-placeholder="actions.modal.subjectPlaceholder"></textarea>
           </div>
           <div class="setting-item">
-            <label class="setting-label">Artistic Style / Direction</label>
+            <label class="setting-label" data-i18n-action="actions.modal.styleDirection">Artistic Style / Direction</label>
             <textarea class="setting-input" id="customPresetStyle" style="height: 80px; resize: none;"
-              placeholder="e.g. Neon lights, cyberpunk aesthetic, 8k, cinematic..."></textarea>
+              placeholder="e.g. Neon lights, cyberpunk aesthetic, 8k, cinematic..." data-i18n-action-placeholder="actions.modal.styleDirectionPlaceholder"></textarea>
           </div>
           <div class="setting-item">
-            <label class="setting-label">Thumbnail URL (Optional)</label>
+            <label class="setting-label" data-i18n-action="actions.modal.thumbnailOptional">Thumbnail URL (Optional)</label>
             <input type="text" class="setting-input" id="customPresetThumbnail" placeholder="https://..." />
           </div>
         </div>
         <!-- Style category fields (shown for styleCategory) -->
         <div id="styleCategoryOnlyFields" style="display: none;">
           <div class="setting-item">
-            <label class="setting-label">Name</label>
-            <input type="text" class="setting-input" id="customStyleName" placeholder="e.g. Minimalism & Swiss Style" />
+            <label class="setting-label" data-i18n-action="actions.modal.name">Name</label>
+            <input type="text" class="setting-input" id="customStyleName" placeholder="e.g. Minimalism & Swiss Style" data-i18n-action-placeholder="actions.modal.styleNamePlaceholder" />
           </div>
           <div class="setting-item">
-            <label class="setting-label">Keywords</label>
+            <label class="setting-label" data-i18n-action="actions.modal.keywords">Keywords</label>
             <input type="text" class="setting-input" id="customStyleKeywords"
-              placeholder="e.g. Clean, simple, spacious, functional..." />
+              placeholder="e.g. Clean, simple, spacious, functional..." data-i18n-action-placeholder="actions.modal.keywordsPlaceholder" />
           </div>
           <div class="setting-item">
-            <label class="setting-label">Primary Colors</label>
+            <label class="setting-label" data-i18n-action="actions.modal.primaryColors">Primary Colors</label>
             <input type="text" class="setting-input" id="customStylePrimaryColors"
-              placeholder="e.g. Monochromatic, Black #000000, White #FFFFFF" />
+              placeholder="e.g. Monochromatic, Black #000000, White #FFFFFF" data-i18n-action-placeholder="actions.modal.primaryColorsPlaceholder" />
           </div>
           <div class="setting-item">
-            <label class="setting-label">Secondary Colors</label>
+            <label class="setting-label" data-i18n-action="actions.modal.secondaryColors">Secondary Colors</label>
             <input type="text" class="setting-input" id="customStyleSecondaryColors"
-              placeholder="e.g. Neutral (Beige #F5F1E8, Grey #808080)" />
+              placeholder="e.g. Neutral (Beige #F5F1E8, Grey #808080)" data-i18n-action-placeholder="actions.modal.secondaryColorsPlaceholder" />
           </div>
           <div class="setting-item">
-            <label class="setting-label">Effects</label>
+            <label class="setting-label" data-i18n-action="actions.modal.effects">Effects</label>
             <input type="text" class="setting-input" id="customStyleEffects"
-              placeholder="e.g. Sharp shadows, clear type hierarchy" />
+              placeholder="e.g. Sharp shadows, clear type hierarchy" data-i18n-action-placeholder="actions.modal.effectsPlaceholder" />
           </div>
         </div>
-        <button class="setting-btn primary" id="btnConfirmAddOption">Add
+        <button class="setting-btn primary" id="btnConfirmAddOption" data-i18n-action="actions.modal.addOptionButton">Add
           Option</button>
       </div>
     </div>
@@ -696,7 +696,7 @@
   <div class="audit-modal" id="auditModal">
     <div class="audit-modal-content">
       <div class="audit-modal-header">
-        <span class="audit-modal-title">UI/UX Audit Settings</span>
+        <span class="audit-modal-title" data-i18n-action="aux.audit.title">UI/UX Audit Settings</span>
         <button class="audit-modal-close" id="closeAuditBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12" />
@@ -708,16 +708,16 @@
         <div class="audit-group">
           <div class="audit-group-title-row">
             <div class="audit-group-title-left">
-              <div class="audit-group-title">Preset & Detail</div>
+              <div class="audit-group-title" data-i18n-action="aux.audit.presetDetail">Preset & Detail</div>
             </div>
             <div style="display: flex; gap: 8px;">
               <div class="audit-preset-select-wrapper">
-                <select class="audit-preset-select audit-select-sub" id="auditLanguageSelect" title="Response Language">
-                  <option value="auto" selected>Auto</option>
-                  <option value="en">English</option>
-                  <option value="ja">Japanese</option>
-                  <option value="cn">Chinese</option>
-                  <option value="kr">Korean</option>
+                <select class="audit-preset-select audit-select-sub" id="auditLanguageSelect" title="Response Language" data-i18n-action-title="aux.audit.languageTitle">
+                  <option value="auto" selected data-i18n-action="aux.audit.lang.auto">Auto</option>
+                  <option value="en" data-i18n-action="aux.audit.lang.en">English</option>
+                  <option value="ja" data-i18n-action="aux.audit.lang.ja">Japanese</option>
+                  <option value="cn" data-i18n-action="aux.audit.lang.cn">Chinese</option>
+                  <option value="kr" data-i18n-action="aux.audit.lang.kr">Korean</option>
                 </select>
                 <svg class="audit-preset-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M6 9l6 6 6-6" />
@@ -725,12 +725,12 @@
               </div>
               <div class="audit-preset-select-wrapper">
                 <select class="audit-preset-select audit-select-sub" id="auditContextModeSelect"
-                  title="Context Detail Level (lower saves tokens)">
-                  <option value="smart" selected>Smart</option>
-                  <option value="all">Full Detail</option>
-                  <option value="minimal">Minimal</option>
-                  <option value="textOnly">Text Only</option>
-                  <option value="hierarchy">Hierarchy</option>
+                  title="Context Detail Level (lower saves tokens)" data-i18n-action-title="aux.audit.contextTitle">
+                  <option value="smart" selected data-i18n-action="aux.audit.context.smart">Smart</option>
+                  <option value="all" data-i18n-action="aux.audit.context.all">Full Detail</option>
+                  <option value="minimal" data-i18n-action="aux.audit.context.minimal">Minimal</option>
+                  <option value="textOnly" data-i18n-action="aux.audit.context.textOnly">Text Only</option>
+                  <option value="hierarchy" data-i18n-action="aux.audit.context.hierarchy">Hierarchy</option>
                 </select>
                 <svg class="audit-preset-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M6 9l6 6 6-6" />
@@ -748,27 +748,27 @@
                   <path d="M6 9l6 6 6-6" />
                 </svg>
               </div>
-              <button class="audit-preset-update-btn" id="auditPresetUpdateBtn" title="Update current preset"
+              <button class="audit-preset-update-btn" id="auditPresetUpdateBtn" title="Update current preset" data-i18n-action-title="aux.audit.updatePresetTitle"
                 style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
                   <path d="M17 21v-8H7v8M7 3v5h8" />
                 </svg>
               </button>
-              <button class="audit-preset-delete-btn" id="auditPresetDeleteBtn" title="Delete preset"
+              <button class="audit-preset-delete-btn" id="auditPresetDeleteBtn" title="Delete preset" data-i18n-action-title="aux.audit.deletePresetTitle"
                 style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                 </svg>
               </button>
-              <button class="audit-preset-edit-btn" id="auditPresetEditBtn" title="Edit preset name"
+              <button class="audit-preset-edit-btn" id="auditPresetEditBtn" title="Edit preset name" data-i18n-action-title="aux.audit.editPresetTitle"
                 style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                   <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
               </button>
-              <button class="audit-preset-action-btn" id="auditPresetSaveBtn" title="Save as new preset">
+              <button class="audit-preset-action-btn" id="auditPresetSaveBtn" title="Save as new preset" data-i18n-action-title="aux.audit.savePresetTitle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 5v14M5 12h14" />
                 </svg>
@@ -777,13 +777,13 @@
             <!-- Input Mode (hidden by default) -->
             <div class="audit-preset-input-mode hidden" id="auditPresetInputMode">
               <input type="text" class="audit-preset-name-input" id="auditPresetNameInput"
-                placeholder="Enter preset name..." />
-              <button class="audit-preset-action-btn cancel" id="auditPresetCancelBtn" title="Cancel">
+                placeholder="Enter preset name..." data-i18n-action-placeholder="aux.audit.presetNamePlaceholder" />
+              <button class="audit-preset-action-btn cancel" id="auditPresetCancelBtn" title="Cancel" data-i18n-action-title="aux.audit.cancelTitle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
-              <button class="audit-preset-action-btn confirm" id="auditPresetConfirmBtn" title="Save preset">
+              <button class="audit-preset-action-btn confirm" id="auditPresetConfirmBtn" title="Save preset" data-i18n-action-title="aux.audit.confirmTitle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
@@ -796,19 +796,19 @@
         <div class="audit-group">
           <div class="audit-group-title-row">
             <div class="audit-group-title-left">
-              <span class="audit-group-title">System Instructions</span>
+              <span class="audit-group-title" data-i18n-action="aux.audit.systemInstructions">System Instructions</span>
               <span class="audit-modified-badge hidden" id="auditInstructionsModifiedBadge"
-                title="Instructions differ from the selected preset">
+                title="Instructions differ from the selected preset" data-i18n-action-title="aux.audit.modifiedTitle">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 2l7 4v8l-7 4-7-4V6z" />
                   <path d="M12 8v4" />
                   <circle cx="12" cy="15" r="1" />
                 </svg>
-                Modified
+                <span data-i18n-action="aux.audit.modified">Modified</span>
               </span>
             </div>
             <button class="audit-autofill-btn" id="auditAutoFillInstructions"
-              title="Auto-fill or enhance with AI using preset context">
+              title="Auto-fill or enhance with AI using preset context" data-i18n-action-title="aux.audit.autoFillInstructionsTitle">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                   d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
@@ -817,7 +817,7 @@
           </div>
           <div class="audit-textarea-wrapper">
             <textarea class="audit-textarea" id="auditInstructions" rows="8"
-              placeholder="Enter your UI/UX audit instructions..."></textarea>
+              placeholder="Enter your UI/UX audit instructions..." data-i18n-action-placeholder="aux.audit.instructionsPlaceholder"></textarea>
           </div>
         </div>
 
@@ -825,14 +825,14 @@
         <div class="audit-group">
           <div class="audit-group-title-row">
             <div class="audit-group-title-left">
-              <span class="audit-group-title" id="viewportTitle">Viewport Settings</span>
+              <span class="audit-group-title" id="viewportTitle" data-i18n-action="aux.audit.viewportTitle">Viewport Settings</span>
               <label class="audit-toggle-switch">
                 <input type="checkbox" id="auditSizeToggle" checked />
-                <span class="toggle-label">Use size audit</span>
+                <span class="toggle-label" data-i18n-action="aux.audit.useSizeAudit">Use size audit</span>
               </label>
             </div>
             <button class="audit-autofill-btn" id="auditAutoFillViewport"
-              title="Auto-fill from instructions or selection">
+              title="Auto-fill from instructions or selection" data-i18n-action-title="aux.audit.autoFillViewportTitle">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                   d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
@@ -841,12 +841,12 @@
           </div>
           <div class="audit-dimension-row">
             <div class="audit-dimension-group">
-              <label class="audit-dimension-label">Target Viewport</label>
+              <label class="audit-dimension-label" data-i18n-action="aux.audit.targetViewport">Target Viewport</label>
               <div class="audit-dimension-inputs">
                 <input type="number" class="audit-dimension-input" id="auditTargetWidth" placeholder="980" />
                 <span class="audit-dimension-separator">×</span>
                 <input type="number" class="audit-dimension-input" id="auditTargetHeight" placeholder="632" />
-                <button class="audit-pick-btn" id="auditPickTargetSize" title="Use selected element's size">
+                <button class="audit-pick-btn" id="auditPickTargetSize" title="Use selected element's size" data-i18n-action-title="aux.audit.useSelectionSizeTitle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l3 3 3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
                   </svg>
@@ -854,12 +854,12 @@
               </div>
             </div>
             <div class="audit-dimension-group">
-              <label class="audit-dimension-label">Min Supported</label>
+              <label class="audit-dimension-label" data-i18n-action="aux.audit.minSupported">Min Supported</label>
               <div class="audit-dimension-inputs">
                 <input type="number" class="audit-dimension-input" id="auditMinWidth" placeholder="320" />
                 <span class="audit-dimension-separator">×</span>
                 <input type="number" class="audit-dimension-input" id="auditMinHeight" placeholder="480" />
-                <button class="audit-pick-btn" id="auditPickMinSize" title="Use selected element's size">
+                <button class="audit-pick-btn" id="auditPickMinSize" title="Use selected element's size" data-i18n-action-title="aux.audit.useSelectionSizeTitle">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l3 3 3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
                   </svg>
@@ -871,10 +871,10 @@
         <div class="audit-group">
           <div class="audit-group-title-row">
             <div class="audit-group-title-left">
-              <span class="audit-group-title">Output Settings</span>
+              <span class="audit-group-title" data-i18n-action="aux.audit.outputSettings">Output Settings</span>
               <label class="audit-toggle-switch">
                 <input type="checkbox" id="auditPostCommentsToggle" />
-                <span class="toggle-label">Post as comments</span>
+                <span class="toggle-label" data-i18n-action="aux.audit.postComments">Post as comments</span>
               </label>
             </div>
           </div>
@@ -883,14 +883,14 @@
         <div class="audit-group">
           <div class="audit-group-title-row">
             <div class="audit-group-title-left">
-              <span class="audit-group-title" id="colorsTitle">Design System Colors</span>
+              <span class="audit-group-title" id="colorsTitle" data-i18n-action="aux.audit.colorsTitle">Design System Colors</span>
               <label class="audit-toggle-switch">
                 <input type="checkbox" id="auditColorsToggle" checked />
-                <span class="toggle-label">Use color audit</span>
+                <span class="toggle-label" data-i18n-action="aux.audit.useColorAudit">Use color audit</span>
               </label>
             </div>
             <button class="audit-autofill-btn" id="auditAutoFillColors"
-              title="Auto-fill from instructions or selection">
+              title="Auto-fill from instructions or selection" data-i18n-action-title="aux.audit.autoFillColorsTitle">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                 <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                   d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z" />
@@ -899,9 +899,9 @@
           </div>
           <div class="audit-colors-grid">
             <div class="audit-color-item" draggable="true" data-color-role="primary">
-              <label class="audit-color-label">Primary</label>
+              <label class="audit-color-label" data-i18n-action="aux.audit.colorPrimary">Primary</label>
               <div class="audit-color-input-wrapper">
-                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color" data-i18n-action-title="aux.audit.colorSwapTitle">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.5" />
                     <circle cx="15" cy="6" r="1.5" />
@@ -913,7 +913,7 @@
                 </div>
                 <input type="color" class="audit-color-picker" id="auditColorPrimary" value="#0E91EF" />
                 <input type="text" class="audit-color-hex" id="auditColorPrimaryHex" value="#0E91EF" />
-                <button class="audit-pick-btn" data-color-target="primary" title="Use selected element's fill">
+                <button class="audit-pick-btn" data-color-target="primary" title="Use selected element's fill" data-i18n-action-title="actions.color.useSelectionFill">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                   </svg>
@@ -921,9 +921,9 @@
               </div>
             </div>
             <div class="audit-color-item" draggable="true" data-color-role="secondary">
-              <label class="audit-color-label">Secondary</label>
+              <label class="audit-color-label" data-i18n-action="aux.audit.colorSecondary">Secondary</label>
               <div class="audit-color-input-wrapper">
-                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color" data-i18n-action-title="aux.audit.colorSwapTitle">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.5" />
                     <circle cx="15" cy="6" r="1.5" />
@@ -935,7 +935,7 @@
                 </div>
                 <input type="color" class="audit-color-picker" id="auditColorSecondary" value="#6B7280" />
                 <input type="text" class="audit-color-hex" id="auditColorSecondaryHex" value="#6B7280" />
-                <button class="audit-pick-btn" data-color-target="secondary" title="Use selected element's fill">
+                <button class="audit-pick-btn" data-color-target="secondary" title="Use selected element's fill" data-i18n-action-title="actions.color.useSelectionFill">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                   </svg>
@@ -943,9 +943,9 @@
               </div>
             </div>
             <div class="audit-color-item" draggable="true" data-color-role="error">
-              <label class="audit-color-label">Error</label>
+              <label class="audit-color-label" data-i18n-action="aux.audit.colorError">Error</label>
               <div class="audit-color-input-wrapper">
-                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color" data-i18n-action-title="aux.audit.colorSwapTitle">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.5" />
                     <circle cx="15" cy="6" r="1.5" />
@@ -957,7 +957,7 @@
                 </div>
                 <input type="color" class="audit-color-picker" id="auditColorError" value="#EF4444" />
                 <input type="text" class="audit-color-hex" id="auditColorErrorHex" value="#EF4444" />
-                <button class="audit-pick-btn" data-color-target="error" title="Use selected element's fill">
+                <button class="audit-pick-btn" data-color-target="error" title="Use selected element's fill" data-i18n-action-title="actions.color.useSelectionFill">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                   </svg>
@@ -965,9 +965,9 @@
               </div>
             </div>
             <div class="audit-color-item" draggable="true" data-color-role="warning">
-              <label class="audit-color-label">Warning</label>
+              <label class="audit-color-label" data-i18n-action="aux.audit.colorWarning">Warning</label>
               <div class="audit-color-input-wrapper">
-                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color" data-i18n-action-title="aux.audit.colorSwapTitle">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.5" />
                     <circle cx="15" cy="6" r="1.5" />
@@ -979,7 +979,7 @@
                 </div>
                 <input type="color" class="audit-color-picker" id="auditColorWarning" value="#F59E0B" />
                 <input type="text" class="audit-color-hex" id="auditColorWarningHex" value="#F59E0B" />
-                <button class="audit-pick-btn" data-color-target="warning" title="Use selected element's fill">
+                <button class="audit-pick-btn" data-color-target="warning" title="Use selected element's fill" data-i18n-action-title="actions.color.useSelectionFill">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                   </svg>
@@ -987,9 +987,9 @@
               </div>
             </div>
             <div class="audit-color-item" draggable="true" data-color-role="success">
-              <label class="audit-color-label">Success</label>
+              <label class="audit-color-label" data-i18n-action="aux.audit.colorSuccess">Success</label>
               <div class="audit-color-input-wrapper">
-                <div class="audit-color-drag-handle" title="Drag to swap with another color">
+                <div class="audit-color-drag-handle" title="Drag to swap with another color" data-i18n-action-title="aux.audit.colorSwapTitle">
                   <svg viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="9" cy="6" r="1.5" />
                     <circle cx="15" cy="6" r="1.5" />
@@ -1001,7 +1001,7 @@
                 </div>
                 <input type="color" class="audit-color-picker" id="auditColorSuccess" value="#10B981" />
                 <input type="text" class="audit-color-hex" id="auditColorSuccessHex" value="#10B981" />
-                <button class="audit-pick-btn" data-color-target="success" title="Use selected element's fill">
+                <button class="audit-pick-btn" data-color-target="success" title="Use selected element's fill" data-i18n-action-title="actions.color.useSelectionFill">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
                   </svg>
@@ -1012,7 +1012,7 @@
         </div>
       </div>
       <div class="audit-modal-footer">
-        <button class="audit-apply-btn" id="auditApplyBtn">Apply Settings</button>
+        <button class="audit-apply-btn" id="auditApplyBtn" data-i18n-action="aux.audit.applySettings">Apply Settings</button>
       </div>
     </div>
   </div>
@@ -1156,9 +1156,9 @@
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
         </svg>
-        Smart Focus (Default)
+        <span data-i18n-action="aux.context.smartTitle">Smart Focus (Default)</span>
       </div>
-      <div class="mode-desc">Intent-based adaptive context selection</div>
+      <div class="mode-desc" data-i18n-action="aux.context.smartDesc">Intent-based adaptive context selection</div>
     </div>
     <div class="context-mode-item" data-mode="all">
       <div class="mode-title">
@@ -1166,27 +1166,27 @@
           <circle cx="12" cy="12" r="10" />
           <path d="M12 8v8M8 12h8" />
         </svg>
-        Full Design Context
+        <span data-i18n-action="aux.context.allTitle">Full Design Context</span>
       </div>
-      <div class="mode-desc">Bypass intent system; use all meta data</div>
+      <div class="mode-desc" data-i18n-action="aux.context.allDesc">Bypass intent system; use all meta data</div>
     </div>
     <div class="context-mode-item" data-mode="textOnly">
       <div class="mode-title">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M4 7V4h16v3M9 20h6M12 4v16" />
         </svg>
-        Text Content Only
+        <span data-i18n-action="aux.context.textOnlyTitle">Text Content Only</span>
       </div>
-      <div class="mode-desc">Only text content and hierarchy</div>
+      <div class="mode-desc" data-i18n-action="aux.context.textOnlyDesc">Only text content and hierarchy</div>
     </div>
     <div class="context-mode-item" data-mode="styleOnly">
       <div class="mode-title">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />
         </svg>
-        Styles & Variables
+        <span data-i18n-action="aux.context.styleOnlyTitle">Styles & Variables</span>
       </div>
-      <div class="mode-desc">Colors, typography, and variables</div>
+      <div class="mode-desc" data-i18n-action="aux.context.styleOnlyDesc">Colors, typography, and variables</div>
     </div>
     <div class="context-mode-item" data-mode="layoutOnly">
       <div class="mode-title">
@@ -1194,25 +1194,25 @@
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <path d="M3 9h18M9 21V9" />
         </svg>
-        Structure & Layout
+        <span data-i18n-action="aux.context.layoutOnlyTitle">Structure & Layout</span>
       </div>
-      <div class="mode-desc">Frames, sizing, and spacing</div>
+      <div class="mode-desc" data-i18n-action="aux.context.layoutOnlyDesc">Frames, sizing, and spacing</div>
     </div>
     <div class="context-mode-item" data-mode="minimal">
       <div class="mode-title">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
         </svg>
-        Minimal
+        <span data-i18n-action="aux.context.minimalTitle">Minimal</span>
       </div>
-      <div class="mode-desc">Only node names and types</div>
+      <div class="mode-desc" data-i18n-action="aux.context.minimalDesc">Only node names and types</div>
     </div>
   </div>
   <!-- Reply Template Manager Modal -->
   <div id="replyTemplateManagerModal" class="comments-quick-modal" style="display: none;">
     <div class="comments-quick-modal-content" style="max-width: 400px;">
       <div class="comments-quick-modal-header">
-        <h3 class="comments-quick-modal-title">Manage Reply Templates</h3>
+        <h3 class="comments-quick-modal-title" data-i18n-action="aux.reply.title">Manage Reply Templates</h3>
         <button class="comments-quick-modal-close" onclick="closeReplyTemplateManager()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12" />
@@ -1220,14 +1220,14 @@
         </button>
       </div>
       <div class="comments-quick-modal-body">
-        <div class="template-manager-info">Templates appear below the reply input for quick access.</div>
+        <div class="template-manager-info" data-i18n-action="aux.reply.info">Templates appear below the reply input for quick access.</div>
         <div id="templateManagerList" class="template-manager-list">
         </div>
       </div>
       <div class="comments-quick-modal-footer">
-        <textarea id="newTemplateInput" placeholder="Enter new template text..."
+        <textarea id="newTemplateInput" placeholder="Enter new template text..." data-i18n-action-placeholder="aux.reply.inputPlaceholder"
           class="comment-action-textarea"></textarea>
-        <button class="comment-action-btn" onclick="addTemplate()">Add</button>
+        <button class="comment-action-btn" onclick="addTemplate()" data-i18n-action="aux.reply.add">Add</button>
       </div>
     </div>
   </div>
@@ -1241,16 +1241,16 @@
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
-          <span>Edit Code</span>
+          <span data-i18n-action="aux.code.title">Edit Code</span>
           <span class="code-editor-lang-badge" id="codeEditorLangBadge">text</span>
         </div>
         <div class="code-editor-modal-actions">
-          <button class="code-editor-modal-copy" id="copyCodeEditorBtn" title="Copy code">
+          <button class="code-editor-modal-copy" id="copyCodeEditorBtn" title="Copy code" data-i18n-action-title="aux.code.copyTitle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <rect x="9" y="9" width="13" height="13" rx="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
-            <span>Copy</span>
+            <span data-i18n-action="aux.code.copy">Copy</span>
           </button>
           <button class="code-editor-modal-close" id="closeCodeEditorBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1267,20 +1267,20 @@
             aria-hidden="true"><code id="codeEditorHighlightCode"></code></pre>
           <!-- Selection context toolbar -->
           <div class="code-editor-selection-toolbar" id="codeEditorSelectionToolbar">
-            <button class="code-sel-btn" id="codeSelFixBtn" title="AI Fix selected code">
+            <button class="code-sel-btn" id="codeSelFixBtn" title="AI Fix selected code" data-i18n-action-title="aux.code.fixTitle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <path
                   d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
               </svg>
-              <span>Fix</span>
+              <span data-i18n-action="aux.code.fix">Fix</span>
             </button>
             <div class="code-sel-divider"></div>
-            <button class="code-sel-btn" id="codeSelQuickEditBtn" title="AI Quick Edit with instruction">
+            <button class="code-sel-btn" id="codeSelQuickEditBtn" title="AI Quick Edit with instruction" data-i18n-action-title="aux.code.quickEditTitle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <path d="M12 20h9" />
                 <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
               </svg>
-              <span>Quick Edit</span>
+              <span data-i18n-action="aux.code.quickEdit">Quick Edit</span>
             </button>
           </div>
           <!-- AI Assistant popup for Quick Edit -->
@@ -1289,18 +1289,18 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
-              <span>AI Quick Edit</span>
+              <span data-i18n-action="aux.code.aiQuickEdit">AI Quick Edit</span>
             </div>
-            <textarea class="ai-assistant-popup-input" id="aiAssistantInput" placeholder="Describe what to change..."
+            <textarea class="ai-assistant-popup-input" id="aiAssistantInput" placeholder="Describe what to change..." data-i18n-action-placeholder="aux.code.aiQuickEditPlaceholder"
               rows="3"></textarea>
             <div class="ai-assistant-popup-footer">
-              <button class="ai-assistant-popup-cancel" id="aiAssistantCancelBtn">Cancel</button>
+              <button class="ai-assistant-popup-cancel" id="aiAssistantCancelBtn" data-i18n-action="aux.code.cancel">Cancel</button>
               <button class="ai-assistant-popup-submit" id="aiAssistantSubmitBtn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                   <line x1="22" y1="2" x2="11" y2="13" />
                   <polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
-                Apply
+                <span data-i18n-action="aux.code.apply">Apply</span>
               </button>
             </div>
           </div>
@@ -1312,33 +1312,33 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            AI Edit
+            <span data-i18n-action="aux.code.aiEdit">AI Edit</span>
           </button>
           <div class="ai-assistant-popup code-editor-ai-popup" id="codeEditorAIPopup">
             <div class="ai-assistant-popup-header">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
-              <span>AI Edit — Full Code</span>
+              <span data-i18n-action="aux.code.aiEditFull">AI Edit — Full Code</span>
             </div>
             <textarea class="ai-assistant-popup-input" id="codeEditorAIInput"
-              placeholder="e.g. &quot;Add error handling&quot;, &quot;Convert to TypeScript&quot;, &quot;Minify this code&quot;..."
+              placeholder="e.g. &quot;Add error handling&quot;, &quot;Convert to TypeScript&quot;, &quot;Minify this code&quot;..." data-i18n-action-placeholder="aux.code.aiEditPlaceholder"
               rows="3"></textarea>
             <div class="ai-assistant-popup-footer">
-              <button class="ai-assistant-popup-cancel" id="codeEditorAICancelBtn">Cancel</button>
+              <button class="ai-assistant-popup-cancel" id="codeEditorAICancelBtn" data-i18n-action="aux.code.cancel">Cancel</button>
               <button class="ai-assistant-popup-submit" id="codeEditorAISubmitBtn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
                   <line x1="22" y1="2" x2="11" y2="13" />
                   <polygon points="22 2 15 22 11 13 2 9 22 2" />
                 </svg>
-                Apply
+                <span data-i18n-action="aux.code.apply">Apply</span>
               </button>
             </div>
           </div>
         </div>
         <div class="code-editor-footer-spacer"></div>
-        <button class="setting-btn" id="codeEditorCancelBtn">Cancel</button>
-        <button class="setting-btn primary" id="codeEditorSaveBtn">Save Changes</button>
+        <button class="setting-btn" id="codeEditorCancelBtn" data-i18n-action="aux.code.cancel">Cancel</button>
+        <button class="setting-btn primary" id="codeEditorSaveBtn" data-i18n-action="aux.code.saveChanges">Save Changes</button>
       </div>
     </div>
   </div>
