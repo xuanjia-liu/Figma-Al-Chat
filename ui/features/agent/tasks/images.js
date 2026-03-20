@@ -22,7 +22,7 @@ export const stylingImageTasks = [
           ]
         },
 {
-          name: 'Fill from online image',
+          name: 'Fill with stock photos',
           desc: 'Fill selected nodes with free stock photos',
           directAction: 'fillFromOnlineImage',
           fields: [
