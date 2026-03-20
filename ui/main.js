@@ -60,6 +60,7 @@ import {
     let currentMode = 'ask';
     let selectedProvider = 'gemini';
     let aiOffMode = false;
+    let lightMode = false;
     let geminiApiKey = '';
     let geminiModel = 'gemini-2.0-flash';
     let openaiApiKey = '';
@@ -2898,6 +2899,8 @@ import {
     const drawerAiEnabledToggle = document.getElementById('drawerAiEnabledToggle');
     const headerOpenFullSettingsBtn = document.getElementById('headerOpenFullSettingsBtn');
     const drawerOpenFullSettingsBtn = document.getElementById('drawerOpenFullSettingsBtn');
+    const headerLightModeToggle = document.getElementById('headerLightModeToggle');
+    const drawerLightModeToggle = document.getElementById('drawerLightModeToggle');
     const providerSelect = document.getElementById('providerSelect');
     const chatContainer = document.querySelector('.chat-container');
     const geminiSettings = document.getElementById('geminiSettings');
@@ -2942,6 +2945,14 @@ import {
       const aiOn = !(noAiModeToggle?.checked === true);
       if (headerAiEnabledToggle) headerAiEnabledToggle.checked = aiOn;
       if (drawerAiEnabledToggle) drawerAiEnabledToggle.checked = aiOn;
+      if (headerLightModeToggle) headerLightModeToggle.checked = lightMode;
+      if (drawerLightModeToggle) drawerLightModeToggle.checked = lightMode;
+    }
+
+    function applyTheme(isLight) {
+      lightMode = !!isLight;
+      document.body.classList.toggle('light-mode', lightMode);
+      syncQuickSettingsMenusFromForm();
     }
 
     function closeAllHeaderSettingsMenus() {
@@ -21550,6 +21561,7 @@ Example structure:
       pixabayApiKeyInput.value = pixabayApiKey;
       pexelsApiKeyInput.value = pexelsApiKey;
       selectionSizeLimitSelect.value = savedSizeLimit.toString();
+      applyTheme(settings?.lightMode === true);
       applySettingsLocale(currentSettingsLocale);
       syncQuickSettingsMenusFromForm();
 
@@ -21750,7 +21762,8 @@ Example structure:
         enabledModels: enabledModels,
         agentMaxTokens: parseInt(agentMaxTokensInput.value) || 65536,
         auditMaxTokens: parseInt(auditMaxTokensInput.value) || 16384,
-        chatMaxTokens: parseInt(chatMaxTokensInput.value) || 16384
+        chatMaxTokens: parseInt(chatMaxTokensInput.value) || 16384,
+        lightMode: lightMode === true
       };
 
       parent.postMessage({
@@ -22497,10 +22510,23 @@ Example structure:
       toggle.addEventListener('change', () => applyQuickAiToggleChange(toggle.checked));
     }
 
+    function applyQuickThemeChange(isLight) {
+      if (lightMode === isLight) return;
+      applyTheme(isLight);
+      saveSettings();
+    }
+
+    function bindQuickLightModeToggle(toggle) {
+      if (!toggle) return;
+      toggle.addEventListener('change', () => applyQuickThemeChange(toggle.checked));
+    }
+
     bindQuickLanguageSelect(headerLanguageSelect);
     bindQuickLanguageSelect(drawerLanguageSelect);
     bindQuickAiToggle(headerAiEnabledToggle);
     bindQuickAiToggle(drawerAiEnabledToggle);
+    bindQuickLightModeToggle(headerLightModeToggle);
+    bindQuickLightModeToggle(drawerLightModeToggle);
 
     if (headerOpenFullSettingsBtn) {
       headerOpenFullSettingsBtn.addEventListener('click', (e) => {
