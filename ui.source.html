@@ -193,16 +193,6 @@
                 <button class="mode-btn active" data-mode="agent" id="modeAgentBtn">Agent</button>
                 <button class="mode-btn" data-mode="audit" id="modeAuditBtn">Audit</button>
               </div>
-              <div class="model-select-dropdown" id="modelSelectDropdown">
-                <button class="model-select-btn" id="modelSelectBtn" title="Select AI model">
-                  <span class="model-select-label" id="modelSelectLabel">Model</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-                <div class="model-select-menu hidden" id="modelSelectMenu">
-                </div>
-              </div>
               <button class="commands-drawer-btn" id="commandsDrawerBtn" title="Browse ready-to-use AI actions">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M4 6h16M4 12h16M4 18h16" />
@@ -252,6 +242,16 @@
                 </div>
                 <input type="file" id="uploadImageInput" accept="image/png,image/jpeg,image/webp" multiple
                   style="display:none" />
+              </div>
+              <div class="model-select-dropdown" id="modelSelectDropdown">
+                <button class="model-select-btn" id="modelSelectBtn" title="Select AI model">
+                  <span class="model-select-label" id="modelSelectLabel">Model</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                <div class="model-select-menu hidden" id="modelSelectMenu">
+                </div>
               </div>
               <div class="spacer"></div>
               <button class="chat-send-btn" id="chatSendBtn">

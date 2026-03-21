@@ -2654,16 +2654,11 @@
 
     .ai-assistant-popup .model-select-btn {
       height: 24px;
-      padding: 0 8px;
       font-size: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border-color: rgba(255, 255, 255, 0.1);
-      border-radius: var(--radius-md);
       color: var(--text-muted);
     }
 
     .ai-assistant-popup .model-select-btn:hover {
-      background: rgba(255, 255, 255, 0.1);
       color: var(--text-primary);
     }
 
@@ -5234,21 +5229,19 @@
       align-items: center;
       justify-content: center;
       gap: var(--space-xs);
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
+      background: none;
+      border: none;
       color: var(--text-secondary);
       cursor: pointer;
       transition: all 0.2s ease;
-      padding: 0 var(--space-md);
+      padding: 0;
+      margin-left: var(--space-xs);
       font-size: var(--text-sm);
       font-weight: 500;
       white-space: nowrap;
     }
 
     .model-select-btn:hover {
-      background: var(--bg-secondary);
-      border-color: var(--border-intense);
       color: var(--text-primary);
     }
 
