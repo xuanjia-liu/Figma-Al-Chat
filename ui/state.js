@@ -51,7 +51,8 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'extractDesignSystem',
   'fillFromOnlineImage',
   'listAllComments',
-  'browseStyles'
+  'browseStyles',
+  'googleFontPreview'
 ]);
 
 export const NON_AI_LOCAL_TASKS = new Set([

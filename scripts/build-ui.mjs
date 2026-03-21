@@ -20,6 +20,7 @@ const jsBundle = await build({
   write: false,
   charset: 'utf8',
   logLevel: 'silent',
+  loader: { '.json': 'json' },
 });
 
 const bundledJs = jsBundle.outputFiles[0]?.text;

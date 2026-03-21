@@ -31,6 +31,7 @@ import {
 } from './features/agent/quick-actions.js';
 import { createPromptDrawerHelpers } from './features/agent/prompt-drawer/helpers.js';
 import { createAgentTasks } from './features/agent/tasks/index.js';
+import { mountGoogleFontPreview } from './features/font-preview/google-font-preview.js';
 import { AUDIT_COMMON_RULES, defaultAuditPresets } from './config/audit-config.js';
 import {
   CHART_PRESETS,
@@ -6200,7 +6201,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             recordQuickActionUsage(actionName);
             closeCommandsDrawer();
             await handleExtractImagePrompt(actionName, actionIcon);
-          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'browseStyles')) {
+          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview')) {
             // Handle actions that open in prompt drawer
             if (task.directAction === 'listAllComments') {
               ensureCommentsLoadedCached();
@@ -12068,6 +12069,7 @@ Generate ONLY the reply text, nothing else.`;
     const chatMaxTokensInput = document.getElementById('chatMaxTokensInput');
 
     let currentPromptAction = null; // Store current action data for submission
+    let disposeGoogleFontPreview = null;
     let isPromptComposing = false;  // Track IME composition in prompt drawer inputs
     let isApplyingPreset = false;   // Track if we are currently applying a preset
 
@@ -12135,7 +12137,8 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawerIcon.innerHTML = actionData.icon || '';
 
         // Set help text - only show if help exists and this action uses the help panel
-        const hidePromptDrawerHelp = actionData.name === 'Vertical text';
+        const hidePromptDrawerHelp =
+          actionData.name === 'Vertical text' || actionData.name === 'Font preview';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
@@ -12165,6 +12168,11 @@ Generate ONLY the reply text, nothing else.`;
 
         // Clean up any global handlers from previous multi-step actions
         cleanupBrowseState();
+
+        if (typeof disposeGoogleFontPreview === 'function') {
+          disposeGoogleFontPreview();
+          disposeGoogleFontPreview = null;
+        }
 
         // Restore submit button text/state
         const submitBtn = document.getElementById('promptDrawerSubmit');
@@ -12438,6 +12446,47 @@ Generate ONLY the reply text, nothing else.`;
               footer.appendChild(group);
             }
           }
+        } else if (actionData.directAction === 'googleFontPreview') {
+          const submitBtn = document.getElementById('promptDrawerSubmit');
+          if (submitBtn) {
+            submitBtn.style.display = 'none';
+          }
+
+          promptDrawerFields.innerHTML = '<div class="gfp-mount"></div>';
+          promptDrawerFields.classList.remove('hidden');
+          const gfpMount = promptDrawerFields.querySelector('.gfp-mount');
+          if (gfpMount) {
+            disposeGoogleFontPreview = mountGoogleFontPreview(gfpMount, { tu, showToast });
+          }
+
+          const resetBtn = document.getElementById('promptDrawerReset');
+          if (resetBtn) {
+            resetBtn.textContent = tu('actions.prompt.refresh');
+            resetBtn.title = tu('actions.prompt.refresh');
+            resetBtn.style.display = '';
+            resetBtn.onclick = (e) => {
+              e.preventDefault();
+              if (typeof disposeGoogleFontPreview === 'function') {
+                disposeGoogleFontPreview();
+                disposeGoogleFontPreview = null;
+              }
+              const mountEl = promptDrawerFields.querySelector('.gfp-mount');
+              if (mountEl) {
+                disposeGoogleFontPreview = mountGoogleFontPreview(mountEl, { tu, showToast });
+              }
+            };
+          }
+
+          const cancelBtn = document.getElementById('promptDrawerCancel');
+          if (cancelBtn) {
+            cancelBtn.textContent = tu('actions.prompt.close');
+          }
+
+          const footer = document.querySelector('.prompt-drawer-footer');
+          if (footer) {
+            const existingGroup = footer.querySelector('.ai-action-group');
+            if (existingGroup) existingGroup.remove();
+          }
         } else {
           // Show submit button for other actions
           const submitBtn = document.getElementById('promptDrawerSubmit');
@@ -12472,6 +12521,10 @@ Generate ONLY the reply text, nothing else.`;
 
     function closePromptDrawer() {
       removeAiActionMenu();
+      if (typeof disposeGoogleFontPreview === 'function') {
+        disposeGoogleFontPreview();
+        disposeGoogleFontPreview = null;
+      }
       promptDrawer.classList.remove('open', 'minimized', 'maximized');
       promptDrawerOverlay.classList.remove('open');
       currentPromptAction = null;
@@ -29409,7 +29462,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
         task.directAction === 'createIcon' ||
         task.directAction === 'browseIconSet' ||
         task.directAction === 'generatePalette' ||
-        task.directAction === 'browseStyles') {
+        task.directAction === 'browseStyles' ||
+        task.directAction === 'googleFontPreview') {
         let hydratedFields = task.fields || [];
         if (task.directAction === 'browseIconSet') {
           const excludeAnyIconifySet = true;
@@ -31550,6 +31604,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
         case 'settings-saved':
           showToast(t('settings.messages.settingsSaved'));
+          break;
+
+        case 'google-fonts-catalog-result':
+          window.dispatchEvent(new CustomEvent('plugin-google-fonts-catalog', { detail: msg }));
           break;
 
         case 'current-context':

@@ -4311,6 +4311,43 @@ figma.ui.onmessage = async (msg: {
       break;
     }
 
+    case 'fetch-google-fonts-catalog': {
+      const RELEVANT_SUBSETS = new Set([
+        'japanese', 'korean', 'chinese-simplified', 'chinese-traditional',
+        'arabic', 'hebrew', 'devanagari', 'thai', 'tamil', 'bengali',
+        'latin', 'latin-ext', 'cyrillic', 'cyrillic-ext', 'greek', 'vietnamese',
+        'symbols', 'symbols2',
+      ]);
+      try {
+        const response = await fetch('https://fonts.google.com/metadata/fonts');
+        if (!response.ok) {
+          figma.ui.postMessage({ type: 'google-fonts-catalog-result', error: `HTTP ${response.status}` });
+          break;
+        }
+        const data = await response.json();
+        const families = (data.familyMetadataList || []).map((f: any) => {
+          const w400 = f.fonts && f.fonts['400'];
+          const thickness = w400 && typeof w400.thickness === 'number' ? w400.thickness : null;
+          const subsets = Array.isArray(f.subsets)
+            ? f.subsets.filter((s: string) => RELEVANT_SUBSETS.has(s))
+            : [];
+          return {
+            family: f.family,
+            category: f.category,
+            subsets,
+            classifications: Array.isArray(f.classifications) ? f.classifications : [],
+            stroke: f.stroke ?? null,
+            popularity: typeof f.popularity === 'number' ? f.popularity : 9999,
+            thickness,
+          };
+        });
+        figma.ui.postMessage({ type: 'google-fonts-catalog-result', families });
+      } catch (error: any) {
+        figma.ui.postMessage({ type: 'google-fonts-catalog-result', error: error?.message || 'Unknown error' });
+      }
+      break;
+    }
+
     case 'quiver-vector-request': {
       try {
         const requestMsg = msg as any;

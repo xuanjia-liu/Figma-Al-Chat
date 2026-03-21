@@ -46,6 +46,14 @@ export const stylingTasks = [
           directAction: 'browseStyles'
         },
 {
+          name: 'Font preview',
+          desc: 'Browse Google Fonts with live preview and filters.',
+          prompt: '',
+          noSelection: true,
+          directAction: 'googleFontPreview',
+          help: 'Loads the public Google Fonts catalog (fonts.google.com metadata). Language filters use script subsets; Feeling and Appearance use on-device heuristics inspired by the Google Fonts site — results are approximate.',
+        },
+{
           name: 'Map raw values to tokens',
           desc: 'Swap raw color/size to design tokens',
           prompt: 'Map the current selection to design tokens and APPLY them. Use the provided tokenContext (colorVariables, paintStyles, textStyles) and any style IDs on the nodes. For each selected node: prefer exact value matches first. Bind color variables to ALL fills/strokes with {"action":"bindVariable","nodeId":"<ID>","field":"fills","variableId":"<VAR_ID>"} (and strokes) using the collection default mode; do not substitute “closest” colors if an exact match exists. If no variable matches, apply paint styles with {"action":"setFillStyle","nodeId":"<ID>","styleId":"<PAINT_STYLE_ID>"} or {"action":"setStrokeStyle","nodeId":"<ID>","styleId":"<PAINT_STYLE_ID>"}. For TEXT nodes, also map the text fill color with an exact match first (bind variable or apply paint style) in addition to text styles. For typography, prefer text styles and apply {"action":"setTextStyle","nodeId":"<ID>","styleId":"<TEXT_STYLE_ID>"}; for effects, apply {"action":"setEffectStyle","nodeId":"<ID>","styleId":"<EFFECT_STYLE_ID>"}. Only fall back to direct hex fills/strokes or manual font values when no exact token/style matches. Respond ONLY with JSON: {"message":"short summary of replacements","commands":[...]} and include a command per node you change. If nothing can be mapped, return a message and an empty commands array.',
