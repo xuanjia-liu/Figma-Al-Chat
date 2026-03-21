@@ -24187,7 +24187,7 @@
         const isSingleImage = items.length === 1 && items[0].hasImageFill;
         let html = "";
         html += '\n        <button class="node-action-btn" id="newChatNodeBtn" data-action="new-chat">\n          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n            <path d="M12 5v14M5 12h14" />\n          </svg>\n          <span>New chat</span>\n        </button>\n      ';
-        const lastUsed = typeof getMostUsedQuickActions === "function" && lastUsedQuickActions.length > 0 ? getMostUsedQuickActions(1) : [];
+        const lastUsed = typeof getMostUsedQuickActions === "function" && lastUsedQuickActions.length > 0 ? getMostUsedQuickActions(MAX_LAST_USED_ACTIONS) : [];
         lastUsed.forEach((action, idx) => {
           const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
           const disabledClass = isDisabled ? " ai-disabled" : "";

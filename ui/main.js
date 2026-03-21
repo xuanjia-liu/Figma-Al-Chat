@@ -2558,10 +2558,10 @@ import {
         </button>
       `;
 
-      // Last used quick actions (most recent 1)
+      // Last used quick actions (most recent up to MAX_LAST_USED_ACTIONS)
       // Only show if we actually have last used actions or if usage has been loaded
       const lastUsed = (typeof getMostUsedQuickActions === 'function' && lastUsedQuickActions.length > 0)
-        ? getMostUsedQuickActions(1)
+        ? getMostUsedQuickActions(MAX_LAST_USED_ACTIONS)
         : [];
       lastUsed.forEach((action, idx) => {
         const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
