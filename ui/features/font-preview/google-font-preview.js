@@ -61,6 +61,24 @@ function hasSubset(f, key) {
   return Array.isArray(f.subsets) && f.subsets.includes(key);
 }
 
+/**
+ * CSS font-family for .gfp-font-sample. Latin-only families have no JP glyphs; without a GF
+ * Japanese fallback the browser uses system UI fonts, which often only expose ~2 weights.
+ */
+function gfpJpPreviewFallbackFamily(f) {
+  if (f.category === 'Serif') return 'Noto Serif JP';
+  return 'Noto Sans JP';
+}
+
+function gfpSampleFontFamilyCss(f) {
+  const primary = `'${String(f.family || '').replace(/'/g, "\\'")}'`;
+  if (hasSubset(f, 'japanese')) {
+    return `${primary}, var(--font-ui, system-ui)`;
+  }
+  const jp = gfpJpPreviewFallbackFamily(f);
+  return `${primary}, '${jp.replace(/'/g, "\\'")}', var(--font-ui, system-ui)`;
+}
+
 function thicknessOf(f) {
   if (typeof f.thickness === 'number') return f.thickness;
   const w400 = f.fonts && f.fonts['400'];
@@ -657,6 +675,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     document.head.appendChild(link);
   }
 
+  /** Load Noto Sans/Serif JP so mixed JP/Latin preview text respects weight for CJK, not system 2-master fonts. */
+  function ensureJpPreviewFallbackCss(meta) {
+    if (!meta || hasSubset(meta, 'japanese') || disposed) return;
+    const jp = gfpJpPreviewFallbackFamily(meta);
+    if (familyByName.has(jp)) loadFontCss(jp);
+  }
+
   function appendBatch() {
     const end = Math.min(state.renderOffset + BATCH, state.filtered.length);
     const frag = document.createDocumentFragment();
@@ -685,7 +710,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       sample.textContent = state.previewText || tu('actions.fontPreview.placeholder');
       sample.style.fontSize = `${state.fontSizePx}px`;
       sample.style.fontWeight = String(gfpClampWght(f, state.fontWght));
-      sample.style.fontFamily = `'${f.family.replace(/'/g, "\\'")}', var(--font-ui, system-ui)`;
+      sample.style.fontFamily = gfpSampleFontFamilyCss(f);
+      ensureJpPreviewFallbackCss(f);
       const actions = document.createElement('div');
       actions.className = 'gfp-font-row-actions';
       const applyBtn = document.createElement('button');
@@ -736,7 +762,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   function onRowVisible(row) {
     const fam = row.dataset.family;
-    if (fam) loadFontCss(fam);
+    if (!fam) return;
+    const meta = familyByName.get(fam);
+    ensureJpPreviewFallbackCss(meta);
+    loadFontCss(fam);
   }
 
   const rowObserver = new IntersectionObserver(
