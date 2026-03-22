@@ -889,7 +889,7 @@
 
     .gfp-pair-popover {
       box-sizing: border-box;
-      max-width: min(200px, 64vw);
+      max-width: min(180px, 56vw);
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border-intense, var(--border));
@@ -946,7 +946,11 @@
     }
 
     .gfp-pair-font-name {
-      margin: 0;
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 2px;
+      margin: 0 0 0 4px;
       padding: 0;
       border: none;
       border-radius: var(--radius-sm);
@@ -964,9 +968,35 @@
       transition: text-decoration-color 0.12s ease, color 0.12s ease;
     }
 
+    .gfp-pair-font-name-icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 13px;
+      height: 13px;
+      color: var(--text-muted);
+      opacity: 0.85;
+    }
+
+    .gfp-pair-font-name-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .gfp-pair-font-name-text {
+      min-width: 0;
+      text-align: left;
+    }
+
     .gfp-pair-font-name:hover {
       text-decoration-color: currentColor;
       color: var(--text-primary);
+    }
+
+    .gfp-pair-font-name:hover .gfp-pair-font-name-icon {
+      color: var(--text-secondary);
+      opacity: 1;
     }
 
     .gfp-pair-font-name:focus {
@@ -19781,9 +19811,17 @@
           btn.type = "button";
           btn.className = "gfp-pair-font-name";
           btn.dataset.family = names[i];
-          btn.textContent = names[i];
           btn.title = copyHint;
           btn.setAttribute("aria-label", "".concat(names[i], " — ").concat(copyHint));
+          const iconWrap = document.createElement("span");
+          iconWrap.className = "gfp-pair-font-name-icon";
+          iconWrap.setAttribute("aria-hidden", "true");
+          iconWrap.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
+          const label = document.createElement("span");
+          label.className = "gfp-pair-font-name-text";
+          label.textContent = names[i];
+          btn.appendChild(iconWrap);
+          btn.appendChild(label);
           namesEl.appendChild(btn);
         }
         sec.appendChild(lab);

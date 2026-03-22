@@ -882,7 +882,7 @@
 
     .gfp-pair-popover {
       box-sizing: border-box;
-      max-width: min(200px, 64vw);
+      max-width: min(180px, 56vw);
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border-intense, var(--border));
@@ -939,7 +939,11 @@
     }
 
     .gfp-pair-font-name {
-      margin: 0;
+      display: inline-flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 2px;
+      margin: 0 0 0 4px;
       padding: 0;
       border: none;
       border-radius: var(--radius-sm);
@@ -957,9 +961,35 @@
       transition: text-decoration-color 0.12s ease, color 0.12s ease;
     }
 
+    .gfp-pair-font-name-icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 13px;
+      height: 13px;
+      color: var(--text-muted);
+      opacity: 0.85;
+    }
+
+    .gfp-pair-font-name-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .gfp-pair-font-name-text {
+      min-width: 0;
+      text-align: left;
+    }
+
     .gfp-pair-font-name:hover {
       text-decoration-color: currentColor;
       color: var(--text-primary);
+    }
+
+    .gfp-pair-font-name:hover .gfp-pair-font-name-icon {
+      color: var(--text-secondary);
+      opacity: 1;
     }
 
     .gfp-pair-font-name:focus {

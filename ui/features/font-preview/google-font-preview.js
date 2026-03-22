@@ -374,9 +374,18 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         btn.type = 'button';
         btn.className = 'gfp-pair-font-name';
         btn.dataset.family = names[i];
-        btn.textContent = names[i];
         btn.title = copyHint;
         btn.setAttribute('aria-label', `${names[i]} — ${copyHint}`);
+        const iconWrap = document.createElement('span');
+        iconWrap.className = 'gfp-pair-font-name-icon';
+        iconWrap.setAttribute('aria-hidden', 'true');
+        iconWrap.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
+        const label = document.createElement('span');
+        label.className = 'gfp-pair-font-name-text';
+        label.textContent = names[i];
+        btn.appendChild(iconWrap);
+        btn.appendChild(label);
         namesEl.appendChild(btn);
       }
       sec.appendChild(lab);
