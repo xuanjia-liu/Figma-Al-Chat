@@ -4331,6 +4331,28 @@ figma.ui.onmessage = async (msg: {
           const subsets = Array.isArray(f.subsets)
             ? f.subsets.filter((s: string) => RELEVANT_SUBSETS.has(s))
             : [];
+          const wghtAxis = Array.isArray(f.axes) ? f.axes.find((a: any) => a.tag === 'wght') : null;
+          let wghtMin = 400;
+          let wghtMax = 400;
+          let wghtCss = '400';
+          if (wghtAxis && Math.round(wghtAxis.max) > Math.round(wghtAxis.min)) {
+            wghtMin = Math.round(wghtAxis.min);
+            wghtMax = Math.round(wghtAxis.max);
+            wghtCss = `${wghtMin}..${wghtMax}`;
+          } else {
+            const roman = Object.keys(f.fonts || {})
+              .filter((k: string) => /^\d+$/.test(k))
+              .map((k: string) => Number(k))
+              .sort((a: number, b: number) => a - b);
+            if (roman.length === 1) {
+              wghtMin = wghtMax = roman[0];
+              wghtCss = String(roman[0]);
+            } else if (roman.length > 1) {
+              wghtMin = roman[0];
+              wghtMax = roman[roman.length - 1];
+              wghtCss = roman.join(';');
+            }
+          }
           return {
             family: f.family,
             category: f.category,
@@ -4339,6 +4361,9 @@ figma.ui.onmessage = async (msg: {
             stroke: f.stroke ?? null,
             popularity: typeof f.popularity === 'number' ? f.popularity : 9999,
             thickness,
+            wghtMin,
+            wghtMax,
+            wghtCss,
           };
         });
         figma.ui.postMessage({ type: 'google-fonts-catalog-result', families });

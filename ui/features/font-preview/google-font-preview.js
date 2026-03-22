@@ -136,6 +136,25 @@ function escapeAttr(s) {
     .replace(/</g, '&lt;');
 }
 
+/** @param {object | undefined} f */
+function gfpWghtBounds(f) {
+  if (f && typeof f.wghtMin === 'number' && typeof f.wghtMax === 'number') {
+    return { min: f.wghtMin, max: f.wghtMax };
+  }
+  return { min: 100, max: 900 };
+}
+
+/** @param {object | undefined} f */
+function gfpWghtCssParam(f) {
+  if (f && typeof f.wghtCss === 'string' && f.wghtCss.length > 0) return f.wghtCss;
+  return '100..900';
+}
+
+function gfpClampWght(f, w) {
+  const { min, max } = gfpWghtBounds(f);
+  return Math.min(max, Math.max(min, w));
+}
+
 /**
  * @param {HTMLElement} container
  * @param {{ tu: (k: string) => string; showToast: (msg: string, type?: string) => void }} deps
@@ -144,6 +163,8 @@ function escapeAttr(s) {
 export function mountGoogleFontPreview(container, { tu, showToast }) {
   let disposed = false;
   let allFamilies = [];
+  /** @type {Map<string, object>} */
+  let familyByName = new Map();
   const loadedCss = new Set();
   /** @type {IntersectionObserver | null} */
   let listObserver = null;
@@ -151,6 +172,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const state = {
     previewText: '',
     fontSizePx: 40,
+    fontWght: 400,
     search: '',
     langSubset: '',
     scriptSubset: '',
@@ -201,9 +223,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         <div class="gfp-toolbar">
           <input type="search" class="gfp-search" placeholder="${escapeAttr(tu('actions.fontPreview.searchFamilies'))}" />
           <select class="gfp-size-select" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}"></select>
+          <select class="gfp-weight-select" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}"></select>
         </div>
         <div class="gfp-size-slider-row">
           <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="40" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}" />
+        </div>
+        <div class="gfp-weight-slider-row">
+          <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}" />
         </div>
         <div class="gfp-list-meta"><span class="gfp-count"></span></div>
         <div class="gfp-list-scroll">
@@ -218,6 +244,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const getSelectionBtn = container.querySelector('.gfp-get-selection-btn');
   const sizeSelect = container.querySelector('.gfp-size-select');
   const sizeRange = container.querySelector('.gfp-size-range');
+  const weightSelect = container.querySelector('.gfp-weight-select');
+  const weightRange = container.querySelector('.gfp-weight-range');
   const langPrimary = container.querySelector('.gfp-lang-primary');
   const langSecondary = container.querySelector('.gfp-lang-secondary');
   const feelingGrid = container.querySelector('.gfp-tag-grid[data-group="feeling"]');
@@ -236,6 +264,12 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     sizeOpts.push(`<option value="${px}"${px === 40 ? ' selected' : ''}>${px}px</option>`);
   }
   sizeSelect.innerHTML = sizeOpts.join('');
+
+  const weightOpts = [];
+  for (let w = 1; w <= 1000; w++) {
+    weightOpts.push(`<option value="${w}"${w === 400 ? ' selected' : ''}>${w}</option>`);
+  }
+  weightSelect.innerHTML = weightOpts.join('');
 
   function fillLangSelect(sel, options) {
     sel.innerHTML = options
@@ -303,7 +337,9 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     link.rel = 'stylesheet';
     link.dataset.gfpFont = '1';
     const enc = family.replace(/\s+/g, '+');
-    link.href = `https://fonts.googleapis.com/css2?family=${enc}:wght@400;500;600;700&display=swap`;
+    const f = familyByName.get(family);
+    const wParam = gfpWghtCssParam(f);
+    link.href = `https://fonts.googleapis.com/css2?family=${enc}:wght@${wParam}&display=swap`;
     document.head.appendChild(link);
   }
 
@@ -322,6 +358,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       sample.className = 'gfp-font-sample';
       sample.textContent = state.previewText || tu('actions.fontPreview.placeholder');
       sample.style.fontSize = `${state.fontSizePx}px`;
+      sample.style.fontWeight = String(gfpClampWght(f, state.fontWght));
       sample.style.fontFamily = `'${f.family.replace(/'/g, "\\'")}', var(--font-ui, system-ui)`;
       row.appendChild(label);
       row.appendChild(sample);
@@ -424,8 +461,29 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     });
   }
 
+  function applyWeightToSamples() {
+    listEl.querySelectorAll('.gfp-font-row').forEach(row => {
+      const name = row.dataset.family;
+      const meta = familyByName.get(name);
+      const sample = row.querySelector('.gfp-font-sample');
+      if (sample) sample.style.fontWeight = String(gfpClampWght(meta, state.fontWght));
+    });
+  }
+
+  function syncWeight(fromRange) {
+    let w = fromRange ? parseInt(weightRange.value, 10) : parseInt(weightSelect.value, 10);
+    if (Number.isNaN(w)) w = 400;
+    w = Math.min(1000, Math.max(1, w));
+    state.fontWght = w;
+    weightSelect.value = String(w);
+    weightRange.value = String(w);
+    applyWeightToSamples();
+  }
+
   sizeSelect.addEventListener('change', () => syncSize(false));
   sizeRange.addEventListener('input', () => syncSize(true));
+  weightSelect.addEventListener('change', () => syncWeight(false));
+  weightRange.addEventListener('input', () => syncWeight(true));
 
   langPrimary.addEventListener('change', () => {
     state.langSubset = langPrimary.value;
@@ -481,6 +539,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       }
       allFamilies = list;
       allFamilies.sort((a, b) => (a.popularity || 9999) - (b.popularity || 9999));
+      familyByName = new Map(allFamilies.map(f => [f.family, f]));
       listEl.innerHTML = '';
       applyFilters();
       setupListObserver();
@@ -506,6 +565,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   syncSize(false);
+  syncWeight(false);
   loadCatalog();
 
   return () => {
