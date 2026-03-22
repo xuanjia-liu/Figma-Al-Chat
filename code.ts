@@ -4969,6 +4969,20 @@ figma.ui.onmessage = async (msg: {
       break;
     }
 
+    case 'get-font-preview-selection-text': {
+      if (selection.length === 0) {
+        figma.ui.postMessage({ type: 'font-preview-selection-text-result', error: 'empty' });
+        break;
+      }
+      const previewText = extractTextContent(selection);
+      if (previewText && previewText.trim()) {
+        figma.ui.postMessage({ type: 'font-preview-selection-text-result', text: previewText });
+      } else {
+        figma.ui.postMessage({ type: 'font-preview-selection-text-result', error: 'noText' });
+      }
+      break;
+    }
+
     case 'get-selection-info': {
       figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(selection) });
       break;

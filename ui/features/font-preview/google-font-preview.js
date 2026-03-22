@@ -192,7 +192,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       </aside>
       <div class="gfp-main">
         <section class="gfp-preview-block">
-          <div class="gfp-section-label">${escapeAttr(tu('actions.fontPreview.preview'))}</div>
+          <div class="gfp-preview-label-row">
+            <div class="gfp-section-label">${escapeAttr(tu('actions.fontPreview.preview'))}</div>
+            <button type="button" class="gfp-get-selection-btn">${escapeAttr(tu('actions.fontPreview.getFromSelection'))}</button>
+          </div>
           <textarea class="gfp-preview-input" rows="4"></textarea>
         </section>
         <div class="gfp-toolbar">
@@ -200,7 +203,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
           <select class="gfp-size-select" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}"></select>
         </div>
         <div class="gfp-size-slider-row">
-          <input type="range" class="gfp-size-range" min="10" max="120" value="40" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}" />
+          <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="40" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}" />
         </div>
         <div class="gfp-list-meta"><span class="gfp-count"></span></div>
         <div class="gfp-list-scroll">
@@ -212,6 +215,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   `;
 
   const textarea = container.querySelector('.gfp-preview-input');
+  const getSelectionBtn = container.querySelector('.gfp-get-selection-btn');
   const sizeSelect = container.querySelector('.gfp-size-select');
   const sizeRange = container.querySelector('.gfp-size-range');
   const langPrimary = container.querySelector('.gfp-lang-primary');
@@ -226,10 +230,12 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   textarea.placeholder = tu('actions.fontPreview.placeholder');
 
-  const sizePresets = [12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 96, 120];
-  sizeSelect.innerHTML = sizePresets
-    .map(px => `<option value="${px}"${px === 40 ? ' selected' : ''}>${px}px</option>`)
-    .join('');
+  // One option per px so slider and select stay in sync (sparse presets left blanks when value had no <option>)
+  const sizeOpts = [];
+  for (let px = 10; px <= 120; px++) {
+    sizeOpts.push(`<option value="${px}"${px === 40 ? ' selected' : ''}>${px}px</option>`);
+  }
+  sizeSelect.innerHTML = sizeOpts.join('');
 
   function fillLangSelect(sel, options) {
     sel.innerHTML = options
@@ -376,6 +382,36 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     });
   });
 
+  let pendingSelectionText = false;
+  function onFontPreviewSelectionTextMessage(ev) {
+    const pm = ev.data?.pluginMessage;
+    if (!pm || pm.type !== 'font-preview-selection-text-result') return;
+    pendingSelectionText = false;
+    if (getSelectionBtn) getSelectionBtn.disabled = false;
+    if (pm.error === 'empty') {
+      showToast(tu('actions.fontPreview.getSelectionEmpty'), 'error');
+      return;
+    }
+    if (pm.error === 'noText') {
+      showToast(tu('actions.fontPreview.getSelectionNoText'), 'error');
+      return;
+    }
+    if (typeof pm.text === 'string') {
+      textarea.value = pm.text;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  window.addEventListener('message', onFontPreviewSelectionTextMessage);
+
+  if (getSelectionBtn) {
+    getSelectionBtn.addEventListener('click', () => {
+      if (pendingSelectionText) return;
+      pendingSelectionText = true;
+      getSelectionBtn.disabled = true;
+      parent.postMessage({ pluginMessage: { type: 'get-font-preview-selection-text' } }, '*');
+    });
+  }
+
   function syncSize(fromRange) {
     let px = fromRange ? parseInt(sizeRange.value, 10) : parseInt(sizeSelect.value, 10);
     if (Number.isNaN(px)) px = 40;
@@ -474,6 +510,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   return () => {
     disposed = true;
+    window.removeEventListener('message', onFontPreviewSelectionTextMessage);
     if (listObserver) listObserver.disconnect();
     rowObserver.disconnect();
     mo.disconnect();

@@ -589,6 +589,19 @@
       flex-shrink: 0;
     }
 
+    .gfp-preview-label-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      margin-bottom: var(--space-xs);
+    }
+
+    .gfp-preview-label-row .gfp-section-label {
+      margin-bottom: 0;
+    }
+
     .gfp-section-label {
       font-size: var(--text-xs);
       font-weight: 600;
@@ -596,6 +609,29 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
       margin-bottom: var(--space-xs);
+    }
+
+    .gfp-get-selection-btn {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: var(--text-xs);
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .gfp-get-selection-btn:hover:not(:disabled) {
+      border-color: var(--border-intense);
+      background: var(--bg-primary);
+    }
+
+    .gfp-get-selection-btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
 
     .gfp-preview-input {
@@ -19047,8 +19083,9 @@
       renderOffset: 0
     };
     const BATCH = 48;
-    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n          <textarea class="gfp-preview-input" rows="4"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n        </div>\n        <div class="gfp-size-slider-row">\n          <input type="range" class="gfp-size-range" min="10" max="120" value="40" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
+    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="4"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n        </div>\n        <div class="gfp-size-slider-row">\n          <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="40" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
     const textarea = container.querySelector(".gfp-preview-input");
+    const getSelectionBtn = container.querySelector(".gfp-get-selection-btn");
     const sizeSelect = container.querySelector(".gfp-size-select");
     const sizeRange = container.querySelector(".gfp-size-range");
     const langPrimary = container.querySelector(".gfp-lang-primary");
@@ -19061,8 +19098,11 @@
     const countEl = container.querySelector(".gfp-count");
     const scrollBox = container.querySelector(".gfp-list-scroll");
     textarea.placeholder = tu("actions.fontPreview.placeholder");
-    const sizePresets = [12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 96, 120];
-    sizeSelect.innerHTML = sizePresets.map((px) => '<option value="'.concat(px, '"').concat(px === 40 ? " selected" : "", ">").concat(px, "px</option>")).join("");
+    const sizeOpts = [];
+    for (let px = 10; px <= 120; px++) {
+      sizeOpts.push('<option value="'.concat(px, '"').concat(px === 40 ? " selected" : "", ">").concat(px, "px</option>"));
+    }
+    sizeSelect.innerHTML = sizeOpts.join("");
     function fillLangSelect(sel, options) {
       sel.innerHTML = options.map((o) => {
         const label = tu(o.labelKey);
@@ -19200,6 +19240,35 @@
         el.textContent = state.previewText || tu("actions.fontPreview.placeholder");
       });
     });
+    let pendingSelectionText = false;
+    function onFontPreviewSelectionTextMessage(ev) {
+      var _a;
+      const pm = (_a = ev.data) == null ? void 0 : _a.pluginMessage;
+      if (!pm || pm.type !== "font-preview-selection-text-result") return;
+      pendingSelectionText = false;
+      if (getSelectionBtn) getSelectionBtn.disabled = false;
+      if (pm.error === "empty") {
+        showToast(tu("actions.fontPreview.getSelectionEmpty"), "error");
+        return;
+      }
+      if (pm.error === "noText") {
+        showToast(tu("actions.fontPreview.getSelectionNoText"), "error");
+        return;
+      }
+      if (typeof pm.text === "string") {
+        textarea.value = pm.text;
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+    window.addEventListener("message", onFontPreviewSelectionTextMessage);
+    if (getSelectionBtn) {
+      getSelectionBtn.addEventListener("click", () => {
+        if (pendingSelectionText) return;
+        pendingSelectionText = true;
+        getSelectionBtn.disabled = true;
+        parent.postMessage({ pluginMessage: { type: "get-font-preview-selection-text" } }, "*");
+      });
+    }
     function syncSize(fromRange) {
       let px = fromRange ? parseInt(sizeRange.value, 10) : parseInt(sizeSelect.value, 10);
       if (Number.isNaN(px)) px = 40;
@@ -19285,6 +19354,7 @@
     loadCatalog();
     return () => {
       disposed = true;
+      window.removeEventListener("message", onFontPreviewSelectionTextMessage);
       if (listObserver) listObserver.disconnect();
       rowObserver.disconnect();
       mo.disconnect();
@@ -21305,6 +21375,9 @@
           "actions.fontPreview.languagePrimaryAria": "Language",
           "actions.fontPreview.languageSecondaryAria": "Script",
           "actions.fontPreview.preview": "Preview",
+          "actions.fontPreview.getFromSelection": "Get from selection",
+          "actions.fontPreview.getSelectionEmpty": "Select a layer with text first.",
+          "actions.fontPreview.getSelectionNoText": "No text found in the current selection.",
           "actions.fontPreview.placeholder": "Type something",
           "actions.fontPreview.size": "Preview size",
           "actions.fontPreview.language": "Language",
@@ -21657,6 +21730,9 @@
           "actions.fontPreview.languagePrimaryAria": "言語",
           "actions.fontPreview.languageSecondaryAria": "スクリプト",
           "actions.fontPreview.preview": "プレビュー",
+          "actions.fontPreview.getFromSelection": "選択から取得",
+          "actions.fontPreview.getSelectionEmpty": "先にテキストのあるレイヤーを選択してください。",
+          "actions.fontPreview.getSelectionNoText": "選択範囲にテキストがありません。",
           "actions.fontPreview.placeholder": "テキストを入力",
           "actions.fontPreview.size": "プレビューサイズ",
           "actions.fontPreview.language": "言語",
@@ -22009,6 +22085,9 @@
           "actions.fontPreview.languagePrimaryAria": "语言",
           "actions.fontPreview.languageSecondaryAria": "书写系统",
           "actions.fontPreview.preview": "预览",
+          "actions.fontPreview.getFromSelection": "从选择获取",
+          "actions.fontPreview.getSelectionEmpty": "请先选择包含文本的图层。",
+          "actions.fontPreview.getSelectionNoText": "当前选择中没有文本。",
           "actions.fontPreview.placeholder": "输入文字",
           "actions.fontPreview.size": "预览字号",
           "actions.fontPreview.language": "语言",
