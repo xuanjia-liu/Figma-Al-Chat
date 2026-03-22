@@ -823,7 +823,6 @@
     .gfp-font-sample {
       width: 100%;
       min-width: 0;
-      padding-right: 72px;
       color: var(--text-primary);
       line-height: 1.25;
       word-break: break-word;
