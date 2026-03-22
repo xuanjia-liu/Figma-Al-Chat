@@ -784,11 +784,9 @@
       gap: 4px;
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-md);
-      border: 1px solid transparent;
     }
 
     .gfp-font-row:hover {
-      border-color: var(--border-intense);
       background: var(--bg-secondary);
     }
 
@@ -887,6 +885,60 @@
       width: 16px;
       height: 16px;
       flex-shrink: 0;
+    }
+
+    .gfp-pair-popover {
+      box-sizing: border-box;
+      max-width: min(240px, 72vw);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-intense, var(--border));
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    .gfp-pair-popover-inner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      min-width: 0;
+    }
+
+    .gfp-pair-popover-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .gfp-pair-popover-section {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .gfp-pair-popover-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .gfp-pair-popover-names {
+      font-size: var(--text-xs);
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
+    .gfp-pair-popover-empty {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
     }
 
     .gfp-loading,
@@ -19198,6 +19250,328 @@
     }
   });
 
+  // ui/features/font-preview/font-pair-recommendations.js
+  function hasJapaneseSubset(f) {
+    return Array.isArray(f == null ? void 0 : f.subsets) && f.subsets.includes("japanese");
+  }
+  function pickInCatalog(names, familyByName, exclude) {
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    const ex = exclude ? String(exclude) : "";
+    for (const n of names) {
+      if (!n || n === ex || seen.has(n)) continue;
+      if (familyByName.has(n)) {
+        seen.add(n);
+        out.push(n);
+        if (out.length >= 3) break;
+      }
+    }
+    return out;
+  }
+  function japaneseVisualRole(f) {
+    const name2 = String(f.family || "");
+    if (f.category === "Serif" || /mincho|serif jp|zen old|kaisei|yuji mai|yuji boku|hina|tegomin|shippori antique|new tegomin/i.test(name2)) {
+      return "serif";
+    }
+    if (f.category === "Monospace") return "mono";
+    if (f.category === "Display" || f.category === "Handwriting" || DISPLAY_NAME_RE.test(name2)) {
+      return "display";
+    }
+    return "sans";
+  }
+  function fillJapaneseFallbacks(f, out, familyByName) {
+    const self = f.family;
+    const role = japaneseVisualRole(f);
+    if (!out.heading.length) {
+      if (role === "serif") {
+        out.heading = pickInCatalog(JP_HEADING_POOL, familyByName, self);
+      } else if (role === "display") {
+        out.heading = pickInCatalog(["Dela Gothic One", "Rampart One", "M PLUS 1", "Zen Kaku Gothic New"], familyByName, self);
+      } else {
+        out.heading = pickInCatalog(JP_HEADING_POOL, familyByName, self);
+      }
+    }
+    if (!out.body.length) {
+      if (role === "display" || role === "mono") {
+        out.body = pickInCatalog(JP_BODY_SANS_POOL, familyByName, self);
+      } else if (role === "serif") {
+        out.body = pickInCatalog(JP_BODY_SANS_POOL, familyByName, self);
+      } else {
+        out.body = pickInCatalog(JP_BODY_SERIF_POOL, familyByName, self);
+      }
+    }
+    if (!out.latin.length) {
+      if (role === "serif") {
+        out.latin = pickInCatalog(JP_LATIN_SERIF, familyByName, self);
+      } else if (role === "display") {
+        out.latin = pickInCatalog(JP_LATIN_DISPLAY, familyByName, self);
+      } else {
+        out.latin = pickInCatalog(JP_LATIN_SANS, familyByName, self);
+      }
+    }
+  }
+  function fillLatinOnlyFallbacks(f, out, familyByName) {
+    const self = f.family;
+    const cat = f.category || "";
+    if (!out.heading.length) {
+      if (cat === "Serif") {
+        out.heading = pickInCatalog(["Playfair Display", "DM Sans", "Work Sans", "Oswald"], familyByName, self);
+      } else if (cat === "Sans Serif") {
+        out.heading = pickInCatalog(["Playfair Display", "Merriweather", "Lora", "Fraunces"], familyByName, self);
+      } else {
+        out.heading = pickInCatalog(["Bebas Neue", "Oswald", "Playfair Display", "Anton"], familyByName, self);
+      }
+    }
+    if (!out.body.length) {
+      if (cat === "Serif") {
+        out.body = pickInCatalog(["Lora", "Source Serif 4", "Merriweather", "Libre Baskerville"], familyByName, self);
+      } else if (cat === "Sans Serif") {
+        out.body = pickInCatalog(["Source Sans 3", "Inter", "Open Sans", "Roboto"], familyByName, self);
+      } else {
+        out.body = pickInCatalog(["Inter", "Open Sans", "Roboto", "Source Sans 3"], familyByName, self);
+      }
+    }
+    if (!out.latin.length && hasJapaneseSubset(f)) {
+      out.latin = pickInCatalog(JP_LATIN_SANS, familyByName, self);
+    }
+  }
+  function getPairSuggestions(f, familyByName) {
+    const self = String((f == null ? void 0 : f.family) || "");
+    const isJapanese = hasJapaneseSubset(f);
+    const out = {
+      heading: [],
+      body: [],
+      latin: [],
+      isJapanese
+    };
+    if (isJapanese) {
+      const cur = JP_CURATED[self];
+      if (cur) {
+        if (cur.heading) out.heading = pickInCatalog(cur.heading, familyByName, self);
+        if (cur.body) out.body = pickInCatalog(cur.body, familyByName, self);
+        if (cur.latin) out.latin = pickInCatalog(cur.latin, familyByName, self);
+      }
+      fillJapaneseFallbacks(f, out, familyByName);
+    } else {
+      fillLatinOnlyFallbacks(f, out, familyByName);
+    }
+    return out;
+  }
+  var JP_CURATED, JP_HEADING_POOL, JP_BODY_SANS_POOL, JP_BODY_SERIF_POOL, JP_LATIN_SANS, JP_LATIN_SERIF, JP_LATIN_DISPLAY, DISPLAY_NAME_RE;
+  var init_font_pair_recommendations = __esm({
+    "ui/features/font-preview/font-pair-recommendations.js"() {
+      "use strict";
+      JP_CURATED = {
+        "Noto Sans JP": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Dela Gothic One"],
+          body: ["Noto Serif JP", "Shippori Mincho", "BIZ UDPMincho"],
+          latin: ["Inter", "Source Sans 3", "IBM Plex Sans"]
+        },
+        "Noto Serif JP": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "IBM Plex Sans JP", "M PLUS 2"],
+          latin: ["Source Serif 4", "Lora", "Merriweather"]
+        },
+        "Zen Kaku Gothic New": {
+          heading: ["Dela Gothic One", "Reggae One", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP"],
+          latin: ["Inter", "DM Sans", "Work Sans"]
+        },
+        "IBM Plex Sans JP": {
+          heading: ["Zen Kaku Gothic New", "Noto Serif JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["IBM Plex Sans", "IBM Plex Serif", "Source Sans 3"]
+        },
+        "M PLUS 1": {
+          heading: ["Zen Kaku Gothic New", "Dela Gothic One", "Noto Sans JP"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["Inter", "Source Sans 3", "Roboto"]
+        },
+        "M PLUS 2": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Dela Gothic One"],
+          body: ["Noto Serif JP", "Shippori Mincho", "Noto Sans JP"],
+          latin: ["Inter", "Open Sans", "Source Sans 3"]
+        },
+        "M PLUS 1p": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Dela Gothic One"],
+          body: ["Noto Serif JP", "Noto Sans JP", "Shippori Mincho"],
+          latin: ["Inter", "Source Sans 3", "Nunito Sans"]
+        },
+        "M PLUS 1 Code": {
+          heading: ["Zen Kaku Gothic New", "IBM Plex Sans JP", "Noto Sans JP"],
+          body: ["Noto Sans JP", "IBM Plex Sans JP", "M PLUS 2"],
+          latin: ["JetBrains Mono", "IBM Plex Mono", "Source Code Pro"]
+        },
+        "M PLUS Rounded 1c": {
+          heading: ["Zen Maru Gothic", "Zen Kaku Gothic New", "M PLUS 1"],
+          body: ["Noto Sans JP", "Kosugi", "M PLUS 2"],
+          latin: ["Nunito", "Quicksand", "Varela Round"]
+        },
+        "Kosugi": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Noto Serif JP"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["Inter", "Roboto", "Source Sans 3"]
+        },
+        "Kosugi Maru": {
+          heading: ["Zen Maru Gothic", "M PLUS 1", "Zen Kaku Gothic New"],
+          body: ["Noto Sans JP", "M PLUS 2", "Kiwi Maru"],
+          latin: ["Nunito", "Varela Round", "Quicksand"]
+        },
+        "Shippori Mincho": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Sawarabi Gothic", "IBM Plex Sans JP"],
+          latin: ["Source Serif 4", "Lora", "Crimson Pro"]
+        },
+        "Shippori Mincho B1": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Shippori Mincho", "Noto Serif JP"],
+          latin: ["Source Serif 4", "Lora", "Libre Baskerville"]
+        },
+        "Shippori Antique": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "Reggae One"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["Libre Baskerville", "Source Serif 4", "Lora"]
+        },
+        "Kaisei Opti": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP"],
+          latin: ["Source Serif 4", "Lora", "Cormorant Garamond"]
+        },
+        "Kaisei Tokumin": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["Source Serif 4", "Merriweather", "Lora"]
+        },
+        "Kaisei HarunoUmi": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP"],
+          latin: ["Lora", "Source Serif 4", "Crimson Pro"]
+        },
+        "Kaisei Decol": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Dela Gothic One"],
+          body: ["Noto Sans JP", "M PLUS 2", "Kosugi"],
+          latin: ["Fraunces", "Playfair Display", "Source Serif 4"]
+        },
+        "Sawarabi Gothic": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Noto Serif JP"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["Inter", "Source Sans 3", "Work Sans"]
+        },
+        "Sawarabi Mincho": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "IBM Plex Sans JP", "M PLUS 2"],
+          latin: ["Source Serif 4", "Lora", "Noto Serif"]
+        },
+        "BIZ UDPGothic": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Noto Serif JP"],
+          body: ["Noto Sans JP", "Noto Serif JP", "BIZ UDPMincho"],
+          latin: ["Inter", "Source Sans 3", "Roboto"]
+        },
+        "BIZ UDPMincho": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "BIZ UDPGothic", "M PLUS 2"],
+          latin: ["Source Serif 4", "Lora", "Noto Serif"]
+        },
+        "BIZ UDGothic": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Noto Serif JP"],
+          body: ["Noto Sans JP", "Noto Serif JP", "BIZ UDMincho"],
+          latin: ["Inter", "Open Sans", "Roboto"]
+        },
+        "BIZ UDMincho": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "BIZ UDGothic", "M PLUS 2"],
+          latin: ["Source Serif 4", "Merriweather", "Lora"]
+        },
+        "Zen Old Mincho": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Shippori Mincho", "Noto Serif JP"],
+          latin: ["Cormorant Garamond", "Source Serif 4", "Lora"]
+        },
+        "Zen Maru Gothic": {
+          heading: ["M PLUS 1", "Zen Kaku Gothic New", "Dela Gothic One"],
+          body: ["Noto Sans JP", "Kosugi", "M PLUS 2"],
+          latin: ["Nunito", "Quicksand", "Varela Round"]
+        },
+        "Zen Antique": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Noto Serif JP", "Shippori Mincho"],
+          latin: ["Libre Baskerville", "Source Serif 4", "Lora"]
+        },
+        "Zen Antique Soft": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "Kiwi Maru"],
+          latin: ["Lora", "Source Serif 4", "Nunito"]
+        },
+        "Hina Mincho": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP"],
+          latin: ["Cormorant", "Source Serif 4", "Lora"]
+        },
+        "Yuji Mai": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "Sawarabi Gothic"],
+          latin: ["Shippori Mincho", "Noto Serif", "Source Serif 4"]
+        },
+        "Yuji Boku": {
+          heading: ["Zen Kaku Gothic New", "Noto Sans JP", "M PLUS 1"],
+          body: ["Noto Sans JP", "Klee One", "M PLUS 2"],
+          latin: ["Kalam", "Caveat", "Patrick Hand"]
+        },
+        "Klee One": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Noto Serif JP"],
+          body: ["Noto Sans JP", "Noto Serif JP", "M PLUS 2"],
+          latin: ["Nunito", "Quicksand", "Source Sans 3"]
+        },
+        "Kiwi Maru": {
+          heading: ["Zen Maru Gothic", "M PLUS 1", "Zen Kaku Gothic New"],
+          body: ["Noto Sans JP", "M PLUS 2", "Kosugi Maru"],
+          latin: ["Nunito", "Varela Round", "Nunito Sans"]
+        },
+        "Yomogi": {
+          heading: ["Zen Kaku Gothic New", "M PLUS 1", "Reggae One"],
+          body: ["Noto Sans JP", "M PLUS 2", "Klee One"],
+          latin: ["Kalam", "Patrick Hand", "Caveat"]
+        },
+        "DotGothic16": {
+          heading: ["Dela Gothic One", "Reggae One", "Rampart One"],
+          body: ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP"],
+          latin: ["VT323", "Press Start 2P", "IBM Plex Mono"]
+        },
+        "Dela Gothic One": {
+          heading: ["Rampart One", "Reggae One", "M PLUS 1"],
+          body: ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP"],
+          latin: ["Bebas Neue", "Oswald", "Anton"]
+        },
+        "Reggae One": {
+          heading: ["Dela Gothic One", "Rampart One", "RocknRoll One"],
+          body: ["Noto Sans JP", "M PLUS 2", "Kosugi"],
+          latin: ["Bungee", "Righteous", "Oswald"]
+        }
+      };
+      JP_HEADING_POOL = [
+        "Zen Kaku Gothic New",
+        "M PLUS 1",
+        "Dela Gothic One",
+        "Reggae One",
+        "Noto Sans JP",
+        "Rampart One"
+      ];
+      JP_BODY_SANS_POOL = ["Noto Sans JP", "M PLUS 2", "IBM Plex Sans JP", "BIZ UDPGothic", "Kosugi", "Sawarabi Gothic"];
+      JP_BODY_SERIF_POOL = [
+        "Noto Serif JP",
+        "Shippori Mincho",
+        "Sawarabi Mincho",
+        "BIZ UDPMincho",
+        "Kaisei Opti",
+        "Hina Mincho"
+      ];
+      JP_LATIN_SANS = ["Inter", "Source Sans 3", "IBM Plex Sans", "Roboto", "Open Sans"];
+      JP_LATIN_SERIF = ["Source Serif 4", "Lora", "Merriweather", "Noto Serif", "Libre Baskerville"];
+      JP_LATIN_DISPLAY = ["DM Sans", "Work Sans", "Bebas Neue", "Oswald"];
+      DISPLAY_NAME_RE = /pop|bomb|rock|train|stick\b|reggae|rampart|dela|dotgothic|chokokutai|mochiy|palette|rocknroll|monomaniac|hachi maru|tsukimi|yusei|hentaigana|slackside|tegomin|darumadrop|aoboshi|potta|murecho|rock 3d|wdxl|lubrifont|shizuru|kapakana|line seed|zen kurenaido|zen antique(?! soft)|cherry bomb|yuji syuku/i;
+    }
+  });
+
   // ui/features/font-preview/google-font-preview.js
   function familyLower(f) {
     return String(f.family || "").toLowerCase();
@@ -19295,6 +19669,162 @@
     const sentinel = container.querySelector(".gfp-list-sentinel");
     const countEl = container.querySelector(".gfp-count");
     const scrollBox = container.querySelector(".gfp-list-scroll");
+    const mainEl = container.querySelector(".gfp-main");
+    const pairPopover = document.createElement("div");
+    pairPopover.className = "gfp-pair-popover";
+    pairPopover.setAttribute("role", "tooltip");
+    pairPopover.hidden = true;
+    if (mainEl) mainEl.appendChild(pairPopover);
+    let pairShowTimer = null;
+    let pairHideTimer = null;
+    let pairHoverRow = null;
+    function hidePairPopover() {
+      pairPopover.hidden = true;
+      pairPopover.textContent = "";
+      pairPopover.removeAttribute("style");
+    }
+    function positionPairPopover(anchorRow) {
+      const margin = 10;
+      const pad = 6;
+      const rect = anchorRow.getBoundingClientRect();
+      const pr = pairPopover.getBoundingClientRect();
+      let left = rect.left - pr.width - margin;
+      if (left < pad) left = pad;
+      let top = rect.top + (rect.height - pr.height) / 2;
+      if (top < pad) top = pad;
+      const maxTop = window.innerHeight - pr.height - pad;
+      if (top > maxTop) top = Math.max(pad, maxTop);
+      pairPopover.style.position = "fixed";
+      pairPopover.style.left = "".concat(Math.round(left), "px");
+      pairPopover.style.top = "".concat(Math.round(top), "px");
+      pairPopover.style.zIndex = "30";
+    }
+    function fillPairPopover(f) {
+      const s = getPairSuggestions(f, familyByName);
+      pairPopover.replaceChildren();
+      const inner = document.createElement("div");
+      inner.className = "gfp-pair-popover-inner";
+      const title = document.createElement("div");
+      title.className = "gfp-pair-popover-title";
+      title.textContent = tu("actions.fontPreview.pairPopoverTitle");
+      inner.appendChild(title);
+      let hasSection = false;
+      function addSection(labelKey, names) {
+        if (!names.length) return;
+        hasSection = true;
+        const sec = document.createElement("div");
+        sec.className = "gfp-pair-popover-section";
+        const lab = document.createElement("div");
+        lab.className = "gfp-pair-popover-label";
+        lab.textContent = tu(labelKey);
+        const namesEl = document.createElement("div");
+        namesEl.className = "gfp-pair-popover-names";
+        namesEl.textContent = names.join(" · ");
+        sec.appendChild(lab);
+        sec.appendChild(namesEl);
+        inner.appendChild(sec);
+      }
+      addSection("actions.fontPreview.pairHeading", s.heading);
+      addSection("actions.fontPreview.pairBody", s.body);
+      if (s.isJapanese && s.latin.length) {
+        addSection("actions.fontPreview.pairLatin", s.latin);
+      }
+      if (!hasSection) {
+        const empty = document.createElement("div");
+        empty.className = "gfp-pair-popover-empty";
+        empty.textContent = tu("actions.fontPreview.pairEmpty");
+        inner.appendChild(empty);
+      }
+      pairPopover.appendChild(inner);
+    }
+    function showPairPopoverForRow(row, f) {
+      if (disposed) return;
+      fillPairPopover(f);
+      pairPopover.hidden = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (disposed || pairPopover.hidden) return;
+          positionPairPopover(row);
+        });
+      });
+    }
+    function onListMouseOver(e) {
+      var _a, _b;
+      const row = (_b = (_a = e.target).closest) == null ? void 0 : _b.call(_a, ".gfp-font-row");
+      if (!row || !listEl.contains(row)) return;
+      if (pairHoverRow === row) return;
+      pairHoverRow = row;
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+      clearTimeout(pairShowTimer);
+      pairShowTimer = setTimeout(() => {
+        pairShowTimer = null;
+        if (disposed || pairHoverRow !== row) return;
+        const meta = familyByName.get(row.dataset.family);
+        if (meta) showPairPopoverForRow(row, meta);
+      }, 150);
+    }
+    function onListMouseOut(e) {
+      var _a, _b;
+      const row = (_b = (_a = e.target).closest) == null ? void 0 : _b.call(_a, ".gfp-font-row");
+      if (!row || !listEl.contains(row)) return;
+      const rel = e.relatedTarget;
+      if (rel && row.contains(rel)) return;
+      const other = rel && rel instanceof Element ? rel.closest(".gfp-font-row") : null;
+      if (other && listEl.contains(other)) {
+        pairHoverRow = other;
+        clearTimeout(pairHideTimer);
+        pairHideTimer = null;
+        clearTimeout(pairShowTimer);
+        pairShowTimer = setTimeout(() => {
+          pairShowTimer = null;
+          if (disposed || pairHoverRow !== other) return;
+          const meta = familyByName.get(other.dataset.family);
+          if (meta) showPairPopoverForRow(other, meta);
+        }, 150);
+        return;
+      }
+      pairHoverRow = null;
+      clearTimeout(pairShowTimer);
+      pairShowTimer = null;
+      pairHideTimer = setTimeout(() => {
+        pairHideTimer = null;
+        hidePairPopover();
+      }, 100);
+    }
+    function onListFocusIn(e) {
+      var _a, _b;
+      const row = (_b = (_a = e.target).closest) == null ? void 0 : _b.call(_a, ".gfp-font-row");
+      if (!row || !listEl.contains(row)) return;
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+      clearTimeout(pairShowTimer);
+      pairShowTimer = null;
+      pairHoverRow = row;
+      const meta = familyByName.get(row.dataset.family);
+      if (meta) showPairPopoverForRow(row, meta);
+    }
+    function onListFocusOut(e) {
+      var _a, _b;
+      const row = (_b = (_a = e.target).closest) == null ? void 0 : _b.call(_a, ".gfp-font-row");
+      if (!row || !listEl.contains(row)) return;
+      requestAnimationFrame(() => {
+        if (disposed) return;
+        const ae = document.activeElement;
+        if (ae && row.contains(ae)) return;
+        pairHoverRow = null;
+        clearTimeout(pairShowTimer);
+        pairShowTimer = null;
+        pairHideTimer = setTimeout(() => {
+          pairHideTimer = null;
+          hidePairPopover();
+        }, 100);
+      });
+    }
+    listEl.addEventListener("mouseover", onListMouseOver);
+    listEl.addEventListener("mouseout", onListMouseOut);
+    listEl.addEventListener("focusin", onListFocusIn);
+    listEl.addEventListener("focusout", onListFocusOut);
     textarea.placeholder = tu("actions.fontPreview.placeholder");
     const sizeOpts = [];
     for (let px = 10; px <= 120; px++) {
@@ -19332,6 +19862,12 @@
     renderTagGrid(feelingGrid, FEELING_TAGS, "feeling");
     renderTagGrid(appearanceGrid, APPEARANCE_TAGS, "appearance");
     function applyFilters() {
+      clearTimeout(pairShowTimer);
+      pairShowTimer = null;
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+      pairHoverRow = null;
+      hidePairPopover();
       const q = state.search.trim().toLowerCase();
       const needFeeling = state.feeling.size > 0;
       const needAppearance = state.appearance.size > 0;
@@ -19706,6 +20242,13 @@
     loadCatalog();
     return () => {
       disposed = true;
+      clearTimeout(pairShowTimer);
+      clearTimeout(pairHideTimer);
+      listEl.removeEventListener("mouseover", onListMouseOver);
+      listEl.removeEventListener("mouseout", onListMouseOut);
+      listEl.removeEventListener("focusin", onListFocusIn);
+      listEl.removeEventListener("focusout", onListFocusOut);
+      hidePairPopover();
       window.removeEventListener("message", onGfpPluginWindowMessage);
       container.removeEventListener("click", onGfpRowActionClick);
       if (listObserver) listObserver.disconnect();
@@ -19721,6 +20264,7 @@
     "ui/features/font-preview/google-font-preview.js"() {
       "use strict";
       init_google_fonts_catalog_slim();
+      init_font_pair_recommendations();
       LANGUAGE_OPTIONS = [
         { value: "", labelKey: "actions.fontPreview.langAll" },
         { value: "japanese", labelKey: "actions.fontPreview.langJapanese", subset: "japanese" },
@@ -21784,6 +22328,11 @@
           "actions.fontPreview.scriptCyrillicExt": "Cyrillic Extended",
           "actions.fontPreview.scriptGreek": "Greek",
           "actions.fontPreview.scriptVietnamese": "Vietnamese",
+          "actions.fontPreview.pairPopoverTitle": "Pairing ideas",
+          "actions.fontPreview.pairHeading": "For headings",
+          "actions.fontPreview.pairBody": "For body text",
+          "actions.fontPreview.pairLatin": "Latin / English",
+          "actions.fontPreview.pairEmpty": "No suggestions",
           "aux.context.smartTitle": "Smart Focus (Default)",
           "aux.context.smartDesc": "Intent-based adaptive context selection",
           "aux.context.allTitle": "Full Design Context",
@@ -22164,6 +22713,11 @@
           "actions.fontPreview.scriptCyrillicExt": "キリル拡張",
           "actions.fontPreview.scriptGreek": "ギリシャ",
           "actions.fontPreview.scriptVietnamese": "ベトナム語",
+          "actions.fontPreview.pairPopoverTitle": "組み合わせのヒント",
+          "actions.fontPreview.pairHeading": "見出しに合うフォント",
+          "actions.fontPreview.pairBody": "本文に合うフォント",
+          "actions.fontPreview.pairLatin": "欧文（英語）の組み合わせ",
+          "actions.fontPreview.pairEmpty": "候補がありません",
           "aux.context.smartTitle": "スマートフォーカス（既定）",
           "aux.context.smartDesc": "意図に応じてコンテキストを自動調整",
           "aux.context.allTitle": "完全なデザインコンテキスト",
@@ -22544,6 +23098,11 @@
           "actions.fontPreview.scriptCyrillicExt": "西里尔扩展",
           "actions.fontPreview.scriptGreek": "希腊",
           "actions.fontPreview.scriptVietnamese": "越南语",
+          "actions.fontPreview.pairPopoverTitle": "搭配建议",
+          "actions.fontPreview.pairHeading": "适合标题",
+          "actions.fontPreview.pairBody": "适合正文",
+          "actions.fontPreview.pairLatin": "拉丁 / 英文",
+          "actions.fontPreview.pairEmpty": "暂无建议",
           "aux.context.smartTitle": "智能聚焦（默认）",
           "aux.context.smartDesc": "根据意图自适应选择上下文",
           "aux.context.allTitle": "完整设计上下文",

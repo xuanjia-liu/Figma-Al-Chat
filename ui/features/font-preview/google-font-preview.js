@@ -3,6 +3,7 @@
  * Feeling / Appearance pills use heuristics on family metadata (category, subsets, name patterns).
  */
 import bundledFontFamilies from '../../data/google-fonts-catalog-slim.json';
+import { getPairSuggestions } from './font-pair-recommendations.js';
 
 const LANGUAGE_OPTIONS = [
   { value: '', labelKey: 'actions.fontPreview.langAll' },
@@ -296,6 +297,174 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const sentinel = container.querySelector('.gfp-list-sentinel');
   const countEl = container.querySelector('.gfp-count');
   const scrollBox = container.querySelector('.gfp-list-scroll');
+  const mainEl = container.querySelector('.gfp-main');
+
+  const pairPopover = document.createElement('div');
+  pairPopover.className = 'gfp-pair-popover';
+  pairPopover.setAttribute('role', 'tooltip');
+  pairPopover.hidden = true;
+  if (mainEl) mainEl.appendChild(pairPopover);
+
+  let pairShowTimer = null;
+  let pairHideTimer = null;
+  let pairHoverRow = null;
+
+  function hidePairPopover() {
+    pairPopover.hidden = true;
+    pairPopover.textContent = '';
+    pairPopover.removeAttribute('style');
+  }
+
+  function positionPairPopover(anchorRow) {
+    const margin = 10;
+    const pad = 6;
+    const rect = anchorRow.getBoundingClientRect();
+    const pr = pairPopover.getBoundingClientRect();
+    let left = rect.left - pr.width - margin;
+    if (left < pad) left = pad;
+    let top = rect.top + (rect.height - pr.height) / 2;
+    if (top < pad) top = pad;
+    const maxTop = window.innerHeight - pr.height - pad;
+    if (top > maxTop) top = Math.max(pad, maxTop);
+    pairPopover.style.position = 'fixed';
+    pairPopover.style.left = `${Math.round(left)}px`;
+    pairPopover.style.top = `${Math.round(top)}px`;
+    pairPopover.style.zIndex = '30';
+  }
+
+  function fillPairPopover(f) {
+    const s = getPairSuggestions(f, familyByName);
+    pairPopover.replaceChildren();
+    const inner = document.createElement('div');
+    inner.className = 'gfp-pair-popover-inner';
+
+    const title = document.createElement('div');
+    title.className = 'gfp-pair-popover-title';
+    title.textContent = tu('actions.fontPreview.pairPopoverTitle');
+    inner.appendChild(title);
+
+    let hasSection = false;
+    function addSection(labelKey, names) {
+      if (!names.length) return;
+      hasSection = true;
+      const sec = document.createElement('div');
+      sec.className = 'gfp-pair-popover-section';
+      const lab = document.createElement('div');
+      lab.className = 'gfp-pair-popover-label';
+      lab.textContent = tu(labelKey);
+      const namesEl = document.createElement('div');
+      namesEl.className = 'gfp-pair-popover-names';
+      namesEl.textContent = names.join(' · ');
+      sec.appendChild(lab);
+      sec.appendChild(namesEl);
+      inner.appendChild(sec);
+    }
+
+    addSection('actions.fontPreview.pairHeading', s.heading);
+    addSection('actions.fontPreview.pairBody', s.body);
+    if (s.isJapanese && s.latin.length) {
+      addSection('actions.fontPreview.pairLatin', s.latin);
+    }
+
+    if (!hasSection) {
+      const empty = document.createElement('div');
+      empty.className = 'gfp-pair-popover-empty';
+      empty.textContent = tu('actions.fontPreview.pairEmpty');
+      inner.appendChild(empty);
+    }
+
+    pairPopover.appendChild(inner);
+  }
+
+  function showPairPopoverForRow(row, f) {
+    if (disposed) return;
+    fillPairPopover(f);
+    pairPopover.hidden = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (disposed || pairPopover.hidden) return;
+        positionPairPopover(row);
+      });
+    });
+  }
+
+  function onListMouseOver(e) {
+    const row = e.target.closest?.('.gfp-font-row');
+    if (!row || !listEl.contains(row)) return;
+    if (pairHoverRow === row) return;
+    pairHoverRow = row;
+    clearTimeout(pairHideTimer);
+    pairHideTimer = null;
+    clearTimeout(pairShowTimer);
+    pairShowTimer = setTimeout(() => {
+      pairShowTimer = null;
+      if (disposed || pairHoverRow !== row) return;
+      const meta = familyByName.get(row.dataset.family);
+      if (meta) showPairPopoverForRow(row, meta);
+    }, 150);
+  }
+
+  function onListMouseOut(e) {
+    const row = e.target.closest?.('.gfp-font-row');
+    if (!row || !listEl.contains(row)) return;
+    const rel = e.relatedTarget;
+    if (rel && row.contains(rel)) return;
+    const other = rel && rel instanceof Element ? rel.closest('.gfp-font-row') : null;
+    if (other && listEl.contains(other)) {
+      pairHoverRow = other;
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+      clearTimeout(pairShowTimer);
+      pairShowTimer = setTimeout(() => {
+        pairShowTimer = null;
+        if (disposed || pairHoverRow !== other) return;
+        const meta = familyByName.get(other.dataset.family);
+        if (meta) showPairPopoverForRow(other, meta);
+      }, 150);
+      return;
+    }
+    pairHoverRow = null;
+    clearTimeout(pairShowTimer);
+    pairShowTimer = null;
+    pairHideTimer = setTimeout(() => {
+      pairHideTimer = null;
+      hidePairPopover();
+    }, 100);
+  }
+
+  function onListFocusIn(e) {
+    const row = e.target.closest?.('.gfp-font-row');
+    if (!row || !listEl.contains(row)) return;
+    clearTimeout(pairHideTimer);
+    pairHideTimer = null;
+    clearTimeout(pairShowTimer);
+    pairShowTimer = null;
+    pairHoverRow = row;
+    const meta = familyByName.get(row.dataset.family);
+    if (meta) showPairPopoverForRow(row, meta);
+  }
+
+  function onListFocusOut(e) {
+    const row = e.target.closest?.('.gfp-font-row');
+    if (!row || !listEl.contains(row)) return;
+    requestAnimationFrame(() => {
+      if (disposed) return;
+      const ae = document.activeElement;
+      if (ae && row.contains(ae)) return;
+      pairHoverRow = null;
+      clearTimeout(pairShowTimer);
+      pairShowTimer = null;
+      pairHideTimer = setTimeout(() => {
+        pairHideTimer = null;
+        hidePairPopover();
+      }, 100);
+    });
+  }
+
+  listEl.addEventListener('mouseover', onListMouseOver);
+  listEl.addEventListener('mouseout', onListMouseOut);
+  listEl.addEventListener('focusin', onListFocusIn);
+  listEl.addEventListener('focusout', onListFocusOut);
 
   textarea.placeholder = tu('actions.fontPreview.placeholder');
 
@@ -344,6 +513,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   renderTagGrid(appearanceGrid, APPEARANCE_TAGS, 'appearance');
 
   function applyFilters() {
+    clearTimeout(pairShowTimer);
+    pairShowTimer = null;
+    clearTimeout(pairHideTimer);
+    pairHideTimer = null;
+    pairHoverRow = null;
+    hidePairPopover();
+
     const q = state.search.trim().toLowerCase();
     const needFeeling = state.feeling.size > 0;
     const needAppearance = state.appearance.size > 0;
@@ -740,6 +916,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   return () => {
     disposed = true;
+    clearTimeout(pairShowTimer);
+    clearTimeout(pairHideTimer);
+    listEl.removeEventListener('mouseover', onListMouseOver);
+    listEl.removeEventListener('mouseout', onListMouseOut);
+    listEl.removeEventListener('focusin', onListFocusIn);
+    listEl.removeEventListener('focusout', onListFocusOut);
+    hidePairPopover();
     window.removeEventListener('message', onGfpPluginWindowMessage);
     container.removeEventListener('click', onGfpRowActionClick);
     if (listObserver) listObserver.disconnect();
