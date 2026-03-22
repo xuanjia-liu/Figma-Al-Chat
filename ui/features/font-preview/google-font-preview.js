@@ -171,7 +171,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   const state = {
     previewText: '',
-    fontSizePx: 40,
+    fontSizePx: 24,
     fontWght: 400,
     search: '',
     langSubset: '',
@@ -218,18 +218,20 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
             <div class="gfp-section-label">${escapeAttr(tu('actions.fontPreview.preview'))}</div>
             <button type="button" class="gfp-get-selection-btn">${escapeAttr(tu('actions.fontPreview.getFromSelection'))}</button>
           </div>
-          <textarea class="gfp-preview-input" rows="4"></textarea>
+          <textarea class="gfp-preview-input" rows="1"></textarea>
         </section>
         <div class="gfp-toolbar">
           <input type="search" class="gfp-search" placeholder="${escapeAttr(tu('actions.fontPreview.searchFamilies'))}" />
           <select class="gfp-size-select" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}"></select>
           <select class="gfp-weight-select" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}"></select>
         </div>
-        <div class="gfp-size-slider-row">
-          <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="40" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}" />
-        </div>
-        <div class="gfp-weight-slider-row">
-          <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}" />
+        <div class="gfp-sliders-row" role="group" aria-label="${escapeAttr(tu('actions.fontPreview.sizeAndWeightControlsAria'))}">
+          <div class="gfp-size-slider-row">
+            <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}" />
+          </div>
+          <div class="gfp-weight-slider-row">
+            <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}" />
+          </div>
         </div>
         <div class="gfp-list-meta"><span class="gfp-count"></span></div>
         <div class="gfp-list-scroll">
@@ -261,7 +263,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   // One option per px so slider and select stay in sync (sparse presets left blanks when value had no <option>)
   const sizeOpts = [];
   for (let px = 10; px <= 120; px++) {
-    sizeOpts.push(`<option value="${px}"${px === 40 ? ' selected' : ''}>${px}px</option>`);
+    sizeOpts.push(`<option value="${px}"${px === 24 ? ' selected' : ''}>${px}px</option>`);
   }
   sizeSelect.innerHTML = sizeOpts.join('');
 
@@ -451,7 +453,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   function syncSize(fromRange) {
     let px = fromRange ? parseInt(sizeRange.value, 10) : parseInt(sizeSelect.value, 10);
-    if (Number.isNaN(px)) px = 40;
+    if (Number.isNaN(px)) px = 24;
     px = Math.min(120, Math.max(10, px));
     state.fontSizePx = px;
     sizeSelect.value = String(px);

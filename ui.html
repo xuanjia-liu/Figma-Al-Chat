@@ -565,13 +565,15 @@
     }
 
     .gfp-tag:hover {
-      border-color: var(--border-intense);
-      background: var(--bg-tertiary);
+      box-shadow: 0 0 0 1px var(--accent-agent);
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
     }
 
     .gfp-tag--on {
-      border-color: var(--accent-agent, #3b82f6);
-      background: var(--accent-glow-agent, rgba(59, 130, 246, 0.12));
+      border-color: var(--accent-agent);
+      background: var(--accent-agent);
+      color: var(--text-on-accent);
     }
 
     .gfp-main {
@@ -583,6 +585,12 @@
       padding: var(--space-md);
       overflow: hidden;
       background: var(--bg-secondary);
+      --gfp-size-accent: #0891b2;
+      --gfp-size-accent-soft: rgba(8, 145, 178, 0.14);
+      --gfp-size-accent-border: rgba(8, 145, 178, 0.45);
+      --gfp-weight-accent: #a855f7;
+      --gfp-weight-accent-soft: rgba(168, 85, 247, 0.14);
+      --gfp-weight-accent-border: rgba(168, 85, 247, 0.45);
     }
 
     .gfp-preview-block {
@@ -637,7 +645,7 @@
     .gfp-preview-input {
       width: 100%;
       box-sizing: border-box;
-      min-height: 88px;
+      min-height: 40px;
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border);
@@ -670,53 +678,76 @@
     .gfp-size-select {
       flex: 0 0 auto;
       box-sizing: border-box;
-      width: 64px;
-      min-width: 64px;
-      max-width: 64px;
+      width: 48px;
       padding: 8px 4px;
       border-radius: var(--radius-md);
-      border: 1px solid var(--border);
-      background: var(--bg-tertiary);
+      border: 1px solid var(--gfp-size-accent-border);
+      background: var(--gfp-size-accent-soft);
       color: var(--text-primary);
-      font-size: var(--text-xs);
+      font-size: var(--text-sm);
+    }
+
+    .gfp-size-select:focus {
+      outline: 2px solid var(--gfp-size-accent);
+      outline-offset: 1px;
     }
 
     .gfp-weight-select {
       flex: 0 0 auto;
       box-sizing: border-box;
-      width: 64px;
-      min-width: 64px;
-      max-width: 64px;
+      width: 48px;
       padding: 8px 4px;
       border-radius: var(--radius-md);
-      border: 1px solid var(--border);
-      background: var(--bg-tertiary);
+      border: 1px solid var(--gfp-weight-accent-border);
+      background: var(--gfp-weight-accent-soft);
       color: var(--text-primary);
-      font-size: var(--text-xs);
+      font-size: var(--text-sm);
     }
 
-    .gfp-size-slider-row {
-      display: flex;
-      align-items: center;
-      flex-shrink: 0;
-      padding: 0 2px;
+    .gfp-weight-select:focus {
+      outline: 2px solid var(--gfp-weight-accent);
+      outline-offset: 1px;
     }
 
-    .gfp-weight-slider-row {
+    .gfp-sliders-row {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: var(--space-md);
+      flex-shrink: 0;
+    }
+
+    .gfp-sliders-row .gfp-size-slider-row,
+    .gfp-sliders-row .gfp-weight-slider-row {
+      flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
-      flex-shrink: 0;
-      padding: 0 2px;
+      padding: 6px 10px;
+      border-radius: var(--radius-md);
+      box-sizing: border-box;
+    }
+
+    .gfp-sliders-row .gfp-size-slider-row {
+      border: 1px solid var(--gfp-size-accent-border);
+      background: var(--gfp-size-accent-soft);
+    }
+
+    .gfp-sliders-row .gfp-weight-slider-row {
+      border: 1px solid var(--gfp-weight-accent-border);
+      background: var(--gfp-weight-accent-soft);
     }
 
     .gfp-size-range {
       width: 100%;
-      accent-color: var(--accent-agent, #3b82f6);
+      min-width: 0;
+      accent-color: var(--gfp-size-accent);
     }
 
     .gfp-weight-range {
       width: 100%;
-      accent-color: var(--accent-agent, #3b82f6);
+      min-width: 0;
+      accent-color: var(--gfp-weight-accent);
     }
 
     .gfp-list-meta {
@@ -19117,7 +19148,7 @@
     let listObserver = null;
     const state = {
       previewText: "",
-      fontSizePx: 40,
+      fontSizePx: 24,
       fontWght: 400,
       search: "",
       langSubset: "",
@@ -19128,7 +19159,7 @@
       renderOffset: 0
     };
     const BATCH = 48;
-    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="4"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n          <select class="gfp-weight-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '"></select>\n        </div>\n        <div class="gfp-size-slider-row">\n          <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="40" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n        </div>\n        <div class="gfp-weight-slider-row">\n          <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '" />\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
+    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="1"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n          <select class="gfp-weight-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '"></select>\n        </div>\n        <div class="gfp-sliders-row" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.sizeAndWeightControlsAria")), '">\n          <div class="gfp-size-slider-row">\n            <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n          </div>\n          <div class="gfp-weight-slider-row">\n            <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '" />\n          </div>\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
     const textarea = container.querySelector(".gfp-preview-input");
     const getSelectionBtn = container.querySelector(".gfp-get-selection-btn");
     const sizeSelect = container.querySelector(".gfp-size-select");
@@ -19147,7 +19178,7 @@
     textarea.placeholder = tu("actions.fontPreview.placeholder");
     const sizeOpts = [];
     for (let px = 10; px <= 120; px++) {
-      sizeOpts.push('<option value="'.concat(px, '"').concat(px === 40 ? " selected" : "", ">").concat(px, "px</option>"));
+      sizeOpts.push('<option value="'.concat(px, '"').concat(px === 24 ? " selected" : "", ">").concat(px, "px</option>"));
     }
     sizeSelect.innerHTML = sizeOpts.join("");
     const weightOpts = [];
@@ -19326,7 +19357,7 @@
     }
     function syncSize(fromRange) {
       let px = fromRange ? parseInt(sizeRange.value, 10) : parseInt(sizeSelect.value, 10);
-      if (Number.isNaN(px)) px = 40;
+      if (Number.isNaN(px)) px = 24;
       px = Math.min(120, Math.max(10, px));
       state.fontSizePx = px;
       sizeSelect.value = String(px);
@@ -21457,6 +21488,7 @@
           "actions.fontPreview.placeholder": "Type something",
           "actions.fontPreview.size": "Preview size",
           "actions.fontPreview.weight": "Preview weight",
+          "actions.fontPreview.sizeAndWeightControlsAria": "Preview size and weight sliders",
           "actions.fontPreview.language": "Language",
           "actions.fontPreview.feeling": "Feeling",
           "actions.fontPreview.appearance": "Appearance",
@@ -21813,6 +21845,7 @@
           "actions.fontPreview.placeholder": "テキストを入力",
           "actions.fontPreview.size": "プレビューサイズ",
           "actions.fontPreview.weight": "プレビュー太さ",
+          "actions.fontPreview.sizeAndWeightControlsAria": "プレビューのサイズとウェイトのスライダー",
           "actions.fontPreview.language": "言語",
           "actions.fontPreview.feeling": "雰囲気",
           "actions.fontPreview.appearance": "外観",
@@ -22169,6 +22202,7 @@
           "actions.fontPreview.placeholder": "输入文字",
           "actions.fontPreview.size": "预览字号",
           "actions.fontPreview.weight": "预览字重",
+          "actions.fontPreview.sizeAndWeightControlsAria": "预览字号与字重滑块",
           "actions.fontPreview.language": "语言",
           "actions.fontPreview.feeling": "气质",
           "actions.fontPreview.appearance": "外观",
