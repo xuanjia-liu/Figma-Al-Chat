@@ -1828,6 +1828,199 @@ function normalizeFontStyle(weight: string | number): string {
   return aliasMap[lower] || s;
 }
 
+/** Map preview numeric weight (1–1000) to the nearest CSS/Figma step for smartLoadFont. */
+function numericPreviewWeightToFigmaStyle(weight: number): string {
+  const clamped = Math.max(1, Math.min(1000, Math.round(weight)));
+  const steps = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+  let best = 400;
+  let bestDist = Infinity;
+  for (const s of steps) {
+    const d = Math.abs(clamped - s);
+    if (d < bestDist) {
+      bestDist = d;
+      best = s;
+    }
+  }
+  return normalizeFontStyle(best);
+}
+
+/** Pick the closest value in `allowed` to `value` (for font static weight buckets). */
+function nearestInList(value: number, allowed: readonly number[]): number {
+  let best = allowed[0];
+  let bestDist = Infinity;
+  for (const a of allowed) {
+    const d = Math.abs(value - a);
+    if (d < bestDist) {
+      bestDist = d;
+      best = a;
+    }
+  }
+  return best;
+}
+
+/** Same as nearestInList, but on a tie picks the heavier weight (better for 450 between 400 and 500). */
+function nearestInListPreferHeavier(value: number, allowed: readonly number[]): number {
+  let best = allowed[0];
+  let bestDist = Infinity;
+  for (const a of allowed) {
+    const d = Math.abs(value - a);
+    if (d < bestDist || (d === bestDist && a > best)) {
+      bestDist = d;
+      best = a;
+    }
+  }
+  return best;
+}
+
+/** Parse "400;500;700" from catalog wghtCss; null if variable range or empty. */
+function staticWeightsFromWghtCss(css: string | undefined): number[] | null {
+  if (!css || typeof css !== 'string') return null;
+  const t = css.trim();
+  if (!t || t.includes('..')) return null;
+  const parts = t
+    .split(';')
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isFinite(n));
+  return parts.length > 0 ? parts : null;
+}
+
+function dedupeFontNames(candidates: FontName[]): FontName[] {
+  const seen = new Set<string>();
+  const out: FontName[] = [];
+  for (const c of candidates) {
+    const k = `${c.family}::${c.style}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(c);
+  }
+  return out;
+}
+
+function pushStyleNameVariants(family: string, style: string, out: FontName[]) {
+  out.push({ family, style });
+  const s = style;
+  if (/[a-z][A-Z]/.test(s)) {
+    out.push({ family, style: s.replace(/([a-z])([A-Z])/g, '$1 $2') });
+  }
+  if (s.includes(' ')) {
+    out.push({ family, style: s.replace(/ /g, '') });
+  }
+}
+
+/**
+ * Google Fonts catalog names vs Figma desktop names often differ (OTF suffix, M+/Rounded naming, WD XL spacing).
+ * Build an ordered list of {family, style} pairs to try with figma.loadFontAsync.
+ */
+function buildFontPreviewApplyCandidates(googleFamily: string, weightNum: number, wghtCss?: string): FontName[] {
+  const w = Number.isFinite(weightNum) ? weightNum : 400;
+  const candidates: FontName[] = [];
+
+  if (googleFamily === 'LINE Seed JP') {
+    const bucket = nearestInList(w, [100, 400, 700, 800]);
+    const stylesByBucket: Record<number, string[]> = {
+      100: ['Thin'],
+      400: ['Regular'],
+      700: ['Bold'],
+      800: ['ExtraBold', 'Extra Bold'],
+    };
+    const styles = stylesByBucket[bucket] || ['Regular'];
+    for (const fam of ['LINE Seed JP_OTF', 'LINE Seed JP'] as const) {
+      for (const st of styles) {
+        pushStyleNameVariants(fam, st, candidates);
+      }
+    }
+    return dedupeFontNames(candidates);
+  }
+
+  if (googleFamily === 'M PLUS Rounded 1c') {
+    const bucket = nearestInList(w, [100, 300, 400, 500, 700, 800, 900]);
+    const styleMap: Record<number, string[]> = {
+      100: ['Rounded Mplus 1c Thin', 'M PLUS Rounded 1c Thin', 'Thin'],
+      300: ['Rounded Mplus 1c Light', 'M PLUS Rounded 1c Light', 'Light'],
+      400: ['Rounded Mplus 1c', 'M PLUS Rounded 1c', 'Rounded Mplus 1c Regular', 'M PLUS Rounded 1c Regular', 'Regular'],
+      500: ['Rounded Mplus 1c Medium', 'M PLUS Rounded 1c Medium', 'Medium'],
+      700: ['Rounded Mplus 1c Bold', 'M PLUS Rounded 1c Bold', 'Bold'],
+      800: ['Rounded Mplus 1c ExtraBold', 'M PLUS Rounded 1c ExtraBold', 'Extra Bold', 'ExtraBold'],
+      900: ['Rounded Mplus 1c Black', 'M PLUS Rounded 1c Black', 'Black'],
+    };
+    const styles = styleMap[bucket] || styleMap[400];
+    for (const fam of ['Rounded Mplus 1c', 'M PLUS Rounded 1c'] as const) {
+      for (const st of styles) {
+        candidates.push({ family: fam, style: st });
+      }
+    }
+    return dedupeFontNames(candidates);
+  }
+
+  const wdxlFamilyAliases: Record<string, readonly string[]> = {
+    'WDXL Lubrifont JP N': [
+      'WDXL Lubrifont JP N',
+      'WDXL Lubrifont JPN',
+      'WD XL Lubrifont JP N',
+      'WD-XL Lubrifont JP N',
+    ],
+    'WDXL Lubrifont SC': ['WDXL Lubrifont SC', 'WD XL Lubrifont SC', 'WD-XL Lubrifont SC'],
+    'WDXL Lubrifont TC': ['WDXL Lubrifont TC', 'WD XL Lubrifont TC', 'WD-XL Lubrifont TC'],
+  };
+  if (wdxlFamilyAliases[googleFamily]) {
+    for (const fam of wdxlFamilyAliases[googleFamily]) {
+      pushStyleNameVariants(fam, 'Regular', candidates);
+      candidates.push({ family: fam, style: 'Normal' });
+    }
+    return dedupeFontNames(candidates);
+  }
+
+  const staticWeights = staticWeightsFromWghtCss(wghtCss);
+  const weightStep = staticWeights
+    ? nearestInListPreferHeavier(Math.round(w), staticWeights)
+    : (() => {
+        const clamped = Math.max(1, Math.min(1000, Math.round(w)));
+        const steps = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+        return nearestInListPreferHeavier(clamped, steps);
+      })();
+  const styleStr = normalizeFontStyle(weightStep);
+  const extraFamilies: Record<string, readonly string[]> = {
+    'M PLUS 1 Code': ['Mplus 1 Code'],
+    'M PLUS 1': ['Mplus 1'],
+    'M PLUS 2': ['Mplus 2'],
+    'M PLUS 1p': ['Mplus 1p'],
+  };
+  const familyOrder = [googleFamily, ...(extraFamilies[googleFamily] || [])];
+  const seenFam = new Set<string>();
+  for (const fam of familyOrder) {
+    if (seenFam.has(fam)) continue;
+    seenFam.add(fam);
+    pushStyleNameVariants(fam, styleStr, candidates);
+    if (styleStr !== 'Regular') {
+      pushStyleNameVariants(fam, 'Regular', candidates);
+    }
+  }
+  return dedupeFontNames(candidates);
+}
+
+async function tryLoadFontNameOnce(font: FontName): Promise<boolean> {
+  const k = `${font.family}::${font.style}`;
+  if (loadedFontsCache.has(k)) return true;
+  try {
+    await figma.loadFontAsync(font);
+    loadedFontsCache.add(k);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve Google Fonts preview family + weight to a Figma FontName without falling back to Inter. */
+async function loadFontForFontPreviewApply(googleFamily: string, weightNum: number, wghtCss?: string): Promise<FontName> {
+  const list = buildFontPreviewApplyCandidates(googleFamily, weightNum, wghtCss);
+  for (const c of list) {
+    if (await tryLoadFontNameOnce(c)) {
+      return c;
+    }
+  }
+  throw new Error(`Font "${googleFamily}" is not available in Figma. Enable it in Team/Library fonts or install from Google Fonts.`);
+}
+
 /**
  * Universal Helper: Check if a node is nested inside an Instance.
  */
@@ -5005,6 +5198,55 @@ figma.ui.onmessage = async (msg: {
       } else {
         figma.ui.postMessage({ type: 'font-preview-selection-text-result', error: 'noText' });
       }
+      break;
+    }
+
+    case 'font-preview-apply-family': {
+      const anyMsg = msg as any;
+      const family = typeof anyMsg.family === 'string' ? anyMsg.family.trim() : '';
+      const rawW = anyMsg.weight;
+      const parsedW =
+        typeof rawW === 'number' && Number.isFinite(rawW)
+          ? rawW
+          : parseFloat(String(rawW ?? ''));
+      const weightNum = Number.isFinite(parsedW) ? parsedW : 400;
+      const wghtCss = typeof anyMsg.wghtCss === 'string' ? anyMsg.wghtCss : '';
+      if (!family) {
+        figma.ui.postMessage({ type: 'font-preview-apply-result', ok: false, applied: 0, failed: 0, error: 'noFamily' });
+        break;
+      }
+      const textNodes = selection.filter((n): n is TextNode => n.type === 'TEXT');
+      if (textNodes.length === 0) {
+        figma.ui.postMessage({ type: 'font-preview-apply-result', ok: false, applied: 0, failed: 0, error: 'noTextSelection' });
+        break;
+      }
+      let applied = 0;
+      let failed = 0;
+      let firstErr = '';
+      for (const textNode of textNodes) {
+        try {
+          await loadAllFontsForTextNode(textNode);
+          const loaded = await loadFontForFontPreviewApply(family, weightNum, wghtCss);
+          const len = textNode.characters.length;
+          if (len > 0) {
+            textNode.setRangeFontName(0, len, loaded);
+          } else {
+            textNode.fontName = loaded;
+          }
+          applied++;
+        } catch (err) {
+          failed++;
+          if (!firstErr) firstErr = (err as Error)?.message || 'Font load failed';
+        }
+      }
+      figma.ui.postMessage({
+        type: 'font-preview-apply-result',
+        ok: failed === 0,
+        applied,
+        failed,
+        error: failed > 0 ? (applied === 0 ? firstErr || 'applyFailed' : 'partial') : undefined,
+        message: failed > 0 ? firstErr : undefined,
+      });
       break;
     }
 

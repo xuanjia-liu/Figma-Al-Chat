@@ -771,6 +771,7 @@
     }
 
     .gfp-font-row {
+      position: relative;
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -822,10 +823,64 @@
     .gfp-font-sample {
       width: 100%;
       min-width: 0;
+      padding-right: 72px;
       color: var(--text-primary);
       line-height: 1.25;
       word-break: break-word;
       text-align: left;
+    }
+
+    .gfp-font-row-actions {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .gfp-font-row:hover .gfp-font-row-actions,
+    .gfp-font-row:focus-within .gfp-font-row-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .gfp-font-row-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      margin: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+
+    .gfp-font-row-btn:hover {
+      border-color: var(--border-intense);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .gfp-font-row-btn:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
+    }
+
+    .gfp-font-row-btn-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
     }
 
     .gfp-loading,

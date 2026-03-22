@@ -401,20 +401,41 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       metaEl.className = 'gfp-font-name-meta';
       const effW = gfpClampWght(f, state.fontWght);
       metaEl.textContent = gfpFormatRowWeightStyle(effW, tu);
-      const countEl = document.createElement('span');
-      countEl.className = 'gfp-font-name-wght-count';
-      countEl.textContent = gfpFamilyWeightCatalogSummary(f, tu);
+      const wghtCountEl = document.createElement('span');
+      wghtCountEl.className = 'gfp-font-name-wght-count';
+      wghtCountEl.textContent = gfpFamilyWeightCatalogSummary(f, tu);
       label.appendChild(titleEl);
       label.appendChild(metaEl);
-      label.appendChild(countEl);
+      label.appendChild(wghtCountEl);
       const sample = document.createElement('div');
       sample.className = 'gfp-font-sample';
       sample.textContent = state.previewText || tu('actions.fontPreview.placeholder');
       sample.style.fontSize = `${state.fontSizePx}px`;
       sample.style.fontWeight = String(gfpClampWght(f, state.fontWght));
       sample.style.fontFamily = `'${f.family.replace(/'/g, "\\'")}', var(--font-ui, system-ui)`;
+      const actions = document.createElement('div');
+      actions.className = 'gfp-font-row-actions';
+      const applyBtn = document.createElement('button');
+      applyBtn.type = 'button';
+      applyBtn.className = 'gfp-font-row-btn gfp-font-row-btn--apply';
+      applyBtn.dataset.family = f.family;
+      applyBtn.title = tu('actions.fontPreview.applyToSelectionTitle');
+      applyBtn.setAttribute('aria-label', tu('actions.fontPreview.applyToSelectionTitle'));
+      applyBtn.innerHTML =
+        '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'gfp-font-row-btn gfp-font-row-btn--copy';
+      copyBtn.dataset.family = f.family;
+      copyBtn.title = tu('actions.fontPreview.copyFamilyNameTitle');
+      copyBtn.setAttribute('aria-label', tu('actions.fontPreview.copyFamilyNameTitle'));
+      copyBtn.innerHTML =
+        '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
+      actions.appendChild(applyBtn);
+      actions.appendChild(copyBtn);
       row.appendChild(label);
       row.appendChild(sample);
+      row.appendChild(actions);
       frag.appendChild(row);
     }
     listEl.appendChild(frag);
@@ -473,25 +494,118 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   });
 
   let pendingSelectionText = false;
-  function onFontPreviewSelectionTextMessage(ev) {
+  function onGfpPluginWindowMessage(ev) {
     const pm = ev.data?.pluginMessage;
-    if (!pm || pm.type !== 'font-preview-selection-text-result') return;
-    pendingSelectionText = false;
-    if (getSelectionBtn) getSelectionBtn.disabled = false;
-    if (pm.error === 'empty') {
-      showToast(tu('actions.fontPreview.getSelectionEmpty'), 'error');
+    if (!pm) return;
+    if (pm.type === 'font-preview-selection-text-result') {
+      pendingSelectionText = false;
+      if (getSelectionBtn) getSelectionBtn.disabled = false;
+      if (pm.error === 'empty') {
+        showToast(tu('actions.fontPreview.getSelectionEmpty'), 'error');
+        return;
+      }
+      if (pm.error === 'noText') {
+        showToast(tu('actions.fontPreview.getSelectionNoText'), 'error');
+        return;
+      }
+      if (typeof pm.text === 'string') {
+        textarea.value = pm.text;
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      }
       return;
     }
-    if (pm.error === 'noText') {
-      showToast(tu('actions.fontPreview.getSelectionNoText'), 'error');
-      return;
-    }
-    if (typeof pm.text === 'string') {
-      textarea.value = pm.text;
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    if (pm.type === 'font-preview-apply-result') {
+      if (pm.error === 'noTextSelection') {
+        showToast(tu('actions.fontPreview.applyNoTextSelection'), 'error');
+        return;
+      }
+      if (pm.error === 'noFamily') {
+        showToast(tu('actions.fontPreview.applyNoFamily'), 'error');
+        return;
+      }
+      if (pm.ok && pm.applied > 0) {
+        showToast(tu('actions.fontPreview.applySuccess', { count: String(pm.applied) }), 'success');
+        return;
+      }
+      if (pm.applied > 0 && pm.failed > 0) {
+        showToast(
+          tu('actions.fontPreview.applyPartial', {
+            applied: String(pm.applied),
+            failed: String(pm.failed),
+          }),
+          'error'
+        );
+        return;
+      }
+      showToast(
+        pm.message ? tu('actions.fontPreview.applyLoadFailWithMsg', { message: pm.message }) : tu('actions.fontPreview.applyLoadFail'),
+        'error'
+      );
     }
   }
-  window.addEventListener('message', onFontPreviewSelectionTextMessage);
+  window.addEventListener('message', onGfpPluginWindowMessage);
+
+  function copyFamilyNameToClipboard(name) {
+    const okToast = () => showToast(tu('actions.fontPreview.copyFamilySuccess'), 'success');
+    const failToast = () => showToast(tu('actions.fontPreview.copyFamilyFail'), 'error');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(name).then(okToast).catch(() => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = name;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          if (ok) okToast();
+          else failToast();
+        } catch {
+          failToast();
+        }
+      });
+      return;
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = name;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) okToast();
+      else failToast();
+    } catch {
+      failToast();
+    }
+  }
+
+  function onGfpRowActionClick(ev) {
+    const btn = ev.target.closest('.gfp-font-row-btn');
+    if (!btn || !container.contains(btn)) return;
+    ev.stopPropagation();
+    const family = btn.dataset.family;
+    if (!family) return;
+    if (btn.classList.contains('gfp-font-row-btn--copy')) {
+      copyFamilyNameToClipboard(family);
+      return;
+    }
+    if (btn.classList.contains('gfp-font-row-btn--apply')) {
+      const meta = familyByName.get(family);
+      const w = gfpClampWght(meta, state.fontWght);
+      const wghtCss = meta && typeof meta.wghtCss === 'string' ? meta.wghtCss : '';
+      parent.postMessage(
+        { pluginMessage: { type: 'font-preview-apply-family', family, weight: w, wghtCss } },
+        '*'
+      );
+    }
+  }
+  container.addEventListener('click', onGfpRowActionClick);
 
   if (getSelectionBtn) {
     getSelectionBtn.addEventListener('click', () => {
@@ -626,7 +740,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   return () => {
     disposed = true;
-    window.removeEventListener('message', onFontPreviewSelectionTextMessage);
+    window.removeEventListener('message', onGfpPluginWindowMessage);
+    container.removeEventListener('click', onGfpRowActionClick);
     if (listObserver) listObserver.disconnect();
     rowObserver.disconnect();
     mo.disconnect();
