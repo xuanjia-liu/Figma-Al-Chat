@@ -711,14 +711,6 @@
       color: var(--text-danger, #ef4444);
     }
 
-    .gfp-hint {
-      font-size: var(--text-xs);
-      color: var(--text-muted);
-      line-height: 1.4;
-      margin: 0;
-      flex-shrink: 0;
-    }
-
     @media (max-width: 440px) {
       .gfp-root {
         flex-direction: column;

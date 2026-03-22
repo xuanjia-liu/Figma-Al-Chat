@@ -207,7 +207,6 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
           <div class="gfp-list"></div>
           <div class="gfp-list-sentinel"></div>
         </div>
-        <p class="gfp-hint">${escapeAttr(tu('actions.fontPreview.hint'))}</p>
       </div>
     </div>
   `;

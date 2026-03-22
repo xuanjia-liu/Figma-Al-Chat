@@ -718,14 +718,6 @@
       color: var(--text-danger, #ef4444);
     }
 
-    .gfp-hint {
-      font-size: var(--text-xs);
-      color: var(--text-muted);
-      line-height: 1.4;
-      margin: 0;
-      flex-shrink: 0;
-    }
-
     @media (max-width: 440px) {
       .gfp-root {
         flex-direction: column;
@@ -19055,7 +19047,7 @@
       renderOffset: 0
     };
     const BATCH = 48;
-    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n          <textarea class="gfp-preview-input" rows="4"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n        </div>\n        <div class="gfp-size-slider-row">\n          <input type="range" class="gfp-size-range" min="10" max="120" value="40" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n        <p class="gfp-hint">').concat(escapeAttr(tu("actions.fontPreview.hint")), "</p>\n      </div>\n    </div>\n  ");
+    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n          <textarea class="gfp-preview-input" rows="4"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n        </div>\n        <div class="gfp-size-slider-row">\n          <input type="range" class="gfp-size-range" min="10" max="120" value="40" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
     const textarea = container.querySelector(".gfp-preview-input");
     const sizeSelect = container.querySelector(".gfp-size-select");
     const sizeRange = container.querySelector(".gfp-size-range");
@@ -21323,7 +21315,6 @@
           "actions.fontPreview.loadError": "Could not load font catalog. Check your network connection.",
           "actions.fontPreview.usingBundledCatalog": "Using built-in font list; live catalog unavailable.",
           "actions.fontPreview.showingCount": "Loaded {shown} of {total} matching families",
-          "actions.fontPreview.hint": "Feeling and Appearance filters use on-device heuristics (not official Google tags). Scroll to load more previews.",
           "actions.fontPreview.langAll": "All languages",
           "actions.fontPreview.langJapanese": "Japanese",
           "actions.fontPreview.langKorean": "Korean",
@@ -21676,7 +21667,6 @@
           "actions.fontPreview.loadError": "フォントカタログを読み込めませんでした。ネットワークを確認してください。",
           "actions.fontPreview.usingBundledCatalog": "同梱のフォント一覧を使用中です（ライブ取得不可）。",
           "actions.fontPreview.showingCount": "一致 {total} 件中 {shown} 件を表示",
-          "actions.fontPreview.hint": "雰囲気・外観は端末上のヒューリスティックです（Google 公式タグではありません）。スクロールでさらに読み込みます。",
           "actions.fontPreview.langAll": "すべての言語",
           "actions.fontPreview.langJapanese": "日本語",
           "actions.fontPreview.langKorean": "韓国語",
@@ -22029,7 +22019,6 @@
           "actions.fontPreview.loadError": "无法加载字体目录，请检查网络连接。",
           "actions.fontPreview.usingBundledCatalog": "正在使用内置字体列表（无法获取在线目录）。",
           "actions.fontPreview.showingCount": "已加载 {shown} / {total} 个匹配家族",
-          "actions.fontPreview.hint": "气质与外观为本地启发式筛选（非 Google 官方标签）。向下滚动可加载更多预览。",
           "actions.fontPreview.langAll": "全部语言",
           "actions.fontPreview.langJapanese": "日语",
           "actions.fontPreview.langKorean": "韩语",

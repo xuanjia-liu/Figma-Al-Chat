@@ -226,8 +226,6 @@ const uiTranslations = {
     'actions.fontPreview.loadError': 'Could not load font catalog. Check your network connection.',
     'actions.fontPreview.usingBundledCatalog': 'Using built-in font list; live catalog unavailable.',
     'actions.fontPreview.showingCount': 'Loaded {shown} of {total} matching families',
-    'actions.fontPreview.hint':
-      'Feeling and Appearance filters use on-device heuristics (not official Google tags). Scroll to load more previews.',
     'actions.fontPreview.langAll': 'All languages',
     'actions.fontPreview.langJapanese': 'Japanese',
     'actions.fontPreview.langKorean': 'Korean',
@@ -580,8 +578,6 @@ const uiTranslations = {
     'actions.fontPreview.loadError': 'フォントカタログを読み込めませんでした。ネットワークを確認してください。',
     'actions.fontPreview.usingBundledCatalog': '同梱のフォント一覧を使用中です（ライブ取得不可）。',
     'actions.fontPreview.showingCount': '一致 {total} 件中 {shown} 件を表示',
-    'actions.fontPreview.hint':
-      '雰囲気・外観は端末上のヒューリスティックです（Google 公式タグではありません）。スクロールでさらに読み込みます。',
     'actions.fontPreview.langAll': 'すべての言語',
     'actions.fontPreview.langJapanese': '日本語',
     'actions.fontPreview.langKorean': '韓国語',
@@ -934,8 +930,6 @@ const uiTranslations = {
     'actions.fontPreview.loadError': '无法加载字体目录，请检查网络连接。',
     'actions.fontPreview.usingBundledCatalog': '正在使用内置字体列表（无法获取在线目录）。',
     'actions.fontPreview.showingCount': '已加载 {shown} / {total} 个匹配家族',
-    'actions.fontPreview.hint':
-      '气质与外观为本地启发式筛选（非 Google 官方标签）。向下滚动可加载更多预览。',
     'actions.fontPreview.langAll': '全部语言',
     'actions.fontPreview.langJapanese': '日语',
     'actions.fontPreview.langKorean': '韩语',
