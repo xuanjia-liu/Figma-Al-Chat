@@ -557,10 +557,25 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
   sizeSelect.innerHTML = sizeOpts.join('');
 
-  const weightOpts = [];
-  for (let w = 1; w <= 1000; w++) {
-    weightOpts.push(`<option value="${w}"${w === 400 ? ' selected' : ''}>${w}</option>`);
+  /** Standard CSS weight steps shown in the compact select (slider stays 1–1000). */
+  const WEIGHT_SELECT_STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+
+  function nearestWeightSelectStep(w) {
+    let best = WEIGHT_SELECT_STEPS[0];
+    let bestDist = Math.abs(w - best);
+    for (const s of WEIGHT_SELECT_STEPS) {
+      const d = Math.abs(w - s);
+      if (d < bestDist) {
+        bestDist = d;
+        best = s;
+      }
+    }
+    return best;
   }
+
+  const weightOpts = WEIGHT_SELECT_STEPS.map(
+    w => `<option value="${w}"${w === 400 ? ' selected' : ''}>${w}</option>`
+  );
   weightSelect.innerHTML = weightOpts.join('');
 
   function fillLangSelect(sel, options) {
@@ -924,8 +939,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     if (Number.isNaN(w)) w = 400;
     w = Math.min(1000, Math.max(1, w));
     state.fontWght = w;
-    weightSelect.value = String(w);
     weightRange.value = String(w);
+    weightSelect.value = String(fromRange ? nearestWeightSelectStep(w) : w);
     applyWeightToSamples();
   }
 
