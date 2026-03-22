@@ -882,14 +882,13 @@
 
     .gfp-pair-popover {
       box-sizing: border-box;
-      max-width: min(240px, 72vw);
+      max-width: min(200px, 64vw);
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border-intense, var(--border));
       background: var(--bg-primary);
       color: var(--text-primary);
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-      pointer-events: none;
       z-index: 30;
     }
 
@@ -922,11 +921,55 @@
     }
 
     .gfp-pair-popover-names {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0;
       font-size: var(--text-xs);
       font-weight: 500;
       line-height: 1.35;
       color: var(--text-primary);
       word-break: break-word;
+    }
+
+    .gfp-pair-font-sep {
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    .gfp-pair-font-name {
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--accent-agent, #3b82f6);
+      font: inherit;
+      font-weight: 600;
+      line-height: inherit;
+      text-align: left;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      word-break: break-word;
+      transition: text-decoration-color 0.12s ease, color 0.12s ease;
+    }
+
+    .gfp-pair-font-name:hover {
+      text-decoration-color: currentColor;
+      color: var(--text-primary);
+    }
+
+    .gfp-pair-font-name:focus {
+      outline: none;
+    }
+
+    .gfp-pair-font-name:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 2px;
+      text-decoration-color: currentColor;
     }
 
     .gfp-pair-popover-empty {

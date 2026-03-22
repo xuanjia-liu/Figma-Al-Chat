@@ -889,14 +889,13 @@
 
     .gfp-pair-popover {
       box-sizing: border-box;
-      max-width: min(240px, 72vw);
+      max-width: min(200px, 64vw);
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border-intense, var(--border));
       background: var(--bg-primary);
       color: var(--text-primary);
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
-      pointer-events: none;
       z-index: 30;
     }
 
@@ -929,11 +928,55 @@
     }
 
     .gfp-pair-popover-names {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0;
       font-size: var(--text-xs);
       font-weight: 500;
       line-height: 1.35;
       color: var(--text-primary);
       word-break: break-word;
+    }
+
+    .gfp-pair-font-sep {
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    .gfp-pair-font-name {
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--accent-agent, #3b82f6);
+      font: inherit;
+      font-weight: 600;
+      line-height: inherit;
+      text-align: left;
+      text-decoration: underline;
+      text-decoration-color: transparent;
+      text-underline-offset: 2px;
+      cursor: pointer;
+      word-break: break-word;
+      transition: text-decoration-color 0.12s ease, color 0.12s ease;
+    }
+
+    .gfp-pair-font-name:hover {
+      text-decoration-color: currentColor;
+      color: var(--text-primary);
+    }
+
+    .gfp-pair-font-name:focus {
+      outline: none;
+    }
+
+    .gfp-pair-font-name:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 2px;
+      text-decoration-color: currentColor;
     }
 
     .gfp-pair-popover-empty {
@@ -19672,13 +19715,19 @@
     const mainEl = container.querySelector(".gfp-main");
     const pairPopover = document.createElement("div");
     pairPopover.className = "gfp-pair-popover";
-    pairPopover.setAttribute("role", "tooltip");
+    pairPopover.setAttribute("role", "region");
     pairPopover.hidden = true;
     if (mainEl) mainEl.appendChild(pairPopover);
     let pairShowTimer = null;
     let pairHideTimer = null;
     let pairHoverRow = null;
     function hidePairPopover() {
+      if (pairPopover.contains(document.activeElement)) {
+        try {
+          document.activeElement.blur();
+        } catch (e) {
+        }
+      }
       pairPopover.hidden = true;
       pairPopover.textContent = "";
       pairPopover.removeAttribute("style");
@@ -19719,7 +19768,24 @@
         lab.textContent = tu(labelKey);
         const namesEl = document.createElement("div");
         namesEl.className = "gfp-pair-popover-names";
-        namesEl.textContent = names.join(" · ");
+        const copyHint = tu("actions.fontPreview.pairFontCopyHint");
+        for (let i = 0; i < names.length; i++) {
+          if (i > 0) {
+            const sep = document.createElement("span");
+            sep.className = "gfp-pair-font-sep";
+            sep.textContent = " · ";
+            sep.setAttribute("aria-hidden", "true");
+            namesEl.appendChild(sep);
+          }
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "gfp-pair-font-name";
+          btn.dataset.family = names[i];
+          btn.textContent = names[i];
+          btn.title = copyHint;
+          btn.setAttribute("aria-label", "".concat(names[i], " — ").concat(copyHint));
+          namesEl.appendChild(btn);
+        }
         sec.appendChild(lab);
         sec.appendChild(namesEl);
         inner.appendChild(sec);
@@ -19736,6 +19802,7 @@
         inner.appendChild(empty);
       }
       pairPopover.appendChild(inner);
+      pairPopover.setAttribute("aria-label", tu("actions.fontPreview.pairPopoverTitle"));
     }
     function showPairPopoverForRow(row, f) {
       if (disposed) return;
@@ -19770,6 +19837,11 @@
       if (!row || !listEl.contains(row)) return;
       const rel = e.relatedTarget;
       if (rel && row.contains(rel)) return;
+      if (rel && pairPopover.contains(rel)) {
+        clearTimeout(pairHideTimer);
+        pairHideTimer = null;
+        return;
+      }
       const other = rel && rel instanceof Element ? rel.closest(".gfp-font-row") : null;
       if (other && listEl.contains(other)) {
         pairHoverRow = other;
@@ -19812,6 +19884,7 @@
         if (disposed) return;
         const ae = document.activeElement;
         if (ae && row.contains(ae)) return;
+        if (ae && pairPopover.contains(ae)) return;
         pairHoverRow = null;
         clearTimeout(pairShowTimer);
         pairShowTimer = null;
@@ -19825,6 +19898,43 @@
     listEl.addEventListener("mouseout", onListMouseOut);
     listEl.addEventListener("focusin", onListFocusIn);
     listEl.addEventListener("focusout", onListFocusOut);
+    function onPairPopoverMouseEnter() {
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+    }
+    function onPairPopoverMouseLeave(e) {
+      const rel = e.relatedTarget;
+      if (rel && pairPopover.contains(rel)) return;
+      if (rel && rel instanceof Element && listEl.contains(rel) && rel.closest(".gfp-font-row")) return;
+      pairHoverRow = null;
+      clearTimeout(pairShowTimer);
+      pairShowTimer = null;
+      pairHideTimer = setTimeout(() => {
+        pairHideTimer = null;
+        if (pairPopover.hidden) return;
+        const ae = document.activeElement;
+        if (ae && pairPopover.contains(ae)) return;
+        hidePairPopover();
+      }, 200);
+    }
+    function onPairPopoverFocusIn() {
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+    }
+    function onPairPopoverFocusOut() {
+      requestAnimationFrame(() => {
+        if (disposed || pairPopover.hidden) return;
+        const ae = document.activeElement;
+        if (ae && pairPopover.contains(ae)) return;
+        if (ae && listEl.contains(ae)) return;
+        hidePairPopover();
+        pairHoverRow = null;
+      });
+    }
+    pairPopover.addEventListener("mouseenter", onPairPopoverMouseEnter);
+    pairPopover.addEventListener("mouseleave", onPairPopoverMouseLeave);
+    pairPopover.addEventListener("focusin", onPairPopoverFocusIn);
+    pairPopover.addEventListener("focusout", onPairPopoverFocusOut);
     textarea.placeholder = tu("actions.fontPreview.placeholder");
     const sizeOpts = [];
     for (let px = 10; px <= 120; px++) {
@@ -20104,6 +20214,24 @@
         failToast();
       }
     }
+    function onPairPopoverCopyClick(ev) {
+      const btn = ev.target.closest(".gfp-pair-font-name");
+      if (!btn || !pairPopover.contains(btn)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      const family = btn.dataset.family;
+      if (family) copyFamilyNameToClipboard(family);
+    }
+    function onPairPopoverKeydown(ev) {
+      if (ev.key !== "Escape" || pairPopover.hidden) return;
+      ev.stopPropagation();
+      clearTimeout(pairShowTimer);
+      clearTimeout(pairHideTimer);
+      pairHoverRow = null;
+      hidePairPopover();
+    }
+    pairPopover.addEventListener("click", onPairPopoverCopyClick);
+    pairPopover.addEventListener("keydown", onPairPopoverKeydown);
     function onGfpRowActionClick(ev) {
       const btn = ev.target.closest(".gfp-font-row-btn");
       if (!btn || !container.contains(btn)) return;
@@ -20248,6 +20376,12 @@
       listEl.removeEventListener("mouseout", onListMouseOut);
       listEl.removeEventListener("focusin", onListFocusIn);
       listEl.removeEventListener("focusout", onListFocusOut);
+      pairPopover.removeEventListener("mouseenter", onPairPopoverMouseEnter);
+      pairPopover.removeEventListener("mouseleave", onPairPopoverMouseLeave);
+      pairPopover.removeEventListener("focusin", onPairPopoverFocusIn);
+      pairPopover.removeEventListener("focusout", onPairPopoverFocusOut);
+      pairPopover.removeEventListener("click", onPairPopoverCopyClick);
+      pairPopover.removeEventListener("keydown", onPairPopoverKeydown);
       hidePairPopover();
       window.removeEventListener("message", onGfpPluginWindowMessage);
       container.removeEventListener("click", onGfpRowActionClick);
@@ -22333,6 +22467,7 @@
           "actions.fontPreview.pairBody": "For body text",
           "actions.fontPreview.pairLatin": "Latin / English",
           "actions.fontPreview.pairEmpty": "No suggestions",
+          "actions.fontPreview.pairFontCopyHint": "Click to copy family name",
           "aux.context.smartTitle": "Smart Focus (Default)",
           "aux.context.smartDesc": "Intent-based adaptive context selection",
           "aux.context.allTitle": "Full Design Context",
@@ -22718,6 +22853,7 @@
           "actions.fontPreview.pairBody": "本文に合うフォント",
           "actions.fontPreview.pairLatin": "欧文（英語）の組み合わせ",
           "actions.fontPreview.pairEmpty": "候補がありません",
+          "actions.fontPreview.pairFontCopyHint": "クリックでファミリー名をコピー",
           "aux.context.smartTitle": "スマートフォーカス（既定）",
           "aux.context.smartDesc": "意図に応じてコンテキストを自動調整",
           "aux.context.allTitle": "完全なデザインコンテキスト",
@@ -23103,6 +23239,7 @@
           "actions.fontPreview.pairBody": "适合正文",
           "actions.fontPreview.pairLatin": "拉丁 / 英文",
           "actions.fontPreview.pairEmpty": "暂无建议",
+          "actions.fontPreview.pairFontCopyHint": "点击复制字体家族名称",
           "aux.context.smartTitle": "智能聚焦（默认）",
           "aux.context.smartDesc": "根据意图自适应选择上下文",
           "aux.context.allTitle": "完整设计上下文",

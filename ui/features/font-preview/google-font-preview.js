@@ -301,7 +301,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   const pairPopover = document.createElement('div');
   pairPopover.className = 'gfp-pair-popover';
-  pairPopover.setAttribute('role', 'tooltip');
+  pairPopover.setAttribute('role', 'region');
   pairPopover.hidden = true;
   if (mainEl) mainEl.appendChild(pairPopover);
 
@@ -310,6 +310,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   let pairHoverRow = null;
 
   function hidePairPopover() {
+    if (pairPopover.contains(document.activeElement)) {
+      try {
+        document.activeElement.blur();
+      } catch {
+        /* ignore */
+      }
+    }
     pairPopover.hidden = true;
     pairPopover.textContent = '';
     pairPopover.removeAttribute('style');
@@ -354,7 +361,24 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       lab.textContent = tu(labelKey);
       const namesEl = document.createElement('div');
       namesEl.className = 'gfp-pair-popover-names';
-      namesEl.textContent = names.join(' · ');
+      const copyHint = tu('actions.fontPreview.pairFontCopyHint');
+      for (let i = 0; i < names.length; i++) {
+        if (i > 0) {
+          const sep = document.createElement('span');
+          sep.className = 'gfp-pair-font-sep';
+          sep.textContent = ' · ';
+          sep.setAttribute('aria-hidden', 'true');
+          namesEl.appendChild(sep);
+        }
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'gfp-pair-font-name';
+        btn.dataset.family = names[i];
+        btn.textContent = names[i];
+        btn.title = copyHint;
+        btn.setAttribute('aria-label', `${names[i]} — ${copyHint}`);
+        namesEl.appendChild(btn);
+      }
       sec.appendChild(lab);
       sec.appendChild(namesEl);
       inner.appendChild(sec);
@@ -374,6 +398,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     }
 
     pairPopover.appendChild(inner);
+    pairPopover.setAttribute('aria-label', tu('actions.fontPreview.pairPopoverTitle'));
   }
 
   function showPairPopoverForRow(row, f) {
@@ -409,6 +434,11 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     if (!row || !listEl.contains(row)) return;
     const rel = e.relatedTarget;
     if (rel && row.contains(rel)) return;
+    if (rel && pairPopover.contains(rel)) {
+      clearTimeout(pairHideTimer);
+      pairHideTimer = null;
+      return;
+    }
     const other = rel && rel instanceof Element ? rel.closest('.gfp-font-row') : null;
     if (other && listEl.contains(other)) {
       pairHoverRow = other;
@@ -451,6 +481,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       if (disposed) return;
       const ae = document.activeElement;
       if (ae && row.contains(ae)) return;
+      if (ae && pairPopover.contains(ae)) return;
       pairHoverRow = null;
       clearTimeout(pairShowTimer);
       pairShowTimer = null;
@@ -465,6 +496,48 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   listEl.addEventListener('mouseout', onListMouseOut);
   listEl.addEventListener('focusin', onListFocusIn);
   listEl.addEventListener('focusout', onListFocusOut);
+
+  function onPairPopoverMouseEnter() {
+    clearTimeout(pairHideTimer);
+    pairHideTimer = null;
+  }
+
+  function onPairPopoverMouseLeave(e) {
+    const rel = e.relatedTarget;
+    if (rel && pairPopover.contains(rel)) return;
+    if (rel && rel instanceof Element && listEl.contains(rel) && rel.closest('.gfp-font-row')) return;
+    pairHoverRow = null;
+    clearTimeout(pairShowTimer);
+    pairShowTimer = null;
+    pairHideTimer = setTimeout(() => {
+      pairHideTimer = null;
+      if (pairPopover.hidden) return;
+      const ae = document.activeElement;
+      if (ae && pairPopover.contains(ae)) return;
+      hidePairPopover();
+    }, 200);
+  }
+
+  function onPairPopoverFocusIn() {
+    clearTimeout(pairHideTimer);
+    pairHideTimer = null;
+  }
+
+  function onPairPopoverFocusOut() {
+    requestAnimationFrame(() => {
+      if (disposed || pairPopover.hidden) return;
+      const ae = document.activeElement;
+      if (ae && pairPopover.contains(ae)) return;
+      if (ae && listEl.contains(ae)) return;
+      hidePairPopover();
+      pairHoverRow = null;
+    });
+  }
+
+  pairPopover.addEventListener('mouseenter', onPairPopoverMouseEnter);
+  pairPopover.addEventListener('mouseleave', onPairPopoverMouseLeave);
+  pairPopover.addEventListener('focusin', onPairPopoverFocusIn);
+  pairPopover.addEventListener('focusout', onPairPopoverFocusOut);
 
   textarea.placeholder = tu('actions.fontPreview.placeholder');
 
@@ -761,6 +834,27 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     }
   }
 
+  function onPairPopoverCopyClick(ev) {
+    const btn = ev.target.closest('.gfp-pair-font-name');
+    if (!btn || !pairPopover.contains(btn)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const family = btn.dataset.family;
+    if (family) copyFamilyNameToClipboard(family);
+  }
+
+  function onPairPopoverKeydown(ev) {
+    if (ev.key !== 'Escape' || pairPopover.hidden) return;
+    ev.stopPropagation();
+    clearTimeout(pairShowTimer);
+    clearTimeout(pairHideTimer);
+    pairHoverRow = null;
+    hidePairPopover();
+  }
+
+  pairPopover.addEventListener('click', onPairPopoverCopyClick);
+  pairPopover.addEventListener('keydown', onPairPopoverKeydown);
+
   function onGfpRowActionClick(ev) {
     const btn = ev.target.closest('.gfp-font-row-btn');
     if (!btn || !container.contains(btn)) return;
@@ -922,6 +1016,12 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     listEl.removeEventListener('mouseout', onListMouseOut);
     listEl.removeEventListener('focusin', onListFocusIn);
     listEl.removeEventListener('focusout', onListFocusOut);
+    pairPopover.removeEventListener('mouseenter', onPairPopoverMouseEnter);
+    pairPopover.removeEventListener('mouseleave', onPairPopoverMouseLeave);
+    pairPopover.removeEventListener('focusin', onPairPopoverFocusIn);
+    pairPopover.removeEventListener('focusout', onPairPopoverFocusOut);
+    pairPopover.removeEventListener('click', onPairPopoverCopyClick);
+    pairPopover.removeEventListener('keydown', onPairPopoverKeydown);
     hidePairPopover();
     window.removeEventListener('message', onGfpPluginWindowMessage);
     container.removeEventListener('click', onGfpRowActionClick);
