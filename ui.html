@@ -486,8 +486,8 @@
     }
 
     .gfp-sidebar {
-      width: min(200px, 34vw);
-      min-width: 200px;
+      width: 24vw;
+      min-width: 160px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
@@ -540,26 +540,27 @@
 
     .gfp-tag-grid {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
       gap: var(--space-xs);
       padding: 0;
     }
 
-    .gfp-tag-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--space-xs);
-    }
-
     .gfp-tag {
+      box-sizing: border-box;
+      width: max-content;
+      max-width: 100%;
+      flex: 0 0 auto;
       border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 7px 8px;
+      border-radius: var(--radius-md);
+      padding: var(--space-xs) var(--space-sm);
       font-size: 10px;
       background: var(--bg-secondary);
       color: var(--text-primary);
       cursor: pointer;
       text-align: center;
+      white-space: nowrap;
       transition: border-color 0.15s ease, background 0.15s ease;
     }
 
@@ -19080,14 +19081,18 @@
     fillLangSelect(langPrimary, LANGUAGE_OPTIONS);
     fillLangSelect(langSecondary, SCRIPT_OPTIONS);
     function renderTagGrid(grid, pairs, group) {
-      grid.innerHTML = pairs.map(([a, b]) => {
-        const cells = [a, b].filter((t) => t && t !== "—").map((tag) => {
+      const parts = [];
+      for (const [a, b] of pairs) {
+        for (const tag of [a, b]) {
+          if (!tag || tag === "—") continue;
           const test = group === "feeling" ? FEELING_TEST[tag] : APPEARANCE_TEST[tag];
-          if (!test) return "";
-          return '<button type="button" class="gfp-tag" data-group="'.concat(group, '" data-tag="').concat(escapeAttr(tag), '">').concat(escapeAttr(tag), "</button>");
-        }).join("");
-        return '<div class="gfp-tag-row">'.concat(cells, "</div>");
-      }).join("");
+          if (!test) continue;
+          parts.push(
+            '<button type="button" class="gfp-tag" data-group="'.concat(group, '" data-tag="').concat(escapeAttr(tag), '">').concat(escapeAttr(tag), "</button>")
+          );
+        }
+      }
+      grid.innerHTML = parts.join("");
     }
     renderTagGrid(feelingGrid, FEELING_TAGS, "feeling");
     renderTagGrid(appearanceGrid, APPEARANCE_TAGS, "appearance");

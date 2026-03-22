@@ -246,19 +246,18 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   fillLangSelect(langSecondary, SCRIPT_OPTIONS);
 
   function renderTagGrid(grid, pairs, group) {
-    grid.innerHTML = pairs
-      .map(([a, b]) => {
-        const cells = [a, b]
-          .filter(t => t && t !== '—')
-          .map(tag => {
-            const test = group === 'feeling' ? FEELING_TEST[tag] : APPEARANCE_TEST[tag];
-            if (!test) return '';
-            return `<button type="button" class="gfp-tag" data-group="${group}" data-tag="${escapeAttr(tag)}">${escapeAttr(tag)}</button>`;
-          })
-          .join('');
-        return `<div class="gfp-tag-row">${cells}</div>`;
-      })
-      .join('');
+    const parts = [];
+    for (const [a, b] of pairs) {
+      for (const tag of [a, b]) {
+        if (!tag || tag === '—') continue;
+        const test = group === 'feeling' ? FEELING_TEST[tag] : APPEARANCE_TEST[tag];
+        if (!test) continue;
+        parts.push(
+          `<button type="button" class="gfp-tag" data-group="${group}" data-tag="${escapeAttr(tag)}">${escapeAttr(tag)}</button>`
+        );
+      }
+    }
+    grid.innerHTML = parts.join('');
   }
 
   renderTagGrid(feelingGrid, FEELING_TAGS, 'feeling');
