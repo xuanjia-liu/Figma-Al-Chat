@@ -155,6 +155,45 @@ function gfpClampWght(f, w) {
   return Math.min(max, Math.max(min, w));
 }
 
+/** @param {(k: string) => string} tu */
+function gfpFormatRowWeightStyle(effectiveWght, tu) {
+  const w = Math.round(Number(effectiveWght)) || 400;
+  let styleKey = 'actions.fontPreview.wghtStyleRegular';
+  if (w <= 120) styleKey = 'actions.fontPreview.wghtStyleThin';
+  else if (w <= 220) styleKey = 'actions.fontPreview.wghtStyleExtraLight';
+  else if (w <= 320) styleKey = 'actions.fontPreview.wghtStyleLight';
+  else if (w <= 420) styleKey = 'actions.fontPreview.wghtStyleRegular';
+  else if (w <= 520) styleKey = 'actions.fontPreview.wghtStyleMedium';
+  else if (w <= 620) styleKey = 'actions.fontPreview.wghtStyleSemiBold';
+  else if (w <= 720) styleKey = 'actions.fontPreview.wghtStyleBold';
+  else if (w <= 820) styleKey = 'actions.fontPreview.wghtStyleExtraBold';
+  else styleKey = 'actions.fontPreview.wghtStyleBlack';
+  return tu('actions.fontPreview.weightStyleMeta', { weight: String(w), style: tu(styleKey) });
+}
+
+/** @param {(k: string, vars?: object) => string} tu */
+function gfpFamilyWeightCatalogSummary(f, tu) {
+  const css = f && typeof f.wghtCss === 'string' ? f.wghtCss.trim() : '';
+  if (css.includes('..')) {
+    return tu('actions.fontPreview.weightFamilyVariable');
+  }
+  if (css.includes(';')) {
+    const n = css.split(';').filter(Boolean).length;
+    return n <= 1
+      ? tu('actions.fontPreview.weightFamilyOne')
+      : tu('actions.fontPreview.weightFamilyCount', { count: String(n) });
+  }
+  if (css && /^\d+$/.test(css)) {
+    return tu('actions.fontPreview.weightFamilyOne');
+  }
+  if (css) {
+    return tu('actions.fontPreview.weightFamilyOne');
+  }
+  const { min, max } = gfpWghtBounds(f);
+  if (min === max) return tu('actions.fontPreview.weightFamilyOne');
+  return tu('actions.fontPreview.weightFamilyVariable');
+}
+
 /**
  * @param {HTMLElement} container
  * @param {{ tu: (k: string) => string; showToast: (msg: string, type?: string) => void }} deps
@@ -355,7 +394,19 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       row.dataset.family = f.family;
       const label = document.createElement('div');
       label.className = 'gfp-font-name';
-      label.textContent = f.family;
+      const titleEl = document.createElement('span');
+      titleEl.className = 'gfp-font-name-title';
+      titleEl.textContent = f.family;
+      const metaEl = document.createElement('span');
+      metaEl.className = 'gfp-font-name-meta';
+      const effW = gfpClampWght(f, state.fontWght);
+      metaEl.textContent = gfpFormatRowWeightStyle(effW, tu);
+      const countEl = document.createElement('span');
+      countEl.className = 'gfp-font-name-wght-count';
+      countEl.textContent = gfpFamilyWeightCatalogSummary(f, tu);
+      label.appendChild(titleEl);
+      label.appendChild(metaEl);
+      label.appendChild(countEl);
       const sample = document.createElement('div');
       sample.className = 'gfp-font-sample';
       sample.textContent = state.previewText || tu('actions.fontPreview.placeholder');
@@ -468,7 +519,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       const name = row.dataset.family;
       const meta = familyByName.get(name);
       const sample = row.querySelector('.gfp-font-sample');
-      if (sample) sample.style.fontWeight = String(gfpClampWght(meta, state.fontWght));
+      const w = gfpClampWght(meta, state.fontWght);
+      if (sample) sample.style.fontWeight = String(w);
+      const metaEl = row.querySelector('.gfp-font-name-meta');
+      if (metaEl) metaEl.textContent = gfpFormatRowWeightStyle(w, tu);
     });
   }
 

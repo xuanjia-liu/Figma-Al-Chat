@@ -785,14 +785,47 @@
     }
 
     .gfp-font-name {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px var(--space-md);
+      width: 100%;
+      min-width: 0;
       font-size: var(--text-xs);
+    }
+
+    .gfp-font-name-title {
+      flex-shrink: 0;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .gfp-font-name-meta {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 500;
       color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+
+    .gfp-font-name-wght-count {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      opacity: 0.9;
+      font-variant-numeric: tabular-nums;
     }
 
     .gfp-font-sample {
+      width: 100%;
+      min-width: 0;
       color: var(--text-primary);
       line-height: 1.25;
       word-break: break-word;
+      text-align: left;
     }
 
     .gfp-loading,

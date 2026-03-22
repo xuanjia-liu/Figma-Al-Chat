@@ -792,14 +792,47 @@
     }
 
     .gfp-font-name {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px var(--space-md);
+      width: 100%;
+      min-width: 0;
       font-size: var(--text-xs);
+    }
+
+    .gfp-font-name-title {
+      flex-shrink: 0;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .gfp-font-name-meta {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 500;
       color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+
+    .gfp-font-name-wght-count {
+      flex-shrink: 0;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      opacity: 0.9;
+      font-variant-numeric: tabular-nums;
     }
 
     .gfp-font-sample {
+      width: 100%;
+      min-width: 0;
       color: var(--text-primary);
       line-height: 1.25;
       word-break: break-word;
+      text-align: left;
     }
 
     .gfp-loading,
@@ -19140,6 +19173,39 @@
     const { min, max } = gfpWghtBounds(f);
     return Math.min(max, Math.max(min, w));
   }
+  function gfpFormatRowWeightStyle(effectiveWght, tu) {
+    const w = Math.round(Number(effectiveWght)) || 400;
+    let styleKey = "actions.fontPreview.wghtStyleRegular";
+    if (w <= 120) styleKey = "actions.fontPreview.wghtStyleThin";
+    else if (w <= 220) styleKey = "actions.fontPreview.wghtStyleExtraLight";
+    else if (w <= 320) styleKey = "actions.fontPreview.wghtStyleLight";
+    else if (w <= 420) styleKey = "actions.fontPreview.wghtStyleRegular";
+    else if (w <= 520) styleKey = "actions.fontPreview.wghtStyleMedium";
+    else if (w <= 620) styleKey = "actions.fontPreview.wghtStyleSemiBold";
+    else if (w <= 720) styleKey = "actions.fontPreview.wghtStyleBold";
+    else if (w <= 820) styleKey = "actions.fontPreview.wghtStyleExtraBold";
+    else styleKey = "actions.fontPreview.wghtStyleBlack";
+    return tu("actions.fontPreview.weightStyleMeta", { weight: String(w), style: tu(styleKey) });
+  }
+  function gfpFamilyWeightCatalogSummary(f, tu) {
+    const css = f && typeof f.wghtCss === "string" ? f.wghtCss.trim() : "";
+    if (css.includes("..")) {
+      return tu("actions.fontPreview.weightFamilyVariable");
+    }
+    if (css.includes(";")) {
+      const n = css.split(";").filter(Boolean).length;
+      return n <= 1 ? tu("actions.fontPreview.weightFamilyOne") : tu("actions.fontPreview.weightFamilyCount", { count: String(n) });
+    }
+    if (css && /^\d+$/.test(css)) {
+      return tu("actions.fontPreview.weightFamilyOne");
+    }
+    if (css) {
+      return tu("actions.fontPreview.weightFamilyOne");
+    }
+    const { min, max } = gfpWghtBounds(f);
+    if (min === max) return tu("actions.fontPreview.weightFamilyOne");
+    return tu("actions.fontPreview.weightFamilyVariable");
+  }
   function mountGoogleFontPreview(container, { tu, showToast }) {
     let disposed = false;
     let allFamilies = [];
@@ -19265,7 +19331,19 @@
         row.dataset.family = f.family;
         const label = document.createElement("div");
         label.className = "gfp-font-name";
-        label.textContent = f.family;
+        const titleEl = document.createElement("span");
+        titleEl.className = "gfp-font-name-title";
+        titleEl.textContent = f.family;
+        const metaEl = document.createElement("span");
+        metaEl.className = "gfp-font-name-meta";
+        const effW = gfpClampWght(f, state.fontWght);
+        metaEl.textContent = gfpFormatRowWeightStyle(effW, tu);
+        const countEl2 = document.createElement("span");
+        countEl2.className = "gfp-font-name-wght-count";
+        countEl2.textContent = gfpFamilyWeightCatalogSummary(f, tu);
+        label.appendChild(titleEl);
+        label.appendChild(metaEl);
+        label.appendChild(countEl2);
         const sample = document.createElement("div");
         sample.className = "gfp-font-sample";
         sample.textContent = state.previewText || tu("actions.fontPreview.placeholder");
@@ -19371,7 +19449,10 @@
         const name2 = row.dataset.family;
         const meta = familyByName.get(name2);
         const sample = row.querySelector(".gfp-font-sample");
-        if (sample) sample.style.fontWeight = String(gfpClampWght(meta, state.fontWght));
+        const w = gfpClampWght(meta, state.fontWght);
+        if (sample) sample.style.fontWeight = String(w);
+        const metaEl = row.querySelector(".gfp-font-name-meta");
+        if (metaEl) metaEl.textContent = gfpFormatRowWeightStyle(w, tu);
       });
     }
     function syncWeight(fromRange) {
@@ -21489,6 +21570,19 @@
           "actions.fontPreview.size": "Preview size",
           "actions.fontPreview.weight": "Preview weight",
           "actions.fontPreview.sizeAndWeightControlsAria": "Preview size and weight sliders",
+          "actions.fontPreview.weightStyleMeta": "{weight} · {style}",
+          "actions.fontPreview.wghtStyleThin": "Thin",
+          "actions.fontPreview.wghtStyleExtraLight": "Extra Light",
+          "actions.fontPreview.wghtStyleLight": "Light",
+          "actions.fontPreview.wghtStyleRegular": "Regular",
+          "actions.fontPreview.wghtStyleMedium": "Medium",
+          "actions.fontPreview.wghtStyleSemiBold": "Semi Bold",
+          "actions.fontPreview.wghtStyleBold": "Bold",
+          "actions.fontPreview.wghtStyleExtraBold": "Extra Bold",
+          "actions.fontPreview.wghtStyleBlack": "Black",
+          "actions.fontPreview.weightFamilyVariable": "Variable",
+          "actions.fontPreview.weightFamilyOne": "1 weight",
+          "actions.fontPreview.weightFamilyCount": "{count} weights",
           "actions.fontPreview.language": "Language",
           "actions.fontPreview.feeling": "Feeling",
           "actions.fontPreview.appearance": "Appearance",
@@ -21846,6 +21940,19 @@
           "actions.fontPreview.size": "プレビューサイズ",
           "actions.fontPreview.weight": "プレビュー太さ",
           "actions.fontPreview.sizeAndWeightControlsAria": "プレビューのサイズとウェイトのスライダー",
+          "actions.fontPreview.weightStyleMeta": "{weight} · {style}",
+          "actions.fontPreview.wghtStyleThin": "極細",
+          "actions.fontPreview.wghtStyleExtraLight": "ウルトラライト",
+          "actions.fontPreview.wghtStyleLight": "ライト",
+          "actions.fontPreview.wghtStyleRegular": "レギュラー",
+          "actions.fontPreview.wghtStyleMedium": "ミディアム",
+          "actions.fontPreview.wghtStyleSemiBold": "セミボールド",
+          "actions.fontPreview.wghtStyleBold": "ボールド",
+          "actions.fontPreview.wghtStyleExtraBold": "エクストラボールド",
+          "actions.fontPreview.wghtStyleBlack": "ヘビー",
+          "actions.fontPreview.weightFamilyVariable": "可変",
+          "actions.fontPreview.weightFamilyOne": "ウェイト 1",
+          "actions.fontPreview.weightFamilyCount": "ウェイト {count}",
           "actions.fontPreview.language": "言語",
           "actions.fontPreview.feeling": "雰囲気",
           "actions.fontPreview.appearance": "外観",
@@ -22203,6 +22310,19 @@
           "actions.fontPreview.size": "预览字号",
           "actions.fontPreview.weight": "预览字重",
           "actions.fontPreview.sizeAndWeightControlsAria": "预览字号与字重滑块",
+          "actions.fontPreview.weightStyleMeta": "{weight} · {style}",
+          "actions.fontPreview.wghtStyleThin": "极细",
+          "actions.fontPreview.wghtStyleExtraLight": "特细",
+          "actions.fontPreview.wghtStyleLight": "细",
+          "actions.fontPreview.wghtStyleRegular": "常规",
+          "actions.fontPreview.wghtStyleMedium": "中等",
+          "actions.fontPreview.wghtStyleSemiBold": "半粗",
+          "actions.fontPreview.wghtStyleBold": "粗体",
+          "actions.fontPreview.wghtStyleExtraBold": "特粗",
+          "actions.fontPreview.wghtStyleBlack": "重体",
+          "actions.fontPreview.weightFamilyVariable": "可变",
+          "actions.fontPreview.weightFamilyOne": "1 种字重",
+          "actions.fontPreview.weightFamilyCount": "{count} 种字重",
           "actions.fontPreview.language": "语言",
           "actions.fontPreview.feeling": "气质",
           "actions.fontPreview.appearance": "外观",
