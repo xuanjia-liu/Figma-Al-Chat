@@ -6,7 +6,7 @@ export const TASK_FIELD_EXACT = {
   ja: {
     " (done)": "（完了）",
     " - draft": " - 下書き",
-    "0 = 1.1 × font size": "0 = フォントサイズの 1.1 倍",
+    "Empty = 1.1 × font size": "未入力 = フォントサイズの 1.1 倍",
     "0 = auto based on count; 2 forces 01, 02, ...": "0 = 件数に応じて自動、2 なら 01, 02… を強制",
     "0 = use platform default": "0 = プラットフォーム既定を使用",
     "0.5K": "0.5K",
@@ -446,7 +446,7 @@ export const TASK_FIELD_EXACT = {
   'zh-CN': {
     " (done)": "（完成）",
     " - draft": " - 草稿",
-    "0 = 1.1 × font size": "0 = 1.1 × 字号",
+    "Empty = 1.1 × font size": "留空 = 1.1 × 字号",
     "0 = auto based on count; 2 forces 01, 02, ...": "0 = 按数量自动；2 则强制 01、02…",
     "0 = use platform default": "0 = 使用平台默认值",
     "0.5K": "0.5K",

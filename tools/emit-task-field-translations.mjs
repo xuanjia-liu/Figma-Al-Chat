@@ -54,7 +54,7 @@ function collectTaskFieldStrings() {
 const EXACT = {
   ' (done)': ['（完了）', '（完成）'],
   ' - draft': [' - 下書き', ' - 草稿'],
-  '0 = 1.1 × font size': ['0 = フォントサイズの 1.1 倍', '0 = 1.1 × 字号'],
+  'Empty = 1.1 × font size': ['未入力 = フォントサイズの 1.1 倍', '留空 = 1.1 × 字号'],
   '0 = auto based on count; 2 forces 01, 02, ...': [
     '0 = 件数に応じて自動、2 なら 01, 02… を強制',
     '0 = 按数量自动；2 则强制 01、02…',

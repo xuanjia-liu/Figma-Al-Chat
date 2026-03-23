@@ -5637,8 +5637,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           const computedCount = (verticalCols > 0 && sourceCharCount > 0)
             ? Math.max(1, Math.ceil(sourceCharCount / verticalCols))
             : 0;
-          colEl.value = computedCount > 0 ? String(computedCount) : '0';
-          heightEl.value = (computedCount > 0 && lh > 0) ? formatNumber(computedCount * lh) : '0';
+          colEl.value = computedCount > 0 ? String(computedCount) : '';
+          heightEl.value = (computedCount > 0 && lh > 0) ? formatNumber(computedCount * lh) : '';
           syncPromptSliderFromNumberInput(colEl);
           syncPromptSliderFromNumberInput(heightEl);
           heightEl.dispatchEvent(new Event('change', { bubbles: true }));
@@ -5648,10 +5648,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
         if (lastEdited === 'heightPx') {
           const h = parseFloat(heightEl.value) || 0;
-          colEl.value = (h > 0 && lh > 0) ? String(Math.ceil(h / lh)) : '0';
+          colEl.value = (h > 0 && lh > 0) ? String(Math.ceil(h / lh)) : '';
           syncPromptSliderFromNumberInput(colEl);
         } else {
-          heightEl.value = (c > 0 && lh > 0) ? formatNumber(c * lh) : '0';
+          heightEl.value = (c > 0 && lh > 0) ? formatNumber(c * lh) : '';
           syncPromptSliderFromNumberInput(heightEl);
         }
         heightEl.dispatchEvent(new Event('change', { bubbles: true }));
@@ -12317,7 +12317,11 @@ Generate ONLY the reply text, nothing else.`;
         if (savedActionHistory) {
           hydratedFields = hydratedFields.map(field => {
             if (savedActionHistory[field.key] !== undefined) {
-              return { ...field, default: savedActionHistory[field.key] };
+              let histVal = savedActionHistory[field.key];
+              if (actionData.name === 'Vertical text' && field.type === 'number' && histVal === 0) {
+                histVal = '';
+              }
+              return { ...field, default: histVal };
             }
             if (field.type === 'row' && field.fields) {
               const updatedRowFields = field.fields.map(rf => {
