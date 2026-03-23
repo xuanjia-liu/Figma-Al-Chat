@@ -909,10 +909,14 @@ import {
 
     function isTaskAvailableInAiOff(task, fallbackName = '') {
       if (!isAiOffModeEnabled()) return true;
+      const name = fallbackName || task?.name || '';
+      if (name === 'Translate text' || name === 'Translate naming') {
+        return true;
+      }
       if (isQuickActionAllowedInAiOff(task)) {
         return true;
       }
-      return isLocalTaskAllowedInAiOff(fallbackName || task?.name || '');
+      return isLocalTaskAllowedInAiOff(name);
     }
 
     function isQuickActionAllowedInAiOff(task) {
@@ -19088,6 +19092,47 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
     }
 
+    function mapQuickActionTargetLanguageToGoogleCode(label) {
+      const map = {
+        'English': 'en',
+        'Japanese': 'ja',
+        'Chinese (Simplified)': 'zh-CN',
+        'Chinese (Traditional)': 'zh-TW',
+        'Korean': 'ko',
+        'Vietnamese': 'vi',
+        'Spanish': 'es',
+        'French': 'fr',
+        'German': 'de'
+      };
+      return map[label] || 'en';
+    }
+
+    async function runGoogleTranslateQuickAction(actionName, values) {
+      const target = mapQuickActionTargetLanguageToGoogleCode(values.targetLanguage || 'English');
+      if (actionName === 'Translate text') {
+        return runLocalActionRequest({
+          requestType: 'local-google-translate-text',
+          resultType: 'local-google-translate-text-result',
+          payload: { target },
+          errorPrefixes: ['Translate text failed'],
+          timeoutMs: 120000
+        });
+      }
+      if (actionName === 'Translate naming') {
+        return runLocalActionRequest({
+          requestType: 'local-google-translate-naming',
+          resultType: 'local-google-translate-naming-result',
+          payload: {
+            target,
+            keepOriginal: values.keepOriginal === true
+          },
+          errorPrefixes: ['Translate naming failed'],
+          timeoutMs: 120000
+        });
+      }
+      throw new Error(`Unsupported translate action: ${actionName}`);
+    }
+
     // ==========================================
     // Fill from Online Image
     // ==========================================
@@ -20293,6 +20338,17 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
             showToast('Prompt is required for Smart rename', 'error');
             return;
           }
+        }
+
+        if (isAiOffModeEnabled() && (action.name === 'Translate text' || action.name === 'Translate naming')) {
+          closePromptDrawer();
+          closeCommandsDrawer();
+          try {
+            await runGoogleTranslateQuickAction(action.name, values);
+          } catch (err) {
+            showToast(err?.message || 'Translation failed', 'error');
+          }
+          return;
         }
 
         if (NON_AI_LOCAL_TASKS.has(action.name) && action.name !== 'Smart rename') {
@@ -31998,6 +32054,35 @@ Based on the user's instruction, generate the appropriate commands to modify the
             showToast(`Failed to verticalize ${failed}/${total} text layer${failed === 1 ? '' : 's'}.`, 'error');
           } else {
             showToast(`No text layers needed changes${total ? ` out of ${total}` : ''}.`, 'info');
+          }
+          break;
+        }
+
+        case 'local-google-translate-text-result': {
+          const gtUpdated = Number(msg.updated) || 0;
+          const gtSkipped = Number(msg.skipped) || 0;
+          const gtFailed = Number(msg.failed) || 0;
+          const gtTotal = Number(msg.total) || (gtUpdated + gtSkipped + gtFailed);
+          if (gtUpdated > 0 && gtFailed === 0) {
+            showToast(`Translated ${gtUpdated}/${gtTotal} text layer${gtUpdated === 1 ? '' : 's'}.`, 'success');
+          } else if (gtUpdated > 0 && gtFailed > 0) {
+            showToast(`Translated ${gtUpdated}/${gtTotal} text layers, ${gtFailed} failed.`, 'warning');
+          } else if (gtFailed > 0) {
+            showToast(`Failed to translate ${gtFailed}/${gtTotal} text layer${gtFailed === 1 ? '' : 's'}.`, 'error');
+          } else {
+            showToast(`No text content needed translation${gtTotal ? ` out of ${gtTotal}` : ''}.`, 'info');
+          }
+          break;
+        }
+
+        case 'local-google-translate-naming-result': {
+          const gtnRenamed = Number(msg.renamed) || 0;
+          const gtnSkipped = Number(msg.skipped) || 0;
+          const gtnTotal = Number(msg.total) || (gtnRenamed + gtnSkipped);
+          if (gtnRenamed > 0) {
+            showToast(`Renamed ${gtnRenamed}/${gtnTotal} layer${gtnRenamed === 1 ? '' : 's'} (translated).`, 'success');
+          } else {
+            showToast(`No layer names needed translation${gtnTotal ? ` out of ${gtnTotal}` : ''}.`, 'info');
           }
           break;
         }

@@ -4198,6 +4198,43 @@ async function exportWithCloneMethod(
   }
 }
 
+/** Same public endpoint pattern as translate.google.com (client=gtx); no API key. Unofficial / may change. */
+async function translateWithGtxClient(text: string, targetLang: string): Promise<string> {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return '';
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(trimmed)}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    throw new Error(`Translation request failed (${resp.status})`);
+  }
+  const data: unknown = await resp.json();
+  const arr = data as unknown[];
+  if (arr && arr[0] && Array.isArray(arr[0]) && arr[0][0] && Array.isArray(arr[0][0]) && arr[0][0][0]) {
+    return String(arr[0][0][0]);
+  }
+  return trimmed;
+}
+
+async function translateStringsWithGtx(strings: string[], targetLang: string): Promise<string[]> {
+  const CONCURRENCY = 5;
+  const out: string[] = new Array(strings.length);
+  let nextIndex = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= strings.length) return;
+      try {
+        out[i] = await translateWithGtxClient(strings[i], targetLang);
+      } catch {
+        out[i] = strings[i];
+      }
+    }
+  }
+  const n = Math.min(CONCURRENCY, Math.max(1, strings.length));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return out;
+}
+
 figma.ui.onmessage = async (msg: {
   type: string,
   cssFormat?: string,
@@ -4220,7 +4257,8 @@ figma.ui.onmessage = async (msg: {
   keepSpacing?: boolean,
   onlySelected?: boolean,
   includeInstances?: boolean,
-  keepOriginal?: boolean
+  keepOriginal?: boolean,
+  target?: string
 }) => {
   // Handle cancellation requests immediately, before the switch
   if (msg.type === 'cancel-execution') {
@@ -6009,6 +6047,142 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('local-verticalize-text failed', error);
         figma.ui.postMessage({ type: 'error', message: `Verticalize text failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'local-google-translate-text': {
+      try {
+        const targetLang = typeof msg.target === 'string' ? msg.target.trim() : '';
+        if (!targetLang) {
+          figma.ui.postMessage({ type: 'error', message: 'Translate text failed: Missing target language.' });
+          break;
+        }
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Translate text failed: Please select at least one layer with editable text.' });
+          break;
+        }
+
+        type TextTranslateEntry = { target: EditableTextTarget; original: string };
+        const entries: TextTranslateEntry[] = [];
+        for (const node of selection) {
+          const t = await resolveEditableTextTarget(node);
+          if (!t) continue;
+          const original = getEditableTextTargetContent(t).trim();
+          if (!original) continue;
+          entries.push({ target: t, original });
+        }
+
+        if (entries.length === 0) {
+          figma.ui.postMessage({
+            type: 'local-google-translate-text-result',
+            updated: 0,
+            skipped: selection.length,
+            failed: 0,
+            total: selection.length
+          });
+          figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+          break;
+        }
+
+        const originals = entries.map(e => e.original);
+        const translated = await translateStringsWithGtx(originals, targetLang);
+
+        let updated = 0;
+        let skipped = 0;
+        let failed = 0;
+        for (let i = 0; i < entries.length; i++) {
+          const { target, original } = entries[i];
+          const next = translated[i] !== undefined && translated[i] !== null ? String(translated[i]).trim() : '';
+          if (!next || next === original) {
+            skipped++;
+            continue;
+          }
+          try {
+            await setEditableTextTargetContent(target, next);
+            updated++;
+          } catch (e) {
+            console.error('local-google-translate-text apply failed', e);
+            failed++;
+          }
+        }
+
+        figma.ui.postMessage({
+          type: 'local-google-translate-text-result',
+          updated,
+          skipped,
+          failed,
+          total: entries.length
+        });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+      } catch (error) {
+        console.error('local-google-translate-text failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Translate text failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'local-google-translate-naming': {
+      try {
+        const targetLang = typeof msg.target === 'string' ? msg.target.trim() : '';
+        const keepOriginal = (msg as { keepOriginal?: boolean }).keepOriginal === true;
+        if (!targetLang) {
+          figma.ui.postMessage({ type: 'error', message: 'Translate naming failed: Missing target language.' });
+          break;
+        }
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Translate naming failed: Please select at least one layer to rename.' });
+          break;
+        }
+
+        const targets = selection.filter(isRenameableSceneNode);
+        if (targets.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Translate naming failed: Please select at least one layer to rename.' });
+          break;
+        }
+
+        type NameTranslatePart = { node: SceneNode; segment: string; prefix: string; fullOriginal: string };
+        const parts: NameTranslatePart[] = [];
+        for (const node of targets) {
+          const name = node.name;
+          const eq = name.indexOf('=');
+          if (eq > 0 && eq < name.length - 1) {
+            parts.push({ node, prefix: name.slice(0, eq + 1), segment: name.slice(eq + 1), fullOriginal: name });
+          } else {
+            parts.push({ node, prefix: '', segment: name, fullOriginal: name });
+          }
+        }
+
+        const segments = parts.map(p => p.segment);
+        const translated = await translateStringsWithGtx(segments, targetLang);
+
+        let renamed = 0;
+        let skipped = 0;
+        for (let i = 0; i < parts.length; i++) {
+          const { node, prefix, segment, fullOriginal } = parts[i];
+          const t = translated[i] !== undefined && translated[i] !== null ? String(translated[i]).trim() : '';
+          let nextFull = prefix ? `${prefix}${t}` : t;
+          if (keepOriginal && fullOriginal) {
+            nextFull = `${nextFull} (${fullOriginal})`;
+          }
+          if (!nextFull || nextFull === node.name) {
+            skipped++;
+            continue;
+          }
+          node.name = nextFull;
+          renamed++;
+        }
+
+        figma.ui.postMessage({
+          type: 'local-google-translate-naming-result',
+          renamed,
+          skipped,
+          total: targets.length
+        });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+      } catch (error) {
+        console.error('local-google-translate-naming failed', error);
+        figma.ui.postMessage({ type: 'error', message: `Translate naming failed: ${(error as Error)?.message || 'Unknown error'}` });
       }
       break;
     }
