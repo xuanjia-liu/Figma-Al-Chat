@@ -9244,6 +9244,24 @@
       height: 10px;
     }
 
+    .prompt-field-reload-btn {
+      padding: 0;
+      width: 22px;
+      min-width: 22px;
+      justify-content: center;
+    }
+
+    .prompt-field-reload-btn svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .prompt-field-reload-btn:disabled {
+      opacity: var(--disabled-opacity);
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
     .prompt-add-image-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -9560,7 +9578,7 @@
     }
 
     .prompt-slider-number {
-      width: 32px;
+      width: 48px;
       text-align: center;
       padding: var(--space-xs) var(--space-2xs);
       background: var(--bg-tertiary);
@@ -9753,6 +9771,36 @@
     .prompt-field-row .prompt-field.prompt-field--compact {
       flex: 0 0 64px;
       min-width: 64px;
+    }
+
+    .prompt-field-inline-checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      margin: 0;
+      cursor: pointer;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-primary);
+      flex-shrink: 0;
+      max-width: 55%;
+      text-align: right;
+    }
+
+    .prompt-field-inline-checkbox input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .prompt-field-inline-checkbox-label {
+      line-height: 1.25;
+    }
+
+    .prompt-field-controls-wrap.disabled {
+      opacity: var(--disabled-opacity);
+      pointer-events: none;
+      cursor: not-allowed;
     }
 
     /* Image Upload Field */

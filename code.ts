@@ -5512,10 +5512,19 @@ figma.ui.onmessage = async (msg: {
           verticalColumns: number;
           useVerticalColumns: boolean;
           lineHeightPx: number;
+          nativeLineHeightPx: number;
           sourceRowCount: number;
           sourceCharCount: number;
           fontSize: number;
         }> = [];
+
+        const readNativeLineHeightPx = (tn: TextNode, fs: number): number => {
+          if (typeof tn.lineHeight === 'symbol') return 0;
+          const lh = tn.lineHeight as LineHeight;
+          if (lh.unit === 'PIXELS') return lh.value;
+          if (lh.unit === 'PERCENT') return Math.round(fs * (lh.value / 100) * 100) / 100;
+          return 0;
+        };
 
         for (const node of sel) {
           let textNode: TextNode | null = null;
@@ -5555,12 +5564,13 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (!textNode) {
-            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0 });
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0 });
             continue;
           }
 
           const isVertical = textNode.getPluginData('fgVerticalText') === 'true';
           const fontSize = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
+          const nativeLineHeightPx = readNativeLineHeightPx(textNode, fontSize);
 
           if (isVertical) {
             results.push({
@@ -5580,6 +5590,7 @@ figma.ui.onmessage = async (msg: {
               ),
               useVerticalColumns: textNode.getPluginData('fgVerticalTextUseVerticalColumns') === 'true',
               lineHeightPx: parseFloat(textNode.getPluginData('fgVerticalTextLineHeightPx') || '0'),
+              nativeLineHeightPx,
               sourceRowCount: parseInt(textNode.getPluginData('fgVerticalTextSourceRowCount') || '0', 10),
               sourceCharCount: Array.from(
                 (textNode.getPluginData('fgVerticalTextOriginalContent') || textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')
@@ -5594,6 +5605,7 @@ figma.ui.onmessage = async (msg: {
               verticalColumns: 0,
               useVerticalColumns: false,
               lineHeightPx: 0,
+              nativeLineHeightPx,
               sourceRowCount: 0,
               sourceCharCount: Array.from((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')).length,
               fontSize

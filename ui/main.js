@@ -193,6 +193,12 @@ import {
       if (Array.isArray(localized.fields)) {
         localized.fields = localized.fields.map(localizeTaskField);
       }
+      if (localized.labelRowCheckbox && typeof localized.labelRowCheckbox === 'object') {
+        localized.labelRowCheckbox = { ...localized.labelRowCheckbox };
+        if (typeof localized.labelRowCheckbox.label === 'string') {
+          localized.labelRowCheckbox.label = localizeActionString(localized.labelRowCheckbox.label);
+        }
+      }
       if (Array.isArray(localized.options)) {
         localized.options = localized.options.map((option) => {
           if (!option || typeof option !== 'object') return option;
@@ -5559,6 +5565,50 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     }
 
     let verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
+    let verticalTextLineHeightReloadEnabled = false;
+
+    function fetchVerticalTextMetadata() {
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          resolve(null);
+        }, 5000);
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (msg && msg.type === 'detect-vertical-text-metadata-result') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(msg.results);
+          }
+        };
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: { type: 'detect-vertical-text-metadata' } }, '*');
+      });
+    }
+
+    function resolveVerticalTextReloadLineHeightPx(first) {
+      if (!first || typeof first.fontSize !== 'number' || first.fontSize <= 0) return null;
+      if (first.isVertical === true && first.lineHeightPx > 0) return first.lineHeightPx;
+      const native = first.nativeLineHeightPx;
+      if (typeof native === 'number' && native > 0) return native;
+      return Math.round(first.fontSize * 1.1 * 100) / 100;
+    }
+
+    /** Keep range slider in sync when a paired number input value is set in code (e.g. Vertical text linked fields). */
+    function syncPromptSliderFromNumberInput(numberInput) {
+      if (!numberInput || numberInput.type !== 'number') return;
+      const container = numberInput.closest('.prompt-slider-container');
+      if (!container) return;
+      const slider = container.querySelector('input[type="range"]');
+      if (!slider) return;
+      const min = parseFloat(slider.min);
+      const max = parseFloat(slider.max);
+      if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+      let v = parseFloat(numberInput.value);
+      if (!Number.isFinite(v)) v = min;
+      const clamped = Math.max(min, Math.min(max, v));
+      slider.value = String(clamped);
+    }
 
     function attachVerticalTextLinkedFields() {
       const heightEl = promptDrawerFields.querySelector('input[data-field-key="heightPx"]');
@@ -5589,6 +5639,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             : 0;
           colEl.value = computedCount > 0 ? String(computedCount) : '0';
           heightEl.value = (computedCount > 0 && lh > 0) ? formatNumber(computedCount * lh) : '0';
+          syncPromptSliderFromNumberInput(colEl);
+          syncPromptSliderFromNumberInput(heightEl);
           heightEl.dispatchEvent(new Event('change', { bubbles: true }));
           colEl.dispatchEvent(new Event('change', { bubbles: true }));
           return;
@@ -5597,8 +5649,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         if (lastEdited === 'heightPx') {
           const h = parseFloat(heightEl.value) || 0;
           colEl.value = (h > 0 && lh > 0) ? String(Math.ceil(h / lh)) : '0';
+          syncPromptSliderFromNumberInput(colEl);
         } else {
           heightEl.value = (c > 0 && lh > 0) ? formatNumber(c * lh) : '0';
+          syncPromptSliderFromNumberInput(heightEl);
         }
         heightEl.dispatchEvent(new Event('change', { bubbles: true }));
       };
@@ -5619,30 +5673,45 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         verticalColsEl.addEventListener('input', updateComputedHeight);
       }
 
+      const reloadLhBtn = promptDrawerFields.querySelector('button[data-reload-line-height]');
+      if (reloadLhBtn) {
+        reloadLhBtn.onclick = async () => {
+          if (reloadLhBtn.disabled) return;
+          try {
+            const metadata = await fetchVerticalTextMetadata();
+            const first = metadata && metadata[0];
+            if (first && typeof first.fontSize === 'number' && first.fontSize > 0) {
+              verticalTextHydrationMeta = {
+                sourceCharCount: first.sourceCharCount || 0,
+                useVerticalColumns: first.useVerticalColumns === true
+              };
+            }
+            const px = resolveVerticalTextReloadLineHeightPx(first);
+            if (px == null || !Number.isFinite(px)) return;
+            lhEl.value = formatNumber(px);
+            syncPromptSliderFromNumberInput(lhEl);
+            lhEl.dispatchEvent(new Event('input', { bubbles: true }));
+            lhEl.dispatchEvent(new Event('change', { bubbles: true }));
+          } catch (e) {
+            console.warn('Reload line height failed', e);
+          }
+        };
+      }
+
       updateComputedHeight();
+      syncPromptSliderFromNumberInput(heightEl);
+      syncPromptSliderFromNumberInput(colEl);
+      syncPromptSliderFromNumberInput(lhEl);
     }
 
     async function hydrateVerticalTextFields(fields = []) {
+      verticalTextLineHeightReloadEnabled = false;
       try {
-        const metadata = await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            window.removeEventListener('message', handler);
-            resolve(null);
-          }, 5000);
-          const handler = (event) => {
-            const msg = event.data.pluginMessage;
-            if (msg && msg.type === 'detect-vertical-text-metadata-result') {
-              clearTimeout(timeout);
-              window.removeEventListener('message', handler);
-              resolve(msg.results);
-            }
-          };
-          window.addEventListener('message', handler);
-          parent.postMessage({ pluginMessage: { type: 'detect-vertical-text-metadata' } }, '*');
-        });
+        const metadata = await fetchVerticalTextMetadata();
 
         if (metadata && Array.isArray(metadata) && metadata.length > 0) {
           const first = metadata[0];
+          verticalTextLineHeightReloadEnabled = !!(first && typeof first.fontSize === 'number' && first.fontSize > 0);
           verticalTextHydrationMeta = {
             sourceCharCount: first.sourceCharCount || 0,
             useVerticalColumns: first.useVerticalColumns === true
@@ -5657,8 +5726,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
               return field;
             });
           } else if (first.fontSize > 0) {
+            const lhDefault = resolveVerticalTextReloadLineHeightPx(first);
             return fields.map(field => {
-              if (field.key === 'lineHeightPx') return { ...field, default: Math.round(first.fontSize * 1.1 * 100) / 100 };
+              if (field.key === 'lineHeightPx' && lhDefault != null) return { ...field, default: lhDefault };
               return field;
             });
           }
@@ -5667,6 +5737,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         console.warn('Failed to hydrate vertical text fields', e);
       }
       verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
+      verticalTextLineHeightReloadEnabled = false;
       return fields;
     }
 
@@ -13368,24 +13439,107 @@ Generate ONLY the reply text, nothing else.`;
             </div>
           `;
         } else if (field.type === 'number') {
-          const numberValue = (preservedValues && preservedValues[field.key] !== undefined)
+          let numberValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
-            : (field.default || '');
+            : (field.default !== undefined && field.default !== null ? field.default : '');
+          if (numberValue === null || numberValue === undefined) numberValue = '';
           const headerClass = field.headerClass ? ` ${field.headerClass}` : '';
-          const numberLabelHtml = field.alignHeader
-            ? `<div class="prompt-field-header${headerClass}"><label class="prompt-field-label" for="${fieldId}">${field.label}</label></div>`
-            : `<label class="prompt-field-label" for="${fieldId}">${field.label}</label>`;
+          const reloadLh = field.reloadLineHeightFromSelection === true;
+          const reloadDisabled = reloadLh && !verticalTextLineHeightReloadEnabled;
+          const reloadTitle = escapeHtml(tu('actions.verticalText.reloadLineHeightTitle'));
+          const reloadBtnHtml = reloadLh ? `
+            <button type="button" class="prompt-field-reload-btn prompt-ai-btn" data-reload-line-height="true" title="${reloadTitle}"${reloadDisabled ? ' disabled' : ''}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
+          ` : '';
+          let numberLabelHtml;
+          const labelRowCb = field.labelRowCheckbox;
+          if (reloadLh) {
+            numberLabelHtml = `
+            <div class="prompt-field-label-row">
+              <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+              ${reloadBtnHtml}
+            </div>`;
+          } else if (labelRowCb && labelRowCb.key) {
+            const cbKey = escapeHtml(String(labelRowCb.key));
+            const cbId = `${fieldId}-label-cb-${cbKey}`;
+            let cbChecked = !!labelRowCb.default;
+            if (preservedValues && preservedValues[labelRowCb.key] !== undefined) {
+              cbChecked = !!preservedValues[labelRowCb.key];
+            }
+            const cbLabel = escapeHtml(String(labelRowCb.label || ''));
+            numberLabelHtml = `
+            <div class="prompt-field-label-row">
+              <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+              <label class="prompt-field-inline-checkbox" for="${cbId}">
+                <input type="checkbox" id="${cbId}" data-field-key="${cbKey}" ${cbChecked ? 'checked' : ''}>
+                <span class="prompt-field-inline-checkbox-label">${cbLabel}</span>
+              </label>
+            </div>`;
+          } else if (field.alignHeader) {
+            numberLabelHtml = `<div class="prompt-field-header${headerClass}"><label class="prompt-field-label" for="${fieldId}">${field.label}</label></div>`;
+          } else {
+            numberLabelHtml = `<label class="prompt-field-label" for="${fieldId}">${field.label}</label>`;
+          }
+
+          const withSlider = field.numberWithSlider === true;
+          const sMin = field.min !== undefined ? field.min : 0;
+          const sMax = field.max !== undefined ? field.max : 100;
+          const sStep = field.sliderStep !== undefined ? field.sliderStep : (field.step !== undefined ? field.step : 1);
+          let numParsed = typeof numberValue === 'number' ? numberValue : parseFloat(String(numberValue));
+
+          let numberInputDisplay;
+          let rangeValueAttr = sMin;
+          if (withSlider) {
+            if (numberValue === '' || numberValue === null || numberValue === undefined) {
+              numberInputDisplay = '';
+              rangeValueAttr = sMin;
+            } else if (Number.isFinite(numParsed)) {
+              numberInputDisplay = String(numParsed);
+              rangeValueAttr = Math.max(sMin, Math.min(sMax, numParsed));
+            } else {
+              numberInputDisplay = String(numberValue);
+              rangeValueAttr = sMin;
+            }
+          } else {
+            if (!Number.isFinite(numParsed)) numParsed = sMin;
+            const clampedPlain = Math.max(sMin, Math.min(sMax, numParsed));
+            numberInputDisplay = String(clampedPlain);
+          }
+
+          const numberInputAttrs = `
+                value="${escapeHtml(String(numberInputDisplay))}" 
+                placeholder="${field.placeholder || ''}"
+                ${field.min !== undefined ? `min="${field.min}"` : ''}
+                ${!withSlider && field.max !== undefined ? `max="${field.max}"` : ''}
+                ${field.step !== undefined ? `step="${field.step}"` : ''}
+                ${disabledAttr}`;
+          const controlsHtml = withSlider ? `
+              <div class="prompt-slider-container">
+                <input type="range" id="${fieldId}-slider" data-slider-for="${fieldId}"
+                  value="${rangeValueAttr}" min="${sMin}" max="${sMax}" step="${sStep}"
+                  ${disabledAttr}>
+                <input type="number" id="${fieldId}" class="prompt-slider-number" data-field-key="${field.key}" data-number-for="${fieldId}-slider"
+                  ${numberInputAttrs}>
+              </div>
+          ` : `
+              <input type="number" id="${fieldId}" data-field-key="${field.key}" 
+                ${numberInputAttrs}>
+          `;
+
+          const disableControlsWrap = !!(labelRowCb && labelRowCb.key);
+          const wrappedControls = disableControlsWrap
+            ? `<div class="prompt-field-controls-wrap" data-prompt-disable-wrap="true">${controlsHtml}</div>`
+            : controlsHtml;
+
           fieldHtml += `
             <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               ${numberLabelHtml}
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <input type="number" id="${fieldId}" data-field-key="${field.key}" 
-                value="${numberValue}" 
-                placeholder="${field.placeholder || ''}"
-                ${field.min !== undefined ? `min="${field.min}"` : ''}
-                ${field.max !== undefined ? `max="${field.max}"` : ''}
-                ${field.step !== undefined ? `step="${field.step}"` : ''}
-                ${disabledAttr}>
+              ${wrappedControls}
             </div>
           `;
         } else if (field.type === 'text-with-tags') {
@@ -13586,7 +13740,8 @@ Generate ONLY the reply text, nothing else.`;
       fields.forEach((field, index) => {
         if (field.type === 'row') {
           const rowFieldsHtml = field.fields.map((f, i) => renderSingleField(f, `${index}-${i}`)).join('');
-          html += `<div class="prompt-field-row">${rowFieldsHtml}</div>`;
+          const rowExtraClass = field.rowClass ? ` ${escapeHtml(field.rowClass)}` : '';
+          html += `<div class="prompt-field-row${rowExtraClass}">${rowFieldsHtml}</div>`;
         } else {
           html += renderSingleField(field, index);
         }
@@ -13893,33 +14048,40 @@ Generate ONLY the reply text, nothing else.`;
           // Sync slider to number input
           slider.addEventListener('input', () => {
             numberInput.value = slider.value;
+            numberInput.dispatchEvent(new Event('input', { bubbles: true }));
+            numberInput.dispatchEvent(new Event('change', { bubbles: true }));
           });
 
-          // Sync number input to slider
+          // Sync number input to slider (slider is pegged at min/max; number may exceed slider range)
           numberInput.addEventListener('input', () => {
             const min = parseFloat(slider.min);
             const max = parseFloat(slider.max);
             let value = parseFloat(numberInput.value);
 
-            // Clamp value within range
-            if (isNaN(value)) value = min;
-            value = Math.max(min, Math.min(max, value));
-
-            slider.value = value;
-            numberInput.value = value;
+            if (!Number.isFinite(value)) {
+              slider.value = String(min);
+              return;
+            }
+            const pegged = Math.max(min, Math.min(max, value));
+            slider.value = String(pegged);
           });
 
           numberInput.addEventListener('blur', () => {
-            // Ensure valid value on blur
             const min = parseFloat(slider.min);
             const max = parseFloat(slider.max);
             let value = parseFloat(numberInput.value);
 
-            if (isNaN(value)) value = parseFloat(slider.value);
-            value = Math.max(min, Math.min(max, value));
-
-            slider.value = value;
-            numberInput.value = value;
+            if (!Number.isFinite(value)) {
+              const fallback = parseFloat(slider.value);
+              numberInput.value = Number.isFinite(fallback) ? String(fallback) : String(min);
+              value = parseFloat(numberInput.value);
+            }
+            if (value < min) {
+              numberInput.value = String(min);
+              value = min;
+            }
+            const pegged = Math.max(min, Math.min(max, value));
+            slider.value = String(pegged);
           });
         }
       });
@@ -15038,12 +15200,28 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
       promptDrawerFields.querySelectorAll('.prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]').forEach(fieldEl => {
         const shouldDisable = evaluatePromptCondition(fieldEl, 'disableWhen');
+        const controlWrap = fieldEl.querySelector('[data-prompt-disable-wrap="true"]');
+        if (controlWrap) {
+          fieldEl.classList.remove('disabled');
+          controlWrap.classList.toggle('disabled', shouldDisable);
+          controlWrap.querySelectorAll('input, textarea, select, button').forEach(control => {
+            if (!control.dataset.baseDisabled) {
+              control.dataset.baseDisabled = control.disabled ? 'true' : 'false';
+            }
+            control.disabled = shouldDisable || control.dataset.baseDisabled === 'true';
+          });
+          return;
+        }
         fieldEl.classList.toggle('disabled', shouldDisable);
         fieldEl.querySelectorAll('input, textarea, select, button').forEach(control => {
           if (!control.dataset.baseDisabled) {
             control.dataset.baseDisabled = control.disabled ? 'true' : 'false';
           }
-          control.disabled = shouldDisable || control.dataset.baseDisabled === 'true';
+          if (shouldDisable && control.dataset.skipPromptDisable === 'true') {
+            control.disabled = control.dataset.baseDisabled === 'true';
+          } else {
+            control.disabled = shouldDisable || control.dataset.baseDisabled === 'true';
+          }
         });
       });
 

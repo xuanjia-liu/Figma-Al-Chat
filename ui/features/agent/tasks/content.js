@@ -248,11 +248,56 @@ export const smartTextTasks = [
           requiredContext: ContextMode.TEXT_ONLY,
           help: 'Converts selected text into vertical columns. Height and Column text count stay linked. Turn on Vertical columns to control by column count instead, which disables Height and Column text count.',
           fields: [
+            {
+              key: 'columnTextCount',
+              type: 'number',
+              label: 'Column text count',
+              default: 0,
+              min: 0,
+              max: 200,
+              step: 1,
+              numberWithSlider: true,
+              hint: 'Maximum characters per vertical column',
+              disabledWhen: { field: 'useVerticalColumns', equals: true }
+            },
+            {
+              key: 'heightPx',
+              type: 'number',
+              label: 'Height (px)',
+              default: 0,
+              min: 0,
+              max: 2000,
+              step: 1,
+              numberWithSlider: true,
+              hint: 'Linked with Column text count using line height',
+              disabledWhen: { field: 'useVerticalColumns', equals: true }
+            },
             { key: 'useVerticalColumns', type: 'checkbox', label: 'Use Vertical columns', default: false },
-            { key: 'heightPx', type: 'number', label: 'Height (px)', default: 0, min: 0, hint: 'Linked with Column text count using line height', disabledWhen: { field: 'useVerticalColumns', equals: true } },
-            { key: 'columnTextCount', type: 'number', label: 'Column text count', default: 0, min: 0, hint: 'Maximum characters per vertical column', disabledWhen: { field: 'useVerticalColumns', equals: true } },
-            { key: 'verticalColumns', type: 'number', label: 'Vertical columns', default: 0, min: 0, hint: 'How many vertical columns to create', disabledWhen: { field: 'useVerticalColumns', equals: false } },
-            { key: 'lineHeightPx', type: 'number', label: 'Line height (px)', default: 0, min: 0, step: 0.01, hint: '0 = 1.1 × font size' },
+            {
+              key: 'verticalColumns',
+              type: 'number',
+              label: 'Vertical columns',
+              default: 0,
+              min: 0,
+              max: 100,
+              step: 1,
+              numberWithSlider: true,
+              hint: 'How many vertical columns to create',
+              disabledWhen: { field: 'useVerticalColumns', equals: false }
+            },
+            {
+              key: 'lineHeightPx',
+              type: 'number',
+              label: 'Line height (px)',
+              default: 0,
+              min: 0,
+              max: 500,
+              step: 0.01,
+              sliderStep: 0.5,
+              numberWithSlider: true,
+              hint: '0 = 1.1 × font size',
+              reloadLineHeightFromSelection: true
+            }
           ]
         }
 ];

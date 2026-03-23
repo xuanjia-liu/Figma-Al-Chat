@@ -9251,6 +9251,24 @@
       height: 10px;
     }
 
+    .prompt-field-reload-btn {
+      padding: 0;
+      width: 22px;
+      min-width: 22px;
+      justify-content: center;
+    }
+
+    .prompt-field-reload-btn svg {
+      width: 12px;
+      height: 12px;
+    }
+
+    .prompt-field-reload-btn:disabled {
+      opacity: var(--disabled-opacity);
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
     .prompt-add-image-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -9567,7 +9585,7 @@
     }
 
     .prompt-slider-number {
-      width: 32px;
+      width: 48px;
       text-align: center;
       padding: var(--space-xs) var(--space-2xs);
       background: var(--bg-tertiary);
@@ -9760,6 +9778,36 @@
     .prompt-field-row .prompt-field.prompt-field--compact {
       flex: 0 0 64px;
       min-width: 64px;
+    }
+
+    .prompt-field-inline-checkbox {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      margin: 0;
+      cursor: pointer;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      color: var(--text-primary);
+      flex-shrink: 0;
+      max-width: 55%;
+      text-align: right;
+    }
+
+    .prompt-field-inline-checkbox input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .prompt-field-inline-checkbox-label {
+      line-height: 1.25;
+    }
+
+    .prompt-field-controls-wrap.disabled {
+      opacity: var(--disabled-opacity);
+      pointer-events: none;
+      cursor: not-allowed;
     }
 
     /* Image Upload Field */
@@ -16202,6 +16250,7 @@
       const values = {};
       promptDrawerFields.querySelectorAll("[data-field-key]").forEach((el) => {
         if (el.tagName === "BUTTON") return;
+        if (el.type === "range") return;
         const key = el.dataset.fieldKey;
         const wrapper = el.closest(".prompt-field");
         if (wrapper && wrapper.dataset.showWhenField && wrapper.style.display === "none") {
@@ -16742,11 +16791,56 @@
           requiredContext: ContextMode.TEXT_ONLY,
           help: "Converts selected text into vertical columns. Height and Column text count stay linked. Turn on Vertical columns to control by column count instead, which disables Height and Column text count.",
           fields: [
+            {
+              key: "columnTextCount",
+              type: "number",
+              label: "Column text count",
+              default: 0,
+              min: 0,
+              max: 200,
+              step: 1,
+              numberWithSlider: true,
+              hint: "Maximum characters per vertical column",
+              disabledWhen: { field: "useVerticalColumns", equals: true }
+            },
+            {
+              key: "heightPx",
+              type: "number",
+              label: "Height (px)",
+              default: 0,
+              min: 0,
+              max: 2e3,
+              step: 1,
+              numberWithSlider: true,
+              hint: "Linked with Column text count using line height",
+              disabledWhen: { field: "useVerticalColumns", equals: true }
+            },
             { key: "useVerticalColumns", type: "checkbox", label: "Use Vertical columns", default: false },
-            { key: "heightPx", type: "number", label: "Height (px)", default: 0, min: 0, hint: "Linked with Column text count using line height", disabledWhen: { field: "useVerticalColumns", equals: true } },
-            { key: "columnTextCount", type: "number", label: "Column text count", default: 0, min: 0, hint: "Maximum characters per vertical column", disabledWhen: { field: "useVerticalColumns", equals: true } },
-            { key: "verticalColumns", type: "number", label: "Vertical columns", default: 0, min: 0, hint: "How many vertical columns to create", disabledWhen: { field: "useVerticalColumns", equals: false } },
-            { key: "lineHeightPx", type: "number", label: "Line height (px)", default: 0, min: 0, step: 0.01, hint: "0 = 1.1 × font size" }
+            {
+              key: "verticalColumns",
+              type: "number",
+              label: "Vertical columns",
+              default: 0,
+              min: 0,
+              max: 100,
+              step: 1,
+              numberWithSlider: true,
+              hint: "How many vertical columns to create",
+              disabledWhen: { field: "useVerticalColumns", equals: false }
+            },
+            {
+              key: "lineHeightPx",
+              type: "number",
+              label: "Line height (px)",
+              default: 0,
+              min: 0,
+              max: 500,
+              step: 0.01,
+              sliderStep: 0.5,
+              numberWithSlider: true,
+              hint: "0 = 1.1 × font size",
+              reloadLineHeightFromSelection: true
+            }
           ]
         }
       ];
@@ -22299,6 +22393,7 @@
           "actions.prompt.removeAll": "Remove All",
           "actions.prompt.loading": "Loading...",
           "actions.prompt.refresh": "Refresh",
+          "actions.verticalText.reloadLineHeightTitle": "Reload line height from selected text",
           "actions.prompt.running": "Running...",
           "actions.prompt.next": "Next →",
           "actions.prompt.outline": "UI Section Outline",
@@ -22685,6 +22780,7 @@
           "actions.prompt.removeAll": "すべて削除",
           "actions.prompt.loading": "読み込み中...",
           "actions.prompt.refresh": "更新",
+          "actions.verticalText.reloadLineHeightTitle": "選択テキストから行の高さを再読み込み",
           "actions.prompt.running": "実行中...",
           "actions.prompt.next": "次へ →",
           "actions.prompt.outline": "UI セクション構成",
@@ -23071,6 +23167,7 @@
           "actions.prompt.removeAll": "全部移除",
           "actions.prompt.loading": "加载中...",
           "actions.prompt.refresh": "刷新",
+          "actions.verticalText.reloadLineHeightTitle": "从所选文本重新载入行高",
           "actions.prompt.running": "运行中...",
           "actions.prompt.next": "下一步 →",
           "actions.prompt.outline": "UI 分区大纲",
@@ -24395,6 +24492,12 @@
         }
         if (Array.isArray(localized.fields)) {
           localized.fields = localized.fields.map(localizeTaskField);
+        }
+        if (localized.labelRowCheckbox && typeof localized.labelRowCheckbox === "object") {
+          localized.labelRowCheckbox = __spreadValues({}, localized.labelRowCheckbox);
+          if (typeof localized.labelRowCheckbox.label === "string") {
+            localized.labelRowCheckbox.label = localizeActionString(localized.labelRowCheckbox.label);
+          }
         }
         if (Array.isArray(localized.options)) {
           localized.options = localized.options.map((option) => {
@@ -28606,6 +28709,46 @@
         });
       }
       var verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
+      var verticalTextLineHeightReloadEnabled = false;
+      function fetchVerticalTextMetadata() {
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            window.removeEventListener("message", handler);
+            resolve(null);
+          }, 5e3);
+          const handler = (event) => {
+            const msg = event.data.pluginMessage;
+            if (msg && msg.type === "detect-vertical-text-metadata-result") {
+              clearTimeout(timeout);
+              window.removeEventListener("message", handler);
+              resolve(msg.results);
+            }
+          };
+          window.addEventListener("message", handler);
+          parent.postMessage({ pluginMessage: { type: "detect-vertical-text-metadata" } }, "*");
+        });
+      }
+      function resolveVerticalTextReloadLineHeightPx(first) {
+        if (!first || typeof first.fontSize !== "number" || first.fontSize <= 0) return null;
+        if (first.isVertical === true && first.lineHeightPx > 0) return first.lineHeightPx;
+        const native = first.nativeLineHeightPx;
+        if (typeof native === "number" && native > 0) return native;
+        return Math.round(first.fontSize * 1.1 * 100) / 100;
+      }
+      function syncPromptSliderFromNumberInput(numberInput) {
+        if (!numberInput || numberInput.type !== "number") return;
+        const container = numberInput.closest(".prompt-slider-container");
+        if (!container) return;
+        const slider = container.querySelector('input[type="range"]');
+        if (!slider) return;
+        const min = parseFloat(slider.min);
+        const max = parseFloat(slider.max);
+        if (!Number.isFinite(min) || !Number.isFinite(max)) return;
+        let v = parseFloat(numberInput.value);
+        if (!Number.isFinite(v)) v = min;
+        const clamped = Math.max(min, Math.min(max, v));
+        slider.value = String(clamped);
+      }
       function attachVerticalTextLinkedFields() {
         const heightEl = promptDrawerFields.querySelector('input[data-field-key="heightPx"]');
         const colEl = promptDrawerFields.querySelector('input[data-field-key="columnTextCount"]');
@@ -28628,6 +28771,8 @@
             const computedCount = verticalCols > 0 && sourceCharCount > 0 ? Math.max(1, Math.ceil(sourceCharCount / verticalCols)) : 0;
             colEl.value = computedCount > 0 ? String(computedCount) : "0";
             heightEl.value = computedCount > 0 && lh > 0 ? formatNumber(computedCount * lh) : "0";
+            syncPromptSliderFromNumberInput(colEl);
+            syncPromptSliderFromNumberInput(heightEl);
             heightEl.dispatchEvent(new Event("change", { bubbles: true }));
             colEl.dispatchEvent(new Event("change", { bubbles: true }));
             return;
@@ -28635,8 +28780,10 @@
           if (lastEdited === "heightPx") {
             const h = parseFloat(heightEl.value) || 0;
             colEl.value = h > 0 && lh > 0 ? String(Math.ceil(h / lh)) : "0";
+            syncPromptSliderFromNumberInput(colEl);
           } else {
             heightEl.value = c > 0 && lh > 0 ? formatNumber(c * lh) : "0";
+            syncPromptSliderFromNumberInput(heightEl);
           }
           heightEl.dispatchEvent(new Event("change", { bubbles: true }));
         };
@@ -28653,28 +28800,42 @@
         if (verticalColsEl) {
           verticalColsEl.addEventListener("input", updateComputedHeight);
         }
+        const reloadLhBtn = promptDrawerFields.querySelector("button[data-reload-line-height]");
+        if (reloadLhBtn) {
+          reloadLhBtn.onclick = async () => {
+            if (reloadLhBtn.disabled) return;
+            try {
+              const metadata2 = await fetchVerticalTextMetadata();
+              const first = metadata2 && metadata2[0];
+              if (first && typeof first.fontSize === "number" && first.fontSize > 0) {
+                verticalTextHydrationMeta = {
+                  sourceCharCount: first.sourceCharCount || 0,
+                  useVerticalColumns: first.useVerticalColumns === true
+                };
+              }
+              const px = resolveVerticalTextReloadLineHeightPx(first);
+              if (px == null || !Number.isFinite(px)) return;
+              lhEl.value = formatNumber(px);
+              syncPromptSliderFromNumberInput(lhEl);
+              lhEl.dispatchEvent(new Event("input", { bubbles: true }));
+              lhEl.dispatchEvent(new Event("change", { bubbles: true }));
+            } catch (e) {
+              console.warn("Reload line height failed", e);
+            }
+          };
+        }
         updateComputedHeight();
+        syncPromptSliderFromNumberInput(heightEl);
+        syncPromptSliderFromNumberInput(colEl);
+        syncPromptSliderFromNumberInput(lhEl);
       }
       async function hydrateVerticalTextFields(fields = []) {
+        verticalTextLineHeightReloadEnabled = false;
         try {
-          const metadata2 = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              window.removeEventListener("message", handler);
-              resolve(null);
-            }, 5e3);
-            const handler = (event) => {
-              const msg = event.data.pluginMessage;
-              if (msg && msg.type === "detect-vertical-text-metadata-result") {
-                clearTimeout(timeout);
-                window.removeEventListener("message", handler);
-                resolve(msg.results);
-              }
-            };
-            window.addEventListener("message", handler);
-            parent.postMessage({ pluginMessage: { type: "detect-vertical-text-metadata" } }, "*");
-          });
+          const metadata2 = await fetchVerticalTextMetadata();
           if (metadata2 && Array.isArray(metadata2) && metadata2.length > 0) {
             const first = metadata2[0];
+            verticalTextLineHeightReloadEnabled = !!(first && typeof first.fontSize === "number" && first.fontSize > 0);
             verticalTextHydrationMeta = {
               sourceCharCount: first.sourceCharCount || 0,
               useVerticalColumns: first.useVerticalColumns === true
@@ -28689,8 +28850,9 @@
                 return field;
               });
             } else if (first.fontSize > 0) {
+              const lhDefault = resolveVerticalTextReloadLineHeightPx(first);
               return fields.map((field) => {
-                if (field.key === "lineHeightPx") return __spreadProps(__spreadValues({}, field), { default: Math.round(first.fontSize * 1.1 * 100) / 100 });
+                if (field.key === "lineHeightPx" && lhDefault != null) return __spreadProps(__spreadValues({}, field), { default: lhDefault });
                 return field;
               });
             }
@@ -28699,6 +28861,7 @@
           console.warn("Failed to hydrate vertical text fields", e);
         }
         verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
+        verticalTextLineHeightReloadEnabled = false;
         return fields;
       }
       async function backgroundRefreshImageModels(originalActionName) {
@@ -34289,10 +34452,59 @@
           } else if (field.type === "context-variables") {
             fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass, '"').concat(conditionalAttrs, '>\n              <div class="prompt-field-header">\n                <label class="prompt-field-label">').concat(field.label, '</label>\n                <div class="prompt-ai-actions">\n                  <button class="prompt-ai-btn" id="ctx-vars-generate-btn" title="').concat(localizeActionString("Generate context variables from inputs"), '" type="button" onclick="_handleGenerateContextVars()">\n                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"></path></svg>\n                    <span>').concat(tu("actions.prompt.generate"), "</span>\n                  </button>\n                </div>\n              </div>\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", '\n              <div id="ctx-vars-ui-container" class="ctx-vars-container"></div>\n            </div>\n          ');
           } else if (field.type === "number") {
-            const numberValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default || "";
+            let numberValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default !== void 0 && field.default !== null ? field.default : "";
+            if (numberValue === null || numberValue === void 0) numberValue = "";
             const headerClass = field.headerClass ? " ".concat(field.headerClass) : "";
-            const numberLabelHtml = field.alignHeader ? '<div class="prompt-field-header'.concat(headerClass, '"><label class="prompt-field-label" for="').concat(fieldId, '">').concat(field.label, "</label></div>") : '<label class="prompt-field-label" for="'.concat(fieldId, '">').concat(field.label, "</label>");
-            fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass).concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, ">\n              ").concat(numberLabelHtml, "\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", '\n              <input type="number" id="').concat(fieldId, '" data-field-key="').concat(field.key, '" \n                value="').concat(numberValue, '" \n                placeholder="').concat(field.placeholder || "", '"\n                ').concat(field.min !== void 0 ? 'min="'.concat(field.min, '"') : "", "\n                ").concat(field.max !== void 0 ? 'max="'.concat(field.max, '"') : "", "\n                ").concat(field.step !== void 0 ? 'step="'.concat(field.step, '"') : "", "\n                ").concat(disabledAttr, ">\n            </div>\n          ");
+            const reloadLh = field.reloadLineHeightFromSelection === true;
+            const reloadDisabled = reloadLh && !verticalTextLineHeightReloadEnabled;
+            const reloadTitle = escapeHtml(tu("actions.verticalText.reloadLineHeightTitle"));
+            const reloadBtnHtml = reloadLh ? '\n            <button type="button" class="prompt-field-reload-btn prompt-ai-btn" data-reload-line-height="true" title="'.concat(reloadTitle, '"').concat(reloadDisabled ? " disabled" : "", '>\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                <path d="M23 4v6h-6M1 20v-6h6"/>\n                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>\n              </svg>\n            </button>\n          ') : "";
+            let numberLabelHtml;
+            const labelRowCb = field.labelRowCheckbox;
+            if (reloadLh) {
+              numberLabelHtml = '\n            <div class="prompt-field-label-row">\n              <label class="prompt-field-label" for="'.concat(fieldId, '">').concat(field.label, "</label>\n              ").concat(reloadBtnHtml, "\n            </div>");
+            } else if (labelRowCb && labelRowCb.key) {
+              const cbKey = escapeHtml(String(labelRowCb.key));
+              const cbId = "".concat(fieldId, "-label-cb-").concat(cbKey);
+              let cbChecked = !!labelRowCb.default;
+              if (preservedValues && preservedValues[labelRowCb.key] !== void 0) {
+                cbChecked = !!preservedValues[labelRowCb.key];
+              }
+              const cbLabel = escapeHtml(String(labelRowCb.label || ""));
+              numberLabelHtml = '\n            <div class="prompt-field-label-row">\n              <label class="prompt-field-label" for="'.concat(fieldId, '">').concat(field.label, '</label>\n              <label class="prompt-field-inline-checkbox" for="').concat(cbId, '">\n                <input type="checkbox" id="').concat(cbId, '" data-field-key="').concat(cbKey, '" ').concat(cbChecked ? "checked" : "", '>\n                <span class="prompt-field-inline-checkbox-label">').concat(cbLabel, "</span>\n              </label>\n            </div>");
+            } else if (field.alignHeader) {
+              numberLabelHtml = '<div class="prompt-field-header'.concat(headerClass, '"><label class="prompt-field-label" for="').concat(fieldId, '">').concat(field.label, "</label></div>");
+            } else {
+              numberLabelHtml = '<label class="prompt-field-label" for="'.concat(fieldId, '">').concat(field.label, "</label>");
+            }
+            const withSlider = field.numberWithSlider === true;
+            const sMin = field.min !== void 0 ? field.min : 0;
+            const sMax = field.max !== void 0 ? field.max : 100;
+            const sStep = field.sliderStep !== void 0 ? field.sliderStep : field.step !== void 0 ? field.step : 1;
+            let numParsed = typeof numberValue === "number" ? numberValue : parseFloat(String(numberValue));
+            let numberInputDisplay;
+            let rangeValueAttr = sMin;
+            if (withSlider) {
+              if (numberValue === "" || numberValue === null || numberValue === void 0) {
+                numberInputDisplay = "";
+                rangeValueAttr = sMin;
+              } else if (Number.isFinite(numParsed)) {
+                numberInputDisplay = String(numParsed);
+                rangeValueAttr = Math.max(sMin, Math.min(sMax, numParsed));
+              } else {
+                numberInputDisplay = String(numberValue);
+                rangeValueAttr = sMin;
+              }
+            } else {
+              if (!Number.isFinite(numParsed)) numParsed = sMin;
+              const clampedPlain = Math.max(sMin, Math.min(sMax, numParsed));
+              numberInputDisplay = String(clampedPlain);
+            }
+            const numberInputAttrs = '\n                value="'.concat(escapeHtml(String(numberInputDisplay)), '" \n                placeholder="').concat(field.placeholder || "", '"\n                ').concat(field.min !== void 0 ? 'min="'.concat(field.min, '"') : "", "\n                ").concat(!withSlider && field.max !== void 0 ? 'max="'.concat(field.max, '"') : "", "\n                ").concat(field.step !== void 0 ? 'step="'.concat(field.step, '"') : "", "\n                ").concat(disabledAttr);
+            const controlsHtml = withSlider ? '\n              <div class="prompt-slider-container">\n                <input type="range" id="'.concat(fieldId, '-slider" data-slider-for="').concat(fieldId, '"\n                  value="').concat(rangeValueAttr, '" min="').concat(sMin, '" max="').concat(sMax, '" step="').concat(sStep, '"\n                  ').concat(disabledAttr, '>\n                <input type="number" id="').concat(fieldId, '" class="prompt-slider-number" data-field-key="').concat(field.key, '" data-number-for="').concat(fieldId, '-slider"\n                  ').concat(numberInputAttrs, ">\n              </div>\n          ") : '\n              <input type="number" id="'.concat(fieldId, '" data-field-key="').concat(field.key, '" \n                ').concat(numberInputAttrs, ">\n          ");
+            const disableControlsWrap = !!(labelRowCb && labelRowCb.key);
+            const wrappedControls = disableControlsWrap ? '<div class="prompt-field-controls-wrap" data-prompt-disable-wrap="true">'.concat(controlsHtml, "</div>") : controlsHtml;
+            fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass).concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, ">\n              ").concat(numberLabelHtml, "\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", "\n              ").concat(wrappedControls, "\n            </div>\n          ");
           } else if (field.type === "text-with-tags") {
             const tagsHtml = (field.tags || []).map((tag) => {
               const tagValue = typeof tag === "string" ? tag : tag.value;
@@ -34331,7 +34543,8 @@
         fields.forEach((field, index) => {
           if (field.type === "row") {
             const rowFieldsHtml = field.fields.map((f, i) => renderSingleField(f, "".concat(index, "-").concat(i))).join("");
-            html += '<div class="prompt-field-row">'.concat(rowFieldsHtml, "</div>");
+            const rowExtraClass = field.rowClass ? " ".concat(escapeHtml(field.rowClass)) : "";
+            html += '<div class="prompt-field-row'.concat(rowExtraClass, '">').concat(rowFieldsHtml, "</div>");
           } else {
             html += renderSingleField(field, index);
           }
@@ -34559,24 +34772,35 @@
           if (slider && numberInput) {
             slider.addEventListener("input", () => {
               numberInput.value = slider.value;
+              numberInput.dispatchEvent(new Event("input", { bubbles: true }));
+              numberInput.dispatchEvent(new Event("change", { bubbles: true }));
             });
             numberInput.addEventListener("input", () => {
               const min = parseFloat(slider.min);
               const max = parseFloat(slider.max);
               let value = parseFloat(numberInput.value);
-              if (isNaN(value)) value = min;
-              value = Math.max(min, Math.min(max, value));
-              slider.value = value;
-              numberInput.value = value;
+              if (!Number.isFinite(value)) {
+                slider.value = String(min);
+                return;
+              }
+              const pegged = Math.max(min, Math.min(max, value));
+              slider.value = String(pegged);
             });
             numberInput.addEventListener("blur", () => {
               const min = parseFloat(slider.min);
               const max = parseFloat(slider.max);
               let value = parseFloat(numberInput.value);
-              if (isNaN(value)) value = parseFloat(slider.value);
-              value = Math.max(min, Math.min(max, value));
-              slider.value = value;
-              numberInput.value = value;
+              if (!Number.isFinite(value)) {
+                const fallback = parseFloat(slider.value);
+                numberInput.value = Number.isFinite(fallback) ? String(fallback) : String(min);
+                value = parseFloat(numberInput.value);
+              }
+              if (value < min) {
+                numberInput.value = String(min);
+                value = min;
+              }
+              const pegged = Math.max(min, Math.min(max, value));
+              slider.value = String(pegged);
             });
           }
         });
@@ -35403,12 +35627,28 @@
         });
         promptDrawerFields.querySelectorAll(".prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]").forEach((fieldEl) => {
           const shouldDisable = evaluatePromptCondition(fieldEl, "disableWhen");
+          const controlWrap = fieldEl.querySelector('[data-prompt-disable-wrap="true"]');
+          if (controlWrap) {
+            fieldEl.classList.remove("disabled");
+            controlWrap.classList.toggle("disabled", shouldDisable);
+            controlWrap.querySelectorAll("input, textarea, select, button").forEach((control) => {
+              if (!control.dataset.baseDisabled) {
+                control.dataset.baseDisabled = control.disabled ? "true" : "false";
+              }
+              control.disabled = shouldDisable || control.dataset.baseDisabled === "true";
+            });
+            return;
+          }
           fieldEl.classList.toggle("disabled", shouldDisable);
           fieldEl.querySelectorAll("input, textarea, select, button").forEach((control) => {
             if (!control.dataset.baseDisabled) {
               control.dataset.baseDisabled = control.disabled ? "true" : "false";
             }
-            control.disabled = shouldDisable || control.dataset.baseDisabled === "true";
+            if (shouldDisable && control.dataset.skipPromptDisable === "true") {
+              control.disabled = control.dataset.baseDisabled === "true";
+            } else {
+              control.disabled = shouldDisable || control.dataset.baseDisabled === "true";
+            }
           });
         });
         const hasSelection = Array.isArray(lastKnownSelectionItems) && lastKnownSelectionItems.length > 0;

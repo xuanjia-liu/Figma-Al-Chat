@@ -257,6 +257,7 @@ export function createPromptDrawerHelpers({
 
     promptDrawerFields.querySelectorAll('[data-field-key]').forEach(el => {
       if (el.tagName === 'BUTTON') return;
+      if (el.type === 'range') return;
 
       const key = el.dataset.fieldKey;
       const wrapper = el.closest('.prompt-field');
