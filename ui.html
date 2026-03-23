@@ -4328,7 +4328,7 @@
       font-size: var(--text-3xl);
       margin-top: 10px;
       margin-bottom: 4px;
-      color: white;
+      color: var(--text-on-accent);
       /* Brighter than text-primary */
     }
 
@@ -4374,7 +4374,7 @@
 
     .message.bot .message-content strong {
       font-weight: 600;
-      color: white;
+      color: var(--text-primary);
       /* Stand out from normal text */
     }
 
@@ -19652,6 +19652,18 @@
   function hasSubset(f, key) {
     return Array.isArray(f.subsets) && f.subsets.includes(key);
   }
+  function gfpJpPreviewFallbackFamily(f) {
+    if (f.category === "Serif") return "Noto Serif JP";
+    return "Noto Sans JP";
+  }
+  function gfpSampleFontFamilyCss(f) {
+    const primary = "'".concat(String(f.family || "").replace(/'/g, "\\'"), "'");
+    if (hasSubset(f, "japanese")) {
+      return "".concat(primary, ", var(--font-ui, system-ui)");
+    }
+    const jp = gfpJpPreviewFallbackFamily(f);
+    return "".concat(primary, ", '").concat(jp.replace(/'/g, "\\'"), "', var(--font-ui, system-ui)");
+  }
   function thicknessOf(f) {
     if (typeof f.thickness === "number") return f.thickness;
     const w400 = f.fonts && f.fonts["400"];
@@ -20071,6 +20083,11 @@
       link.href = "https://fonts.googleapis.com/css2?family=".concat(enc, ":wght@").concat(wParam, "&display=swap");
       document.head.appendChild(link);
     }
+    function ensureJpPreviewFallbackCss(meta) {
+      if (!meta || hasSubset(meta, "japanese") || disposed) return;
+      const jp = gfpJpPreviewFallbackFamily(meta);
+      if (familyByName.has(jp)) loadFontCss(jp);
+    }
     function appendBatch() {
       const end = Math.min(state.renderOffset + BATCH, state.filtered.length);
       const frag = document.createDocumentFragment();
@@ -20099,7 +20116,8 @@
         sample.textContent = state.previewText || tu("actions.fontPreview.placeholder");
         sample.style.fontSize = "".concat(state.fontSizePx, "px");
         sample.style.fontWeight = String(gfpClampWght(f, state.fontWght));
-        sample.style.fontFamily = "'".concat(f.family.replace(/'/g, "\\'"), "', var(--font-ui, system-ui)");
+        sample.style.fontFamily = gfpSampleFontFamilyCss(f);
+        ensureJpPreviewFallbackCss(f);
         const actions = document.createElement("div");
         actions.className = "gfp-font-row-actions";
         const applyBtn = document.createElement("button");
@@ -20146,7 +20164,10 @@
     }
     function onRowVisible(row) {
       const fam = row.dataset.family;
-      if (fam) loadFontCss(fam);
+      if (!fam) return;
+      const meta = familyByName.get(fam);
+      ensureJpPreviewFallbackCss(meta);
+      loadFontCss(fam);
     }
     const rowObserver = new IntersectionObserver(
       (entries) => {

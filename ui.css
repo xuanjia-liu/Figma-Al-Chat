@@ -4321,7 +4321,7 @@
       font-size: var(--text-3xl);
       margin-top: 10px;
       margin-bottom: 4px;
-      color: white;
+      color: var(--text-on-accent);
       /* Brighter than text-primary */
     }
 
@@ -4367,7 +4367,7 @@
 
     .message.bot .message-content strong {
       font-weight: 600;
-      color: white;
+      color: var(--text-primary);
       /* Stand out from normal text */
     }
 
