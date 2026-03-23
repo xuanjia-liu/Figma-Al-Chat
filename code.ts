@@ -9806,7 +9806,7 @@ figma.ui.onmessage = async (msg: {
         'createEllipse', 'createText', 'createFrame', 'createPolygon',
         'createStar', 'createLine', 'createSticky', 'createShapeWithText',
         'createButtonComponent', 'createPaintStyle', 'createTextStyle', 'createEffectStyle', 'createGridStyle',
-        'createRectangleWithImage', 'createGridLines', 'group', 'union', 'booleanUnion',
+        'createRectangleWithImage', 'createGridLines', 'createPlaceholderSet', 'group', 'union', 'booleanUnion',
         'subtract', 'booleanSubtract', 'intersect', 'booleanIntersect', 'exclude', 'booleanExclude',
         'duplicate', 'createInstance', 'duplicateStyle',
         'createVariableCollection', 'createVariable',
@@ -10841,6 +10841,131 @@ figma.ui.onmessage = async (msg: {
             await appendToParent(frame, cmd, { width: frameWidth, height: frameHeight });
             figma.currentPage.selection = [frame];
             success++;
+            continue;
+          }
+
+          if (cmd.action === 'createPlaceholderSet') {
+            try {
+              const count = Math.max(1, Math.min(50, Math.floor(Number(cmd.count) || 5)));
+              const spacing = Math.max(0, Math.min(500, Number(cmd.spacing) || 16));
+              let cellW = Math.max(1, Math.min(4096, Math.round(Number(cmd.width) || 200)));
+              let cellH = Math.max(1, Math.min(4096, Math.round(Number(cmd.height) || 150)));
+              const direction = cmd.direction === 'vertical' ? 'vertical' : 'horizontal';
+              const nodeType = (cmd.nodeType || 'rectangle').toString();
+              const fillColor = parseHexColor(typeof cmd.color === 'string' ? cmd.color : '#9CA3AF');
+
+              type PhKind = 'rectangle' | 'ellipse' | 'polygon' | 'star' | 'frame' | 'autoLayout';
+              let kind: PhKind = 'rectangle';
+              let polygonPoints = 6;
+              let starPoints = 5;
+              let starInnerRadius = 0.5;
+
+              if (nodeType === 'autoLayout') {
+                kind = 'autoLayout';
+              } else if (nodeType === 'frame') {
+                kind = 'frame';
+              } else if (nodeType === 'matchSelection') {
+                const sel = figma.currentPage.selection[0];
+                if (sel && 'width' in sel && 'height' in sel) {
+                  const lm = sel as LayoutMixin;
+                  cellW = Math.max(1, Math.round(lm.width));
+                  cellH = Math.max(1, Math.round(lm.height));
+                }
+                if (sel?.type === 'RECTANGLE') kind = 'rectangle';
+                else if (sel?.type === 'ELLIPSE') kind = 'ellipse';
+                else if (sel?.type === 'POLYGON') {
+                  kind = 'polygon';
+                  polygonPoints = Math.max(3, Math.min(20, (sel as PolygonNode).pointCount || 6));
+                } else if (sel?.type === 'STAR') {
+                  kind = 'star';
+                  const st = sel as StarNode;
+                  starPoints = Math.max(3, Math.min(20, st.pointCount || 5));
+                  starInnerRadius = Math.max(0, Math.min(1, st.innerRadius));
+                } else if (sel?.type === 'FRAME' || sel?.type === 'COMPONENT' || sel?.type === 'INSTANCE' || sel?.type === 'SECTION') {
+                  kind = 'frame';
+                } else {
+                  kind = 'rectangle';
+                }
+              }
+
+              const makeShape = (): SceneNode => {
+                let n: SceneNode;
+                if (kind === 'rectangle') {
+                  n = figma.createRectangle();
+                } else if (kind === 'ellipse') {
+                  n = figma.createEllipse();
+                } else if (kind === 'polygon') {
+                  n = figma.createPolygon();
+                  (n as PolygonNode).pointCount = polygonPoints;
+                } else if (kind === 'star') {
+                  n = figma.createStar();
+                  const st = n as StarNode;
+                  st.pointCount = starPoints;
+                  st.innerRadius = starInnerRadius;
+                } else {
+                  n = figma.createFrame();
+                  if (kind === 'autoLayout') {
+                    const f = n as FrameNode;
+                    f.layoutMode = 'VERTICAL';
+                    f.primaryAxisAlignItems = 'CENTER';
+                    f.counterAxisAlignItems = 'CENTER';
+                    f.paddingTop = f.paddingRight = f.paddingBottom = f.paddingLeft = 16;
+                    f.itemSpacing = 8;
+                  }
+                }
+                if ('resize' in n) {
+                  try {
+                    (n as LayoutMixin).resize(cellW, cellH);
+                  } catch (e) {
+                    console.warn('createPlaceholderSet resize', e);
+                  }
+                }
+                if ('fills' in n) {
+                  (n as GeometryMixin & MinimalBlendMixin).fills = [{
+                    type: 'SOLID',
+                    color: { r: fillColor.r, g: fillColor.g, b: fillColor.b },
+                  }];
+                }
+                n.name = 'Placeholder';
+                return n;
+              };
+
+              const container = figma.createFrame();
+              container.name = `Placeholders (${count})`;
+              container.fills = [];
+              container.clipsContent = false;
+
+              let totalW: number;
+              let totalH: number;
+              if (direction === 'horizontal') {
+                totalW = count * cellW + Math.max(0, count - 1) * spacing;
+                totalH = cellH;
+              } else {
+                totalW = cellW;
+                totalH = count * cellH + Math.max(0, count - 1) * spacing;
+              }
+              container.resize(Math.max(totalW, 1), Math.max(totalH, 1));
+
+              for (let i = 0; i < count; i++) {
+                const node = makeShape();
+                if (direction === 'horizontal') {
+                  node.x = i * (cellW + spacing);
+                  node.y = 0;
+                } else {
+                  node.x = 0;
+                  node.y = i * (cellH + spacing);
+                }
+                container.appendChild(node);
+              }
+
+              await appendToParent(container, cmd, { width: totalW, height: totalH });
+              figma.currentPage.selection = [container];
+              success++;
+            } catch (error) {
+              console.error('createPlaceholderSet failed', error);
+              if (!firstError) firstError = { action: cmd.action, message: (error as Error)?.message || 'createPlaceholderSet failed' };
+              failed++;
+            }
             continue;
           }
 

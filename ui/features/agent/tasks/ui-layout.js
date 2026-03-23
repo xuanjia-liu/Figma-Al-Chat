@@ -653,6 +653,7 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
           name: 'Placeholder set',
           desc: 'Create N placeholder boxes',
           prompt: '',
+          directAction: 'placeholderSet',
           help: 'Creates multiple placeholder rectangles arranged in a row or column.',
           noSelection: true,
           fields: [
@@ -687,7 +688,6 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
             },
             { key: 'color', type: 'color', label: 'Fill Color', default: '#9CA3AF' },
           ],
-          promptTemplate: 'Create {count} placeholders using nodeType:{nodeType}. If nodeType is "frame", use createFrame with width:{width}, height:{height}. If nodeType is "autoLayout", use createFrame then setAutoLayout with layoutMode:VERTICAL, primaryAxisAlignItems:CENTER, counterAxisAlignItems:CENTER, padding:16, itemSpacing:8, keeping the frame size {width}x{height}. If nodeType is "matchSelection", and there is a selected node, mirror the first selection\'s shape type (rectangle/ellipse/polygon/star/frame) and size; otherwise fall back to rectangle. For rectangle/node types, apply fill color:{color} (use fills for frames too). Arrange all placeholders in a {direction} line starting at (0,0) with {spacing}px gaps; keep coordinates relative so the batch can be centered.'
         },
 {
           name: 'Turn into Component Set',

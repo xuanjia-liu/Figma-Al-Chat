@@ -13665,6 +13665,7 @@
         "createIcon",
         "browseIconSet",
         "createGridLines",
+        "placeholderSet",
         "createAdvancedGrid",
         "turnIntoComponentSet",
         "createButtonComponentSet",
@@ -17982,6 +17983,7 @@
         name: "Placeholder set",
         desc: "Create N placeholder boxes",
         prompt: "",
+        directAction: "placeholderSet",
         help: "Creates multiple placeholder rectangles arranged in a row or column.",
         noSelection: true,
         fields: [
@@ -18023,8 +18025,7 @@
             ]
           },
           { key: "color", type: "color", label: "Fill Color", default: "#9CA3AF" }
-        ],
-        promptTemplate: 'Create {count} placeholders using nodeType:{nodeType}. If nodeType is "frame", use createFrame with width:{width}, height:{height}. If nodeType is "autoLayout", use createFrame then setAutoLayout with layoutMode:VERTICAL, primaryAxisAlignItems:CENTER, counterAxisAlignItems:CENTER, padding:16, itemSpacing:8, keeping the frame size {width}x{height}. If nodeType is "matchSelection", and there is a selected node, mirror the first selection\'s shape type (rectangle/ellipse/polygon/star/frame) and size; otherwise fall back to rectangle. For rectangle/node types, apply fill color:{color} (use fills for frames too). Arrange all placeholders in a {direction} line starting at (0,0) with {spacing}px gaps; keep coordinates relative so the batch can be centered.'
+        ]
       },
       {
         name: "Turn into Component Set",
@@ -38324,6 +38325,45 @@
           setSendButtonMode(false);
         }
       }
+      async function runPlaceholderSetAction(values, actionMeta) {
+        var _a2, _b, _c, _d;
+        const count = clampNumber((_a2 = values.count) != null ? _a2 : 5, 1, 50);
+        const spacing = clampNumber((_b = values.spacing) != null ? _b : 16, 0, 500);
+        const width = clampNumber((_c = values.width) != null ? _c : 200, 10, 4096);
+        const height = clampNumber((_d = values.height) != null ? _d : 150, 10, 4096);
+        const direction = values.direction === "vertical" ? "vertical" : "horizontal";
+        const nodeType = values.nodeType || "rectangle";
+        const color = normalizeHexColor(values.color || "#9CA3AF");
+        showThinkingIndicator("Creating placeholders...");
+        setSendButtonMode(true);
+        try {
+          const command = {
+            action: "createPlaceholderSet",
+            count,
+            spacing,
+            width,
+            height,
+            direction,
+            nodeType,
+            color
+          };
+          await executeCommands([command]);
+          const botText = "Created ".concat(count, " placeholder").concat(count === 1 ? "" : "s", " (").concat(nodeType, ", ").concat(direction, ").");
+          addMessage("bot", botText);
+          chatHistory.push({ role: "model", parts: [{ text: botText }] });
+          await autoSaveAfterResponse();
+          showToast("Placeholders created", "success");
+        } catch (err) {
+          console.error("Placeholder set action failed", err);
+          showToast("Failed to create placeholders.", "error");
+          addMessage("bot", "Failed to create placeholders.");
+          chatHistory.push({ role: "model", parts: [{ text: "Failed to create placeholders." }] });
+          await autoSaveAfterResponse();
+        } finally {
+          removeThinkingIndicator();
+          setSendButtonMode(false);
+        }
+      }
       async function runCreateAdvancedGridAction(values, actionMeta) {
         const pattern = values.pattern || "grid";
         const shape = values.shape || "rectangle";
@@ -38496,6 +38536,9 @@
             break;
           case "createGridLines":
             await runCreateGridLinesAction(values, actionMeta);
+            break;
+          case "placeholderSet":
+            await runPlaceholderSetAction(values, actionMeta);
             break;
           case "createAdvancedGrid":
             await runCreateAdvancedGridAction(values, actionMeta);

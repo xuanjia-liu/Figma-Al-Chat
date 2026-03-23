@@ -18696,6 +18696,47 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runPlaceholderSetAction(values, actionMeta) {
+      const count = clampNumber(values.count ?? 5, 1, 50);
+      const spacing = clampNumber(values.spacing ?? 16, 0, 500);
+      const width = clampNumber(values.width ?? 200, 10, 4096);
+      const height = clampNumber(values.height ?? 150, 10, 4096);
+      const direction = values.direction === 'vertical' ? 'vertical' : 'horizontal';
+      const nodeType = values.nodeType || 'rectangle';
+      const color = normalizeHexColor(values.color || '#9CA3AF');
+
+      showThinkingIndicator('Creating placeholders...');
+      setSendButtonMode(true);
+
+      try {
+        const command = {
+          action: 'createPlaceholderSet',
+          count,
+          spacing,
+          width,
+          height,
+          direction,
+          nodeType,
+          color,
+        };
+        await executeCommands([command]);
+        const botText = `Created ${count} placeholder${count === 1 ? '' : 's'} (${nodeType}, ${direction}).`;
+        addMessage('bot', botText);
+        chatHistory.push({ role: 'model', parts: [{ text: botText }] });
+        await autoSaveAfterResponse();
+        showToast('Placeholders created', 'success');
+      } catch (err) {
+        console.error('Placeholder set action failed', err);
+        showToast('Failed to create placeholders.', 'error');
+        addMessage('bot', 'Failed to create placeholders.');
+        chatHistory.push({ role: 'model', parts: [{ text: 'Failed to create placeholders.' }] });
+        await autoSaveAfterResponse();
+      } finally {
+        removeThinkingIndicator();
+        setSendButtonMode(false);
+      }
+    }
+
     async function runCreateAdvancedGridAction(values, actionMeta) {
       const pattern = values.pattern || 'grid';
       const shape = values.shape || 'rectangle';
@@ -18915,6 +18956,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'createGridLines':
           await runCreateGridLinesAction(values, actionMeta);
+          break;
+        case 'placeholderSet':
+          await runPlaceholderSetAction(values, actionMeta);
           break;
         case 'createAdvancedGrid':
           await runCreateAdvancedGridAction(values, actionMeta);

@@ -44,6 +44,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'createIcon',
   'browseIconSet',
   'createGridLines',
+  'placeholderSet',
   'createAdvancedGrid',
   'turnIntoComponentSet',
   'createButtonComponentSet',
