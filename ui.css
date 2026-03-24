@@ -2057,6 +2057,7 @@
       align-items: center;
       gap: 4px;
       position: relative;
+      height: 20px;
     }
 
     .comment-action-btn.loading {
@@ -2759,6 +2760,7 @@
       align-items: center;
       gap: 4px;
       padding: 6px 8px 6px 2px;
+      height: 26px;
       background: transparent;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
@@ -2932,6 +2934,7 @@
       overflow: hidden;
       margin-right: 4px;
       flex-shrink: 0;
+      color: var(--text-primary);
     }
 
     .people-chip-avatar-mini img {
@@ -2965,7 +2968,7 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 10px;
+      padding: var(--space-xs) var(--space-md) var(--space-xs) var(--space-xs);
       background: var(--bg-secondary);
       border: none;
       border-radius: 16px;

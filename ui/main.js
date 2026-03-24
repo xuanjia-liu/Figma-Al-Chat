@@ -12450,14 +12450,23 @@ Generate ONLY the reply text, nothing else.`;
             const action = getCommentAiActionMeta(currentCommentAiAction);
 
             group.innerHTML = `
-            <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" onclick="executeCurrentAiAction()" title="${action.title}">
+            <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" title="${action.title}">
               ${action.icon}
               ${action.label}${currentCommentAiAction === 'summarize' ? ' <span class="summarize-count">(0)</span>' : ''}
             </button>
-            <button class="ai-action-expand-btn" type="button" onclick="toggleAiActionMenu(event)" title="${tu('actions.comments.drawer.moreAiActions')}">
+            <button class="ai-action-expand-btn" type="button" title="${tu('actions.comments.drawer.moreAiActions')}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
             </button>
           `;
+
+            const mainSummarizeBtn = group.querySelector('.prompt-action-main-btn');
+            if (mainSummarizeBtn) {
+              mainSummarizeBtn.onclick = () => executeCurrentAiAction();
+            }
+            const expandAiBtn = group.querySelector('.ai-action-expand-btn');
+            if (expandAiBtn) {
+              expandAiBtn.onclick = (e) => toggleAiActionMenu(e);
+            }
 
             if (cancelBtn) {
               footer.insertBefore(group, cancelBtn);

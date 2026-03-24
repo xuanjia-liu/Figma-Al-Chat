@@ -2064,6 +2064,7 @@
       align-items: center;
       gap: 4px;
       position: relative;
+      height: 20px;
     }
 
     .comment-action-btn.loading {
@@ -2766,6 +2767,7 @@
       align-items: center;
       gap: 4px;
       padding: 6px 8px 6px 2px;
+      height: 26px;
       background: transparent;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
@@ -2939,6 +2941,7 @@
       overflow: hidden;
       margin-right: 4px;
       flex-shrink: 0;
+      color: var(--text-primary);
     }
 
     .people-chip-avatar-mini img {
@@ -2972,7 +2975,7 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 10px;
+      padding: var(--space-xs) var(--space-md) var(--space-xs) var(--space-xs);
       background: var(--bg-secondary);
       border: none;
       border-radius: 16px;
@@ -35057,7 +35060,15 @@
               const group = document.createElement("div");
               group.className = "ai-action-group";
               const action = getCommentAiActionMeta(currentCommentAiAction);
-              group.innerHTML = '\n            <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" onclick="executeCurrentAiAction()" title="'.concat(action.title, '">\n              ').concat(action.icon, "\n              ").concat(action.label).concat(currentCommentAiAction === "summarize" ? ' <span class="summarize-count">(0)</span>' : "", '\n            </button>\n            <button class="ai-action-expand-btn" type="button" onclick="toggleAiActionMenu(event)" title="').concat(tu("actions.comments.drawer.moreAiActions"), '">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n            </button>\n          ');
+              group.innerHTML = '\n            <button class="prompt-comments-summarize-btn prompt-action-main-btn" type="button" title="'.concat(action.title, '">\n              ').concat(action.icon, "\n              ").concat(action.label).concat(currentCommentAiAction === "summarize" ? ' <span class="summarize-count">(0)</span>' : "", '\n            </button>\n            <button class="ai-action-expand-btn" type="button" title="').concat(tu("actions.comments.drawer.moreAiActions"), '">\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>\n            </button>\n          ');
+              const mainSummarizeBtn = group.querySelector(".prompt-action-main-btn");
+              if (mainSummarizeBtn) {
+                mainSummarizeBtn.onclick = () => executeCurrentAiAction();
+              }
+              const expandAiBtn = group.querySelector(".ai-action-expand-btn");
+              if (expandAiBtn) {
+                expandAiBtn.onclick = (e) => toggleAiActionMenu(e);
+              }
               if (cancelBtn) {
                 footer.insertBefore(group, cancelBtn);
               } else {
