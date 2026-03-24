@@ -20,15 +20,6 @@ const LANGUAGE_OPTIONS = [
   { value: 'latin', labelKey: 'actions.fontPreview.langLatin', subset: 'latin' },
 ];
 
-const SCRIPT_OPTIONS = [
-  { value: '', labelKey: 'actions.fontPreview.scriptAny' },
-  { value: 'latin-ext', labelKey: 'actions.fontPreview.scriptLatinExt', subset: 'latin-ext' },
-  { value: 'cyrillic', labelKey: 'actions.fontPreview.scriptCyrillic', subset: 'cyrillic' },
-  { value: 'cyrillic-ext', labelKey: 'actions.fontPreview.scriptCyrillicExt', subset: 'cyrillic-ext' },
-  { value: 'greek', labelKey: 'actions.fontPreview.scriptGreek', subset: 'greek' },
-  { value: 'vietnamese', labelKey: 'actions.fontPreview.scriptVietnamese', subset: 'vietnamese' },
-];
-
 const FEELING_TAGS = [
   ['Business', 'Fancy'],
   ['Calm', 'Playful'],
@@ -213,6 +204,28 @@ function gfpFamilyWeightCatalogSummary(f, tu) {
   return tu('actions.fontPreview.weightFamilyVariable');
 }
 
+function gfpNewBookmarkListId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `gfp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
+/** @param {string} name */
+function gfpSyntheticFamilyMeta(name) {
+  const family = String(name || '').trim() || 'Unknown';
+  return {
+    family,
+    category: 'Sans Serif',
+    subsets: [],
+    classifications: [],
+    stroke: null,
+    popularity: 9999,
+    thickness: 5,
+    wghtMin: 100,
+    wghtMax: 900,
+    wghtCss: '100..900',
+  };
+}
+
 /**
  * @param {HTMLElement} container
  * @param {{ tu: (k: string) => string; showToast: (msg: string, type?: string) => void }} deps
@@ -233,7 +246,6 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     fontWght: 400,
     search: '',
     langSubset: '',
-    scriptSubset: '',
     feeling: new Set(),
     appearance: new Set(),
     filtered: [],
@@ -252,7 +264,26 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
           </div>
           <div class="gfp-lang-row">
             <select class="gfp-select gfp-lang-primary" aria-label="${escapeAttr(tu('actions.fontPreview.languagePrimaryAria'))}"></select>
-            <select class="gfp-select gfp-lang-secondary" aria-label="${escapeAttr(tu('actions.fontPreview.languageSecondaryAria'))}"></select>
+          </div>
+        </section>
+        <section class="gfp-filter-block">
+          <div class="gfp-filter-heading">
+            <span class="gfp-filter-heading-icon" aria-hidden="true">🔖</span>
+            ${escapeAttr(tu('actions.fontPreview.bookmarksHeading'))}
+          </div>
+          <div class="gfp-bookmark-bar">
+            <select class="gfp-select gfp-bookmark-list-select" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkListSelectAria'))}"></select>
+          </div>
+          <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkToolbarAria'))}">
+            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}">
+              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            </button>
+            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}">
+              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}">
+              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            </button>
           </div>
         </section>
         <section class="gfp-filter-block">
@@ -307,7 +338,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const weightSelect = container.querySelector('.gfp-weight-select');
   const weightRange = container.querySelector('.gfp-weight-range');
   const langPrimary = container.querySelector('.gfp-lang-primary');
-  const langSecondary = container.querySelector('.gfp-lang-secondary');
+  const bookmarkListSelect = container.querySelector('.gfp-bookmark-list-select');
+  const bookmarkRenameBtn = container.querySelector('.gfp-bookmark-rename-btn');
+  const bookmarkDeleteBtn = container.querySelector('.gfp-bookmark-delete-btn');
+  const bookmarkNewBtn = container.querySelector('.gfp-bookmark-new-btn');
   const feelingGrid = container.querySelector('.gfp-tag-grid[data-group="feeling"]');
   const appearanceGrid = container.querySelector('.gfp-tag-grid[data-group="appearance"]');
   const searchInput = container.querySelector('.gfp-search');
@@ -322,6 +356,32 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   pairPopover.setAttribute('role', 'region');
   pairPopover.hidden = true;
   if (mainEl) mainEl.appendChild(pairPopover);
+
+  const bookmarkPopover = document.createElement('div');
+  bookmarkPopover.className = 'gfp-bookmark-popover';
+  bookmarkPopover.setAttribute('role', 'dialog');
+  bookmarkPopover.setAttribute('aria-modal', 'true');
+  bookmarkPopover.hidden = true;
+  if (mainEl) mainEl.appendChild(bookmarkPopover);
+
+  const renameListPopover = document.createElement('div');
+  renameListPopover.className = 'gfp-bookmark-rename-popover';
+  renameListPopover.setAttribute('role', 'dialog');
+  renameListPopover.setAttribute('aria-modal', 'true');
+  renameListPopover.hidden = true;
+  container.appendChild(renameListPopover);
+
+  /** @type {HTMLElement | null} */
+  let renamePopoverAnchor = null;
+
+  /** @type {{ id: string, name: string, families: string[] }[]} */
+  let bookmarkLists = [];
+  let bookmarkLastSelectedListId = null;
+  /** @type {string} '' = browse all fonts */
+  let activeListId = '';
+  let bookmarkSaveTimer = null;
+  /** @type {HTMLElement | null} */
+  let bookmarkAnchorRow = null;
 
   let pairShowTimer = null;
   let pairHideTimer = null;
@@ -607,7 +667,6 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   fillLangSelect(langPrimary, LANGUAGE_OPTIONS);
-  fillLangSelect(langSecondary, SCRIPT_OPTIONS);
 
   function renderTagGrid(grid, pairs, group) {
     const parts = [];
@@ -627,6 +686,354 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   renderTagGrid(feelingGrid, FEELING_TAGS, 'feeling');
   renderTagGrid(appearanceGrid, APPEARANCE_TAGS, 'appearance');
 
+  function getActiveBookmarkList() {
+    if (!activeListId) return null;
+    return bookmarkLists.find(l => l.id === activeListId) || null;
+  }
+
+  function getFamilyMeta(familyName) {
+    const fromMap = familyByName.get(familyName);
+    if (fromMap) return fromMap;
+    return gfpSyntheticFamilyMeta(familyName);
+  }
+
+  function familyPassesFilters(f) {
+    const q = state.search.trim().toLowerCase();
+    const needFeeling = state.feeling.size > 0;
+    const needAppearance = state.appearance.size > 0;
+    if (q && !familyLower(f).includes(q)) return false;
+    if (state.langSubset && !hasSubset(f, state.langSubset)) return false;
+    if (needFeeling) {
+      const ok = [...state.feeling].some(tag => FEELING_TEST[tag]?.(f));
+      if (!ok) return false;
+    }
+    if (needAppearance) {
+      const ok = [...state.appearance].some(tag => APPEARANCE_TEST[tag]?.(f));
+      if (!ok) return false;
+    }
+    return true;
+  }
+
+  function buildBookmarkPayload() {
+    return {
+      lists: bookmarkLists.map(l => ({
+        id: l.id,
+        name: l.name,
+        families: [...l.families],
+      })),
+      lastSelectedListId: activeListId || null,
+    };
+  }
+
+  function scheduleSaveBookmarks() {
+    if (disposed) return;
+    clearTimeout(bookmarkSaveTimer);
+    bookmarkSaveTimer = setTimeout(() => {
+      bookmarkSaveTimer = null;
+      if (disposed) return;
+      parent.postMessage(
+        { pluginMessage: { type: 'save-font-preview-bookmarks', data: buildBookmarkPayload() } },
+        '*'
+      );
+    }, 300);
+  }
+
+  function rebuildBookmarkSelect() {
+    if (!bookmarkListSelect) return;
+    const parts = [`<option value="">${escapeAttr(tu('actions.fontPreview.bookmarkAllFonts'))}</option>`];
+    for (const l of bookmarkLists) {
+      parts.push(`<option value="${escapeAttr(l.id)}">${escapeAttr(l.name)}</option>`);
+    }
+    bookmarkListSelect.innerHTML = parts.join('');
+    bookmarkListSelect.value = activeListId || '';
+  }
+
+  function syncBookmarkManageRowDisabled() {
+    const hasList = !!activeListId && !!getActiveBookmarkList();
+    if (bookmarkRenameBtn) bookmarkRenameBtn.disabled = !hasList;
+    if (bookmarkDeleteBtn) bookmarkDeleteBtn.disabled = !hasList;
+  }
+
+  function applyBookmarksFromServer(data) {
+    if (!data || typeof data !== 'object') return;
+    bookmarkLists = Array.isArray(data.lists)
+      ? data.lists
+          .map(l => ({
+            id: String(l.id || ''),
+            name: String(l.name || 'List').slice(0, 80),
+            families: Array.isArray(l.families) ? l.families.map(String) : [],
+          }))
+          .filter(l => l.id)
+      : [];
+    bookmarkLastSelectedListId =
+      typeof data.lastSelectedListId === 'string' && data.lastSelectedListId
+        ? data.lastSelectedListId
+        : null;
+    activeListId =
+      bookmarkLastSelectedListId && bookmarkLists.some(l => l.id === bookmarkLastSelectedListId)
+        ? bookmarkLastSelectedListId
+        : '';
+    rebuildBookmarkSelect();
+    syncBookmarkManageRowDisabled();
+    applyFilters();
+    setupListObserver();
+  }
+
+  function hideRenameListPopover() {
+    if (renameListPopover.contains(document.activeElement)) {
+      try {
+        document.activeElement.blur();
+      } catch {
+        /* ignore */
+      }
+    }
+    renameListPopover.hidden = true;
+    renameListPopover.replaceChildren();
+    renameListPopover.removeAttribute('style');
+    renamePopoverAnchor = null;
+  }
+
+  function positionRenameListPopover(anchorBtn) {
+    const margin = 8;
+    const pad = 6;
+    const rect = anchorBtn.getBoundingClientRect();
+    const pr = renameListPopover.getBoundingClientRect();
+    let left = rect.left;
+    let top = rect.bottom + margin;
+    if (left + pr.width > window.innerWidth - pad) {
+      left = window.innerWidth - pr.width - pad;
+    }
+    if (left < pad) left = pad;
+    if (top + pr.height > window.innerHeight - pad) {
+      top = rect.top - pr.height - margin;
+    }
+    if (top < pad) top = pad;
+    renameListPopover.style.position = 'fixed';
+    renameListPopover.style.left = `${Math.round(left)}px`;
+    renameListPopover.style.top = `${Math.round(top)}px`;
+    renameListPopover.style.zIndex = '32';
+  }
+
+  function showRenameListPopover() {
+    const list = getActiveBookmarkList();
+    if (!list || !bookmarkRenameBtn) return;
+    hideBookmarkPopover();
+    renameListPopover.replaceChildren();
+    const inner = document.createElement('div');
+    inner.className = 'gfp-bookmark-rename-popover-inner';
+    const title = document.createElement('div');
+    title.className = 'gfp-bookmark-rename-popover-title';
+    title.textContent = tu('actions.fontPreview.bookmarkRenamePopoverTitle');
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'gfp-input gfp-bookmark-rename-popover-input';
+    nameInput.maxLength = 80;
+    nameInput.value = list.name;
+    nameInput.placeholder = tu('actions.fontPreview.bookmarkRenamePlaceholder');
+    nameInput.setAttribute('aria-label', tu('actions.fontPreview.bookmarkRenamePlaceholder'));
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'gfp-bookmark-btn gfp-bookmark-rename-popover-save';
+    saveBtn.textContent = tu('actions.fontPreview.bookmarkRenameSave');
+    function commitRename() {
+      const current = getActiveBookmarkList();
+      if (!current || current.id !== list.id) return;
+      const nm = nameInput.value.trim().slice(0, 80);
+      if (!nm) {
+        showToast(tu('actions.fontPreview.bookmarkNeedListName'), 'error');
+        return;
+      }
+      current.name = nm;
+      rebuildBookmarkSelect();
+      if (bookmarkListSelect) bookmarkListSelect.value = activeListId;
+      scheduleSaveBookmarks();
+      hideRenameListPopover();
+    }
+    saveBtn.addEventListener('click', commitRename);
+    nameInput.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        commitRename();
+      }
+    });
+    inner.appendChild(title);
+    inner.appendChild(nameInput);
+    inner.appendChild(saveBtn);
+    renameListPopover.appendChild(inner);
+    renamePopoverAnchor = bookmarkRenameBtn;
+    renameListPopover.hidden = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (disposed || renameListPopover.hidden) return;
+        positionRenameListPopover(bookmarkRenameBtn);
+        nameInput.focus();
+        nameInput.select();
+      });
+    });
+  }
+
+  function hideBookmarkPopover() {
+    if (bookmarkPopover.contains(document.activeElement)) {
+      try {
+        document.activeElement.blur();
+      } catch {
+        /* ignore */
+      }
+    }
+    bookmarkPopover.hidden = true;
+    bookmarkPopover.replaceChildren();
+    bookmarkPopover.removeAttribute('style');
+    bookmarkAnchorRow = null;
+  }
+
+  function positionBookmarkPopover(anchorRow) {
+    const margin = 10;
+    const pad = 6;
+    const rect = anchorRow.getBoundingClientRect();
+    const pr = bookmarkPopover.getBoundingClientRect();
+    let left = rect.right + margin;
+    if (left + pr.width > window.innerWidth - pad) {
+      left = rect.left - pr.width - margin;
+    }
+    if (left < pad) left = pad;
+    let top = rect.top + (rect.height - pr.height) / 2;
+    if (top < pad) top = pad;
+    const maxTop = window.innerHeight - pr.height - pad;
+    if (top > maxTop) top = Math.max(pad, maxTop);
+    bookmarkPopover.style.position = 'fixed';
+    bookmarkPopover.style.left = `${Math.round(left)}px`;
+    bookmarkPopover.style.top = `${Math.round(top)}px`;
+    bookmarkPopover.style.zIndex = '31';
+  }
+
+  function fillBookmarkPopoverInner(family) {
+    bookmarkPopover.replaceChildren();
+    const inner = document.createElement('div');
+    inner.className = 'gfp-bookmark-popover-inner';
+    const title = document.createElement('div');
+    title.className = 'gfp-bookmark-popover-title';
+    title.textContent = tu('actions.fontPreview.bookmarkAddTitle');
+    const sub = document.createElement('div');
+    sub.className = 'gfp-bookmark-popover-family';
+    sub.textContent = family;
+    const sel = document.createElement('select');
+    sel.className = 'gfp-select gfp-bookmark-popover-list';
+    sel.setAttribute('aria-label', tu('actions.fontPreview.bookmarkPopoverListAria'));
+    const optNew = document.createElement('option');
+    optNew.value = '__new__';
+    optNew.textContent = tu('actions.fontPreview.bookmarkNewListOption');
+    sel.appendChild(optNew);
+    for (const l of bookmarkLists) {
+      const o = document.createElement('option');
+      o.value = l.id;
+      o.textContent = l.name;
+      sel.appendChild(o);
+    }
+    const nameRow = document.createElement('div');
+    nameRow.className = 'gfp-bookmark-popover-new-row';
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'gfp-input gfp-bookmark-popover-new-name';
+    nameInput.maxLength = 80;
+    nameInput.placeholder = tu('actions.fontPreview.bookmarkNewListNamePlaceholder');
+    nameRow.appendChild(nameInput);
+    function syncNewRow() {
+      nameRow.hidden = sel.value !== '__new__';
+    }
+    sel.addEventListener('change', syncNewRow);
+    if (bookmarkLists.length > 0) {
+      sel.value = bookmarkLists[0].id;
+    }
+    syncNewRow();
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'gfp-bookmark-btn gfp-bookmark-popover-add';
+    addBtn.textContent = tu('actions.fontPreview.bookmarkAddConfirm');
+    addBtn.addEventListener('click', () => {
+      let targetListId = sel.value;
+      /** @type {{ id: string, name: string, families: string[] } | null} */
+      let targetList = bookmarkLists.find(x => x.id === targetListId) || null;
+      if (targetListId === '__new__') {
+        if (bookmarkLists.length >= 50) {
+          showToast(tu('actions.fontPreview.bookmarkMaxLists'), 'error');
+          return;
+        }
+        const nm = nameInput.value.trim().slice(0, 80);
+        if (!nm) {
+          showToast(tu('actions.fontPreview.bookmarkNeedListName'), 'error');
+          return;
+        }
+        targetListId = gfpNewBookmarkListId();
+        targetList = { id: targetListId, name: nm, families: [] };
+        bookmarkLists.push(targetList);
+        rebuildBookmarkSelect();
+      }
+      if (!targetList) return;
+      if (!targetList.families.includes(family)) {
+        targetList.families.push(family);
+      }
+      scheduleSaveBookmarks();
+      showToast(tu('actions.fontPreview.bookmarkAddedToast', { list: targetList.name }), 'success');
+      hideBookmarkPopover();
+      if (activeListId === targetListId) {
+        applyFilters();
+        setupListObserver();
+      }
+    });
+    inner.appendChild(title);
+    inner.appendChild(sub);
+    inner.appendChild(sel);
+    inner.appendChild(nameRow);
+    inner.appendChild(addBtn);
+    bookmarkPopover.appendChild(inner);
+  }
+
+  function showBookmarkPopoverForFamily(row, family) {
+    hidePairPopover();
+    hideRenameListPopover();
+    fillBookmarkPopoverInner(family);
+    bookmarkAnchorRow = row;
+    bookmarkPopover.hidden = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (disposed || bookmarkPopover.hidden) return;
+        positionBookmarkPopover(row);
+        bookmarkPopover.querySelector('.gfp-bookmark-popover-add')?.focus();
+      });
+    });
+  }
+
+  function onBookmarkPopoverKeydown(ev) {
+    if (ev.key !== 'Escape' || bookmarkPopover.hidden) return;
+    ev.stopPropagation();
+    hideBookmarkPopover();
+  }
+
+  bookmarkPopover.addEventListener('keydown', onBookmarkPopoverKeydown);
+
+  function onDocMousedownBookmark(ev) {
+    const t = ev.target;
+    if (!(t instanceof Node)) return;
+    if (!bookmarkPopover.hidden) {
+      if (!bookmarkPopover.contains(t) && !(bookmarkAnchorRow && bookmarkAnchorRow.contains(t))) {
+        hideBookmarkPopover();
+      }
+    }
+    if (!renameListPopover.hidden) {
+      if (!renameListPopover.contains(t) && !(renamePopoverAnchor && renamePopoverAnchor.contains(t))) {
+        hideRenameListPopover();
+      }
+    }
+  }
+  document.addEventListener('mousedown', onDocMousedownBookmark);
+
+  function onRenameListPopoverKeydown(ev) {
+    if (ev.key !== 'Escape' || renameListPopover.hidden) return;
+    ev.stopPropagation();
+    hideRenameListPopover();
+  }
+  renameListPopover.addEventListener('keydown', onRenameListPopoverKeydown);
+
   function applyFilters() {
     clearTimeout(pairShowTimer);
     pairShowTimer = null;
@@ -635,26 +1042,26 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     pairHoverRow = null;
     hidePairPopover();
 
-    const q = state.search.trim().toLowerCase();
-    const needFeeling = state.feeling.size > 0;
-    const needAppearance = state.appearance.size > 0;
+    /** @type {object[]} */
+    let base;
+    if (activeListId) {
+      const list = getActiveBookmarkList();
+      base = [];
+      if (list) {
+        for (const name of list.families) {
+          base.push(getFamilyMeta(name));
+        }
+      }
+    } else {
+      base = allFamilies;
+    }
 
-    state.filtered = allFamilies.filter(f => {
-      if (q && !familyLower(f).includes(q)) return false;
-      if (state.langSubset && !hasSubset(f, state.langSubset)) return false;
-      if (state.scriptSubset && !hasSubset(f, state.scriptSubset)) return false;
-      if (needFeeling) {
-        const ok = [...state.feeling].some(tag => FEELING_TEST[tag]?.(f));
-        if (!ok) return false;
-      }
-      if (needAppearance) {
-        const ok = [...state.appearance].some(tag => APPEARANCE_TEST[tag]?.(f));
-        if (!ok) return false;
-      }
-      return true;
-    });
+    state.filtered = base.filter(familyPassesFilters);
     state.renderOffset = 0;
     listEl.innerHTML = '';
+    if (state.filtered.length === 0 && activeListId) {
+      listEl.innerHTML = `<div class="gfp-bookmarks-empty-hint">${escapeAttr(tu('actions.fontPreview.bookmarksEmptyList'))}</div>`;
+    }
     countEl.textContent = tu('actions.fontPreview.showingCount', {
       shown: Math.min(BATCH, state.filtered.length),
       total: state.filtered.length,
@@ -722,6 +1129,24 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       applyBtn.setAttribute('aria-label', tu('actions.fontPreview.applyToSelectionTitle'));
       applyBtn.innerHTML =
         '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+      const markBtn = document.createElement('button');
+      markBtn.type = 'button';
+      markBtn.className = 'gfp-font-row-btn gfp-font-row-btn--bookmark';
+      markBtn.dataset.family = f.family;
+      const listForRow = getActiveBookmarkList();
+      const inActiveList = !!(activeListId && listForRow && listForRow.families.includes(f.family));
+      if (inActiveList) {
+        markBtn.classList.add('gfp-font-row-btn--bookmark-on');
+        markBtn.title = tu('actions.fontPreview.bookmarkRemoveTitle');
+        markBtn.setAttribute('aria-label', tu('actions.fontPreview.bookmarkRemoveTitle'));
+        markBtn.innerHTML =
+          '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 2h12a2 2 0 012 2v18l-8-4-8 4V4a2 2 0 012-2z"/></svg>';
+      } else {
+        markBtn.title = tu('actions.fontPreview.bookmarkAddTitle');
+        markBtn.setAttribute('aria-label', tu('actions.fontPreview.bookmarkAddTitle'));
+        markBtn.innerHTML =
+          '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>';
+      }
       const copyBtn = document.createElement('button');
       copyBtn.type = 'button';
       copyBtn.className = 'gfp-font-row-btn gfp-font-row-btn--copy';
@@ -730,6 +1155,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       copyBtn.setAttribute('aria-label', tu('actions.fontPreview.copyFamilyNameTitle'));
       copyBtn.innerHTML =
         '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
+      actions.appendChild(markBtn);
       actions.appendChild(applyBtn);
       actions.appendChild(copyBtn);
       row.appendChild(label);
@@ -799,6 +1225,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   function onGfpPluginWindowMessage(ev) {
     const pm = ev.data?.pluginMessage;
     if (!pm) return;
+    if (pm.type === 'font-preview-bookmarks-result' && pm.data) {
+      applyBookmarksFromServer(pm.data);
+      return;
+    }
     if (pm.type === 'font-preview-selection-text-result') {
       pendingSelectionText = false;
       if (getSelectionBtn) getSelectionBtn.disabled = false;
@@ -914,12 +1344,28 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     ev.stopPropagation();
     const family = btn.dataset.family;
     if (!family) return;
+    if (btn.classList.contains('gfp-font-row-btn--bookmark')) {
+      if (activeListId) {
+        const list = getActiveBookmarkList();
+        if (list) {
+          list.families = list.families.filter(n => n !== family);
+          scheduleSaveBookmarks();
+          showToast(tu('actions.fontPreview.bookmarkRemovedToast'), 'success');
+          applyFilters();
+          setupListObserver();
+        }
+      } else {
+        const row = btn.closest('.gfp-font-row');
+        if (row) showBookmarkPopoverForFamily(row, family);
+      }
+      return;
+    }
     if (btn.classList.contains('gfp-font-row-btn--copy')) {
       copyFamilyNameToClipboard(family);
       return;
     }
     if (btn.classList.contains('gfp-font-row-btn--apply')) {
-      const meta = familyByName.get(family);
+      const meta = getFamilyMeta(family);
       const w = gfpClampWght(meta, state.fontWght);
       const wghtCss = meta && typeof meta.wghtCss === 'string' ? meta.wghtCss : '';
       parent.postMessage(
@@ -954,7 +1400,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   function applyWeightToSamples() {
     listEl.querySelectorAll('.gfp-font-row').forEach(row => {
       const name = row.dataset.family;
-      const meta = familyByName.get(name);
+      const meta = name ? getFamilyMeta(name) : null;
       const sample = row.querySelector('.gfp-font-sample');
       const w = gfpClampWght(meta, state.fontWght);
       if (sample) sample.style.fontWeight = String(w);
@@ -983,11 +1429,72 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     applyFilters();
     setupListObserver();
   });
-  langSecondary.addEventListener('change', () => {
-    state.scriptSubset = langSecondary.value;
-    applyFilters();
-    setupListObserver();
-  });
+
+  rebuildBookmarkSelect();
+  syncBookmarkManageRowDisabled();
+
+  if (bookmarkListSelect) {
+    bookmarkListSelect.addEventListener('change', () => {
+      hideRenameListPopover();
+      activeListId = bookmarkListSelect.value || '';
+      syncBookmarkManageRowDisabled();
+      scheduleSaveBookmarks();
+      applyFilters();
+      setupListObserver();
+    });
+  }
+
+  if (bookmarkRenameBtn) {
+    bookmarkRenameBtn.addEventListener('click', () => {
+      if (!getActiveBookmarkList()) return;
+      showRenameListPopover();
+    });
+  }
+
+  if (bookmarkDeleteBtn) {
+    bookmarkDeleteBtn.addEventListener('click', () => {
+      const list = getActiveBookmarkList();
+      if (!list) return;
+      hideRenameListPopover();
+      if (!window.confirm(tu('actions.fontPreview.bookmarkDeleteConfirm', { name: list.name }))) return;
+      const removedId = list.id;
+      bookmarkLists = bookmarkLists.filter(l => l.id !== removedId);
+      if (activeListId === removedId) {
+        activeListId = '';
+      }
+      rebuildBookmarkSelect();
+      syncBookmarkManageRowDisabled();
+      scheduleSaveBookmarks();
+      applyFilters();
+      setupListObserver();
+    });
+  }
+
+  if (bookmarkNewBtn) {
+    bookmarkNewBtn.addEventListener('click', () => {
+      hideRenameListPopover();
+      if (bookmarkLists.length >= 50) {
+        showToast(tu('actions.fontPreview.bookmarkMaxLists'), 'error');
+        return;
+      }
+      const raw = window.prompt(tu('actions.fontPreview.bookmarkNewListPrompt'), '');
+      if (raw == null) return;
+      const nm = raw.trim().slice(0, 80);
+      if (!nm) {
+        showToast(tu('actions.fontPreview.bookmarkNeedListName'), 'error');
+        return;
+      }
+      const id = gfpNewBookmarkListId();
+      bookmarkLists.push({ id, name: nm, families: [] });
+      activeListId = id;
+      rebuildBookmarkSelect();
+      bookmarkListSelect.value = id;
+      syncBookmarkManageRowDisabled();
+      scheduleSaveBookmarks();
+      applyFilters();
+      setupListObserver();
+    });
+  }
 
   searchInput.addEventListener('input', () => {
     state.search = searchInput.value;
@@ -1059,12 +1566,19 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   syncSize(false);
   syncWeight(false);
+  parent.postMessage({ pluginMessage: { type: 'get-font-preview-bookmarks' } }, '*');
   loadCatalog();
 
   return () => {
     disposed = true;
+    clearTimeout(bookmarkSaveTimer);
     clearTimeout(pairShowTimer);
     clearTimeout(pairHideTimer);
+    hideBookmarkPopover();
+    hideRenameListPopover();
+    document.removeEventListener('mousedown', onDocMousedownBookmark);
+    bookmarkPopover.removeEventListener('keydown', onBookmarkPopoverKeydown);
+    renameListPopover.removeEventListener('keydown', onRenameListPopoverKeydown);
     listEl.removeEventListener('mouseover', onListMouseOver);
     listEl.removeEventListener('mouseout', onListMouseOut);
     listEl.removeEventListener('focusin', onListFocusIn);

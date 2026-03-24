@@ -55,8 +55,55 @@ const SETTINGS_KEYS = {
   PIXABAY_API_KEY: 'figma-pixabay-api-key',
   PEXELS_API_KEY: 'figma-pexels-api-key',
   UI_LANGUAGE: 'figma-ui-language',
-  LIGHT_MODE: 'figma-light-mode'
+  LIGHT_MODE: 'figma-light-mode',
+  FONT_PREVIEW_BOOKMARKS: 'figma-font-preview-bookmarks'
 };
+
+const FONT_PREVIEW_BOOKMARKS_LIMITS = {
+  MAX_LISTS: 50,
+  MAX_NAME_LEN: 80,
+  MAX_FAMILIES_PER_LIST: 500
+};
+
+function normalizeFontPreviewBookmarks(raw: unknown): { lists: { id: string; name: string; families: string[] }[]; lastSelectedListId: string | null } {
+  const empty = { lists: [] as { id: string; name: string; families: string[] }[], lastSelectedListId: null as string | null };
+  if (!raw || typeof raw !== 'object') return empty;
+  const o = raw as Record<string, unknown>;
+  const listsRaw = o.lists;
+  if (!Array.isArray(listsRaw)) return empty;
+  const lists: { id: string; name: string; families: string[] }[] = [];
+  const seenIds = new Set<string>();
+  for (const item of listsRaw) {
+    if (lists.length >= FONT_PREVIEW_BOOKMARKS_LIMITS.MAX_LISTS) break;
+    if (!item || typeof item !== 'object') continue;
+    const it = item as Record<string, unknown>;
+    const id = typeof it.id === 'string' && it.id.trim() ? it.id.trim().slice(0, 64) : '';
+    if (!id || seenIds.has(id)) continue;
+    seenIds.add(id);
+    let name = typeof it.name === 'string' ? it.name.trim().slice(0, FONT_PREVIEW_BOOKMARKS_LIMITS.MAX_NAME_LEN) : '';
+    if (!name) name = 'List';
+    const famRaw = it.families;
+    const families: string[] = [];
+    const seenFam = new Set<string>();
+    if (Array.isArray(famRaw)) {
+      for (const f of famRaw) {
+        if (families.length >= FONT_PREVIEW_BOOKMARKS_LIMITS.MAX_FAMILIES_PER_LIST) break;
+        if (typeof f !== 'string') continue;
+        const fam = f.trim();
+        if (!fam || seenFam.has(fam)) continue;
+        seenFam.add(fam);
+        families.push(fam);
+      }
+    }
+    lists.push({ id, name, families });
+  }
+  let lastSelectedListId: string | null = null;
+  if (typeof o.lastSelectedListId === 'string' && o.lastSelectedListId.trim()) {
+    const lid = o.lastSelectedListId.trim().slice(0, 64);
+    if (lists.some(l => l.id === lid)) lastSelectedListId = lid;
+  }
+  return { lists, lastSelectedListId };
+}
 
 figma.showUI(__html__, {
   width: 480,
@@ -5221,6 +5268,33 @@ figma.ui.onmessage = async (msg: {
         figma.ui.postMessage({ type: 'text-result', data: text });
       } else {
         figma.ui.postMessage({ type: 'error', message: 'No text found in selection' });
+      }
+      break;
+    }
+
+    case 'get-font-preview-bookmarks': {
+      try {
+        const raw = await figma.clientStorage.getAsync(SETTINGS_KEYS.FONT_PREVIEW_BOOKMARKS);
+        const data = normalizeFontPreviewBookmarks(raw);
+        figma.ui.postMessage({ type: 'font-preview-bookmarks-result', data });
+      } catch (e) {
+        figma.ui.postMessage({
+          type: 'font-preview-bookmarks-result',
+          data: { lists: [], lastSelectedListId: null }
+        });
+      }
+      break;
+    }
+
+    case 'save-font-preview-bookmarks': {
+      try {
+        const anyMsg = msg as any;
+        const normalized = normalizeFontPreviewBookmarks(anyMsg.data);
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.FONT_PREVIEW_BOOKMARKS, normalized);
+        figma.ui.postMessage({ type: 'font-preview-bookmarks-saved', ok: true });
+      } catch (error) {
+        console.error('Failed to save font preview bookmarks:', error);
+        figma.ui.postMessage({ type: 'font-preview-bookmarks-saved', ok: false });
       }
       break;
     }

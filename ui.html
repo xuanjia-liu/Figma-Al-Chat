@@ -526,6 +526,99 @@
       gap: var(--space-sm);
     }
 
+    .gfp-bookmark-bar {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .gfp-bookmark-manage-row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .gfp-bookmark-icon-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      margin: 0;
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+
+    .gfp-bookmark-icon-btn:hover:not(:disabled) {
+      border-color: var(--border-intense);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .gfp-bookmark-icon-btn:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
+    }
+
+    .gfp-bookmark-icon-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .gfp-bookmark-icon-btn-svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .gfp-input {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      padding: 6px 8px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: var(--text-xs);
+    }
+
+    .gfp-input:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .gfp-bookmark-btn {
+      flex: 0 0 auto;
+      padding: 6px 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .gfp-bookmark-btn:hover:not(:disabled) {
+      border-color: var(--border-intense);
+      background: var(--bg-tertiary);
+    }
+
+    .gfp-bookmark-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .gfp-select {
       width: 100%;
       min-width: 0;
@@ -887,6 +980,12 @@
       flex-shrink: 0;
     }
 
+    .gfp-font-row-btn--bookmark.gfp-font-row-btn--bookmark-on {
+      color: var(--accent-agent, #3b82f6);
+      border-color: var(--accent-agent, #3b82f6);
+      background: var(--accent-agent-soft, rgba(59, 130, 246, 0.12));
+    }
+
     .gfp-pair-popover {
       box-sizing: border-box;
       max-width: min(180px, 56vw);
@@ -1012,6 +1111,91 @@
     .gfp-pair-popover-empty {
       font-size: var(--text-xs);
       color: var(--text-muted);
+    }
+
+    .gfp-bookmark-popover {
+      box-sizing: border-box;
+      max-width: min(240px, 72vw);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-intense, var(--border));
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    }
+
+    .gfp-bookmark-popover-inner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      min-width: 0;
+    }
+
+    .gfp-bookmark-popover-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .gfp-bookmark-popover-family {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-primary);
+      word-break: break-word;
+    }
+
+    .gfp-bookmark-popover-new-row {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .gfp-bookmark-popover-new-row[hidden] {
+      display: none !important;
+    }
+
+    .gfp-bookmark-rename-popover {
+      box-sizing: border-box;
+      min-width: min(200px, 72vw);
+      max-width: min(260px, 90vw);
+      padding: var(--space-sm) var(--space-md);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-intense, var(--border));
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+    }
+
+    .gfp-bookmark-rename-popover-inner {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      min-width: 0;
+    }
+
+    .gfp-bookmark-rename-popover-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .gfp-bookmark-rename-popover-input {
+      width: 100%;
+    }
+
+    .gfp-bookmark-rename-popover-save {
+      align-self: flex-end;
+    }
+
+    .gfp-bookmarks-empty-hint {
+      padding: var(--space-md);
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      text-align: center;
     }
 
     .gfp-loading,
@@ -19935,6 +20119,25 @@
     if (min === max) return tu("actions.fontPreview.weightFamilyOne");
     return tu("actions.fontPreview.weightFamilyVariable");
   }
+  function gfpNewBookmarkListId() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    return "gfp-".concat(Date.now(), "-").concat(Math.random().toString(36).slice(2, 11));
+  }
+  function gfpSyntheticFamilyMeta(name2) {
+    const family = String(name2 || "").trim() || "Unknown";
+    return {
+      family,
+      category: "Sans Serif",
+      subsets: [],
+      classifications: [],
+      stroke: null,
+      popularity: 9999,
+      thickness: 5,
+      wghtMin: 100,
+      wghtMax: 900,
+      wghtCss: "100..900"
+    };
+  }
   function mountGoogleFontPreview(container, { tu, showToast }) {
     let disposed = false;
     let allFamilies = [];
@@ -19947,14 +20150,13 @@
       fontWght: 400,
       search: "",
       langSubset: "",
-      scriptSubset: "",
       feeling: /* @__PURE__ */ new Set(),
       appearance: /* @__PURE__ */ new Set(),
       filtered: [],
       renderOffset: 0
     };
     const BATCH = 48;
-    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            <select class="gfp-select gfp-lang-secondary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languageSecondaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="1"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n          <select class="gfp-weight-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '"></select>\n        </div>\n        <div class="gfp-sliders-row" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.sizeAndWeightControlsAria")), '">\n          <div class="gfp-size-slider-row">\n            <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n          </div>\n          <div class="gfp-weight-slider-row">\n            <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '" />\n          </div>\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
+    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n          </div>\n          <div class="gfp-lang-row">\n            <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">🔖</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.bookmarksHeading")), '\n          </div>\n          <div class="gfp-bookmark-bar">\n            <select class="gfp-select gfp-bookmark-list-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkListSelectAria")), '"></select>\n          </div>\n          <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkToolbarAria")), '">\n            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkRename")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkRename")), '">\n              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>\n            </button>\n            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkDeleteList")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkDeleteList")), '">\n              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>\n            </button>\n            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkNewList")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkNewList")), '">\n              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>\n            </button>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="1"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n          <select class="gfp-weight-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '"></select>\n        </div>\n        <div class="gfp-sliders-row" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.sizeAndWeightControlsAria")), '">\n          <div class="gfp-size-slider-row">\n            <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n          </div>\n          <div class="gfp-weight-slider-row">\n            <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '" />\n          </div>\n        </div>\n        <div class="gfp-list-meta"><span class="gfp-count"></span></div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
     const textarea = container.querySelector(".gfp-preview-input");
     const getSelectionBtn = container.querySelector(".gfp-get-selection-btn");
     const sizeSelect = container.querySelector(".gfp-size-select");
@@ -19962,7 +20164,10 @@
     const weightSelect = container.querySelector(".gfp-weight-select");
     const weightRange = container.querySelector(".gfp-weight-range");
     const langPrimary = container.querySelector(".gfp-lang-primary");
-    const langSecondary = container.querySelector(".gfp-lang-secondary");
+    const bookmarkListSelect = container.querySelector(".gfp-bookmark-list-select");
+    const bookmarkRenameBtn = container.querySelector(".gfp-bookmark-rename-btn");
+    const bookmarkDeleteBtn = container.querySelector(".gfp-bookmark-delete-btn");
+    const bookmarkNewBtn = container.querySelector(".gfp-bookmark-new-btn");
     const feelingGrid = container.querySelector('.gfp-tag-grid[data-group="feeling"]');
     const appearanceGrid = container.querySelector('.gfp-tag-grid[data-group="appearance"]');
     const searchInput = container.querySelector(".gfp-search");
@@ -19976,6 +20181,24 @@
     pairPopover.setAttribute("role", "region");
     pairPopover.hidden = true;
     if (mainEl) mainEl.appendChild(pairPopover);
+    const bookmarkPopover = document.createElement("div");
+    bookmarkPopover.className = "gfp-bookmark-popover";
+    bookmarkPopover.setAttribute("role", "dialog");
+    bookmarkPopover.setAttribute("aria-modal", "true");
+    bookmarkPopover.hidden = true;
+    if (mainEl) mainEl.appendChild(bookmarkPopover);
+    const renameListPopover = document.createElement("div");
+    renameListPopover.className = "gfp-bookmark-rename-popover";
+    renameListPopover.setAttribute("role", "dialog");
+    renameListPopover.setAttribute("aria-modal", "true");
+    renameListPopover.hidden = true;
+    container.appendChild(renameListPopover);
+    let renamePopoverAnchor = null;
+    let bookmarkLists = [];
+    let bookmarkLastSelectedListId = null;
+    let activeListId = "";
+    let bookmarkSaveTimer = null;
+    let bookmarkAnchorRow = null;
     let pairShowTimer = null;
     let pairHideTimer = null;
     let pairHoverRow = null;
@@ -20232,7 +20455,6 @@
       }).join("");
     }
     fillLangSelect(langPrimary, LANGUAGE_OPTIONS);
-    fillLangSelect(langSecondary, SCRIPT_OPTIONS);
     function renderTagGrid(grid, pairs, group) {
       const parts = [];
       for (const [a, b] of pairs) {
@@ -20249,6 +20471,329 @@
     }
     renderTagGrid(feelingGrid, FEELING_TAGS, "feeling");
     renderTagGrid(appearanceGrid, APPEARANCE_TAGS, "appearance");
+    function getActiveBookmarkList() {
+      if (!activeListId) return null;
+      return bookmarkLists.find((l) => l.id === activeListId) || null;
+    }
+    function getFamilyMeta(familyName) {
+      const fromMap = familyByName.get(familyName);
+      if (fromMap) return fromMap;
+      return gfpSyntheticFamilyMeta(familyName);
+    }
+    function familyPassesFilters(f) {
+      const q = state.search.trim().toLowerCase();
+      const needFeeling = state.feeling.size > 0;
+      const needAppearance = state.appearance.size > 0;
+      if (q && !familyLower(f).includes(q)) return false;
+      if (state.langSubset && !hasSubset(f, state.langSubset)) return false;
+      if (needFeeling) {
+        const ok = [...state.feeling].some((tag) => {
+          var _a;
+          return (_a = FEELING_TEST[tag]) == null ? void 0 : _a.call(FEELING_TEST, f);
+        });
+        if (!ok) return false;
+      }
+      if (needAppearance) {
+        const ok = [...state.appearance].some((tag) => {
+          var _a;
+          return (_a = APPEARANCE_TEST[tag]) == null ? void 0 : _a.call(APPEARANCE_TEST, f);
+        });
+        if (!ok) return false;
+      }
+      return true;
+    }
+    function buildBookmarkPayload() {
+      return {
+        lists: bookmarkLists.map((l) => ({
+          id: l.id,
+          name: l.name,
+          families: [...l.families]
+        })),
+        lastSelectedListId: activeListId || null
+      };
+    }
+    function scheduleSaveBookmarks() {
+      if (disposed) return;
+      clearTimeout(bookmarkSaveTimer);
+      bookmarkSaveTimer = setTimeout(() => {
+        bookmarkSaveTimer = null;
+        if (disposed) return;
+        parent.postMessage(
+          { pluginMessage: { type: "save-font-preview-bookmarks", data: buildBookmarkPayload() } },
+          "*"
+        );
+      }, 300);
+    }
+    function rebuildBookmarkSelect() {
+      if (!bookmarkListSelect) return;
+      const parts = ['<option value="">'.concat(escapeAttr(tu("actions.fontPreview.bookmarkAllFonts")), "</option>")];
+      for (const l of bookmarkLists) {
+        parts.push('<option value="'.concat(escapeAttr(l.id), '">').concat(escapeAttr(l.name), "</option>"));
+      }
+      bookmarkListSelect.innerHTML = parts.join("");
+      bookmarkListSelect.value = activeListId || "";
+    }
+    function syncBookmarkManageRowDisabled() {
+      const hasList = !!activeListId && !!getActiveBookmarkList();
+      if (bookmarkRenameBtn) bookmarkRenameBtn.disabled = !hasList;
+      if (bookmarkDeleteBtn) bookmarkDeleteBtn.disabled = !hasList;
+    }
+    function applyBookmarksFromServer(data) {
+      if (!data || typeof data !== "object") return;
+      bookmarkLists = Array.isArray(data.lists) ? data.lists.map((l) => ({
+        id: String(l.id || ""),
+        name: String(l.name || "List").slice(0, 80),
+        families: Array.isArray(l.families) ? l.families.map(String) : []
+      })).filter((l) => l.id) : [];
+      bookmarkLastSelectedListId = typeof data.lastSelectedListId === "string" && data.lastSelectedListId ? data.lastSelectedListId : null;
+      activeListId = bookmarkLastSelectedListId && bookmarkLists.some((l) => l.id === bookmarkLastSelectedListId) ? bookmarkLastSelectedListId : "";
+      rebuildBookmarkSelect();
+      syncBookmarkManageRowDisabled();
+      applyFilters();
+      setupListObserver();
+    }
+    function hideRenameListPopover() {
+      if (renameListPopover.contains(document.activeElement)) {
+        try {
+          document.activeElement.blur();
+        } catch (e) {
+        }
+      }
+      renameListPopover.hidden = true;
+      renameListPopover.replaceChildren();
+      renameListPopover.removeAttribute("style");
+      renamePopoverAnchor = null;
+    }
+    function positionRenameListPopover(anchorBtn) {
+      const margin = 8;
+      const pad = 6;
+      const rect = anchorBtn.getBoundingClientRect();
+      const pr = renameListPopover.getBoundingClientRect();
+      let left = rect.left;
+      let top = rect.bottom + margin;
+      if (left + pr.width > window.innerWidth - pad) {
+        left = window.innerWidth - pr.width - pad;
+      }
+      if (left < pad) left = pad;
+      if (top + pr.height > window.innerHeight - pad) {
+        top = rect.top - pr.height - margin;
+      }
+      if (top < pad) top = pad;
+      renameListPopover.style.position = "fixed";
+      renameListPopover.style.left = "".concat(Math.round(left), "px");
+      renameListPopover.style.top = "".concat(Math.round(top), "px");
+      renameListPopover.style.zIndex = "32";
+    }
+    function showRenameListPopover() {
+      const list = getActiveBookmarkList();
+      if (!list || !bookmarkRenameBtn) return;
+      hideBookmarkPopover();
+      renameListPopover.replaceChildren();
+      const inner = document.createElement("div");
+      inner.className = "gfp-bookmark-rename-popover-inner";
+      const title = document.createElement("div");
+      title.className = "gfp-bookmark-rename-popover-title";
+      title.textContent = tu("actions.fontPreview.bookmarkRenamePopoverTitle");
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "gfp-input gfp-bookmark-rename-popover-input";
+      nameInput.maxLength = 80;
+      nameInput.value = list.name;
+      nameInput.placeholder = tu("actions.fontPreview.bookmarkRenamePlaceholder");
+      nameInput.setAttribute("aria-label", tu("actions.fontPreview.bookmarkRenamePlaceholder"));
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "gfp-bookmark-btn gfp-bookmark-rename-popover-save";
+      saveBtn.textContent = tu("actions.fontPreview.bookmarkRenameSave");
+      function commitRename() {
+        const current = getActiveBookmarkList();
+        if (!current || current.id !== list.id) return;
+        const nm = nameInput.value.trim().slice(0, 80);
+        if (!nm) {
+          showToast(tu("actions.fontPreview.bookmarkNeedListName"), "error");
+          return;
+        }
+        current.name = nm;
+        rebuildBookmarkSelect();
+        if (bookmarkListSelect) bookmarkListSelect.value = activeListId;
+        scheduleSaveBookmarks();
+        hideRenameListPopover();
+      }
+      saveBtn.addEventListener("click", commitRename);
+      nameInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          commitRename();
+        }
+      });
+      inner.appendChild(title);
+      inner.appendChild(nameInput);
+      inner.appendChild(saveBtn);
+      renameListPopover.appendChild(inner);
+      renamePopoverAnchor = bookmarkRenameBtn;
+      renameListPopover.hidden = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (disposed || renameListPopover.hidden) return;
+          positionRenameListPopover(bookmarkRenameBtn);
+          nameInput.focus();
+          nameInput.select();
+        });
+      });
+    }
+    function hideBookmarkPopover() {
+      if (bookmarkPopover.contains(document.activeElement)) {
+        try {
+          document.activeElement.blur();
+        } catch (e) {
+        }
+      }
+      bookmarkPopover.hidden = true;
+      bookmarkPopover.replaceChildren();
+      bookmarkPopover.removeAttribute("style");
+      bookmarkAnchorRow = null;
+    }
+    function positionBookmarkPopover(anchorRow) {
+      const margin = 10;
+      const pad = 6;
+      const rect = anchorRow.getBoundingClientRect();
+      const pr = bookmarkPopover.getBoundingClientRect();
+      let left = rect.right + margin;
+      if (left + pr.width > window.innerWidth - pad) {
+        left = rect.left - pr.width - margin;
+      }
+      if (left < pad) left = pad;
+      let top = rect.top + (rect.height - pr.height) / 2;
+      if (top < pad) top = pad;
+      const maxTop = window.innerHeight - pr.height - pad;
+      if (top > maxTop) top = Math.max(pad, maxTop);
+      bookmarkPopover.style.position = "fixed";
+      bookmarkPopover.style.left = "".concat(Math.round(left), "px");
+      bookmarkPopover.style.top = "".concat(Math.round(top), "px");
+      bookmarkPopover.style.zIndex = "31";
+    }
+    function fillBookmarkPopoverInner(family) {
+      bookmarkPopover.replaceChildren();
+      const inner = document.createElement("div");
+      inner.className = "gfp-bookmark-popover-inner";
+      const title = document.createElement("div");
+      title.className = "gfp-bookmark-popover-title";
+      title.textContent = tu("actions.fontPreview.bookmarkAddTitle");
+      const sub = document.createElement("div");
+      sub.className = "gfp-bookmark-popover-family";
+      sub.textContent = family;
+      const sel = document.createElement("select");
+      sel.className = "gfp-select gfp-bookmark-popover-list";
+      sel.setAttribute("aria-label", tu("actions.fontPreview.bookmarkPopoverListAria"));
+      const optNew = document.createElement("option");
+      optNew.value = "__new__";
+      optNew.textContent = tu("actions.fontPreview.bookmarkNewListOption");
+      sel.appendChild(optNew);
+      for (const l of bookmarkLists) {
+        const o = document.createElement("option");
+        o.value = l.id;
+        o.textContent = l.name;
+        sel.appendChild(o);
+      }
+      const nameRow = document.createElement("div");
+      nameRow.className = "gfp-bookmark-popover-new-row";
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "gfp-input gfp-bookmark-popover-new-name";
+      nameInput.maxLength = 80;
+      nameInput.placeholder = tu("actions.fontPreview.bookmarkNewListNamePlaceholder");
+      nameRow.appendChild(nameInput);
+      function syncNewRow() {
+        nameRow.hidden = sel.value !== "__new__";
+      }
+      sel.addEventListener("change", syncNewRow);
+      if (bookmarkLists.length > 0) {
+        sel.value = bookmarkLists[0].id;
+      }
+      syncNewRow();
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "gfp-bookmark-btn gfp-bookmark-popover-add";
+      addBtn.textContent = tu("actions.fontPreview.bookmarkAddConfirm");
+      addBtn.addEventListener("click", () => {
+        let targetListId = sel.value;
+        let targetList = bookmarkLists.find((x) => x.id === targetListId) || null;
+        if (targetListId === "__new__") {
+          if (bookmarkLists.length >= 50) {
+            showToast(tu("actions.fontPreview.bookmarkMaxLists"), "error");
+            return;
+          }
+          const nm = nameInput.value.trim().slice(0, 80);
+          if (!nm) {
+            showToast(tu("actions.fontPreview.bookmarkNeedListName"), "error");
+            return;
+          }
+          targetListId = gfpNewBookmarkListId();
+          targetList = { id: targetListId, name: nm, families: [] };
+          bookmarkLists.push(targetList);
+          rebuildBookmarkSelect();
+        }
+        if (!targetList) return;
+        if (!targetList.families.includes(family)) {
+          targetList.families.push(family);
+        }
+        scheduleSaveBookmarks();
+        showToast(tu("actions.fontPreview.bookmarkAddedToast", { list: targetList.name }), "success");
+        hideBookmarkPopover();
+        if (activeListId === targetListId) {
+          applyFilters();
+          setupListObserver();
+        }
+      });
+      inner.appendChild(title);
+      inner.appendChild(sub);
+      inner.appendChild(sel);
+      inner.appendChild(nameRow);
+      inner.appendChild(addBtn);
+      bookmarkPopover.appendChild(inner);
+    }
+    function showBookmarkPopoverForFamily(row, family) {
+      hidePairPopover();
+      hideRenameListPopover();
+      fillBookmarkPopoverInner(family);
+      bookmarkAnchorRow = row;
+      bookmarkPopover.hidden = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          var _a;
+          if (disposed || bookmarkPopover.hidden) return;
+          positionBookmarkPopover(row);
+          (_a = bookmarkPopover.querySelector(".gfp-bookmark-popover-add")) == null ? void 0 : _a.focus();
+        });
+      });
+    }
+    function onBookmarkPopoverKeydown(ev) {
+      if (ev.key !== "Escape" || bookmarkPopover.hidden) return;
+      ev.stopPropagation();
+      hideBookmarkPopover();
+    }
+    bookmarkPopover.addEventListener("keydown", onBookmarkPopoverKeydown);
+    function onDocMousedownBookmark(ev) {
+      const t = ev.target;
+      if (!(t instanceof Node)) return;
+      if (!bookmarkPopover.hidden) {
+        if (!bookmarkPopover.contains(t) && !(bookmarkAnchorRow && bookmarkAnchorRow.contains(t))) {
+          hideBookmarkPopover();
+        }
+      }
+      if (!renameListPopover.hidden) {
+        if (!renameListPopover.contains(t) && !(renamePopoverAnchor && renamePopoverAnchor.contains(t))) {
+          hideRenameListPopover();
+        }
+      }
+    }
+    document.addEventListener("mousedown", onDocMousedownBookmark);
+    function onRenameListPopoverKeydown(ev) {
+      if (ev.key !== "Escape" || renameListPopover.hidden) return;
+      ev.stopPropagation();
+      hideRenameListPopover();
+    }
+    renameListPopover.addEventListener("keydown", onRenameListPopoverKeydown);
     function applyFilters() {
       clearTimeout(pairShowTimer);
       pairShowTimer = null;
@@ -20256,31 +20801,24 @@
       pairHideTimer = null;
       pairHoverRow = null;
       hidePairPopover();
-      const q = state.search.trim().toLowerCase();
-      const needFeeling = state.feeling.size > 0;
-      const needAppearance = state.appearance.size > 0;
-      state.filtered = allFamilies.filter((f) => {
-        if (q && !familyLower(f).includes(q)) return false;
-        if (state.langSubset && !hasSubset(f, state.langSubset)) return false;
-        if (state.scriptSubset && !hasSubset(f, state.scriptSubset)) return false;
-        if (needFeeling) {
-          const ok = [...state.feeling].some((tag) => {
-            var _a;
-            return (_a = FEELING_TEST[tag]) == null ? void 0 : _a.call(FEELING_TEST, f);
-          });
-          if (!ok) return false;
+      let base;
+      if (activeListId) {
+        const list = getActiveBookmarkList();
+        base = [];
+        if (list) {
+          for (const name2 of list.families) {
+            base.push(getFamilyMeta(name2));
+          }
         }
-        if (needAppearance) {
-          const ok = [...state.appearance].some((tag) => {
-            var _a;
-            return (_a = APPEARANCE_TEST[tag]) == null ? void 0 : _a.call(APPEARANCE_TEST, f);
-          });
-          if (!ok) return false;
-        }
-        return true;
-      });
+      } else {
+        base = allFamilies;
+      }
+      state.filtered = base.filter(familyPassesFilters);
       state.renderOffset = 0;
       listEl.innerHTML = "";
+      if (state.filtered.length === 0 && activeListId) {
+        listEl.innerHTML = '<div class="gfp-bookmarks-empty-hint">'.concat(escapeAttr(tu("actions.fontPreview.bookmarksEmptyList")), "</div>");
+      }
       countEl.textContent = tu("actions.fontPreview.showingCount", {
         shown: Math.min(BATCH, state.filtered.length),
         total: state.filtered.length
@@ -20343,6 +20881,22 @@
         applyBtn.title = tu("actions.fontPreview.applyToSelectionTitle");
         applyBtn.setAttribute("aria-label", tu("actions.fontPreview.applyToSelectionTitle"));
         applyBtn.innerHTML = '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        const markBtn = document.createElement("button");
+        markBtn.type = "button";
+        markBtn.className = "gfp-font-row-btn gfp-font-row-btn--bookmark";
+        markBtn.dataset.family = f.family;
+        const listForRow = getActiveBookmarkList();
+        const inActiveList = !!(activeListId && listForRow && listForRow.families.includes(f.family));
+        if (inActiveList) {
+          markBtn.classList.add("gfp-font-row-btn--bookmark-on");
+          markBtn.title = tu("actions.fontPreview.bookmarkRemoveTitle");
+          markBtn.setAttribute("aria-label", tu("actions.fontPreview.bookmarkRemoveTitle"));
+          markBtn.innerHTML = '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 2h12a2 2 0 012 2v18l-8-4-8 4V4a2 2 0 012-2z"/></svg>';
+        } else {
+          markBtn.title = tu("actions.fontPreview.bookmarkAddTitle");
+          markBtn.setAttribute("aria-label", tu("actions.fontPreview.bookmarkAddTitle"));
+          markBtn.innerHTML = '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>';
+        }
         const copyBtn = document.createElement("button");
         copyBtn.type = "button";
         copyBtn.className = "gfp-font-row-btn gfp-font-row-btn--copy";
@@ -20350,6 +20904,7 @@
         copyBtn.title = tu("actions.fontPreview.copyFamilyNameTitle");
         copyBtn.setAttribute("aria-label", tu("actions.fontPreview.copyFamilyNameTitle"));
         copyBtn.innerHTML = '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
+        actions.appendChild(markBtn);
         actions.appendChild(applyBtn);
         actions.appendChild(copyBtn);
         row.appendChild(label);
@@ -20415,6 +20970,10 @@
       var _a;
       const pm = (_a = ev.data) == null ? void 0 : _a.pluginMessage;
       if (!pm) return;
+      if (pm.type === "font-preview-bookmarks-result" && pm.data) {
+        applyBookmarksFromServer(pm.data);
+        return;
+      }
       if (pm.type === "font-preview-selection-text-result") {
         pendingSelectionText = false;
         if (getSelectionBtn) getSelectionBtn.disabled = false;
@@ -20525,12 +21084,28 @@
       ev.stopPropagation();
       const family = btn.dataset.family;
       if (!family) return;
+      if (btn.classList.contains("gfp-font-row-btn--bookmark")) {
+        if (activeListId) {
+          const list = getActiveBookmarkList();
+          if (list) {
+            list.families = list.families.filter((n) => n !== family);
+            scheduleSaveBookmarks();
+            showToast(tu("actions.fontPreview.bookmarkRemovedToast"), "success");
+            applyFilters();
+            setupListObserver();
+          }
+        } else {
+          const row = btn.closest(".gfp-font-row");
+          if (row) showBookmarkPopoverForFamily(row, family);
+        }
+        return;
+      }
       if (btn.classList.contains("gfp-font-row-btn--copy")) {
         copyFamilyNameToClipboard(family);
         return;
       }
       if (btn.classList.contains("gfp-font-row-btn--apply")) {
-        const meta = familyByName.get(family);
+        const meta = getFamilyMeta(family);
         const w = gfpClampWght(meta, state.fontWght);
         const wghtCss = meta && typeof meta.wghtCss === "string" ? meta.wghtCss : "";
         parent.postMessage(
@@ -20562,7 +21137,7 @@
     function applyWeightToSamples() {
       listEl.querySelectorAll(".gfp-font-row").forEach((row) => {
         const name2 = row.dataset.family;
-        const meta = familyByName.get(name2);
+        const meta = name2 ? getFamilyMeta(name2) : null;
         const sample = row.querySelector(".gfp-font-sample");
         const w = gfpClampWght(meta, state.fontWght);
         if (sample) sample.style.fontWeight = String(w);
@@ -20588,11 +21163,67 @@
       applyFilters();
       setupListObserver();
     });
-    langSecondary.addEventListener("change", () => {
-      state.scriptSubset = langSecondary.value;
-      applyFilters();
-      setupListObserver();
-    });
+    rebuildBookmarkSelect();
+    syncBookmarkManageRowDisabled();
+    if (bookmarkListSelect) {
+      bookmarkListSelect.addEventListener("change", () => {
+        hideRenameListPopover();
+        activeListId = bookmarkListSelect.value || "";
+        syncBookmarkManageRowDisabled();
+        scheduleSaveBookmarks();
+        applyFilters();
+        setupListObserver();
+      });
+    }
+    if (bookmarkRenameBtn) {
+      bookmarkRenameBtn.addEventListener("click", () => {
+        if (!getActiveBookmarkList()) return;
+        showRenameListPopover();
+      });
+    }
+    if (bookmarkDeleteBtn) {
+      bookmarkDeleteBtn.addEventListener("click", () => {
+        const list = getActiveBookmarkList();
+        if (!list) return;
+        hideRenameListPopover();
+        if (!window.confirm(tu("actions.fontPreview.bookmarkDeleteConfirm", { name: list.name }))) return;
+        const removedId = list.id;
+        bookmarkLists = bookmarkLists.filter((l) => l.id !== removedId);
+        if (activeListId === removedId) {
+          activeListId = "";
+        }
+        rebuildBookmarkSelect();
+        syncBookmarkManageRowDisabled();
+        scheduleSaveBookmarks();
+        applyFilters();
+        setupListObserver();
+      });
+    }
+    if (bookmarkNewBtn) {
+      bookmarkNewBtn.addEventListener("click", () => {
+        hideRenameListPopover();
+        if (bookmarkLists.length >= 50) {
+          showToast(tu("actions.fontPreview.bookmarkMaxLists"), "error");
+          return;
+        }
+        const raw = window.prompt(tu("actions.fontPreview.bookmarkNewListPrompt"), "");
+        if (raw == null) return;
+        const nm = raw.trim().slice(0, 80);
+        if (!nm) {
+          showToast(tu("actions.fontPreview.bookmarkNeedListName"), "error");
+          return;
+        }
+        const id = gfpNewBookmarkListId();
+        bookmarkLists.push({ id, name: nm, families: [] });
+        activeListId = id;
+        rebuildBookmarkSelect();
+        bookmarkListSelect.value = id;
+        syncBookmarkManageRowDisabled();
+        scheduleSaveBookmarks();
+        applyFilters();
+        setupListObserver();
+      });
+    }
     searchInput.addEventListener("input", () => {
       state.search = searchInput.value;
       applyFilters();
@@ -20654,11 +21285,18 @@
     }
     syncSize(false);
     syncWeight(false);
+    parent.postMessage({ pluginMessage: { type: "get-font-preview-bookmarks" } }, "*");
     loadCatalog();
     return () => {
       disposed = true;
+      clearTimeout(bookmarkSaveTimer);
       clearTimeout(pairShowTimer);
       clearTimeout(pairHideTimer);
+      hideBookmarkPopover();
+      hideRenameListPopover();
+      document.removeEventListener("mousedown", onDocMousedownBookmark);
+      bookmarkPopover.removeEventListener("keydown", onBookmarkPopoverKeydown);
+      renameListPopover.removeEventListener("keydown", onRenameListPopoverKeydown);
       listEl.removeEventListener("mouseover", onListMouseOver);
       listEl.removeEventListener("mouseout", onListMouseOut);
       listEl.removeEventListener("focusin", onListFocusIn);
@@ -20680,7 +21318,7 @@
       container.innerHTML = "";
     };
   }
-  var LANGUAGE_OPTIONS, SCRIPT_OPTIONS, FEELING_TAGS, APPEARANCE_TAGS, FEELING_TEST, APPEARANCE_TEST;
+  var LANGUAGE_OPTIONS, FEELING_TAGS, APPEARANCE_TAGS, FEELING_TEST, APPEARANCE_TEST;
   var init_google_font_preview = __esm({
     "ui/features/font-preview/google-font-preview.js"() {
       "use strict";
@@ -20699,14 +21337,6 @@
         { value: "tamil", labelKey: "actions.fontPreview.langTamil", subset: "tamil" },
         { value: "bengali", labelKey: "actions.fontPreview.langBengali", subset: "bengali" },
         { value: "latin", labelKey: "actions.fontPreview.langLatin", subset: "latin" }
-      ];
-      SCRIPT_OPTIONS = [
-        { value: "", labelKey: "actions.fontPreview.scriptAny" },
-        { value: "latin-ext", labelKey: "actions.fontPreview.scriptLatinExt", subset: "latin-ext" },
-        { value: "cyrillic", labelKey: "actions.fontPreview.scriptCyrillic", subset: "cyrillic" },
-        { value: "cyrillic-ext", labelKey: "actions.fontPreview.scriptCyrillicExt", subset: "cyrillic-ext" },
-        { value: "greek", labelKey: "actions.fontPreview.scriptGreek", subset: "greek" },
-        { value: "vietnamese", labelKey: "actions.fontPreview.scriptVietnamese", subset: "vietnamese" }
       ];
       FEELING_TAGS = [
         ["Business", "Fancy"],
@@ -22692,7 +23322,6 @@
           "actions.styles.variables": "Variables",
           "actions.fontPreview.filtersAria": "Font filters",
           "actions.fontPreview.languagePrimaryAria": "Language",
-          "actions.fontPreview.languageSecondaryAria": "Script",
           "actions.fontPreview.preview": "Preview",
           "actions.fontPreview.getFromSelection": "Get from selection",
           "actions.fontPreview.getSelectionEmpty": "Select a layer with text first.",
@@ -22744,18 +23373,35 @@
           "actions.fontPreview.langTamil": "Tamil",
           "actions.fontPreview.langBengali": "Bengali",
           "actions.fontPreview.langLatin": "Latin",
-          "actions.fontPreview.scriptAny": "All scripts",
-          "actions.fontPreview.scriptLatinExt": "Latin Extended",
-          "actions.fontPreview.scriptCyrillic": "Cyrillic",
-          "actions.fontPreview.scriptCyrillicExt": "Cyrillic Extended",
-          "actions.fontPreview.scriptGreek": "Greek",
-          "actions.fontPreview.scriptVietnamese": "Vietnamese",
           "actions.fontPreview.pairPopoverTitle": "Pairing ideas",
           "actions.fontPreview.pairHeading": "For headings",
           "actions.fontPreview.pairBody": "For body text",
           "actions.fontPreview.pairLatin": "Latin / English",
           "actions.fontPreview.pairEmpty": "No suggestions",
           "actions.fontPreview.pairFontCopyHint": "Click to copy family name",
+          "actions.fontPreview.bookmarksHeading": "Saved lists",
+          "actions.fontPreview.bookmarkListSelectAria": "Bookmark list",
+          "actions.fontPreview.bookmarkRenamePlaceholder": "List name",
+          "actions.fontPreview.bookmarkRename": "Rename",
+          "actions.fontPreview.bookmarkDeleteList": "Delete",
+          "actions.fontPreview.bookmarkNewList": "New list",
+          "actions.fontPreview.bookmarkAllFonts": "All fonts",
+          "actions.fontPreview.bookmarkAddTitle": "Add to bookmark list",
+          "actions.fontPreview.bookmarkRemoveTitle": "Remove from this list",
+          "actions.fontPreview.bookmarkPopoverListAria": "Choose list",
+          "actions.fontPreview.bookmarkNewListOption": "New list…",
+          "actions.fontPreview.bookmarkNewListNamePlaceholder": "New list name",
+          "actions.fontPreview.bookmarkAddConfirm": "Add",
+          "actions.fontPreview.bookmarkNeedListName": "Enter a list name.",
+          "actions.fontPreview.bookmarkAddedToast": "Added to “{list}”.",
+          "actions.fontPreview.bookmarkRemovedToast": "Removed from list.",
+          "actions.fontPreview.bookmarkDeleteConfirm": "Delete the list “{name}” and all its bookmarks?",
+          "actions.fontPreview.bookmarkNewListPrompt": "Name for the new list:",
+          "actions.fontPreview.bookmarksEmptyList": "No fonts in this list (or none match your filters).",
+          "actions.fontPreview.bookmarkMaxLists": "Maximum number of lists reached.",
+          "actions.fontPreview.bookmarkToolbarAria": "Bookmark list actions",
+          "actions.fontPreview.bookmarkRenamePopoverTitle": "Rename list",
+          "actions.fontPreview.bookmarkRenameSave": "Save",
           "aux.context.smartTitle": "Smart Focus (Default)",
           "aux.context.smartDesc": "Intent-based adaptive context selection",
           "aux.context.allTitle": "Full Design Context",
@@ -23079,7 +23725,6 @@
           "actions.styles.variables": "変数",
           "actions.fontPreview.filtersAria": "フォントフィルター",
           "actions.fontPreview.languagePrimaryAria": "言語",
-          "actions.fontPreview.languageSecondaryAria": "スクリプト",
           "actions.fontPreview.preview": "プレビュー",
           "actions.fontPreview.getFromSelection": "選択から取得",
           "actions.fontPreview.getSelectionEmpty": "先にテキストのあるレイヤーを選択してください。",
@@ -23131,18 +23776,35 @@
           "actions.fontPreview.langTamil": "タミル語",
           "actions.fontPreview.langBengali": "ベンガル語",
           "actions.fontPreview.langLatin": "ラテン",
-          "actions.fontPreview.scriptAny": "すべてのスクリプト",
-          "actions.fontPreview.scriptLatinExt": "ラテン拡張",
-          "actions.fontPreview.scriptCyrillic": "キリル",
-          "actions.fontPreview.scriptCyrillicExt": "キリル拡張",
-          "actions.fontPreview.scriptGreek": "ギリシャ",
-          "actions.fontPreview.scriptVietnamese": "ベトナム語",
           "actions.fontPreview.pairPopoverTitle": "組み合わせのヒント",
           "actions.fontPreview.pairHeading": "見出しに合うフォント",
           "actions.fontPreview.pairBody": "本文に合うフォント",
           "actions.fontPreview.pairLatin": "欧文（英語）の組み合わせ",
           "actions.fontPreview.pairEmpty": "候補がありません",
           "actions.fontPreview.pairFontCopyHint": "クリックでファミリー名をコピー",
+          "actions.fontPreview.bookmarksHeading": "保存リスト",
+          "actions.fontPreview.bookmarkListSelectAria": "ブックマークリスト",
+          "actions.fontPreview.bookmarkRenamePlaceholder": "リスト名",
+          "actions.fontPreview.bookmarkRename": "名前変更",
+          "actions.fontPreview.bookmarkDeleteList": "削除",
+          "actions.fontPreview.bookmarkNewList": "新規リスト",
+          "actions.fontPreview.bookmarkAllFonts": "すべてのフォント",
+          "actions.fontPreview.bookmarkAddTitle": "ブックマークリストに追加",
+          "actions.fontPreview.bookmarkRemoveTitle": "このリストから削除",
+          "actions.fontPreview.bookmarkPopoverListAria": "リストを選択",
+          "actions.fontPreview.bookmarkNewListOption": "新規リスト…",
+          "actions.fontPreview.bookmarkNewListNamePlaceholder": "新しいリスト名",
+          "actions.fontPreview.bookmarkAddConfirm": "追加",
+          "actions.fontPreview.bookmarkNeedListName": "リスト名を入力してください。",
+          "actions.fontPreview.bookmarkAddedToast": "「{list}」に追加しました。",
+          "actions.fontPreview.bookmarkRemovedToast": "リストから削除しました。",
+          "actions.fontPreview.bookmarkDeleteConfirm": "リスト「{name}」とそのブックマークを削除しますか？",
+          "actions.fontPreview.bookmarkNewListPrompt": "新しいリストの名前:",
+          "actions.fontPreview.bookmarksEmptyList": "このリストにフォントがありません（またはフィルターに一致しません）。",
+          "actions.fontPreview.bookmarkMaxLists": "リストの上限に達しました。",
+          "actions.fontPreview.bookmarkToolbarAria": "ブックマークリストの操作",
+          "actions.fontPreview.bookmarkRenamePopoverTitle": "リスト名を変更",
+          "actions.fontPreview.bookmarkRenameSave": "保存",
           "aux.context.smartTitle": "スマートフォーカス（既定）",
           "aux.context.smartDesc": "意図に応じてコンテキストを自動調整",
           "aux.context.allTitle": "完全なデザインコンテキスト",
@@ -23466,7 +24128,6 @@
           "actions.styles.variables": "变量",
           "actions.fontPreview.filtersAria": "字体筛选",
           "actions.fontPreview.languagePrimaryAria": "语言",
-          "actions.fontPreview.languageSecondaryAria": "书写系统",
           "actions.fontPreview.preview": "预览",
           "actions.fontPreview.getFromSelection": "从选择获取",
           "actions.fontPreview.getSelectionEmpty": "请先选择包含文本的图层。",
@@ -23518,18 +24179,35 @@
           "actions.fontPreview.langTamil": "泰米尔语",
           "actions.fontPreview.langBengali": "孟加拉语",
           "actions.fontPreview.langLatin": "拉丁",
-          "actions.fontPreview.scriptAny": "全部书写系统",
-          "actions.fontPreview.scriptLatinExt": "拉丁扩展",
-          "actions.fontPreview.scriptCyrillic": "西里尔",
-          "actions.fontPreview.scriptCyrillicExt": "西里尔扩展",
-          "actions.fontPreview.scriptGreek": "希腊",
-          "actions.fontPreview.scriptVietnamese": "越南语",
           "actions.fontPreview.pairPopoverTitle": "搭配建议",
           "actions.fontPreview.pairHeading": "适合标题",
           "actions.fontPreview.pairBody": "适合正文",
           "actions.fontPreview.pairLatin": "拉丁 / 英文",
           "actions.fontPreview.pairEmpty": "暂无建议",
           "actions.fontPreview.pairFontCopyHint": "点击复制字体家族名称",
+          "actions.fontPreview.bookmarksHeading": "已存列表",
+          "actions.fontPreview.bookmarkListSelectAria": "书签列表",
+          "actions.fontPreview.bookmarkRenamePlaceholder": "列表名称",
+          "actions.fontPreview.bookmarkRename": "重命名",
+          "actions.fontPreview.bookmarkDeleteList": "删除",
+          "actions.fontPreview.bookmarkNewList": "新建列表",
+          "actions.fontPreview.bookmarkAllFonts": "全部字体",
+          "actions.fontPreview.bookmarkAddTitle": "添加到书签列表",
+          "actions.fontPreview.bookmarkRemoveTitle": "从此列表移除",
+          "actions.fontPreview.bookmarkPopoverListAria": "选择列表",
+          "actions.fontPreview.bookmarkNewListOption": "新建列表…",
+          "actions.fontPreview.bookmarkNewListNamePlaceholder": "新列表名称",
+          "actions.fontPreview.bookmarkAddConfirm": "添加",
+          "actions.fontPreview.bookmarkNeedListName": "请输入列表名称。",
+          "actions.fontPreview.bookmarkAddedToast": "已添加到「{list}」。",
+          "actions.fontPreview.bookmarkRemovedToast": "已从列表移除。",
+          "actions.fontPreview.bookmarkDeleteConfirm": "删除列表「{name}」及其全部书签？",
+          "actions.fontPreview.bookmarkNewListPrompt": "新列表名称：",
+          "actions.fontPreview.bookmarksEmptyList": "此列表没有字体（或与筛选条件不匹配）。",
+          "actions.fontPreview.bookmarkMaxLists": "已达到列表数量上限。",
+          "actions.fontPreview.bookmarkToolbarAria": "书签列表操作",
+          "actions.fontPreview.bookmarkRenamePopoverTitle": "重命名列表",
+          "actions.fontPreview.bookmarkRenameSave": "保存",
           "aux.context.smartTitle": "智能聚焦（默认）",
           "aux.context.smartDesc": "根据意图自适应选择上下文",
           "aux.context.allTitle": "完整设计上下文",
