@@ -4607,6 +4607,29 @@ function collectInstanceNodesInSubtree(
   return instances;
 }
 
+function collectTopLevelInstanceNodesInSubtree(
+  node: SceneNode,
+  includeSelf: boolean = true
+): InstanceNode[] {
+  const instances: InstanceNode[] = [];
+
+  const visit = (current: SceneNode, allowCurrent: boolean) => {
+    if (allowCurrent && current.type === 'INSTANCE') {
+      instances.push(current as InstanceNode);
+      return;
+    }
+
+    if ('children' in current) {
+      for (const child of current.children) {
+        visit(child, true);
+      }
+    }
+  };
+
+  visit(node, includeSelf);
+  return instances;
+}
+
 figma.ui.onmessage = async (msg: {
   type: string,
   cssFormat?: string,
@@ -8586,7 +8609,7 @@ figma.ui.onmessage = async (msg: {
         const selectedInstances = selection.filter((node): node is InstanceNode => node.type === 'INSTANCE');
         const descendantInstances: InstanceNode[] = [];
         for (const node of selection) {
-          descendantInstances.push(...collectInstanceNodesInSubtree(node, false));
+          descendantInstances.push(...collectTopLevelInstanceNodesInSubtree(node, false));
         }
         const hasNestedInstance = (nodes: readonly SceneNode[]): boolean => {
           for (const node of nodes) {
