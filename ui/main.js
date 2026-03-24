@@ -6341,6 +6341,14 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
               return;
             }
 
+            if (task && task.directAction && !task.askMode) {
+              closeCommandsDrawer();
+              recordQuickActionUsage(actionName);
+              setMode('agent');
+              await runDirectAction(task.directAction, {}, task);
+              return;
+            }
+
             closeCommandsDrawer();
             recordQuickActionUsage(actionName);
             setMode('agent');
@@ -18850,6 +18858,27 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runFlattenStructureAction(values, actionMeta) {
+      showThinkingIndicator('Flattening structure...');
+      setSendButtonMode(true);
+      try {
+        await executeCommands([{ action: 'flattenSingleChildGroups' }]);
+        const botText = 'Flattened single-child groups under the selection.';
+        addMessage('bot', botText);
+        chatHistory.push({ role: 'model', parts: [{ text: botText }] });
+        await autoSaveAfterResponse();
+      } catch (err) {
+        console.error('Flatten structure action failed', err);
+        showToast('Failed to flatten structure.', 'error');
+        addMessage('bot', 'Failed to flatten structure.');
+        chatHistory.push({ role: 'model', parts: [{ text: 'Failed to flatten structure.' }] });
+        await autoSaveAfterResponse();
+      } finally {
+        removeThinkingIndicator();
+        setSendButtonMode(false);
+      }
+    }
+
     async function runDuplicateWithInstructionsAction(values, actionMeta) {
       try {
         const imageData = values.imageInput;
@@ -18980,6 +19009,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'createAdvancedGrid':
           await runCreateAdvancedGridAction(values, actionMeta);
+          break;
+        case 'flattenStructure':
+          await runFlattenStructureAction(values, actionMeta);
           break;
         case 'generateImage':
           await handleGenerateImage(values, actionMeta.name, actionMeta.icon);
@@ -29792,6 +29824,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
           const prompt = task.prompt || (typeof task.promptTemplate === 'string' ? task.promptTemplate : '');
           await sendAskModeQuickAction(prompt, { name: task.name, icon });
         }
+        return;
+      }
+
+      if (task.directAction) {
+        setMode('agent');
+        await runDirectAction(task.directAction, {}, task);
         return;
       }
 

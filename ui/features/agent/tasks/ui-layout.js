@@ -393,9 +393,9 @@ export const uiLayoutTasks = [
 {
           name: 'Flatten structure (clean up)',
           desc: 'Remove 1-child groups',
-          prompt: 'Use the flattenSingleChildGroups command on the selection. Traverse descendants depth-first (skip COMPONENT/INSTANCE). For any unlocked GROUP with exactly 1 child and a parent: run native ungroup on that GROUP, then check the resulting child—if it is also a single-child GROUP, keep ungrouping down the chain. Preserve position/size/constraints/layout; do not delete children. Leave groups with 0 or 2+ children untouched.',
           help: 'Uses native ungroup to safely collapse chains of single-child GROUP wrappers; skips components/instances/locked groups.',
           requiredContext: ContextMode.HIERARCHY,
+          directAction: 'flattenStructure',
         },
 {
           name: 'Add Description',

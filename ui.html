@@ -13670,6 +13670,7 @@
         "turnIntoComponentSet",
         "createButtonComponentSet",
         "duplicateWithInstructions",
+        "flattenStructure",
         "extractDesignSystem",
         "fillFromOnlineImage",
         "listAllComments",
@@ -18824,9 +18825,9 @@
         {
           name: "Flatten structure (clean up)",
           desc: "Remove 1-child groups",
-          prompt: "Use the flattenSingleChildGroups command on the selection. Traverse descendants depth-first (skip COMPONENT/INSTANCE). For any unlocked GROUP with exactly 1 child and a parent: run native ungroup on that GROUP, then check the resulting child—if it is also a single-child GROUP, keep ungrouping down the chain. Preserve position/size/constraints/layout; do not delete children. Leave groups with 0 or 2+ children untouched.",
           help: "Uses native ungroup to safely collapse chains of single-child GROUP wrappers; skips components/instances/locked groups.",
-          requiredContext: ContextMode.HIERARCHY
+          requiredContext: ContextMode.HIERARCHY,
+          directAction: "flattenStructure"
         },
         {
           name: "Add Description",
@@ -29298,6 +29299,13 @@
                 }
                 return;
               }
+              if (task && task.directAction && !task.askMode) {
+                closeCommandsDrawer();
+                recordQuickActionUsage(actionName);
+                setMode("agent");
+                await runDirectAction(task.directAction, {}, task);
+                return;
+              }
               closeCommandsDrawer();
               recordQuickActionUsage(actionName);
               setMode("agent");
@@ -38464,6 +38472,26 @@
           setSendButtonMode(false);
         }
       }
+      async function runFlattenStructureAction(values, actionMeta) {
+        showThinkingIndicator("Flattening structure...");
+        setSendButtonMode(true);
+        try {
+          await executeCommands([{ action: "flattenSingleChildGroups" }]);
+          const botText = "Flattened single-child groups under the selection.";
+          addMessage("bot", botText);
+          chatHistory.push({ role: "model", parts: [{ text: botText }] });
+          await autoSaveAfterResponse();
+        } catch (err) {
+          console.error("Flatten structure action failed", err);
+          showToast("Failed to flatten structure.", "error");
+          addMessage("bot", "Failed to flatten structure.");
+          chatHistory.push({ role: "model", parts: [{ text: "Failed to flatten structure." }] });
+          await autoSaveAfterResponse();
+        } finally {
+          removeThinkingIndicator();
+          setSendButtonMode(false);
+        }
+      }
       async function runDuplicateWithInstructionsAction(values, actionMeta) {
         try {
           const imageData = values.imageInput;
@@ -38557,6 +38585,9 @@
             break;
           case "createAdvancedGrid":
             await runCreateAdvancedGridAction(values, actionMeta);
+            break;
+          case "flattenStructure":
+            await runFlattenStructureAction(values, actionMeta);
             break;
           case "generateImage":
             await handleGenerateImage(values, actionMeta.name, actionMeta.icon);
@@ -45999,6 +46030,11 @@
             const prompt2 = task.prompt || (typeof task.promptTemplate === "string" ? task.promptTemplate : "");
             await sendAskModeQuickAction(prompt2, { name: task.name, icon });
           }
+          return;
+        }
+        if (task.directAction) {
+          setMode("agent");
+          await runDirectAction(task.directAction, {}, task);
           return;
         }
         setMode("agent");
