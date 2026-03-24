@@ -49,6 +49,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'turnIntoComponentSet',
   'createButtonComponentSet',
   'duplicateWithInstructions',
+  'randomizeSelectedInstances',
   'flattenStructure',
   'easyWrapper',
   'extractDesignSystem',

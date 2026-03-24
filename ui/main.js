@@ -13386,16 +13386,25 @@ Generate ONLY the reply text, nothing else.`;
     });
 
     function renderPromptFields(fields, preservedValues = null) {
-      const isSmartRenameFieldDisabledInAiOffMode = (fieldKey) => {
-        return currentPromptAction?.name === 'Smart rename' &&
-          isAiOffModeEnabled() &&
-          (fieldKey === 'renamePreset' || fieldKey === 'renamePrompt');
+      const isFieldDisabledInAiOffMode = (fieldKey) => {
+        if (!isAiOffModeEnabled()) return false;
+
+        if (currentPromptAction?.name === 'Smart rename') {
+          return fieldKey === 'renamePreset' || fieldKey === 'renamePrompt';
+        }
+
+        if (currentPromptAction?.directAction === 'duplicateWithInstructions') {
+          return fieldKey === 'realityData' || fieldKey === 'customInstructions' || fieldKey === 'imageInput';
+        }
+
+        return false;
       };
 
       function renderSingleField(field, index) {
         let fieldHtml = '';
         const fieldId = `prompt-field-${index}`;
         const wrapperClass = field.wrapperClass ? ` ${field.wrapperClass}` : '';
+        const forceDisabled = isFieldDisabledInAiOffMode(field.key);
         let conditionalAttrs = '';
         const buildConditionAttr = (attrName, condition) => {
           if (!condition) return '';
@@ -13419,7 +13428,7 @@ Generate ONLY the reply text, nothing else.`;
         if (field.hideWhenNoSelection) {
           conditionalAttrs += ' data-hide-when-no-selection="true"';
         }
-        const disabledAttr = field.disabled ? ' disabled' : '';
+        const disabledAttr = (field.disabled || forceDisabled) ? ' disabled' : '';
 
         if (field.type === 'checkbox') {
           let isChecked = (preservedValues && preservedValues[field.key] !== undefined)
@@ -13431,7 +13440,7 @@ Generate ONLY the reply text, nothing else.`;
           const useToggleStyle = field.renderAsToggle || (currentPromptAction?.name === 'Smart rename' && field.key === 'caseOnly');
           if (useToggleStyle) {
             fieldHtml += `
-              <div class="prompt-field${wrapperClass} prompt-field-checkbox prompt-field-checkbox-toggle${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+              <div class="prompt-field${wrapperClass} prompt-field-checkbox prompt-field-checkbox-toggle${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
                 <label class="prompt-toggle-switch" for="${fieldId}">
                   <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
                   <span class="prompt-field-label">${field.label}</span>
@@ -13441,7 +13450,7 @@ Generate ONLY the reply text, nothing else.`;
             `;
           } else {
             fieldHtml += `
-              <div class="prompt-field${wrapperClass} prompt-field-checkbox${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+              <div class="prompt-field${wrapperClass} prompt-field-checkbox${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
                 <div class="prompt-checkbox-row">
                   <input type="checkbox" id="${fieldId}" ${isChecked ? 'checked' : ''} data-field-key="${field.key}"${disabledAttr}>
                   <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
@@ -13452,7 +13461,6 @@ Generate ONLY the reply text, nothing else.`;
           }
         } else if (field.type === 'select') {
           const isMulti = field.multi === true;
-          const forceDisabled = isSmartRenameFieldDisabledInAiOffMode(field.key);
           const selectDisabledAttr = (field.disabled || forceDisabled) ? ' disabled' : '';
           // Use preservedValues if available, otherwise fall back to field.default
           let effectiveDefault = field.default;
@@ -13779,7 +13787,7 @@ Generate ONLY the reply text, nothing else.`;
             ? preservedValues[field.key]
             : (field.default || '#3B82F6');
           fieldHtml += `
-            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <label class="prompt-field-label">${field.label}</label>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <div class="prompt-color-input-wrapper">
@@ -13794,7 +13802,6 @@ Generate ONLY the reply text, nothing else.`;
             </div>
           `;
         } else if (field.type === 'textarea') {
-          const forceDisabled = isSmartRenameFieldDisabledInAiOffMode(field.key);
           const aiButtons = [];
 
           if (field.aiButtons) {
@@ -14096,17 +14103,17 @@ Generate ONLY the reply text, nothing else.`;
           `;
         } else if (field.type === 'image') {
           fieldHtml += `
-            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-label-row">
                 <label class="prompt-field-label">${field.label}</label>
                 <div class="prompt-ai-actions">
-                  <button class="prompt-add-image-btn prompt-remove-all-btn" id="${fieldId}-remove-all-btn" type="button" style="display: none;">
+                  <button class="prompt-add-image-btn prompt-remove-all-btn" id="${fieldId}-remove-all-btn" type="button" style="display: none;"${disabledAttr}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                     </svg>
                     ${tu('actions.prompt.removeAll')}
                   </button>
-                  <button class="prompt-add-image-btn" id="${fieldId}-add-btn" type="button">
+                  <button class="prompt-add-image-btn" id="${fieldId}-add-btn" type="button"${disabledAttr}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
@@ -14186,7 +14193,7 @@ Generate ONLY the reply text, nothing else.`;
           ` : '';
 
           fieldHtml += `
-            <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
                 ${actionButtonHtml}
@@ -19393,13 +19400,10 @@ Return as JSON with colors array containing objects with hierarchical names. Use
 
     async function runDuplicateWithInstructionsAction(values, actionMeta) {
       try {
-        const imageData = values.imageInput;
-        if (isAiOffModeEnabled() && imageData) {
-          showToast('No AI mode: Duplicate with image instructions is unavailable. Remove image input to continue.', 'error');
-          return;
-        }
+        const noAiMode = isAiOffModeEnabled();
+        const imageData = noAiMode ? null : values.imageInput;
         // Parse custom instructions
-        const customInstructions = values.customInstructions
+        const customInstructions = !noAiMode && values.customInstructions
           ? values.customInstructions.split('\n').filter(line => line.trim().length > 0)
           : [];
 
@@ -19424,7 +19428,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
             options: {
               duplicateCount: duplicateCount,
               sequentialFull: values.sequentialFull || false,
-              realityData: values.realityData || false, // Will be applied after selection
+              realityData: noAiMode ? false : (values.realityData || false), // Will be applied after selection
               randomizeInstance: values.randomizeInstance || false, // Will be applied after selection
               randomizeNestedInstances: values.randomizeNestedInstances || false,
               randomizeConfig,
