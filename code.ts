@@ -8507,7 +8507,9 @@ figma.ui.onmessage = async (msg: {
         }
       };
 
-      // Helper to calculate bounding box of nodes
+      // Helper to calculate bounding box of nodes (union in absolute document space).
+      // Prefer absoluteRenderBounds / absoluteBoundingBox so the box matches Figma’s real
+      // selection outline (rotation, text, strokes, effects). Fallback: transform + width/height.
       const getNodesBounds = (nodes: SceneNode[]) => {
         if (nodes.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
 
@@ -8515,20 +8517,42 @@ figma.ui.onmessage = async (msg: {
         let minY = Infinity;
         let maxX = -Infinity;
         let maxY = -Infinity;
+        let any = false;
+
+        const expandWithRect = (x: number, y: number, w: number, h: number) => {
+          if (!(w > 0) || !(h > 0)) return;
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x + w);
+          maxY = Math.max(maxY, y + h);
+          any = true;
+        };
 
         for (const node of nodes) {
+          const n = node as SceneNode & { absoluteRenderBounds?: Rect | null; absoluteBoundingBox?: Rect | null };
+          const rb = n.absoluteRenderBounds;
+          if (rb && rb.width > 0 && rb.height > 0) {
+            expandWithRect(rb.x, rb.y, rb.width, rb.height);
+            continue;
+          }
+          const bb = n.absoluteBoundingBox;
+          if (bb && bb.width > 0 && bb.height > 0) {
+            expandWithRect(bb.x, bb.y, bb.width, bb.height);
+            continue;
+          }
           const absTransform = node.absoluteTransform;
           const nx = absTransform[0][2];
           const ny = absTransform[1][2];
           const nw = node.width;
           const nh = node.height;
-
           minX = Math.min(minX, nx);
           minY = Math.min(minY, ny);
           maxX = Math.max(maxX, nx + nw);
           maxY = Math.max(maxY, ny + nh);
+          any = true;
         }
 
+        if (!any) return { x: 0, y: 0, width: 0, height: 0 };
         return {
           x: minX,
           y: minY,
@@ -8838,27 +8862,42 @@ figma.ui.onmessage = async (msg: {
           // Base case: no more clusters, just add nodes and apply AL
           const direction = detectLayoutDirection(nodes);
 
-          // Sort nodes by position: top-to-bottom for VERTICAL, left-to-right for HORIZONTAL
-          const sortedNodes = [...nodes].sort((a, b) => {
-            const aAbsX = a.absoluteTransform[0][2];
-            const aAbsY = a.absoluteTransform[1][2];
-            const bAbsX = b.absoluteTransform[0][2];
-            const bAbsY = b.absoluteTransform[1][2];
-
-            if (direction === 'VERTICAL') {
-              return aAbsY - bAbsY;
-            } else {
-              return aAbsX - bAbsX;
+          type AlSnap = { node: SceneNode; absX: number; absY: number; parent: BaseNode | null; siblingIndex: number };
+          const alSnap: AlSnap[] = nodes.map(n => {
+            const p = n.parent;
+            let siblingIndex = 0;
+            if (p && 'children' in p) {
+              const idx = (p as ChildrenMixin).children.indexOf(n);
+              siblingIndex = idx >= 0 ? idx : 0;
             }
+            return {
+              node: n,
+              absX: n.absoluteTransform[0][2],
+              absY: n.absoluteTransform[1][2],
+              parent: p,
+              siblingIndex,
+            };
           });
+          const snapRefParent = alSnap[0]?.parent;
+          const allSnapSameParent = !!(snapRefParent && alSnap.every(s => s.parent === snapRefParent));
+          if (allSnapSameParent) {
+            alSnap.sort((a, b) => a.siblingIndex - b.siblingIndex);
+          } else {
+            alSnap.sort((a, b) => {
+              if (direction === 'VERTICAL') {
+                if (a.absY !== b.absY) return a.absY - b.absY;
+                return a.absX - b.absX;
+              }
+              if (a.absX !== b.absX) return a.absX - b.absX;
+              return a.absY - b.absY;
+            });
+          }
+          const sortedNodes = alSnap.map(s => s.node);
 
-          // Move nodes into frame
-          for (const node of sortedNodes) {
-            const nAbsX = node.absoluteTransform[0][2];
-            const nAbsY = node.absoluteTransform[1][2];
-            frame.appendChild(node);
-            node.x = nAbsX - frame.absoluteTransform[0][2];
-            node.y = nAbsY - frame.absoluteTransform[1][2];
+          for (const s of alSnap) {
+            frame.appendChild(s.node);
+            s.node.x = s.absX - frame.absoluteTransform[0][2];
+            s.node.y = s.absY - frame.absoluteTransform[1][2];
           }
 
           // Apply auto layout - but we need to add the relative offset as padding
@@ -8903,6 +8942,134 @@ figma.ui.onmessage = async (msg: {
         }
 
         return frame;
+      };
+
+      const wrapNodesInPlainFrame = (nodes: SceneNode[], parent: BaseNode & ChildrenMixin, name: string): FrameNode => {
+        const bounds = getNodesBounds(nodes);
+        const snapshot = nodes.map(n => {
+          const p = n.parent;
+          let siblingIndex = 0;
+          if (p && 'children' in p) {
+            const idx = (p as ChildrenMixin).children.indexOf(n);
+            siblingIndex = idx >= 0 ? idx : 0;
+          }
+          return {
+            node: n,
+            absX: n.absoluteTransform[0][2],
+            absY: n.absoluteTransform[1][2],
+            parent: p,
+            siblingIndex,
+          };
+        });
+        const refParent = snapshot[0]?.parent;
+        const allSameParent = !!(refParent && snapshot.every(s => s.parent === refParent));
+        if (allSameParent) {
+          snapshot.sort((a, b) => a.siblingIndex - b.siblingIndex);
+        } else {
+          snapshot.sort((a, b) => {
+            if (a.absY !== b.absY) return a.absY - b.absY;
+            if (a.absX !== b.absX) return a.absX - b.absX;
+            return a.node.id.localeCompare(b.node.id);
+          });
+        }
+        const frame = figma.createFrame();
+        parent.appendChild(frame);
+        const pAny = parent as FrameNode;
+        if ('layoutMode' in pAny && pAny.layoutMode && pAny.layoutMode !== 'NONE') {
+          frame.layoutPositioning = 'ABSOLUTE';
+        }
+        const parentAbsX = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[0][2] : 0;
+        const parentAbsY = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[1][2] : 0;
+        frame.x = bounds.x - parentAbsX;
+        frame.y = bounds.y - parentAbsY;
+        frame.resize(Math.max(bounds.width, 1), Math.max(bounds.height, 1));
+        frame.name = name;
+        frame.fills = [];
+        for (const s of snapshot) {
+          frame.appendChild(s.node);
+          s.node.x = s.absX - frame.absoluteTransform[0][2];
+          s.node.y = s.absY - frame.absoluteTransform[1][2];
+        }
+        return frame;
+      };
+
+      const convertSingleContainerToAutoLayout = (
+        originalNode: SceneNode,
+        directionCmd?: 'HORIZONTAL' | 'VERTICAL',
+        rename?: string
+      ): { frame: FrameNode; setSelection: boolean } | null => {
+        if (!(originalNode.type === 'FRAME' || originalNode.type === 'COMPONENT' || originalNode.type === 'INSTANCE' || originalNode.type === 'GROUP')) {
+          return null;
+        }
+        if (originalNode.removed || originalNode.locked) {
+          return null;
+        }
+        let frame: FrameNode;
+
+        if (originalNode.type === 'GROUP') {
+          const group = originalNode as GroupNode;
+          const parent = group.parent || figma.currentPage;
+          const absX = group.absoluteTransform[0][2];
+          const absY = group.absoluteTransform[1][2];
+          const width = group.width;
+          const height = group.height;
+          const name = group.name;
+
+          frame = figma.createFrame();
+          parent.appendChild(frame);
+          const parentAbsX = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[0][2] : 0;
+          const parentAbsY = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[1][2] : 0;
+          frame.x = absX - parentAbsX;
+          frame.y = absY - parentAbsY;
+          frame.resize(Math.max(width, 1), Math.max(height, 1));
+          frame.name = name;
+          frame.fills = [];
+
+          const children = [...group.children];
+          for (const child of children) {
+            const cAbsX = child.absoluteTransform[0][2];
+            const cAbsY = child.absoluteTransform[1][2];
+            frame.appendChild(child);
+            child.x = cAbsX - frame.absoluteTransform[0][2];
+            child.y = cAbsY - frame.absoluteTransform[1][2];
+          }
+
+          if (!group.removed) {
+            group.remove();
+          }
+        } else {
+          frame = originalNode as FrameNode;
+        }
+
+        if (frame.layoutMode !== 'NONE') {
+          applySmartAutoLayout(frame, directionCmd);
+          if (rename) frame.name = rename;
+          return { frame, setSelection: false };
+        }
+
+        const children = [...frame.children] as SceneNode[];
+        if (children.length > 0) {
+          const { groups: clusters, direction: outerDirection } = clusterNodesIntoGroups(children);
+
+          if (clusters.length === 1) {
+            applySmartAutoLayout(frame, directionCmd);
+          } else {
+            const allNodes: SceneNode[] = [];
+            clusters.forEach(c => allNodes.push(...c));
+            const outerBounds = getNodesBounds(allNodes);
+
+            for (let ci = 0; ci < clusters.length; ci++) {
+              wrapNodesInAutoLayoutFrame(clusters[ci], frame, `Group ${ci + 1}`, outerBounds, outerDirection);
+            }
+
+            applySmartAutoLayout(frame, outerDirection);
+          }
+        } else {
+          applySmartAutoLayout(frame, directionCmd);
+        }
+
+        if (rename) frame.name = rename;
+        return { frame, setSelection: true };
       };
 
       let stickyCreationIndex = 0;
@@ -9810,7 +9977,7 @@ figma.ui.onmessage = async (msg: {
         'subtract', 'booleanSubtract', 'intersect', 'booleanIntersect', 'exclude', 'booleanExclude',
         'duplicate', 'createInstance', 'duplicateStyle',
         'createVariableCollection', 'createVariable',
-        'applyAutoLayout', 'createTable'
+        'applyAutoLayout', 'easyWrapper', 'createTable'
       ]);
       const hierarchyActions = new Set(['appendChild', 'moveTo']);
       const layoutEnableActions = new Set(['setAutoLayout']);
@@ -13099,97 +13266,14 @@ figma.ui.onmessage = async (msg: {
             }
 
             if (nodes.length === 1 && (nodes[0].type === 'FRAME' || nodes[0].type === 'COMPONENT' || nodes[0].type === 'INSTANCE' || nodes[0].type === 'GROUP')) {
-              // Single frame or group: convert to auto layout and layout children correctly
               console.log('[applyAutoLayout] Single container detected');
-              let frame: FrameNode;
-              const originalNode = nodes[0];
-
-              if (originalNode.type === 'GROUP') {
-                console.log('[applyAutoLayout] Converting Group to Frame');
-                const group = originalNode as GroupNode;
-                const parent = group.parent || figma.currentPage;
-
-                // Get absolute bounds before moving anything
-                const absX = group.absoluteTransform[0][2];
-                const absY = group.absoluteTransform[1][2];
-                const width = group.width;
-                const height = group.height;
-                const name = group.name;
-
-                frame = figma.createFrame();
-
-                // Insert frame into same parent
-                parent.appendChild(frame);
-
-                // Position frame absolutely to match group
-                const parentAbsX = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[0][2] : 0;
-                const parentAbsY = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[1][2] : 0;
-                frame.x = absX - parentAbsX;
-                frame.y = absY - parentAbsY;
-                frame.resize(Math.max(width, 1), Math.max(height, 1));
-                frame.name = name;
-                frame.fills = []; // Groups usually don't have fills
-
-                // Move children
-                const children = [...group.children];
-                for (const child of children) {
-                  const cAbsX = child.absoluteTransform[0][2];
-                  const cAbsY = child.absoluteTransform[1][2];
-                  frame.appendChild(child);
-                  child.x = cAbsX - frame.absoluteTransform[0][2];
-                  child.y = cAbsY - frame.absoluteTransform[1][2];
-                }
-
-                // Figma automatically removes empty groups. 
-                // Only call remove() if it hasn't been automatically cleaned up.
-                if (!group.removed) {
-                  group.remove();
-                }
+              const conv = convertSingleContainerToAutoLayout(nodes[0], cmd.direction, cmd.name);
+              if (!conv) {
+                failed++;
               } else {
-                frame = originalNode as FrameNode;
-              }
-
-              // If it's already an auto-layout frame, just refresh its settings
-              if (frame.layoutMode !== 'NONE') {
-                console.log('[applyAutoLayout] Frame already has auto layout, refreshing settings');
-                applySmartAutoLayout(frame, cmd.direction);
-                if (cmd.name) frame.name = cmd.name;
-                success++;
-              } else {
-                // Non-auto-layout container: Apply smart nested layout to children
-                const children = [...frame.children] as SceneNode[];
-                if (children.length > 0) {
-                  console.log(`[applyAutoLayout] Applying smart layout to ${children.length} children inside frame`);
-                  // Detect clusters among children
-                  const { groups: clusters, direction: outerDirection } = clusterNodesIntoGroups(children);
-
-                  if (clusters.length === 1) {
-                    // Simple case: just apply auto layout to the frame
-                    applySmartAutoLayout(frame, cmd.direction);
-                  } else {
-                    // Nested case: children form distinct groups
-                    console.log(`[applyAutoLayout] Found ${clusters.length} clusters inside container, direction=${outerDirection}`);
-
-                    // Calculate overall bounds of all clusters to maintain relative offsets
-                    const allNodes: SceneNode[] = [];
-                    clusters.forEach(c => allNodes.push(...c));
-                    const outerBounds = getNodesBounds(allNodes);
-
-                    // Wrap each cluster in its own auto layout frame
-                    for (let ci = 0; ci < clusters.length; ci++) {
-                      wrapNodesInAutoLayoutFrame(clusters[ci], frame, `Group ${ci + 1}`, outerBounds, outerDirection);
-                    }
-
-                    // Apply auto layout to the outer frame (the container)
-                    applySmartAutoLayout(frame, outerDirection);
-                  }
-                } else {
-                  // Empty container
-                  applySmartAutoLayout(frame, cmd.direction);
+                if (conv.setSelection) {
+                  figma.currentPage.selection = [conv.frame];
                 }
-
-                if (cmd.name) frame.name = cmd.name;
-                figma.currentPage.selection = [frame];
                 success++;
               }
               continue;
@@ -13212,6 +13296,152 @@ figma.ui.onmessage = async (msg: {
               success++;
             } else {
               failed++;
+            }
+            continue;
+          }
+
+          if (cmd.action === 'easyWrapper') {
+            try {
+              const nodeIds = cmd.nodeIds || [];
+              let ewNodes: SceneNode[] = [];
+              for (const id of nodeIds) {
+                const n = await resolveNodeSmart(id) as SceneNode;
+                if (n) ewNodes.push(n);
+              }
+              if (ewNodes.length === 0 && (!nodeIds || nodeIds.length === 0)) {
+                ewNodes.push(...currentSelection);
+              }
+
+              if (ewNodes.length === 0) {
+                failed++;
+                if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: 'Easy wrapper: select at least one layer.' };
+                continue;
+              }
+
+              const modeRaw = typeof cmd.mode === 'string' ? cmd.mode.toLowerCase() : 'together';
+              const wrapperRaw = typeof cmd.wrapper === 'string' ? cmd.wrapper.toLowerCase() : 'frame';
+              const wrapperKind = wrapperRaw === 'group' ? 'group' : (wrapperRaw === 'autolayout') ? 'autoLayout' : 'frame';
+
+              let dir: 'HORIZONTAL' | 'VERTICAL' | undefined;
+              if (typeof cmd.direction === 'string') {
+                const ud = cmd.direction.toUpperCase();
+                if (ud === 'HORIZONTAL' || ud === 'VERTICAL') dir = ud as 'HORIZONTAL' | 'VERTICAL';
+              }
+
+              const wantWrap = cmd.layoutWrap === 'WRAP' || cmd.layoutWrap === true;
+              const counterAxisSpacing = cmd.counterAxisSpacing;
+
+              const applyWrapToAutoLayoutFrame = (frame: FrameNode) => {
+                if (!wantWrap || frame.layoutMode === 'NONE') return;
+                frame.layoutMode = 'HORIZONTAL';
+                if (counterAxisSpacing !== undefined && counterAxisSpacing !== null && !isNaN(Number(counterAxisSpacing))) {
+                  frame.counterAxisSpacing = Number(counterAxisSpacing);
+                } else {
+                  frame.counterAxisSpacing = frame.itemSpacing;
+                }
+                frame.layoutWrap = 'WRAP';
+              };
+
+              const defaultWrapName = (kind: string) =>
+                kind === 'group' ? 'Group' : kind === 'autoLayout' ? 'Auto layout' : 'Frame';
+
+              const pickTargetParent = (n: SceneNode) => {
+                let targetParent = (n.parent || figma.currentPage) as BaseNode & ChildrenMixin;
+                if (targetParent.type === 'GROUP' && targetParent.parent) {
+                  targetParent = targetParent.parent as BaseNode & ChildrenMixin;
+                }
+                return targetParent;
+              };
+
+              if (modeRaw === 'convert') {
+                const converted: FrameNode[] = [];
+                for (const n of ewNodes) {
+                  try {
+                    const conv = convertSingleContainerToAutoLayout(n, dir, cmd.name);
+                    if (!conv) continue;
+                    applyWrapToAutoLayoutFrame(conv.frame);
+                    converted.push(conv.frame);
+                  } catch (convOneErr) {
+                    console.warn('[easyWrapper] convert skipped for node', n?.id, convOneErr);
+                  }
+                }
+                if (converted.length === 0) {
+                  failed++;
+                  if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: 'Easy wrapper: no frame or group could be converted (wrong type or locked).' };
+                  continue;
+                }
+                figma.currentPage.selection = converted;
+                success++;
+                continue;
+              }
+
+              const wrapName = (cmd.name && String(cmd.name).trim()) || defaultWrapName(wrapperKind);
+
+              if (modeRaw === 'together') {
+                const targetParent = pickTargetParent(ewNodes[0]);
+                if (wrapperKind === 'group') {
+                  try {
+                    const group = figma.group(ewNodes, targetParent);
+                    group.name = wrapName;
+                    figma.currentPage.selection = [group];
+                    success++;
+                  } catch (groupErr) {
+                    failed++;
+                    if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: (groupErr as Error)?.message || 'Easy wrapper: group requires sibling layers.' };
+                  }
+                } else if (wrapperKind === 'frame') {
+                  const frame = wrapNodesInPlainFrame(ewNodes, targetParent, wrapName);
+                  figma.currentPage.selection = [frame];
+                  success++;
+                } else {
+                  const frame = wrapNodesInAutoLayoutFrame(ewNodes, targetParent, wrapName);
+                  if (dir) applySmartAutoLayout(frame, dir);
+                  applyWrapToAutoLayoutFrame(frame);
+                  figma.currentPage.selection = [frame];
+                  success++;
+                }
+                continue;
+              }
+
+              if (modeRaw === 'each') {
+                const out: SceneNode[] = [];
+                for (let i = 0; i < ewNodes.length; i++) {
+                  const n = ewNodes[i];
+                  if (n.removed || n.locked) continue;
+                  const targetParent = pickTargetParent(n);
+                  const nm = ewNodes.length > 1 ? `${wrapName} ${i + 1}` : wrapName;
+                  if (wrapperKind === 'group') {
+                    try {
+                      const group = figma.group([n], targetParent);
+                      group.name = nm;
+                      out.push(group);
+                    } catch (e) {
+                      console.warn('[easyWrapper] group each failed', e);
+                    }
+                  } else if (wrapperKind === 'frame') {
+                    out.push(wrapNodesInPlainFrame([n], targetParent, nm));
+                  } else {
+                    const frame = wrapNodesInAutoLayoutFrame([n], targetParent, nm);
+                    if (dir) applySmartAutoLayout(frame, dir);
+                    applyWrapToAutoLayoutFrame(frame);
+                    out.push(frame);
+                  }
+                }
+                if (out.length === 0) {
+                  failed++;
+                  if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: 'Easy wrapper: nothing wrapped (locked or invalid).' };
+                  continue;
+                }
+                figma.currentPage.selection = out;
+                success++;
+                continue;
+              }
+
+              failed++;
+              if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: `Easy wrapper: unknown mode "${cmd.mode}".` };
+            } catch (ewErr) {
+              failed++;
+              if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: (ewErr as Error)?.message || 'easyWrapper failed' };
             }
             continue;
           }

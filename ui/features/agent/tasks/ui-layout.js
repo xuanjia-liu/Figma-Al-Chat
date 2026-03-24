@@ -398,6 +398,124 @@ export const uiLayoutTasks = [
           directAction: 'flattenStructure',
         },
 {
+          name: 'Easy wrapper',
+          desc: 'Wrap or convert frames, groups, and auto layout',
+          help: 'Wrap the selection together (choose frame, group, or auto layout) or wrap each layer separately (always auto layout); convert existing frames/groups to auto layout; optional wrapped rows (layout wrap). Works in No AI mode.',
+          requiredContext: ContextMode.LAYOUT_ONLY,
+          directAction: 'easyWrapper',
+          fields: [
+            {
+              key: 'mode',
+              type: 'select',
+              label: 'Mode',
+              default: 'together',
+              options: [
+                { value: 'together', label: 'Wrap selection together' },
+                { value: 'each', label: 'Wrap each selected layer separately' },
+                { value: 'convert', label: 'Convert to auto layout (existing frame/group)' },
+              ],
+            },
+            {
+              key: 'wrapper',
+              type: 'select',
+              label: 'Container',
+              default: 'frame',
+              options: [
+                { value: 'frame', label: 'Frame' },
+                { value: 'group', label: 'Group' },
+                { value: 'autoLayout', label: 'Auto layout' },
+              ],
+              showWhen: { field: 'mode', equals: 'together' },
+            },
+            {
+              key: 'direction',
+              type: 'select',
+              label: 'Auto layout direction',
+              default: 'AUTO',
+              options: [
+                { value: 'AUTO', label: 'Auto' },
+                { value: 'HORIZONTAL', label: 'Horizontal' },
+                { value: 'VERTICAL', label: 'Vertical' },
+              ],
+              showWhen: {
+                anyOf: [
+                  [{ field: 'mode', equals: 'each' }],
+                  [
+                    { field: 'mode', equals: 'together' },
+                    { field: 'wrapper', equals: 'autoLayout' },
+                  ],
+                ],
+              },
+            },
+            {
+              key: 'layoutWrap',
+              type: 'checkbox',
+              label: 'Wrap rows (layout wrap)',
+              default: false,
+              hint: 'Figma auto-layout wrap: items flow onto new rows when space is tight.',
+              showWhen: {
+                anyOf: [
+                  [{ field: 'mode', equals: 'each' }],
+                  [
+                    { field: 'mode', equals: 'together' },
+                    { field: 'wrapper', equals: 'autoLayout' },
+                  ],
+                ],
+              },
+            },
+            {
+              key: 'counterAxisSpacing',
+              type: 'number',
+              label: 'Row gap (px)',
+              default: 0,
+              min: 0,
+              max: 500,
+              hint: 'Vertical gap between wrapped rows; 0 uses the frame’s item spacing.',
+              showWhen: {
+                anyOf: [
+                  [
+                    { field: 'mode', equals: 'each' },
+                    { field: 'layoutWrap', equals: 'true' },
+                  ],
+                  [
+                    { field: 'mode', equals: 'together' },
+                    { field: 'wrapper', equals: 'autoLayout' },
+                    { field: 'layoutWrap', equals: 'true' },
+                  ],
+                ],
+              },
+            },
+            {
+              key: 'wrapperName',
+              type: 'text',
+              label: 'Name (optional)',
+              placeholder: 'e.g. Container',
+              default: '',
+            },
+            {
+              key: 'convertLayoutWrap',
+              type: 'checkbox',
+              label: 'Wrap rows after convert',
+              default: false,
+              hint: 'Applies layout wrap on the converted auto-layout frame.',
+              showWhen: { field: 'mode', equals: 'convert' },
+            },
+            {
+              key: 'convertCounterAxisSpacing',
+              type: 'number',
+              label: 'Row gap after convert (px)',
+              default: 0,
+              min: 0,
+              max: 500,
+              hint: '0 uses the frame’s item spacing.',
+              showWhen: [
+                { field: 'mode', equals: 'convert' },
+                { field: 'convertLayoutWrap', equals: 'true' },
+              ],
+            },
+          ],
+        },
+{
           name: 'Add Description',
           desc: 'Add comprehensive component description',
           prompt: '',

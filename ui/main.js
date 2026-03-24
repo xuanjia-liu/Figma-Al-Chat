@@ -12997,6 +12997,9 @@ Generate ONLY the reply text, nothing else.`;
         let conditionalAttrs = '';
         const buildConditionAttr = (attrName, condition) => {
           if (!condition) return '';
+          if (condition && typeof condition === 'object' && !Array.isArray(condition) && Array.isArray(condition.anyOf)) {
+            return ` ${attrName}-json='${JSON.stringify(condition)}'`;
+          }
           if (Array.isArray(condition)) {
             return ` ${attrName}-json='${JSON.stringify(condition)}'`;
           }
@@ -15205,14 +15208,23 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       const evaluatePromptCondition = (fieldEl, attrPrefix) => {
         if (fieldEl.dataset[`${attrPrefix}Json`]) {
           try {
-            const conditions = JSON.parse(fieldEl.dataset[`${attrPrefix}Json`]);
-            return conditions.every(cond => {
+            const parsed = JSON.parse(fieldEl.dataset[`${attrPrefix}Json`]);
+            const evalOneCond = (cond) => {
               const current = getPromptVisibilityValue(cond.field);
               if (cond.equalsAny) {
                 return cond.equalsAny.map(String).includes(String(current));
               }
               return String(current) === String(cond.equals);
-            });
+            };
+            const evalAllConds = (conds) => {
+              const arr = Array.isArray(conds) ? conds : [conds];
+              return arr.every(evalOneCond);
+            };
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.anyOf)) {
+              return parsed.anyOf.some(branch => evalAllConds(branch));
+            }
+            const conditions = Array.isArray(parsed) ? parsed : [parsed];
+            return conditions.every(evalOneCond);
           } catch (e) {
             console.error(`Error parsing ${attrPrefix}-json:`, e);
             return false;
@@ -18879,6 +18891,54 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runEasyWrapperAction(values, actionMeta) {
+      showThinkingIndicator('Wrapping selection...');
+      setSendButtonMode(true);
+      const mode = values.mode || 'together';
+      const isConvert = mode === 'convert';
+      const isEach = mode === 'each';
+      const effectiveWrapper = isConvert
+        ? null
+        : (isEach ? 'autoLayout' : (values.wrapper || 'frame'));
+      const wantWrap = isConvert
+        ? values.convertLayoutWrap === true
+        : (effectiveWrapper === 'autoLayout' && values.layoutWrap === true);
+      const gapRaw = isConvert ? values.convertCounterAxisSpacing : values.counterAxisSpacing;
+      const gapNum = gapRaw !== undefined && gapRaw !== null && gapRaw !== '' ? Number(gapRaw) : 0;
+      const direction = values.direction === 'HORIZONTAL' || values.direction === 'VERTICAL'
+        ? values.direction
+        : undefined;
+      const payload = {
+        action: 'easyWrapper',
+        mode,
+        ...(isConvert ? {} : { wrapper: effectiveWrapper }),
+        ...(direction ? { direction } : {}),
+        ...(wantWrap ? { layoutWrap: 'WRAP' } : {}),
+        ...(wantWrap && gapNum > 0 ? { counterAxisSpacing: gapNum } : {}),
+      };
+      const wn = (values.wrapperName && String(values.wrapperName).trim()) || '';
+      if (wn) payload.name = wn;
+
+      try {
+        await executeCommands([payload]);
+        const botText = 'Easy wrapper finished.';
+        addMessage('bot', botText);
+        chatHistory.push({ role: 'model', parts: [{ text: botText }] });
+        await autoSaveAfterResponse();
+        showToast('Wrapper applied', 'success');
+      } catch (err) {
+        console.error('Easy wrapper action failed', err);
+        const msg = err?.message || 'Easy wrapper failed.';
+        showToast(msg, 'error');
+        addMessage('bot', msg);
+        chatHistory.push({ role: 'model', parts: [{ text: msg }] });
+        await autoSaveAfterResponse();
+      } finally {
+        removeThinkingIndicator();
+        setSendButtonMode(false);
+      }
+    }
+
     async function runDuplicateWithInstructionsAction(values, actionMeta) {
       try {
         const imageData = values.imageInput;
@@ -19012,6 +19072,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'flattenStructure':
           await runFlattenStructureAction(values, actionMeta);
+          break;
+        case 'easyWrapper':
+          await runEasyWrapperAction(values, actionMeta);
           break;
         case 'generateImage':
           await handleGenerateImage(values, actionMeta.name, actionMeta.icon);
@@ -29276,6 +29339,11 @@ Selection data now includes "fillsDetailed" array with gradient info including t
   - If multiple nodes are selected, analyzes their spatial positions and creates nested auto layout structure.
   - 'direction' is optional; if omitted, automatically detects the best layout direction.
   - 'nodeIds' is optional; if omitted, uses the current selection.
+- easyWrapper: { "action": "easyWrapper", "mode": "together|each|convert", "wrapper": "frame|group|autoLayout", "direction": "VERTICAL/HORIZONTAL", "layoutWrap": "WRAP", "counterAxisSpacing": 12, "name": "Container", "nodeIds": ["id1", "id2"] }
+  - Structured wrapping without guessing: mode "together" wraps all selected nodes in one container; "each" wraps every selected node separately; "convert" turns existing frames/groups/components/instances into auto layout (ignores "wrapper").
+  - "wrapper" is only for together/each: plain frame, group, or auto layout frame (with smart layout). Grouping requires sibling layers under the same parent.
+  - Optional "layoutWrap": "WRAP" enables Figma auto-layout wrap rows; optional "counterAxisSpacing" sets row gap (defaults to item spacing when omitted).
+  - "name" sets the wrapper name; "nodeIds" optional (defaults to current selection).
 - setAutoLayout: { "action": "setAutoLayout", "nodeId": "xxx", "direction": "VERTICAL/HORIZONTAL/GRID", "gap": 10, "padding": 16, "paddingTop": 16, "paddingRight": 16, "paddingBottom": 16, "paddingLeft": 16, "primaryAxisAlignItems": "MIN/CENTER/MAX/SPACE_BETWEEN", "counterAxisAlignItems": "MIN/CENTER/MAX/BASELINE", "primaryAxisSizingMode": "FIXED/AUTO", "counterAxisSizingMode": "FIXED/AUTO", "layoutWrap": "NO_WRAP/WRAP", "counterAxisSpacing": 10, "gridColumnCount": 3, "gridRowCount": 2, "gridColumnGap": 10, "gridRowGap": 10, "gridRowSizes": [{ "type": "FLEX", "value": 1 }], "gridColumnSizes": [{ "type": "FIXED", "value": 120 }], "gridChildHorizontalAlign": "MIN/CENTER/MAX/AUTO", "gridChildVerticalAlign": "MIN/CENTER/MAX/AUTO" }
   - Use this to configure auto layout properties on an EXISTING frame (not for applying to selection).
 - setLayoutWrap: { "action": "setLayoutWrap", "nodeId": "xxx", "wrap": "NO_WRAP/WRAP" }

@@ -50,6 +50,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'createButtonComponentSet',
   'duplicateWithInstructions',
   'flattenStructure',
+  'easyWrapper',
   'extractDesignSystem',
   'fillFromOnlineImage',
   'listAllComments',
