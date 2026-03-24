@@ -387,57 +387,59 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   container.innerHTML = `
     <div class="gfp-root">
       <aside class="gfp-sidebar" aria-label="${escapeAttr(tu('actions.fontPreview.filtersAria'))}">
+        <div class="gfp-sidebar-lang-font-pair">
+          <section class="gfp-filter-block">
+            <div class="gfp-filter-heading">
+              <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke-linecap="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+              ${escapeAttr(tu('actions.fontPreview.language'))}
+            </div>
+            <div class="gfp-lang-row">
+              <select class="gfp-select gfp-lang-primary" aria-label="${escapeAttr(tu('actions.fontPreview.languagePrimaryAria'))}"></select>
+            </div>
+          </section>
+          <section class="gfp-filter-block">
+            <div class="gfp-filter-heading">
+              <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+              ${escapeAttr(tu('actions.fontPreview.fontLibraryHeading'))}
+            </div>
+            <div class="gfp-font-source-row">
+              <select class="gfp-select gfp-font-source-select" aria-label="${escapeAttr(tu('actions.fontPreview.fontSourceSelectAria'))}">
+                <option value="google">${escapeAttr(tu('actions.fontPreview.fontSourceGoogle'))}</option>
+                <option value="local">${escapeAttr(tu('actions.fontPreview.fontSourceLocal'))}</option>
+              </select>
+            </div>
+          </section>
+        </div>
         <section class="gfp-filter-block">
           <div class="gfp-filter-heading">
-            <span class="gfp-filter-heading-icon" aria-hidden="true">🌐</span>
-            ${escapeAttr(tu('actions.fontPreview.language'))}
-          </div>
-          <div class="gfp-lang-row">
-            <select class="gfp-select gfp-lang-primary" aria-label="${escapeAttr(tu('actions.fontPreview.languagePrimaryAria'))}"></select>
-          </div>
-        </section>
-        <section class="gfp-filter-block">
-          <div class="gfp-filter-heading">
-            <span class="gfp-filter-heading-icon" aria-hidden="true">Aa</span>
-            ${escapeAttr(tu('actions.fontPreview.fontLibraryHeading'))}
-          </div>
-          <div class="gfp-font-source-row">
-            <select class="gfp-select gfp-font-source-select" aria-label="${escapeAttr(tu('actions.fontPreview.fontSourceSelectAria'))}">
-              <option value="google">${escapeAttr(tu('actions.fontPreview.fontSourceGoogle'))}</option>
-              <option value="local">${escapeAttr(tu('actions.fontPreview.fontSourceLocal'))}</option>
-            </select>
-          </div>
-        </section>
-        <section class="gfp-filter-block">
-          <div class="gfp-filter-heading">
-            <span class="gfp-filter-heading-icon" aria-hidden="true">🔖</span>
+            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
             ${escapeAttr(tu('actions.fontPreview.bookmarksHeading'))}
           </div>
           <div class="gfp-bookmark-bar">
             <select class="gfp-select gfp-bookmark-list-select" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkListSelectAria'))}"></select>
-          </div>
-          <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkToolbarAria'))}">
-            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}">
-              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-            </button>
-            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}">
-              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-            </button>
-            <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}">
-              <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            </button>
+            <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkToolbarAria'))}">
+              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}">
+                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}">
+                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}">
+                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+              </button>
+            </div>
           </div>
         </section>
         <section class="gfp-filter-block">
           <div class="gfp-filter-heading">
-            <span class="gfp-filter-heading-icon" aria-hidden="true">☺</span>
+            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h.008v.008H9.75V9.75zm4.5 0h.008v.008h-.008V9.75z"/></svg>
             ${escapeAttr(tu('actions.fontPreview.feeling'))}
           </div>
           <div class="gfp-tag-grid" data-group="feeling"></div>
         </section>
         <section class="gfp-filter-block">
           <div class="gfp-filter-heading">
-            <span class="gfp-filter-heading-icon" aria-hidden="true">👕</span>
+            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm-4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0z"/></svg>
             ${escapeAttr(tu('actions.fontPreview.appearance'))}
           </div>
           <div class="gfp-tag-grid" data-group="appearance"></div>

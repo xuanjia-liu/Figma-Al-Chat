@@ -492,6 +492,11 @@
       background: var(--bg-tertiary);
     }
 
+    /* Wraps Language + Font library; children lay out as direct flex items on wide viewports. */
+    .gfp-sidebar-lang-font-pair {
+      display: contents;
+    }
+
     .gfp-filter-block {
       display: flex;
       flex-direction: column;
@@ -508,9 +513,11 @@
     }
 
     .gfp-filter-heading-icon {
-      font-size: 15px;
-      line-height: 1;
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
       opacity: 0.9;
+      color: inherit;
     }
 
     .gfp-lang-row {
@@ -1272,15 +1279,37 @@
       .gfp-sidebar {
         width: 100%;
         min-width: 0;
-        max-height: min(42vh, 320px);
+        max-height: min(20vh, 160px);
         flex-shrink: 0;
         border-right: none;
         border-bottom: 1px solid var(--border);
       }
 
+      .gfp-sidebar-lang-font-pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-md);
+        align-items: start;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .gfp-sidebar-lang-font-pair .gfp-filter-block {
+        min-width: 0;
+      }
+
+      .gfp-bookmark-bar {
+        gap: var(--space-sm);
+        flex-direction: row;
+      }
+
       .gfp-main {
         flex: 1;
         min-height: 0;
+      }
+
+      .gfp-sliders-row {
+        display: none;
       }
     }
 
