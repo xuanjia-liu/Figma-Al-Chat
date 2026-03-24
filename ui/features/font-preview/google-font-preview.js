@@ -123,11 +123,11 @@ function gfpJpPreviewFallbackFamily(f) {
 }
 
 function gfpSampleFontFamilyCss(f) {
-  if (f && f.source === 'local') {
-    const primary = `'${String(f.family || '').replace(/'/g, "\\'")}'`;
+  const primary = `'${String(f.family || '').replace(/'/g, "\\'")}'`;
+  /** Local list uses Figma names; the plugin iframe often has no matching system/@font-face. When the Google catalog lists the same family we load GF CSS — use GF-style stacks for preview. */
+  if (f && f.source === 'local' && !f.gfpCatalogMatch) {
     return `${primary}, var(--font-ui, system-ui, sans-serif)`;
   }
-  const primary = `'${String(f.family || '').replace(/'/g, "\\'")}'`;
   if (hasSubset(f, 'japanese')) {
     return `${primary}, var(--font-ui, system-ui)`;
   }
@@ -358,6 +358,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   let allFamilies = [];
   /** @type {Map<string, object>} */
   let familyByName = new Map();
+  /** Lowercase catalog family → canonical name from `familyByName` (for Figma/local name matching). */
+  let catalogLowerToCanonical = new Map();
   let allLocalFamilies = [];
   /** @type {Map<string, object>} */
   let localFamilyByName = new Map();
@@ -845,7 +847,11 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     const fam = row?.dataset?.family || '';
     if (!fam) return null;
     if (row.dataset.fontSource === 'local') {
-      return localFamilyByName.get(fam) || gfpSyntheticLocalMeta(fam);
+      const local = localFamilyByName.get(fam) || gfpSyntheticLocalMeta(fam);
+      const catalogKey = resolveGoogleCatalogFamilyName(fam);
+      const cat = catalogKey ? familyByName.get(catalogKey) : null;
+      if (!cat) return local;
+      return { ...cat, family: local.family, source: 'local', styles: local.styles, gfpCatalogMatch: true };
     }
     return familyByName.get(fam) || gfpSyntheticFamilyMeta(fam);
   }
@@ -1361,9 +1367,39 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   /** Load Noto Sans/Serif JP so mixed JP/Latin preview text respects weight for CJK, not system 2-master fonts. */
   function ensureJpPreviewFallbackCss(meta) {
-    if (!meta || meta.source === 'local' || hasSubset(meta, 'japanese') || disposed) return;
+    if (!meta || disposed) return;
+    if (meta.source === 'local' && !meta.gfpCatalogMatch) return;
+    if (hasSubset(meta, 'japanese')) return;
     const jp = gfpJpPreviewFallbackFamily(meta);
     if (familyByName.has(jp)) loadFontCss(jp);
+  }
+
+  function syncCatalogFamilyIndex() {
+    catalogLowerToCanonical = new Map(
+      [...familyByName.keys()].map(k => [String(k).trim().toLowerCase(), k])
+    );
+  }
+
+  /** @returns {string | null} */
+  function resolveGoogleCatalogFamilyName(figmaFamily) {
+    const raw = String(figmaFamily || '').trim();
+    if (!raw || catalogLowerToCanonical.size === 0) return null;
+    if (familyByName.has(raw)) return raw;
+    return catalogLowerToCanonical.get(raw.toLowerCase()) ?? null;
+  }
+
+  function primeLocalRowFontCss(row) {
+    const fam = row.dataset.family;
+    if (!fam || row.dataset.fontSource !== 'local') return;
+    const catalogFam = resolveGoogleCatalogFamilyName(fam);
+    if (!catalogFam) return;
+    const meta = familyByName.get(catalogFam);
+    ensureJpPreviewFallbackCss(
+      meta
+        ? { ...meta, family: fam, source: 'local', styles: [], gfpCatalogMatch: true }
+        : null
+    );
+    loadFontCss(catalogFam);
   }
 
   function appendBatch() {
@@ -1371,6 +1407,12 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     const frag = document.createDocumentFragment();
     for (let i = state.renderOffset; i < end; i++) {
       const f = state.filtered[i];
+      const catalogKey = f.source === 'local' ? resolveGoogleCatalogFamilyName(f.family) : null;
+      const catMeta = catalogKey ? familyByName.get(catalogKey) : null;
+      const sampleFont =
+        catMeta
+          ? { ...catMeta, family: f.family, source: 'local', styles: f.styles, gfpCatalogMatch: true }
+          : f;
       const row = document.createElement('div');
       row.className = 'gfp-font-row';
       row.dataset.family = f.family;
@@ -1382,7 +1424,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       titleEl.textContent = f.family;
       const metaEl = document.createElement('span');
       metaEl.className = 'gfp-font-name-meta';
-      const effW = gfpClampWght(f, state.fontWght);
+      const effW = gfpClampWght(sampleFont, state.fontWght);
       metaEl.textContent = gfpFormatRowWeightStyle(effW, tu);
       const wghtCountEl = document.createElement('span');
       wghtCountEl.className = 'gfp-font-name-wght-count';
@@ -1394,9 +1436,9 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       sample.className = 'gfp-font-sample';
       sample.textContent = state.previewText || tu('actions.fontPreview.placeholder');
       sample.style.fontSize = `${state.fontSizePx}px`;
-      sample.style.fontWeight = String(gfpClampWght(f, state.fontWght));
-      sample.style.fontFamily = gfpSampleFontFamilyCss(f);
-      ensureJpPreviewFallbackCss(f);
+      sample.style.fontWeight = String(gfpClampWght(sampleFont, state.fontWght));
+      sample.style.fontFamily = gfpSampleFontFamilyCss(sampleFont);
+      ensureJpPreviewFallbackCss(sampleFont);
       const actions = document.createElement('div');
       actions.className = 'gfp-font-row-actions';
       const applyBtn = document.createElement('button');
@@ -1468,7 +1510,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   function onRowVisible(row) {
     const fam = row.dataset.family;
     if (!fam) return;
-    if (row.dataset.fontSource === 'local') return;
+    if (row.dataset.fontSource === 'local') {
+      primeLocalRowFontCss(row);
+      return;
+    }
     const meta = familyByName.get(fam);
     ensureJpPreviewFallbackCss(meta);
     loadFontCss(fam);
@@ -1847,9 +1892,11 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       allFamilies = list;
       allFamilies.sort((a, b) => (a.popularity || 9999) - (b.popularity || 9999));
       familyByName = new Map(allFamilies.map(f => [f.family, f]));
+      syncCatalogFamilyIndex();
       listEl.innerHTML = '';
       applyFilters();
       setupListObserver();
+      listEl.querySelectorAll('.gfp-font-row[data-font-source="local"]').forEach(r => primeLocalRowFontCss(r));
       if (usedFallback && fallback.length > 0) {
         showToast(tu('actions.fontPreview.usingBundledCatalog'), 'info');
       }
