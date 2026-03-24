@@ -29119,8 +29119,24 @@
       var lastSelectedCategoryBeforePrompt = null;
       var commandsSidebar = document.getElementById("commandsSidebar");
       var commandsContent = document.getElementById("commandsContent");
+      function filterCommandsForAiOffMode(tasks) {
+        if (!isAiOffModeEnabled() || !tasks || tasks.length === 0) return tasks;
+        return tasks.filter((t2) => isTaskAvailableInAiOff(t2, t2.name));
+      }
+      function getCommandsSidebarCategories() {
+        const keys = Object.keys(agentTasks);
+        if (!isAiOffModeEnabled()) return keys;
+        return keys.filter((cat) => {
+          const tasks = agentTasks[cat] || [];
+          return tasks.some((t2) => isTaskAvailableInAiOff(t2, t2.name));
+        });
+      }
       function renderSidebar() {
-        const categories = Object.keys(agentTasks);
+        const categories = getCommandsSidebarCategories();
+        if (categories.length > 0 && !categories.includes(selectedCategory)) {
+          selectedCategory = categories[0];
+          parent.postMessage({ pluginMessage: { type: "save-last-commands-category", category: selectedCategory } }, "*");
+        }
         let html = "";
         categories.forEach((category) => {
           const isActive = category === selectedCategory;
@@ -29193,6 +29209,7 @@
           filteredTasks = agentTasks[selectedCategory] || [];
           headerText = localizeActionString(selectedCategory);
         }
+        filteredTasks = filterCommandsForAiOffMode(filteredTasks);
         if (filteredTasks.length === 0) {
           const suffix = filter ? tu("actions.commands.emptySuffix", { filter }) : "";
           commandsContent.innerHTML = '\n          <div class="commands-empty">\n            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">\n              <circle cx="11" cy="11" r="8"/>\n              <path d="M21 21l-4.35-4.35"/>\n                </svg>\n            <span>'.concat(tu("actions.commands.empty", { suffix }), "</span>\n            </div>\n        ");
@@ -29205,15 +29222,13 @@
           const taskCategory = task.category || selectedCategory;
           const icon = getActionIconForTask(task, taskCategory);
           const noSelectionClass = task.noSelection ? " no-selection" : "";
-          const aiDisabled = !isTaskAvailableInAiOff(task, task.name);
-          const aiDisabledClass = aiDisabled ? " ai-disabled" : "";
           const noSelectionBadge = task.noSelection ? '<span class="no-selection-badge" title="'.concat(tu("actions.commands.noSelectionRequired"), '">✨</span>') : "";
           const iconEncoded = encodeURIComponent(icon);
           const hasFields = task.fields && task.fields.length > 0;
           const fieldsIndicator = hasFields ? '<span class="fields-badge" title="'.concat(tu("actions.commands.opensSettingsPanel"), '">⚙️</span>') : "";
           const categoryLabel = lowerFilter && task.category ? '<div class="command-item-category">'.concat(localizeActionString(task.category), "</div>") : "";
-          const disabledAttrs = aiDisabled ? ' aria-disabled="true" tabindex="-1"' : "";
-          html += '\n                <button class="command-item'.concat(noSelectionClass).concat(aiDisabledClass, '" data-task-index="').concat(taskIndex, '" data-prompt="').concat((task.prompt || "").replace(/"/g, "&quot;"), '" data-no-selection="').concat(task.noSelection || false, '" data-action-name="').concat(task.name, '" data-action-icon="').concat(iconEncoded, '" data-has-fields="').concat(hasFields, '" data-ai-disabled="').concat(aiDisabled ? "true" : "false", '" title="').concat(aiDisabled ? getAiOffBlockedMessage(localizedTask.displayName || task.name || "Quick action") : localizedTask.displayDesc || localizedTask.displayName || task.name, '"').concat(disabledAttrs, '>\n            <div class="command-item-icon">').concat(icon).concat(noSelectionBadge).concat(fieldsIndicator, '</div>\n            <div class="command-item-text">\n              <div class="command-item-name">').concat(localizedTask.displayName, '</div>\n              <div class="command-item-desc">').concat(localizedTask.displayDesc, "</div>\n              ").concat(categoryLabel, "\n            </div>\n          </button>\n        ");
+          const itemTitle = localizedTask.displayDesc || localizedTask.displayName || task.name;
+          html += '\n                <button class="command-item'.concat(noSelectionClass, '" data-task-index="').concat(taskIndex, '" data-prompt="').concat((task.prompt || "").replace(/"/g, "&quot;"), '" data-no-selection="').concat(task.noSelection || false, '" data-action-name="').concat(task.name, '" data-action-icon="').concat(iconEncoded, '" data-has-fields="').concat(hasFields, '" data-ai-disabled="false" title="').concat(itemTitle, '">\n            <div class="command-item-icon">').concat(icon).concat(noSelectionBadge).concat(fieldsIndicator, '</div>\n            <div class="command-item-text">\n              <div class="command-item-name">').concat(localizedTask.displayName, '</div>\n              <div class="command-item-desc">').concat(localizedTask.displayDesc, "</div>\n              ").concat(categoryLabel, "\n            </div>\n          </button>\n        ");
         });
         html += "</div>";
         commandsContent.innerHTML = html;

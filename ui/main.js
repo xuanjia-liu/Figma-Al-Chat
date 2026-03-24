@@ -6090,9 +6090,27 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     const commandsSidebar = document.getElementById('commandsSidebar');
     const commandsContent = document.getElementById('commandsContent');
 
+    function filterCommandsForAiOffMode(tasks) {
+      if (!isAiOffModeEnabled() || !tasks || tasks.length === 0) return tasks;
+      return tasks.filter(t => isTaskAvailableInAiOff(t, t.name));
+    }
+
+    function getCommandsSidebarCategories() {
+      const keys = Object.keys(agentTasks);
+      if (!isAiOffModeEnabled()) return keys;
+      return keys.filter(cat => {
+        const tasks = agentTasks[cat] || [];
+        return tasks.some(t => isTaskAvailableInAiOff(t, t.name));
+      });
+    }
+
     // Render sidebar with categories
     function renderSidebar() {
-      const categories = Object.keys(agentTasks);
+      const categories = getCommandsSidebarCategories();
+      if (categories.length > 0 && !categories.includes(selectedCategory)) {
+        selectedCategory = categories[0];
+        parent.postMessage({ pluginMessage: { type: 'save-last-commands-category', category: selectedCategory } }, '*');
+      }
       let html = '';
 
       categories.forEach(category => {
@@ -6191,6 +6209,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         headerText = localizeActionString(selectedCategory);
       }
 
+      filteredTasks = filterCommandsForAiOffMode(filteredTasks);
+
       if (filteredTasks.length === 0) {
         const suffix = filter ? tu('actions.commands.emptySuffix', { filter }) : '';
         commandsContent.innerHTML = `
@@ -6213,8 +6233,6 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         const taskCategory = task.category || selectedCategory;
         const icon = getActionIconForTask(task, taskCategory);
         const noSelectionClass = task.noSelection ? ' no-selection' : '';
-        const aiDisabled = !isTaskAvailableInAiOff(task, task.name);
-        const aiDisabledClass = aiDisabled ? ' ai-disabled' : '';
         const noSelectionBadge = task.noSelection ? `<span class="no-selection-badge" title="${tu('actions.commands.noSelectionRequired')}">✨</span>` : '';
         // Escape icon for data attribute (encode HTML)
         const iconEncoded = encodeURIComponent(icon);
@@ -6222,9 +6240,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         const hasFields = task.fields && task.fields.length > 0;
         const fieldsIndicator = hasFields ? `<span class="fields-badge" title="${tu('actions.commands.opensSettingsPanel')}">⚙️</span>` : '';
         const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${localizeActionString(task.category)}</div>` : '';
-        const disabledAttrs = aiDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
+        const itemTitle = localizedTask.displayDesc || localizedTask.displayName || task.name;
         html += `
-                <button class="command-item${noSelectionClass}${aiDisabledClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="${aiDisabled ? 'true' : 'false'}" title="${aiDisabled ? getAiOffBlockedMessage(localizedTask.displayName || task.name || 'Quick action') : (localizedTask.displayDesc || localizedTask.displayName || task.name)}"${disabledAttrs}>
+                <button class="command-item${noSelectionClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="false" title="${itemTitle}">
             <div class="command-item-icon">${icon}${noSelectionBadge}${fieldsIndicator}</div>
             <div class="command-item-text">
               <div class="command-item-name">${localizedTask.displayName}</div>
