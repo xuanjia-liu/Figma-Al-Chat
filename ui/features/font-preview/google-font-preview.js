@@ -974,6 +974,24 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     renameListPopover.style.zIndex = '32';
   }
 
+  /**
+   * @param {HTMLElement} headerRow
+   * @param {() => void} onClose
+   */
+  function appendBookmarkPopoverCloseBtn(headerRow, onClose) {
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'gfp-bookmark-popover-close';
+    closeBtn.setAttribute('aria-label', tu('actions.prompt.close'));
+    closeBtn.innerHTML =
+      '<svg class="gfp-bookmark-popover-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+    closeBtn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      onClose();
+    });
+    headerRow.appendChild(closeBtn);
+  }
+
   function showRenameListPopover() {
     const list = getActiveBookmarkList();
     if (!list || !bookmarkRenameBtn) return;
@@ -981,9 +999,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     renameListPopover.replaceChildren();
     const inner = document.createElement('div');
     inner.className = 'gfp-bookmark-rename-popover-inner';
+    const header = document.createElement('div');
+    header.className = 'gfp-bookmark-rename-popover-header';
     const title = document.createElement('div');
     title.className = 'gfp-bookmark-rename-popover-title';
     title.textContent = tu('actions.fontPreview.bookmarkRenamePopoverTitle');
+    header.appendChild(title);
+    appendBookmarkPopoverCloseBtn(header, hideRenameListPopover);
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.className = 'gfp-input gfp-bookmark-rename-popover-input';
@@ -1016,7 +1038,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         commitRename();
       }
     });
-    inner.appendChild(title);
+    inner.appendChild(header);
     inner.appendChild(nameInput);
     inner.appendChild(saveBtn);
     renameListPopover.appendChild(inner);
@@ -1039,9 +1061,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     renameListPopover.replaceChildren();
     const inner = document.createElement('div');
     inner.className = 'gfp-bookmark-rename-popover-inner';
+    const header = document.createElement('div');
+    header.className = 'gfp-bookmark-rename-popover-header';
     const title = document.createElement('div');
     title.className = 'gfp-bookmark-rename-popover-title';
     title.textContent = tu('actions.fontPreview.bookmarkNewList');
+    header.appendChild(title);
+    appendBookmarkPopoverCloseBtn(header, hideRenameListPopover);
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.className = 'gfp-input gfp-bookmark-rename-popover-input';
@@ -1081,7 +1107,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         commitNewList();
       }
     });
-    inner.appendChild(title);
+    inner.appendChild(header);
     inner.appendChild(nameInput);
     inner.appendChild(saveBtn);
     renameListPopover.appendChild(inner);
@@ -1140,9 +1166,13 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     bookmarkPopover.replaceChildren();
     const inner = document.createElement('div');
     inner.className = 'gfp-bookmark-popover-inner';
+    const header = document.createElement('div');
+    header.className = 'gfp-bookmark-popover-header';
     const title = document.createElement('div');
     title.className = 'gfp-bookmark-popover-title';
     title.textContent = tu('actions.fontPreview.bookmarkAddTitle');
+    header.appendChild(title);
+    appendBookmarkPopoverCloseBtn(header, hideBookmarkPopover);
     const sub = document.createElement('div');
     sub.className = 'gfp-bookmark-popover-family';
     sub.textContent = family;
@@ -1211,7 +1241,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         setupListObserver();
       }
     });
-    inner.appendChild(title);
+    inner.appendChild(header);
     inner.appendChild(sub);
     inner.appendChild(sel);
     inner.appendChild(nameRow);

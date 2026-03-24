@@ -1138,6 +1138,55 @@
       color: var(--text-muted);
     }
 
+    .gfp-bookmark-popover-header,
+    .gfp-bookmark-rename-popover-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      min-width: 0;
+    }
+
+    .gfp-bookmark-popover-header .gfp-bookmark-popover-title,
+    .gfp-bookmark-rename-popover-header .gfp-bookmark-rename-popover-title {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.3;
+    }
+
+    .gfp-bookmark-popover-close {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      margin: -4px -4px -4px 0;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-md);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+
+    .gfp-bookmark-popover-close:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .gfp-bookmark-popover-close:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
+    }
+
+    .gfp-bookmark-popover-close-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
     .gfp-bookmark-popover-family {
       font-size: var(--text-lg);
       font-weight: 600;
@@ -1180,6 +1229,10 @@
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--text-muted);
+    }
+
+    .gfp-bookmark-rename-popover-header .gfp-bookmark-rename-popover-title {
+      padding-top: 2px;
     }
 
     .gfp-bookmark-rename-popover-input {

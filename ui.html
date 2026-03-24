@@ -1145,6 +1145,55 @@
       color: var(--text-muted);
     }
 
+    .gfp-bookmark-popover-header,
+    .gfp-bookmark-rename-popover-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      min-width: 0;
+    }
+
+    .gfp-bookmark-popover-header .gfp-bookmark-popover-title,
+    .gfp-bookmark-rename-popover-header .gfp-bookmark-rename-popover-title {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.3;
+    }
+
+    .gfp-bookmark-popover-close {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      margin: -4px -4px -4px 0;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-md);
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+
+    .gfp-bookmark-popover-close:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+
+    .gfp-bookmark-popover-close:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
+    }
+
+    .gfp-bookmark-popover-close-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
     .gfp-bookmark-popover-family {
       font-size: var(--text-lg);
       font-weight: 600;
@@ -1187,6 +1236,10 @@
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--text-muted);
+    }
+
+    .gfp-bookmark-rename-popover-header .gfp-bookmark-rename-popover-title {
+      padding-top: 2px;
     }
 
     .gfp-bookmark-rename-popover-input {
@@ -20714,6 +20767,18 @@
       renameListPopover.style.top = "".concat(Math.round(top), "px");
       renameListPopover.style.zIndex = "32";
     }
+    function appendBookmarkPopoverCloseBtn(headerRow, onClose) {
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.className = "gfp-bookmark-popover-close";
+      closeBtn.setAttribute("aria-label", tu("actions.prompt.close"));
+      closeBtn.innerHTML = '<svg class="gfp-bookmark-popover-close-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+      closeBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        onClose();
+      });
+      headerRow.appendChild(closeBtn);
+    }
     function showRenameListPopover() {
       const list = getActiveBookmarkList();
       if (!list || !bookmarkRenameBtn) return;
@@ -20721,9 +20786,13 @@
       renameListPopover.replaceChildren();
       const inner = document.createElement("div");
       inner.className = "gfp-bookmark-rename-popover-inner";
+      const header = document.createElement("div");
+      header.className = "gfp-bookmark-rename-popover-header";
       const title = document.createElement("div");
       title.className = "gfp-bookmark-rename-popover-title";
       title.textContent = tu("actions.fontPreview.bookmarkRenamePopoverTitle");
+      header.appendChild(title);
+      appendBookmarkPopoverCloseBtn(header, hideRenameListPopover);
       const nameInput = document.createElement("input");
       nameInput.type = "text";
       nameInput.className = "gfp-input gfp-bookmark-rename-popover-input";
@@ -20756,7 +20825,7 @@
           commitRename();
         }
       });
-      inner.appendChild(title);
+      inner.appendChild(header);
       inner.appendChild(nameInput);
       inner.appendChild(saveBtn);
       renameListPopover.appendChild(inner);
@@ -20778,9 +20847,13 @@
       renameListPopover.replaceChildren();
       const inner = document.createElement("div");
       inner.className = "gfp-bookmark-rename-popover-inner";
+      const header = document.createElement("div");
+      header.className = "gfp-bookmark-rename-popover-header";
       const title = document.createElement("div");
       title.className = "gfp-bookmark-rename-popover-title";
       title.textContent = tu("actions.fontPreview.bookmarkNewList");
+      header.appendChild(title);
+      appendBookmarkPopoverCloseBtn(header, hideRenameListPopover);
       const nameInput = document.createElement("input");
       nameInput.type = "text";
       nameInput.className = "gfp-input gfp-bookmark-rename-popover-input";
@@ -20820,7 +20893,7 @@
           commitNewList();
         }
       });
-      inner.appendChild(title);
+      inner.appendChild(header);
       inner.appendChild(nameInput);
       inner.appendChild(saveBtn);
       renameListPopover.appendChild(inner);
@@ -20875,9 +20948,13 @@
       bookmarkPopover.replaceChildren();
       const inner = document.createElement("div");
       inner.className = "gfp-bookmark-popover-inner";
+      const header = document.createElement("div");
+      header.className = "gfp-bookmark-popover-header";
       const title = document.createElement("div");
       title.className = "gfp-bookmark-popover-title";
       title.textContent = tu("actions.fontPreview.bookmarkAddTitle");
+      header.appendChild(title);
+      appendBookmarkPopoverCloseBtn(header, hideBookmarkPopover);
       const sub = document.createElement("div");
       sub.className = "gfp-bookmark-popover-family";
       sub.textContent = family;
@@ -20945,7 +21022,7 @@
           setupListObserver();
         }
       });
-      inner.appendChild(title);
+      inner.appendChild(header);
       inner.appendChild(sub);
       inner.appendChild(sel);
       inner.appendChild(nameRow);
