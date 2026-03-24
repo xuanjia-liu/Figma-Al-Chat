@@ -1032,6 +1032,70 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     });
   }
 
+  function showNewBookmarkListPopover() {
+    if (!bookmarkNewBtn) return;
+    hideBookmarkPopover();
+    hideRenameListPopover();
+    renameListPopover.replaceChildren();
+    const inner = document.createElement('div');
+    inner.className = 'gfp-bookmark-rename-popover-inner';
+    const title = document.createElement('div');
+    title.className = 'gfp-bookmark-rename-popover-title';
+    title.textContent = tu('actions.fontPreview.bookmarkNewList');
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.className = 'gfp-input gfp-bookmark-rename-popover-input';
+    nameInput.maxLength = 80;
+    nameInput.value = '';
+    nameInput.placeholder = tu('actions.fontPreview.bookmarkNewListNamePlaceholder');
+    nameInput.setAttribute('aria-label', tu('actions.fontPreview.bookmarkNewListNamePlaceholder'));
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'gfp-bookmark-btn gfp-bookmark-rename-popover-save';
+    saveBtn.textContent = tu('actions.fontPreview.bookmarkRenameSave');
+    function commitNewList() {
+      if (bookmarkLists.length >= 50) {
+        showToast(tu('actions.fontPreview.bookmarkMaxLists'), 'error');
+        return;
+      }
+      const nm = nameInput.value.trim().slice(0, 80);
+      if (!nm) {
+        showToast(tu('actions.fontPreview.bookmarkNeedListName'), 'error');
+        return;
+      }
+      const id = gfpNewBookmarkListId();
+      bookmarkLists.push({ id, name: nm, families: [] });
+      activeListId = id;
+      rebuildBookmarkSelect();
+      if (bookmarkListSelect) bookmarkListSelect.value = id;
+      syncBookmarkManageRowDisabled();
+      scheduleSaveBookmarks();
+      applyFilters();
+      setupListObserver();
+      hideRenameListPopover();
+    }
+    saveBtn.addEventListener('click', commitNewList);
+    nameInput.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        commitNewList();
+      }
+    });
+    inner.appendChild(title);
+    inner.appendChild(nameInput);
+    inner.appendChild(saveBtn);
+    renameListPopover.appendChild(inner);
+    renamePopoverAnchor = bookmarkNewBtn;
+    renameListPopover.hidden = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (disposed || renameListPopover.hidden) return;
+        positionRenameListPopover(bookmarkNewBtn);
+        nameInput.focus();
+      });
+    });
+  }
+
   function hideBookmarkPopover() {
     if (bookmarkPopover.contains(document.activeElement)) {
       try {
@@ -1047,16 +1111,21 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   function positionBookmarkPopover(anchorRow) {
-    const margin = 10;
+    const gap = 6;
     const pad = 6;
-    const rect = anchorRow.getBoundingClientRect();
+    const markBtn = anchorRow.querySelector('.gfp-font-row-btn--bookmark');
+    const anchor = markBtn instanceof HTMLElement ? markBtn : anchorRow;
+    const rect = anchor.getBoundingClientRect();
     const pr = bookmarkPopover.getBoundingClientRect();
-    let left = rect.right + margin;
+    let left = rect.left;
     if (left + pr.width > window.innerWidth - pad) {
-      left = rect.left - pr.width - margin;
+      left = window.innerWidth - pr.width - pad;
     }
     if (left < pad) left = pad;
-    let top = rect.top + (rect.height - pr.height) / 2;
+    let top = rect.bottom + gap;
+    if (top + pr.height > window.innerHeight - pad) {
+      top = rect.top - pr.height - gap;
+    }
     if (top < pad) top = pad;
     const maxTop = window.innerHeight - pr.height - pad;
     if (top > maxTop) top = Math.max(pad, maxTop);
@@ -1696,27 +1765,11 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   if (bookmarkNewBtn) {
     bookmarkNewBtn.addEventListener('click', () => {
-      hideRenameListPopover();
       if (bookmarkLists.length >= 50) {
         showToast(tu('actions.fontPreview.bookmarkMaxLists'), 'error');
         return;
       }
-      const raw = window.prompt(tu('actions.fontPreview.bookmarkNewListPrompt'), '');
-      if (raw == null) return;
-      const nm = raw.trim().slice(0, 80);
-      if (!nm) {
-        showToast(tu('actions.fontPreview.bookmarkNeedListName'), 'error');
-        return;
-      }
-      const id = gfpNewBookmarkListId();
-      bookmarkLists.push({ id, name: nm, families: [] });
-      activeListId = id;
-      rebuildBookmarkSelect();
-      bookmarkListSelect.value = id;
-      syncBookmarkManageRowDisabled();
-      scheduleSaveBookmarks();
-      applyFilters();
-      setupListObserver();
+      showNewBookmarkListPopover();
     });
   }
 
