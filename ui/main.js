@@ -12254,6 +12254,10 @@ Generate ONLY the reply text, nothing else.`;
       return hashIndex > 0 ? rawKey.slice(0, hashIndex) : rawKey;
     }
 
+    function buildRandomizeWeightInputKey(fieldKey, value) {
+      return `${fieldKey}__weight__${encodeURIComponent(String(value))}`;
+    }
+
     function collectInstanceNodesForRandomization(nodes) {
       const topLevelInstances = [];
       const nestedInstances = [];
@@ -12365,7 +12369,13 @@ Generate ONLY the reply text, nothing else.`;
         const valueOptions = entry.allowedValues.map(value => ({
           value: escapePromptOptionValue(value),
           label: formatPropertyValueForLabel(value, entry.propertyType),
-          detail: entry.currentValues.includes(value) ? 'Seen in selection' : 'Available option'
+          detail: entry.currentValues.includes(value) ? 'Seen in selection' : 'Available option',
+          inputKey: buildRandomizeWeightInputKey(entry.fieldKey, value),
+          inputDefault: 1,
+          inputType: 'number',
+          inputMin: 0,
+          inputPlaceholder: '1',
+          inputSuffix: 'wt'
         }));
 
         return {
@@ -12431,7 +12441,11 @@ Generate ONLY the reply text, nothing else.`;
           propertyType: entry.propertyType,
           fieldKey: entry.fieldKey,
           allowedValues: [...entry.allowedValues],
-          currentValues: [...entry.currentValues]
+          currentValues: [...entry.currentValues],
+          weightInputKeys: entry.allowedValues.reduce((acc, value) => {
+            acc[value] = buildRandomizeWeightInputKey(entry.fieldKey, value);
+            return acc;
+          }, {})
         })),
         hasAvailableProperties
       };
@@ -12445,16 +12459,26 @@ Generate ONLY the reply text, nothing else.`;
           : [];
         if (selectedProperties.length > 0) {
           const propertyValues = {};
+          const propertyWeights = {};
           actionMeta.randomizePropertyMetadata.forEach((meta) => {
             if (!selectedProperties.includes(meta.propertyKey)) return;
             const selectedValues = Array.isArray(values[meta.fieldKey])
               ? values[meta.fieldKey].map(value => String(value))
               : [];
             propertyValues[meta.propertyKey] = selectedValues;
+            const weightMap = {};
+            selectedValues.forEach((value) => {
+              const inputKey = meta.weightInputKeys?.[value];
+              const rawWeight = inputKey ? values[inputKey] : null;
+              const normalizedWeight = Number.isFinite(rawWeight) ? Number(rawWeight) : parseFloat(String(rawWeight || ''));
+              weightMap[value] = normalizedWeight >= 0 ? normalizedWeight : 0;
+            });
+            propertyWeights[meta.propertyKey] = weightMap;
           });
           randomizeConfig = {
             propertyKeys: selectedProperties,
-            propertyValues
+            propertyValues,
+            propertyWeights
           };
         }
       }

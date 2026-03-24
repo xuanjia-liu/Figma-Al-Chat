@@ -4418,6 +4418,23 @@ function getConfiguredRandomPropsForInstance(
 
   const configuredProps: Record<string, string | boolean> = {};
 
+  const pickWeightedValue = (values: Array<string | boolean>, weights: number[], fallbackIndex: number): string | boolean => {
+    const sanitizedWeights = weights.map(weight => Number.isFinite(weight) && weight > 0 ? weight : 0);
+    const totalWeight = sanitizedWeights.reduce((sum, weight) => sum + weight, 0);
+
+    if (totalWeight <= 0) {
+      return values[fallbackIndex % values.length];
+    }
+
+    let threshold = Math.random() * totalWeight;
+    for (let index = 0; index < values.length; index++) {
+      threshold -= sanitizedWeights[index];
+      if (threshold < 0) return values[index];
+    }
+
+    return values[values.length - 1];
+  };
+
   selectedPropertyKeys.forEach((propertyKey: string, propertyIndex: number) => {
     const definition = propertyDefs[propertyKey];
     if (!definition) {
@@ -4445,7 +4462,13 @@ function getConfiguredRandomPropsForInstance(
       return;
     }
 
-    configuredProps[propertyKey] = uniqueValues[(copyIndex + propertyIndex) % uniqueValues.length];
+    const configuredWeights = randomizeConfig?.propertyWeights?.[propertyKey] || {};
+    const weights = uniqueValues.map((value) => {
+      const rawWeight = configuredWeights[String(value)];
+      return typeof rawWeight === 'number' ? rawWeight : Number(rawWeight ?? 1);
+    });
+
+    configuredProps[propertyKey] = pickWeightedValue(uniqueValues, weights, copyIndex + propertyIndex);
   });
 
   return configuredProps;
