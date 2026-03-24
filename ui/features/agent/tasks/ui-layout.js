@@ -1229,6 +1229,29 @@ Return ONLY JSON.`;
               hint: 'Upload an image for the AI to extract information from (e.g., a list of items or a screenshot of data)'
             },
           ]
+        },
+{
+          name: 'Randomize selected instance',
+          desc: 'Randomize selected instances without duplicating',
+          directAction: 'randomizeSelectedInstances',
+          icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="M15 15 21 21"/><path d="M4 4l5 5"/></svg>`,
+          help: 'Randomizes selected component instances in place. No duplicates are created.',
+          fields: [
+            {
+              key: 'randomizeInstance',
+              type: 'checkbox',
+              label: 'Randomize Component Instance',
+              default: true,
+              hint: 'Randomize the selected top-level component instance property values in place'
+            },
+            {
+              key: 'randomizeNestedInstances',
+              type: 'checkbox',
+              label: 'Randomize Nested Instances',
+              default: false,
+              hint: 'Randomize properties of instances nested inside the current selection as well'
+            },
+          ]
         }
   ];
 }

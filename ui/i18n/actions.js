@@ -1306,6 +1306,16 @@ const exactTranslations = {
     'Generate Vector': 'ベクター生成',
     'Create variants': 'バリアント作成',
     'Duplicate with instructions': '指示付きで複製',
+    'Randomize selected instance': '選択したインスタンスをランダム化',
+    'Randomize selected instances without duplicating': '複製せずに選択したインスタンスをランダム化',
+    'Randomizes selected component instances in place. No duplicates are created.':
+      '選択したコンポーネントインスタンスをその場でランダム化します。複製は作成されません。',
+    'Randomize Component Instance': 'コンポーネントインスタンスをランダム化',
+    'Randomize Nested Instances': 'ネストしたインスタンスをランダム化',
+    'Randomize the selected top-level component instance property values in place':
+      '選択した最上位のコンポーネントインスタンスのプロパティ値をその場でランダム化します',
+    'Randomize properties of instances nested inside the current selection as well':
+      '現在の選択内にネストされたインスタンスのプロパティもランダム化します',
     'List All Comments': 'すべてのコメントを表示',
     'Solve Comment': 'コメントを解決',
     'Summarize Comments': 'コメントを要約',
@@ -1731,6 +1741,16 @@ const exactTranslations = {
     'Generate Vector': '生成矢量',
     'Create variants': '创建变体',
     'Duplicate with instructions': '按指令复制',
+    'Randomize selected instance': '随机化所选实例',
+    'Randomize selected instances without duplicating': '随机化所选实例且不复制',
+    'Randomizes selected component instances in place. No duplicates are created.':
+      '直接随机化所选组件实例，不会创建副本。',
+    'Randomize Component Instance': '随机化组件实例',
+    'Randomize Nested Instances': '随机化嵌套实例',
+    'Randomize the selected top-level component instance property values in place':
+      '直接随机化所选顶层组件实例的属性值',
+    'Randomize properties of instances nested inside the current selection as well':
+      '同时随机化当前所选内容内嵌套实例的属性',
     'List All Comments': '列出全部评论',
     'Solve Comment': '处理评论',
     'Summarize Comments': '总结评论',

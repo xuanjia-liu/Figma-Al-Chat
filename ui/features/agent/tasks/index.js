@@ -22,6 +22,7 @@ export function createAgentTasks(deps = {}) {
     createGridLineTask,
     createVariantsTask,
     duplicateWithInstructionsTask,
+    randomizeSelectedInstanceTask,
   ] = quickCreateUiTasks;
 
   const [
@@ -61,6 +62,7 @@ export function createAgentTasks(deps = {}) {
       generateVectorTask,
       createVariantsTask,
       duplicateWithInstructionsTask,
+      randomizeSelectedInstanceTask,
     ],
     'FigJam': figJamTasks,
     'User Research': userResearchTasks,

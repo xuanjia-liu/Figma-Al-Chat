@@ -18720,6 +18720,29 @@
             hint: "Upload an image for the AI to extract information from (e.g., a list of items or a screenshot of data)"
           }
         ]
+      },
+      {
+        name: "Randomize selected instance",
+        desc: "Randomize selected instances without duplicating",
+        directAction: "randomizeSelectedInstances",
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="M15 15 21 21"/><path d="M4 4l5 5"/></svg>',
+        help: "Randomizes selected component instances in place. No duplicates are created.",
+        fields: [
+          {
+            key: "randomizeInstance",
+            type: "checkbox",
+            label: "Randomize Component Instance",
+            default: true,
+            hint: "Randomize the selected top-level component instance property values in place"
+          },
+          {
+            key: "randomizeNestedInstances",
+            type: "checkbox",
+            label: "Randomize Nested Instances",
+            default: false,
+            hint: "Randomize properties of instances nested inside the current selection as well"
+          }
+        ]
       }
     ];
   }
@@ -19755,7 +19778,8 @@
       buttonTask,
       createGridLineTask,
       createVariantsTask,
-      duplicateWithInstructionsTask
+      duplicateWithInstructionsTask,
+      randomizeSelectedInstanceTask
     ] = quickCreateUiTasks;
     const [
       createIconTask,
@@ -19791,7 +19815,8 @@
         generateImageTask,
         generateVectorTask,
         createVariantsTask,
-        duplicateWithInstructionsTask
+        duplicateWithInstructionsTask,
+        randomizeSelectedInstanceTask
       ],
       "FigJam": figJamTasks,
       "User Research": userResearchTasks,
@@ -24795,6 +24820,13 @@
           "Generate Vector": "ベクター生成",
           "Create variants": "バリアント作成",
           "Duplicate with instructions": "指示付きで複製",
+          "Randomize selected instance": "選択したインスタンスをランダム化",
+          "Randomize selected instances without duplicating": "複製せずに選択したインスタンスをランダム化",
+          "Randomizes selected component instances in place. No duplicates are created.": "選択したコンポーネントインスタンスをその場でランダム化します。複製は作成されません。",
+          "Randomize Component Instance": "コンポーネントインスタンスをランダム化",
+          "Randomize Nested Instances": "ネストしたインスタンスをランダム化",
+          "Randomize the selected top-level component instance property values in place": "選択した最上位のコンポーネントインスタンスのプロパティ値をその場でランダム化します",
+          "Randomize properties of instances nested inside the current selection as well": "現在の選択内にネストされたインスタンスのプロパティもランダム化します",
           "List All Comments": "すべてのコメントを表示",
           "Solve Comment": "コメントを解決",
           "Summarize Comments": "コメントを要約",
@@ -25217,6 +25249,13 @@
           "Generate Vector": "生成矢量",
           "Create variants": "创建变体",
           "Duplicate with instructions": "按指令复制",
+          "Randomize selected instance": "随机化所选实例",
+          "Randomize selected instances without duplicating": "随机化所选实例且不复制",
+          "Randomizes selected component instances in place. No duplicates are created.": "直接随机化所选组件实例，不会创建副本。",
+          "Randomize Component Instance": "随机化组件实例",
+          "Randomize Nested Instances": "随机化嵌套实例",
+          "Randomize the selected top-level component instance property values in place": "直接随机化所选顶层组件实例的属性值",
+          "Randomize properties of instances nested inside the current selection as well": "同时随机化当前所选内容内嵌套实例的属性",
           "List All Comments": "列出全部评论",
           "Solve Comment": "处理评论",
           "Summarize Comments": "总结评论",
@@ -34861,6 +34900,7 @@
       var disposeGoogleFontPreview = null;
       var isPromptComposing = false;
       var isApplyingPreset = false;
+      var randomizeDrawerRefreshVersion = 0;
       var minimizedDrawers = /* @__PURE__ */ new Map();
       var minimizedIdCounter = 0;
       var directUIPhase = 0;
@@ -34868,6 +34908,279 @@
       var currentDirectUIPageIndex = 0;
       var directUIFieldValues = null;
       var directUIHydratedFields = null;
+      function buildDuplicateRandomizationCondition() {
+        return {
+          anyOf: [
+            [{ field: "randomizeInstance", equals: true }],
+            [{ field: "randomizeNestedInstances", equals: true }]
+          ]
+        };
+      }
+      function getInstanceRandomizationCondition(mode = "duplicate") {
+        return buildDuplicateRandomizationCondition();
+      }
+      function parsePromptSelectedValues(data) {
+        if (!data) return [];
+        try {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (error) {
+        }
+        if (typeof data === "string") {
+          return data.split(",").map((value) => value.trim()).filter(Boolean);
+        }
+        return [];
+      }
+      function escapePromptOptionValue(value) {
+        return String(value != null ? value : "");
+      }
+      function normalizeInstancePropertyType(definition, propertyValue) {
+        const definitionType = definition && typeof definition.type === "string" ? definition.type : "";
+        if (definitionType === "VARIANT" || definitionType === "BOOLEAN" || definitionType === "TEXT") {
+          return definitionType;
+        }
+        if (typeof propertyValue === "boolean") return "BOOLEAN";
+        if (typeof propertyValue === "string") return "TEXT";
+        return "";
+      }
+      function normalizePropertyValueForUi(rawValue, propertyType) {
+        if (propertyType === "BOOLEAN") {
+          if (typeof rawValue === "boolean") return rawValue ? "true" : "false";
+          if (typeof rawValue === "string") {
+            const normalized = rawValue.trim().toLowerCase();
+            if (normalized === "true" || normalized === "false") return normalized;
+          }
+        }
+        if (rawValue === null || rawValue === void 0) return "";
+        return String(rawValue);
+      }
+      function formatPropertyValueForLabel(value, propertyType) {
+        if (propertyType === "BOOLEAN") {
+          return value === "true" ? "True" : "False";
+        }
+        return value || "(Empty)";
+      }
+      function formatInstancePropertyNameForLabel(propertyKey) {
+        if (propertyKey === null || propertyKey === void 0) return "";
+        const rawKey = String(propertyKey);
+        const hashIndex = rawKey.lastIndexOf("#");
+        return hashIndex > 0 ? rawKey.slice(0, hashIndex) : rawKey;
+      }
+      function collectInstanceNodesForRandomization(nodes) {
+        const topLevelInstances = [];
+        const nestedInstances = [];
+        const walk = (node, depth) => {
+          if (!node || typeof node !== "object") return;
+          if (node.type === "INSTANCE") {
+            if (depth === 0) {
+              topLevelInstances.push(node);
+            } else {
+              nestedInstances.push(node);
+            }
+          }
+          if (Array.isArray(node.children)) {
+            node.children.forEach((child) => walk(child, depth + 1));
+          }
+        };
+        (Array.isArray(nodes) ? nodes : []).forEach((node) => walk(node, 0));
+        return { topLevelInstances, nestedInstances };
+      }
+      function buildInstanceRandomizationFields(baseFields = [], selectionData = [], mode = "duplicate", buildOptions = {}) {
+        const isLoading = buildOptions && buildOptions.isLoading === true;
+        const toggleCondition = getInstanceRandomizationCondition(mode);
+        const { topLevelInstances, nestedInstances } = collectInstanceNodesForRandomization(selectionData);
+        const allInstances = [...topLevelInstances, ...nestedInstances];
+        const propertyMap = /* @__PURE__ */ new Map();
+        allInstances.forEach((instanceNode) => {
+          const componentProperties = instanceNode.componentProperties || {};
+          const componentDefinitions = instanceNode.componentPropertyDefinitions || {};
+          Object.entries(componentProperties).forEach(([propertyKey, propertyState]) => {
+            const definition = componentDefinitions[propertyKey] || null;
+            const propertyType = normalizeInstancePropertyType(definition, propertyState && propertyState.value);
+            if (!propertyType) return;
+            let entry = propertyMap.get(propertyKey);
+            if (!entry) {
+              entry = {
+                propertyKey,
+                propertyType,
+                currentValues: /* @__PURE__ */ new Set(),
+                allowedValues: /* @__PURE__ */ new Set()
+              };
+              propertyMap.set(propertyKey, entry);
+            }
+            const currentValue = normalizePropertyValueForUi(propertyState && propertyState.value, propertyType);
+            if (currentValue !== "") {
+              entry.currentValues.add(currentValue);
+            } else if (propertyType === "TEXT") {
+              entry.currentValues.add("");
+            }
+            if (propertyType === "VARIANT") {
+              const variantOptions = Array.isArray(definition && definition.variantOptions) ? definition.variantOptions : [];
+              variantOptions.forEach((option) => {
+                entry.allowedValues.add(normalizePropertyValueForUi(option, propertyType));
+              });
+            } else if (propertyType === "BOOLEAN") {
+              entry.allowedValues.add("true");
+              entry.allowedValues.add("false");
+            } else if (propertyType === "TEXT") {
+              entry.currentValues.forEach((value) => entry.allowedValues.add(value));
+            }
+          });
+        });
+        const propertyEntries = Array.from(propertyMap.values()).map((entry, index) => {
+          const allowedValues = Array.from(entry.allowedValues);
+          const currentValues = Array.from(entry.currentValues);
+          return __spreadProps(__spreadValues({}, entry), {
+            index,
+            allowedValues,
+            currentValues,
+            fieldKey: "randomizePropertyValues_".concat(index)
+          });
+        }).sort((a, b) => a.propertyKey.localeCompare(b.propertyKey));
+        const hasAvailableProperties = propertyEntries.length > 0;
+        const propertyOptions = propertyEntries.map((entry) => {
+          const currentValuesLabel = entry.currentValues.length > 0 ? entry.currentValues.map((value) => formatPropertyValueForLabel(value, entry.propertyType)).join(", ") : "None";
+          const allowedValuesLabel = entry.allowedValues.length > 0 ? entry.allowedValues.map((value) => formatPropertyValueForLabel(value, entry.propertyType)).join(", ") : "None";
+          return {
+            value: escapePromptOptionValue(entry.propertyKey),
+            label: formatInstancePropertyNameForLabel(entry.propertyKey),
+            detail: "".concat(entry.propertyType, " · Current: ").concat(currentValuesLabel, " · Allowed: ").concat(allowedValuesLabel)
+          };
+        });
+        const propertyFields = propertyEntries.map((entry) => {
+          const currentValuesLabel = entry.currentValues.length > 0 ? entry.currentValues.map((value) => formatPropertyValueForLabel(value, entry.propertyType)).join(", ") : "None";
+          const allowedValuesLabel = entry.allowedValues.length > 0 ? entry.allowedValues.map((value) => formatPropertyValueForLabel(value, entry.propertyType)).join(", ") : "None";
+          const isValuePickerDisabled = entry.allowedValues.length <= 1;
+          const valueOptions = entry.allowedValues.map((value) => ({
+            value: escapePromptOptionValue(value),
+            label: formatPropertyValueForLabel(value, entry.propertyType),
+            detail: entry.currentValues.includes(value) ? "Seen in selection" : "Available option"
+          }));
+          return __spreadValues({
+            key: entry.fieldKey,
+            type: "select",
+            label: "".concat(formatInstancePropertyNameForLabel(entry.propertyKey), " Values"),
+            multi: true,
+            searchable: true,
+            showThumbnails: false,
+            default: entry.allowedValues,
+            disabled: isValuePickerDisabled,
+            options: valueOptions
+          }, toggleCondition ? { showWhen: toggleCondition } : {});
+        });
+        const randomizationFields = [
+          __spreadValues({
+            key: "randomizeProperties",
+            type: "select",
+            label: "Properties to Randomize",
+            multi: true,
+            searchable: true,
+            showThumbnails: false,
+            default: propertyEntries.map((entry) => entry.propertyKey),
+            disabled: !hasAvailableProperties,
+            actionButton: {
+              action: "refresh-instance-randomization-fields",
+              label: "Refresh"
+            },
+            options: propertyOptions,
+            hint: hasAvailableProperties ? mode === "randomizeOnly" ? "" : "Choose which properties can change for duplicated instances. The selected rules apply to all matching instances in the selection." : isLoading ? "Loading instance properties..." : mode === "randomizeOnly" ? "Select one or more component instances, then click Refresh to load available properties and values." : "Select component instances, then click Refresh to load available properties and values."
+          }, toggleCondition ? { showWhen: toggleCondition } : {}),
+          ...propertyFields
+        ];
+        const enrichedFields = mode === "randomizeOnly" ? [...baseFields, ...randomizationFields] : (() => {
+          const output = [];
+          baseFields.forEach((field) => {
+            output.push(field);
+            if (field.key === "randomizeNestedInstances") {
+              output.push(...randomizationFields);
+            }
+          });
+          return output;
+        })();
+        return {
+          fields: enrichedFields,
+          metadata: propertyEntries.map((entry) => ({
+            propertyKey: entry.propertyKey,
+            propertyType: entry.propertyType,
+            fieldKey: entry.fieldKey,
+            allowedValues: [...entry.allowedValues],
+            currentValues: [...entry.currentValues]
+          })),
+          hasAvailableProperties
+        };
+      }
+      function buildRandomizeConfigFromAction(values, actionMeta) {
+        let randomizeConfig = null;
+        if (Array.isArray(actionMeta == null ? void 0 : actionMeta.randomizePropertyMetadata) && actionMeta.randomizePropertyMetadata.length > 0) {
+          const selectedProperties = Array.isArray(values.randomizeProperties) ? values.randomizeProperties.map((value) => String(value)) : [];
+          if (selectedProperties.length > 0) {
+            const propertyValues = {};
+            actionMeta.randomizePropertyMetadata.forEach((meta) => {
+              if (!selectedProperties.includes(meta.propertyKey)) return;
+              const selectedValues = Array.isArray(values[meta.fieldKey]) ? values[meta.fieldKey].map((value) => String(value)) : [];
+              propertyValues[meta.propertyKey] = selectedValues;
+            });
+            randomizeConfig = {
+              propertyKeys: selectedProperties,
+              propertyValues
+            };
+          }
+        }
+        return randomizeConfig;
+      }
+      function isInstanceRandomizationPromptAction(action = currentPromptAction) {
+        return !!action && (action.directAction === "duplicateWithInstructions" || action.directAction === "randomizeSelectedInstances");
+      }
+      function sanitizeRandomizationDrawerValues(values, metadata2) {
+        const nextValues = __spreadValues({}, values || {});
+        const propertyKeys = Array.isArray(metadata2) ? metadata2.map((item) => item.propertyKey) : [];
+        const selectedProperties = Array.isArray(nextValues.randomizeProperties) ? nextValues.randomizeProperties.map((value) => String(value)).filter((value) => propertyKeys.includes(value)) : [];
+        nextValues.randomizeProperties = selectedProperties;
+        (Array.isArray(metadata2) ? metadata2 : []).forEach((meta) => {
+          if (!selectedProperties.includes(meta.propertyKey)) {
+            delete nextValues[meta.fieldKey];
+            return;
+          }
+          const selectedValues = Array.isArray(nextValues[meta.fieldKey]) ? nextValues[meta.fieldKey].map((value) => String(value)).filter((value) => meta.allowedValues.includes(value)) : [];
+          nextValues[meta.fieldKey] = selectedValues.length > 0 ? selectedValues : [...meta.allowedValues];
+        });
+        return nextValues;
+      }
+      async function refreshOpenInstanceRandomizationDrawerFromSelection() {
+        if (!promptDrawer.classList.contains("open") || !isInstanceRandomizationPromptAction()) return;
+        const refreshVersion = ++randomizeDrawerRefreshVersion;
+        const preservedValues = typeof getPromptFieldValues === "function" ? getPromptFieldValues() : {};
+        const mode = (currentPromptAction == null ? void 0 : currentPromptAction.directAction) === "randomizeSelectedInstances" ? "randomizeOnly" : "duplicate";
+        const baseFields = (currentPromptAction == null ? void 0 : currentPromptAction.randomizeBaseFields) || [];
+        const selectionResult = await requestSelectionData(true, false, "all");
+        if (refreshVersion !== randomizeDrawerRefreshVersion) return;
+        if (!promptDrawer.classList.contains("open") || !isInstanceRandomizationPromptAction()) return;
+        const refreshed = buildInstanceRandomizationFields(baseFields, selectionResult.data || [], mode);
+        const localizedFields = refreshed.fields.map(localizeTaskField);
+        currentPromptAction.fields = localizedFields;
+        currentPromptAction.randomizePropertyMetadata = refreshed.metadata;
+        currentPromptAction.randomizePropertiesAvailable = refreshed.hasAvailableProperties;
+        const nextValues = sanitizeRandomizationDrawerValues(preservedValues, refreshed.metadata);
+        renderPromptFields(localizedFields, nextValues);
+        promptDrawerFields.classList.remove("hidden");
+      }
+      async function triggerInstanceRandomizationDrawerRefresh(buttonEl = null) {
+        if (buttonEl) {
+          buttonEl.disabled = true;
+          buttonEl.classList.add("loading");
+        }
+        try {
+          await refreshOpenInstanceRandomizationDrawerFromSelection();
+        } catch (error) {
+          console.warn("Failed to manually refresh instance randomization drawer:", error);
+          showToast("Failed to refresh instance properties from selection", "error");
+        } finally {
+          if (buttonEl) {
+            buttonEl.disabled = false;
+            buttonEl.classList.remove("loading");
+          }
+        }
+      }
       function normalizeDirectUISections(data) {
         if (!Array.isArray(data)) return [];
         if (data.length === 0) return [];
@@ -34904,9 +35217,12 @@
           closeCommandsDrawer();
           const template = actionData.promptTemplate || actionData.prompt || "";
           currentPromptAction = __spreadProps(__spreadValues({}, actionData), { promptTemplate: template });
+          if (isInstanceRandomizationPromptAction(currentPromptAction)) {
+            currentPromptAction.randomizeBaseFields = actionData.fields || [];
+          }
           promptDrawerTitle.textContent = localizedAction.displayName || actionData.name;
           promptDrawerIcon.innerHTML = actionData.icon || "";
-          const hidePromptDrawerHelp = actionData.name === "Vertical text" || actionData.name === "Font preview";
+          const hidePromptDrawerHelp = actionData.name === "Vertical text" || actionData.name === "Font preview" || actionData.directAction === "randomizeSelectedInstances";
           if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
             promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
             promptDrawerHelp.classList.remove("hidden");
@@ -34987,6 +35303,16 @@
             hydratedFields = await hydrateCreateGraphFields(actionData.fields);
           } else if (actionData.name === "Vertical text") {
             hydratedFields = await hydrateVerticalTextFields(actionData.fields);
+          } else if (actionData.directAction === "duplicateWithInstructions" || actionData.directAction === "randomizeSelectedInstances") {
+            const duplicateRandomizeData = buildInstanceRandomizationFields(
+              actionData.fields || [],
+              [],
+              actionData.directAction === "randomizeSelectedInstances" ? "randomizeOnly" : "duplicate",
+              { isLoading: true }
+            );
+            hydratedFields = duplicateRandomizeData.fields;
+            currentPromptAction.randomizePropertyMetadata = duplicateRandomizeData.metadata;
+            currentPromptAction.randomizePropertiesAvailable = duplicateRandomizeData.hasAvailableProperties;
           }
           const savedActionHistory = promptHistory[actionData.name];
           if (savedActionHistory) {
@@ -35011,6 +35337,7 @@
             });
           }
           const localizedHydratedFields = hydratedFields.map(localizeTaskField);
+          currentPromptAction.fields = localizedHydratedFields;
           if (actionData.name === "UI Section Outline") {
             renderPromptFields(localizedHydratedFields, directUIFieldValues);
             promptDrawerFields.classList.remove("hidden");
@@ -35037,6 +35364,13 @@
           setupExampleClicks();
           promptDrawer.classList.add("open");
           promptDrawerOverlay.classList.add("open");
+          if (actionData.directAction === "duplicateWithInstructions" || actionData.directAction === "randomizeSelectedInstances") {
+            setTimeout(() => {
+              refreshOpenInstanceRandomizationDrawerFromSelection().catch((error) => {
+                console.warn("Failed to hydrate instance randomization fields after opening drawer:", error);
+              });
+            }, 0);
+          }
           setTimeout(async () => {
             try {
               await initCameraSelector3D();
@@ -35676,7 +36010,9 @@
               return '\n                  <div class="prompt-pill" data-value="'.concat(escapeHtml(String(val)), '">\n                    <span>').concat(escapeHtml(String(label)), '</span>\n                    <svg class="prompt-pill-remove" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>\n                    </svg>\n                  </div>');
             }).join(""), "\n            </div>\n          ") : "";
             const canAddOption = field.key === "tone" || field.key === "imagePreset" || field.key === "reStylePreset" || field.key === "renamePreset" || field.key === "styleCategory";
-            const fieldHeaderHtml = canAddOption ? '\n            <div class="prompt-field-label-row">\n              <label class="prompt-field-label">'.concat(field.label, '</label>\n              <button class="add-option-btn" data-add-for="').concat(field.key, '" title="').concat(tu("actions.prompt.add"), " ").concat(field.label || field.key, '"').concat(forceDisabled ? " disabled" : "", '>\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M12 5v14M5 12h14" />\n                </svg>\n                <span>').concat(tu("actions.prompt.add"), "</span>\n              </button>\n            </div>\n          ") : '<label class="prompt-field-label">'.concat(field.label, "</label>");
+            const actionButtonHtml = field.actionButton ? '\n            <button class="prompt-ai-btn prompt-refresh-instance-scope-btn" data-prompt-action="'.concat(escapeHtml(field.actionButton.action || ""), '" type="button"').concat(field.disabled || forceDisabled ? " disabled" : "", '>\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                <path d="M23 4v6h-6M1 20v-6h6"/>\n                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>\n              </svg>\n              <span>').concat(escapeHtml(field.actionButton.label || "Refresh"), "</span>\n            </button>\n          ") : "";
+            const addOptionButtonHtml = canAddOption ? '\n            <button class="add-option-btn" data-add-for="'.concat(field.key, '" title="').concat(tu("actions.prompt.add"), " ").concat(field.label || field.key, '"').concat(forceDisabled ? " disabled" : "", '>\n              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                <path d="M12 5v14M5 12h14" />\n              </svg>\n              <span>').concat(tu("actions.prompt.add"), "</span>\n            </button>\n          ") : "";
+            const fieldHeaderHtml = canAddOption || field.actionButton ? '\n            <div class="prompt-field-header">\n              <label class="prompt-field-label">'.concat(field.label, '</label>\n              <div class="prompt-ai-actions">\n                ').concat(actionButtonHtml, "\n                ").concat(addOptionButtonHtml, "\n              </div>\n            </div>\n          ") : '<label class="prompt-field-label">'.concat(field.label, "</label>");
             fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass, '"').concat(conditionalAttrs, ">\n              ").concat(fieldHeaderHtml, "\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", '\n              <div class="prompt-custom-select').concat(field.searchable ? " collapsible collapsed" : "").concat(field.disabled || forceDisabled ? " disabled" : "", '" id="').concat(fieldId, '" data-field-key="').concat(field.key, '" data-selected="').concat(selectedAttr, '" data-multi="').concat(isMulti ? "true" : "false", '" data-searchable="').concat(field.searchable ? "true" : "false", '"').concat(selectDisabledAttr, ">\n                ").concat(searchHtml, '\n                <div class="prompt-custom-select-options">\n                  ').concat(optionsHtml, "\n                </div>\n              </div>\n              ").concat(selectedPillsHtml, "\n            </div>\n          ");
           } else if (field.type === "color") {
             const colorValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default || "#3B82F6";
@@ -35789,8 +36125,9 @@
             fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass, ' prompt-field-comments"').concat(conditionalAttrs, '>\n              <div class="prompt-field-header">\n                <div class="pill-tab-container">\n                  <button class="pill-tab ').concat(currentCommentsScope === "all" ? "active" : "", '" onclick="switchCommentScope(\'all\', this)" type="button">').concat(tu("actions.comments.fileTab"), '</button>\n                  <button class="pill-tab ').concat(currentCommentsScope === "page" ? "active" : "", '" onclick="switchCommentScope(\'page\', this)" type="button">').concat(tu("actions.comments.pageTab"), '</button>\n                  <button class="pill-tab ').concat(currentCommentsScope === "selection" ? "active" : "", '" onclick="switchCommentScope(\'selection\', this)" type="button">').concat(tu("actions.comments.selectionTab"), '</button>\n                </div>\n                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">\n                  <button class="prompt-comments-toggle-btn" id="multiSelectToggle" type="button" onclick="toggleMultiSelect()">\n                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">\n                      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>\n                      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>\n                    </svg>\n                    ').concat(tu("actions.comments.select"), '\n                  </button>\n                  <button class="prompt-comments-toggle-btn" id="showResolvedToggle" type="button" onclick="toggleShowResolved()">\n                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">\n                      <path d="M20 6L9 17l-5-5"/>\n                    </svg>\n                    ').concat(tu("actions.comments.resolved"), '\n                  </button>\n                  <button class="prompt-comments-refresh-btn" type="button" onclick="refreshCommentsInDrawer()">\n                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">\n                      <path d="M23 4v6h-6M1 20v-6h6"/>\n                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>\n                    </svg>\n                  </button>\n                </div>\n              </div>\n              <div class="prompt-comments-container" id="promptCommentsContainer">\n                <div class="prompt-comments-loading">').concat(tu("actions.comments.loading"), "</div>\n              </div>\n            </div>\n          ");
           } else {
             const textValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default || "";
+            const actionButtonHtml = field.actionButton ? '\n            <div class="prompt-ai-actions">\n              <button class="prompt-ai-btn prompt-refresh-instance-scope-btn" data-prompt-action="'.concat(escapeHtml(field.actionButton.action || ""), '" type="button">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">\n                  <path d="M23 4v6h-6M1 20v-6h6"/>\n                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>\n                </svg>\n                <span>').concat(escapeHtml(field.actionButton.label || "Refresh"), "</span>\n              </button>\n            </div>\n          ") : "";
             const translateBtnHtml = field.translate ? '\n            <div class="prompt-ai-actions">\n              <button class="prompt-ai-btn" data-ai-action="translate" title="'.concat(escapeHtml(tu("actions.prompt.translateTitle")), '" type="button">\n                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>\n                <span>').concat(tu("actions.prompt.translate"), "</span>\n              </button>\n            </div>\n          ") : "";
-            fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass).concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, '>\n              <div class="prompt-field-header">\n                <label class="prompt-field-label" for="').concat(fieldId, '">').concat(field.label, "</label>\n                ").concat(translateBtnHtml, "\n              </div>\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", '\n              <input type="text" id="').concat(fieldId, '" data-field-key="').concat(field.key, '" \n                value="').concat(textValue, '" \n                placeholder="').concat(field.placeholder || "", '"\n                ').concat(disabledAttr, ">\n            </div>\n          ");
+            fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass).concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, '>\n              <div class="prompt-field-header">\n                <label class="prompt-field-label" for="').concat(fieldId, '">').concat(field.label, "</label>\n                ").concat(actionButtonHtml, "\n                ").concat(translateBtnHtml, "\n              </div>\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", '\n              <input type="text" id="').concat(fieldId, '" data-field-key="').concat(field.key, '" \n                value="').concat(textValue, '" \n                placeholder="').concat(field.placeholder || "", '"\n                ').concat(field.actionButton ? "readonly" : disabledAttr, ">\n            </div>\n          ");
           }
           return fieldHtml;
         }
@@ -35830,6 +36167,13 @@
             e.preventDefault();
             e.stopPropagation();
             showOptionContextMenu(e, btn.dataset.fieldKey, btn.dataset.optionValue, btn.dataset.optionId);
+          };
+        });
+        promptDrawerFields.querySelectorAll(".prompt-refresh-instance-scope-btn").forEach((btn) => {
+          btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            triggerInstanceRandomizationDrawerRefresh(btn);
           };
         });
         const styleSelect = promptDrawerFields.querySelector('[data-field-key="styleCategory"]');
@@ -36844,7 +37188,7 @@
         if (!el) return "";
         if (el.classList.contains("prompt-custom-select")) {
           if (el.dataset.multi === "true") {
-            return parseSelectedValues(el.dataset.selected).join(",");
+            return parsePromptSelectedValues(el.dataset.selected).join(",");
           }
           return el.dataset.selected || "";
         }
@@ -36954,6 +37298,17 @@
           if (caseOnlyEnabled) {
             updatePromptFieldIndicator("renamePrompt", { visible: false });
           }
+        }
+        if ((currentPromptAction == null ? void 0 : currentPromptAction.directAction) === "duplicateWithInstructions" || (currentPromptAction == null ? void 0 : currentPromptAction.directAction) === "randomizeSelectedInstances") {
+          const randomizationEnabled = getPromptVisibilityValue("randomizeInstance") === "true" || getPromptVisibilityValue("randomizeNestedInstances") === "true";
+          const selectedProperties = new Set(parsePromptSelectedValues(getPromptVisibilityValue("randomizeProperties")));
+          const propertyMetadata = Array.isArray(currentPromptAction.randomizePropertyMetadata) ? currentPromptAction.randomizePropertyMetadata : [];
+          propertyMetadata.forEach((meta) => {
+            var _a2;
+            const fieldEl = (_a2 = promptDrawerFields.querySelector('[data-field-key="'.concat(meta.fieldKey, '"]'))) == null ? void 0 : _a2.closest(".prompt-field");
+            if (!fieldEl) return;
+            fieldEl.style.display = randomizationEnabled && selectedProperties.has(meta.propertyKey) ? "" : "none";
+          });
         }
         const btnTypeValue = getPromptVisibilityValue("btnType");
         if (btnTypeValue) {
@@ -39773,6 +40128,7 @@
           if (customInstructions.length > 0) {
             numCopies = customInstructions.length;
           }
+          const randomizeConfig = buildRandomizeConfigFromAction(values, actionMeta);
           parent.postMessage({
             pluginMessage: {
               type: "duplicate-with-instructions",
@@ -39784,6 +40140,7 @@
                 randomizeInstance: values.randomizeInstance || false,
                 // Will be applied after selection
                 randomizeNestedInstances: values.randomizeNestedInstances || false,
+                randomizeConfig,
                 customInstructions,
                 numCopies,
                 hasImage: !!imageData
@@ -39813,6 +40170,25 @@
         } catch (error) {
           console.error("Duplicate with instructions failed:", error);
           showToast("Failed to duplicate nodes: " + error.message, "error");
+        }
+      }
+      async function runRandomizeSelectedInstancesAction(values, actionMeta) {
+        try {
+          const randomizeConfig = buildRandomizeConfigFromAction(values, actionMeta);
+          const result = await runLocalActionRequest({
+            requestType: "randomize-selected-instances",
+            resultType: "randomize-selected-instances-result",
+            payload: {
+              randomizeInstance: values.randomizeInstance || false,
+              randomizeNestedInstances: values.randomizeNestedInstances || false,
+              randomizeConfig
+            },
+            errorPrefixes: ["Failed to randomize selected instances", "Please select at least one instance"]
+          });
+          showToast(result.message || "Randomized selected instances", "success");
+        } catch (error) {
+          console.error("Randomize selected instances failed:", error);
+          showToast(error.message || "Failed to randomize selected instances", "error");
         }
       }
       function triggerImageBasedDuplication(imageData, nodeIds, customInstructions) {
@@ -39868,6 +40244,9 @@
             break;
           case "duplicateWithInstructions":
             await runDuplicateWithInstructionsAction(values, actionMeta);
+            break;
+          case "randomizeSelectedInstances":
+            await runRandomizeSelectedInstancesAction(values, actionMeta);
             break;
           case "turnIntoComponentSet":
             await runTurnIntoComponentSetAction(values, actionMeta);

@@ -3362,6 +3362,19 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
   if (isAll && node.type === 'INSTANCE') {
     const instanceNode = node as InstanceNode;
     serialized.componentProperties = instanceNode.componentProperties;
+    let mainComponent: ComponentNode | null = null;
+    if ('getMainComponentAsync' in instanceNode && typeof (instanceNode as any).getMainComponentAsync === 'function') {
+      mainComponent = await (instanceNode as any).getMainComponentAsync();
+    } else {
+      mainComponent = (instanceNode as any).mainComponent as ComponentNode | null;
+    }
+    if (mainComponent) {
+      if (mainComponent.parent && mainComponent.parent.type === 'COMPONENT_SET') {
+        serialized.componentPropertyDefinitions = (mainComponent.parent as ComponentSetNode).componentPropertyDefinitions;
+      } else {
+        serialized.componentPropertyDefinitions = mainComponent.componentPropertyDefinitions;
+      }
+    }
   }
 
   // Get component property definitions for COMPONENT and COMPONENT_SET nodes
@@ -4326,6 +4339,249 @@ async function translateStringsWithGtx(strings: string[], targetLang: string): P
   const n = Math.min(CONCURRENCY, Math.max(1, strings.length));
   await Promise.all(Array.from({ length: n }, () => worker()));
   return out;
+}
+
+function normalizeConfiguredRandomValueForInstance(rawValue: unknown, definition: any): string | boolean | undefined {
+  if (!definition || !definition.type) return undefined;
+
+  if (definition.type === 'BOOLEAN') {
+    if (typeof rawValue === 'boolean') return rawValue;
+    if (typeof rawValue === 'string') {
+      const normalized = rawValue.trim().toLowerCase();
+      if (normalized === 'true') return true;
+      if (normalized === 'false') return false;
+    }
+    return undefined;
+  }
+
+  if (definition.type === 'TEXT') {
+    if (rawValue === null || rawValue === undefined) return undefined;
+    return String(rawValue);
+  }
+
+  if (definition.type === 'VARIANT') {
+    if (rawValue === null || rawValue === undefined) return undefined;
+    const rawString = String(rawValue);
+    const options = Array.isArray(definition.variantOptions) ? definition.variantOptions : [];
+    const exactMatch = options.find((option: string) => option === rawString);
+    if (exactMatch) return exactMatch;
+    const caseInsensitiveMatch = options.find((option: string) => option.toLowerCase() === rawString.toLowerCase());
+    return caseInsensitiveMatch || undefined;
+  }
+
+  return undefined;
+}
+
+async function resolveInstanceRandomizationContext(instance: InstanceNode): Promise<{
+  mainComponent: ComponentNode | null;
+  propertyDefs: Record<string, any> | null;
+  componentName: string;
+  componentSet: ComponentSetNode | null;
+}> {
+  let mainComponent: ComponentNode | null = null;
+  if ('getMainComponentAsync' in instance && typeof (instance as any).getMainComponentAsync === 'function') {
+    mainComponent = await (instance as any).getMainComponentAsync();
+  } else {
+    mainComponent = (instance as any).mainComponent;
+  }
+
+  if (!mainComponent) {
+    return { mainComponent: null, propertyDefs: null, componentName: instance.name, componentSet: null };
+  }
+
+  let propertyDefs: Record<string, any> | null = null;
+  let componentName = mainComponent.name;
+  let componentSet: ComponentSetNode | null = null;
+
+  if (mainComponent.type === 'COMPONENT' && mainComponent.parent && mainComponent.parent.type === 'COMPONENT_SET') {
+    componentSet = mainComponent.parent as ComponentSetNode;
+    propertyDefs = componentSet.componentPropertyDefinitions as Record<string, any>;
+    componentName = componentSet.name;
+  } else {
+    propertyDefs = mainComponent.componentPropertyDefinitions as Record<string, any>;
+  }
+
+  return { mainComponent, propertyDefs, componentName, componentSet };
+}
+
+function getConfiguredRandomPropsForInstance(
+  instance: InstanceNode,
+  propertyDefs: Record<string, any>,
+  copyIndex: number,
+  randomizeConfig: any
+): Record<string, string | boolean> {
+  const selectedPropertyKeys = Array.isArray(randomizeConfig?.propertyKeys)
+    ? randomizeConfig.propertyKeys.map((key: unknown) => String(key))
+    : [];
+
+  if (selectedPropertyKeys.length === 0) return {};
+
+  const configuredProps: Record<string, string | boolean> = {};
+
+  selectedPropertyKeys.forEach((propertyKey: string, propertyIndex: number) => {
+    const definition = propertyDefs[propertyKey];
+    if (!definition) {
+      console.log(`Skipping configured property "${propertyKey}" on instance ${instance.id} because it is not defined on this instance.`);
+      return;
+    }
+
+    const currentProperty = (instance.componentProperties as any)?.[propertyKey];
+    if (!currentProperty) {
+      console.log(`Skipping configured property "${propertyKey}" on instance ${instance.id} because it is not present in componentProperties.`);
+      return;
+    }
+
+    const configuredValues = Array.isArray(randomizeConfig?.propertyValues?.[propertyKey])
+      ? randomizeConfig.propertyValues[propertyKey]
+      : [];
+
+    const normalizedValues = configuredValues
+      .map((value: unknown) => normalizeConfiguredRandomValueForInstance(value, definition))
+      .filter((value: string | boolean | undefined): value is string | boolean => value !== undefined);
+
+    const uniqueValues = normalizedValues.filter((value, index, array) => array.findIndex(entry => entry === value) === index);
+    if (uniqueValues.length === 0) {
+      console.log(`Skipping configured property "${propertyKey}" on instance ${instance.id} because no valid values were provided.`);
+      return;
+    }
+
+    configuredProps[propertyKey] = uniqueValues[(copyIndex + propertyIndex) % uniqueValues.length];
+  });
+
+  return configuredProps;
+}
+
+async function randomizeSingleInstanceProperties(
+  instance: InstanceNode,
+  copyIndex: number,
+  randomizeConfig: any
+): Promise<boolean> {
+  try {
+    console.log(`Processing instance ${instance.id} for randomization`);
+    const { mainComponent, propertyDefs, componentName, componentSet } = await resolveInstanceRandomizationContext(instance);
+
+    if (!mainComponent) {
+      console.warn(`Instance ${instance.id} has no main component`);
+      return false;
+    }
+
+    console.log(`Main component: ${mainComponent.id} (${mainComponent.name})`);
+    console.log(`Component property definitions:`, Object.keys(propertyDefs || {}));
+
+    if (!propertyDefs || Object.keys(propertyDefs).length === 0) {
+      console.warn(`Component ${mainComponent.id} (${componentName}) has no properties to randomize`);
+      return false;
+    }
+
+    let randomProps: Record<string, string | boolean> = {};
+
+    if (randomizeConfig && Array.isArray(randomizeConfig.propertyKeys) && randomizeConfig.propertyKeys.length > 0) {
+      randomProps = getConfiguredRandomPropsForInstance(instance, propertyDefs, copyIndex, randomizeConfig);
+    }
+
+    if (Object.keys(randomProps).length === 0) {
+      if (componentSet) {
+        const variants = componentSet.children.filter(c => c.type === 'COMPONENT') as ComponentNode[];
+        if (variants.length > 0) {
+          const selectedVariant = variants[copyIndex % variants.length];
+          const propStr = selectedVariant.name;
+          const parts = propStr.split(',').map(s => s.trim());
+          parts.forEach(part => {
+            const [key, val] = part.split('=').map(s => s.trim());
+            if (key && val) {
+              randomProps[key] = val;
+            }
+          });
+          console.log(`Selected variant "${selectedVariant.name}" for properties:`, randomProps);
+        }
+      }
+
+      Object.keys(propertyDefs).forEach((key) => {
+        const prop = propertyDefs[key];
+        if (randomProps[key] !== undefined) return;
+
+        if (prop.type === 'VARIANT') {
+          const options = prop.variantOptions || [];
+          if (options.length > 0) {
+            randomProps[key] = options[copyIndex % options.length];
+          }
+        } else if (prop.type === 'BOOLEAN') {
+          randomProps[key] = (copyIndex % 2 === 0);
+        } else if (prop.type === 'TEXT') {
+          randomProps[key] = `Value ${copyIndex + 1}`;
+        }
+      });
+    }
+
+    if (Object.keys(randomProps).length === 0) {
+      return false;
+    }
+
+    const normalizedProps: Record<string, string | boolean> = {};
+    for (const [key, val] of Object.entries(randomProps)) {
+      const def = propertyDefs[key];
+      if (def && def.type === 'VARIANT' && typeof val === 'boolean') {
+        const options = def.variantOptions || [];
+        const valStr = val.toString();
+        const match = (options as string[]).find((o: string) => o.toLowerCase() === valStr ||
+          (val && (o.toLowerCase() === 'on' || o.toLowerCase() === 'yes' || o.toLowerCase() === 'true')) ||
+          (!val && (o.toLowerCase() === 'off' || o.toLowerCase() === 'no' || o.toLowerCase() === 'false')));
+        normalizedProps[key] = match || valStr;
+      } else {
+        normalizedProps[key] = val;
+      }
+    }
+
+    console.log(`Setting properties on instance ${instance.id}:`, normalizedProps);
+    instance.setProperties(normalizedProps);
+    return true;
+  } catch (e) {
+    console.error(`Failed to randomize instance ${instance.id}:`, e);
+    return false;
+  }
+}
+
+async function randomizeInstancesRecursivelyInNode(
+  node: SceneNode,
+  startIndex: number,
+  randomizeConfig: any
+): Promise<number> {
+  let randomizedCount = 0;
+
+  if (node.type === 'INSTANCE') {
+    const didRandomize = await randomizeSingleInstanceProperties(node as InstanceNode, startIndex + randomizedCount, randomizeConfig);
+    if (didRandomize) randomizedCount++;
+  }
+
+  if ('children' in node) {
+    for (const child of node.children) {
+      randomizedCount += await randomizeInstancesRecursivelyInNode(child, startIndex + randomizedCount, randomizeConfig);
+    }
+  }
+
+  return randomizedCount;
+}
+
+function collectInstanceNodesInSubtree(
+  node: SceneNode,
+  includeSelf: boolean = true
+): InstanceNode[] {
+  const instances: InstanceNode[] = [];
+
+  const visit = (current: SceneNode, allowCurrent: boolean) => {
+    if (allowCurrent && current.type === 'INSTANCE') {
+      instances.push(current as InstanceNode);
+    }
+
+    if ('children' in current) {
+      for (const child of current.children) {
+        visit(child, true);
+      }
+    }
+  };
+
+  visit(node, includeSelf);
+  return instances;
 }
 
 figma.ui.onmessage = async (msg: {
@@ -8042,6 +8298,9 @@ figma.ui.onmessage = async (msg: {
         const realityData = options.realityData === true;
         const randomizeInstance = options.randomizeInstance === true;
         const randomizeNestedInstances = options.randomizeNestedInstances === true;
+        const randomizeConfig = options.randomizeConfig && typeof options.randomizeConfig === 'object'
+          ? options.randomizeConfig
+          : null;
         const hasImage = options.hasImage === true;
         const customInstructions = Array.isArray(options.customInstructions) ? options.customInstructions : [];
         const duplicateCount = typeof options.duplicateCount === 'number' && options.duplicateCount > 0 ? options.duplicateCount : 1;
@@ -8094,111 +8353,7 @@ figma.ui.onmessage = async (msg: {
 
         // Helper function to randomize properties of a single instance
         async function randomizeInstanceProperties(instance: InstanceNode, copyIndex: number) {
-          try {
-            console.log(`Processing instance ${instance.id} for randomization`);
-
-            // Use async method for dynamic pages
-            let mainComponent: ComponentNode | null = null;
-            if ('getMainComponentAsync' in instance && typeof (instance as any).getMainComponentAsync === 'function') {
-              mainComponent = await (instance as any).getMainComponentAsync();
-            } else {
-              mainComponent = (instance as any).mainComponent;
-            }
-
-            if (!mainComponent) {
-              console.warn(`Instance ${instance.id} has no main component`);
-              return;
-            }
-
-            console.log(`Main component: ${mainComponent.id} (${mainComponent.name})`);
-
-            // Get properties from component set if this is a variant, otherwise from the component
-            let propertyDefs: any = null;
-            let componentName = mainComponent.name;
-            let componentSet: ComponentSetNode | null = null;
-
-            if (mainComponent.type === 'COMPONENT' && mainComponent.parent && mainComponent.parent.type === 'COMPONENT_SET') {
-              // This is a variant component - get properties from the component set
-              componentSet = mainComponent.parent as ComponentSetNode;
-              propertyDefs = componentSet.componentPropertyDefinitions;
-              componentName = componentSet.name;
-              console.log(`Using component set ${componentSet.id} (${componentName}) properties for variant`);
-            } else {
-              // This is a regular component
-              propertyDefs = mainComponent.componentPropertyDefinitions;
-            }
-
-            console.log(`Component property definitions:`, Object.keys(propertyDefs || {}));
-
-            if (!propertyDefs || Object.keys(propertyDefs).length === 0) {
-              console.warn(`Component ${mainComponent.id} (${componentName}) has no properties to randomize`);
-              return;
-            }
-
-            const randomProps: Record<string, string | boolean> = {};
-
-            // If it's a component set, pick one of the actual variants to ensure validity
-            if (componentSet) {
-              const variants = componentSet.children.filter(c => c.type === 'COMPONENT') as ComponentNode[];
-              if (variants.length > 0) {
-                const selectedVariant = variants[copyIndex % variants.length];
-                // Extract properties from the selected variant's name (e.g., "Size=Large, Style=Outlined")
-                const propStr = selectedVariant.name;
-                const parts = propStr.split(',').map(s => s.trim());
-                parts.forEach(part => {
-                  const [key, val] = part.split('=').map(s => s.trim());
-                  if (key && val) {
-                    randomProps[key] = val;
-                  }
-                });
-                console.log(`Selected variant "${selectedVariant.name}" for properties:`, randomProps);
-              }
-            }
-
-            // Also handle any other properties (like BOOLEAN or TEXT properties that are NOT variants)
-            Object.keys(propertyDefs).forEach((key) => {
-              const prop = propertyDefs[key];
-              // Skip if already handled by variant selection
-              if (randomProps[key] !== undefined) return;
-
-              if (prop.type === 'VARIANT') {
-                // If not already set by variant picking (e.g., if variant picking failed or handled differently)
-                const options = prop.variantOptions || [];
-                if (options.length > 0) {
-                  randomProps[key] = options[copyIndex % options.length];
-                }
-              } else if (prop.type === 'BOOLEAN') {
-                randomProps[key] = (copyIndex % 2 === 0);
-              } else if (prop.type === 'TEXT') {
-                randomProps[key] = `Value ${copyIndex + 1}`;
-              }
-            });
-
-            if (Object.keys(randomProps).length > 0) {
-              // Normalize boolean values for VARIANT properties if needed
-              // (Though variant picking above should have given us strings)
-              const normalizedProps: Record<string, string | boolean> = {};
-              for (const [key, val] of Object.entries(randomProps)) {
-                const def = propertyDefs[key];
-                if (def && def.type === 'VARIANT' && typeof val === 'boolean') {
-                  const options = def.variantOptions || [];
-                  const valStr = val.toString();
-                  // Try to find a matching option case-insensitively
-                  const match = (options as string[]).find((o: string) => o.toLowerCase() === valStr ||
-                    (val && (o.toLowerCase() === 'on' || o.toLowerCase() === 'yes' || o.toLowerCase() === 'true')) ||
-                    (!val && (o.toLowerCase() === 'off' || o.toLowerCase() === 'no' || o.toLowerCase() === 'false')));
-                  normalizedProps[key] = match || valStr;
-                } else {
-                  normalizedProps[key] = val;
-                }
-              }
-
-              console.log(`Setting properties on instance ${instance.id}:`, normalizedProps);
-              instance.setProperties(normalizedProps);
-            }
-          } catch (e) {
-            console.error(`Failed to randomize instance ${instance.id}:`, e);
-          }
+          await randomizeSingleInstanceProperties(instance, copyIndex, randomizeConfig);
         }
 
         // Helper function to randomize all instances within a node recursively
@@ -8376,6 +8531,112 @@ figma.ui.onmessage = async (msg: {
         figma.ui.postMessage({
           type: 'error',
           message: 'Failed to duplicate nodes: ' + (error instanceof Error ? error.message : String(error))
+        });
+      }
+      break;
+    }
+
+    case 'randomize-selected-instances': {
+      try {
+        const randomizeInstance = (msg as any).randomizeInstance === true;
+        const randomizeNestedInstances = (msg as any).randomizeNestedInstances === true;
+        const randomizeConfig = (msg as any).randomizeConfig && typeof (msg as any).randomizeConfig === 'object'
+          ? (msg as any).randomizeConfig
+          : null;
+
+        if (selection.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one instance to randomize.' });
+          break;
+        }
+
+        if (!randomizeInstance && !randomizeNestedInstances) {
+          figma.ui.postMessage({
+            type: 'randomize-selected-instances-result',
+            randomized: 0,
+            skipped: 0,
+            total: selection.length,
+            message: 'Enable Randomize Component Instance or Randomize Nested Instances to run this action.'
+          });
+          break;
+        }
+
+        const selectedInstances = selection.filter((node): node is InstanceNode => node.type === 'INSTANCE');
+        const descendantInstances: InstanceNode[] = [];
+        for (const node of selection) {
+          descendantInstances.push(...collectInstanceNodesInSubtree(node, false));
+        }
+        const hasNestedInstance = (nodes: readonly SceneNode[]): boolean => {
+          for (const node of nodes) {
+            if (node.type === 'INSTANCE') return true;
+            if ('children' in node && hasNestedInstance(node.children)) return true;
+          }
+          return false;
+        };
+        const standaloneTargets = selectedInstances.length > 0 ? selectedInstances : descendantInstances;
+
+        if (!randomizeNestedInstances && standaloneTargets.length === 0) {
+          figma.notify('No component instances found in the selection. Please select one or more instances, or frames containing instances, to randomize.', { error: true });
+          figma.ui.postMessage({
+            type: 'randomize-selected-instances-result',
+            randomized: 0,
+            skipped: selection.length,
+            total: selection.length,
+            message: 'No selected component instances were randomized.'
+          });
+          break;
+        }
+
+        if (randomizeNestedInstances && !hasNestedInstance(selection)) {
+          figma.notify('No component instances were found in the selection. Please select one or more instances, or frames containing instances, to randomize.', { error: true });
+          figma.ui.postMessage({
+            type: 'randomize-selected-instances-result',
+            randomized: 0,
+            skipped: selection.length,
+            total: selection.length,
+            message: 'No instances were found to randomize.'
+          });
+          break;
+        }
+
+        figma.commitUndo();
+
+        let randomized = 0;
+        if (randomizeInstance) {
+          for (let index = 0; index < standaloneTargets.length; index++) {
+            const didRandomize = await randomizeSingleInstanceProperties(standaloneTargets[index], randomized, randomizeConfig);
+            if (didRandomize) randomized++;
+          }
+        }
+
+        if (randomizeNestedInstances) {
+          for (const node of selection) {
+            if (node.type === 'INSTANCE') {
+              if ('children' in node) {
+                for (const child of node.children) {
+                  randomized += await randomizeInstancesRecursivelyInNode(child, randomized, randomizeConfig);
+                }
+              }
+            } else {
+              randomized += await randomizeInstancesRecursivelyInNode(node, randomized, randomizeConfig);
+            }
+          }
+        }
+
+        const skipped = Math.max(0, selection.length - randomized);
+        figma.ui.postMessage({
+          type: 'randomize-selected-instances-result',
+          randomized,
+          skipped,
+          total: selection.length,
+          message: randomized > 0
+            ? `Randomized ${randomized} selected instance(s).`
+            : 'No selected instances could be randomized.'
+        });
+      } catch (error) {
+        console.error('randomize-selected-instances failed:', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'Failed to randomize selected instances: ' + (error instanceof Error ? error.message : String(error))
         });
       }
       break;

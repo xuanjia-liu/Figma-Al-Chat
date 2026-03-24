@@ -12173,6 +12173,7 @@ Generate ONLY the reply text, nothing else.`;
     let disposeGoogleFontPreview = null;
     let isPromptComposing = false;  // Track IME composition in prompt drawer inputs
     let isApplyingPreset = false;   // Track if we are currently applying a preset
+    let randomizeDrawerRefreshVersion = 0;
 
     // --- Multi-minimized-drawer state ---
     const minimizedDrawers = new Map(); // id -> { id, actionData, iconHtml, title, color, fieldValues, isRunning, directUIPhase, directUISections, directUIFieldValues, directUIHydratedFields }
@@ -12185,6 +12186,350 @@ Generate ONLY the reply text, nothing else.`;
 
     let directUIFieldValues = null;     // Cached Phase 1 field values for "Back"
     let directUIHydratedFields = null;  // Cached hydrated fields for "Back"
+
+    function buildDuplicateRandomizationCondition() {
+      return {
+        anyOf: [
+          [{ field: 'randomizeInstance', equals: true }],
+          [{ field: 'randomizeNestedInstances', equals: true }]
+        ]
+      };
+    }
+
+    function getInstanceRandomizationCondition(mode = 'duplicate') {
+      return buildDuplicateRandomizationCondition();
+    }
+
+    function parsePromptSelectedValues(data) {
+      if (!data) return [];
+      try {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (error) {
+        // Fall back to comma-delimited parsing below.
+      }
+      if (typeof data === 'string') {
+        return data.split(',').map((value) => value.trim()).filter(Boolean);
+      }
+      return [];
+    }
+
+    function escapePromptOptionValue(value) {
+      return String(value ?? '');
+    }
+
+    function normalizeInstancePropertyType(definition, propertyValue) {
+      const definitionType = definition && typeof definition.type === 'string' ? definition.type : '';
+      if (definitionType === 'VARIANT' || definitionType === 'BOOLEAN' || definitionType === 'TEXT') {
+        return definitionType;
+      }
+      if (typeof propertyValue === 'boolean') return 'BOOLEAN';
+      if (typeof propertyValue === 'string') return 'TEXT';
+      return '';
+    }
+
+    function normalizePropertyValueForUi(rawValue, propertyType) {
+      if (propertyType === 'BOOLEAN') {
+        if (typeof rawValue === 'boolean') return rawValue ? 'true' : 'false';
+        if (typeof rawValue === 'string') {
+          const normalized = rawValue.trim().toLowerCase();
+          if (normalized === 'true' || normalized === 'false') return normalized;
+        }
+      }
+      if (rawValue === null || rawValue === undefined) return '';
+      return String(rawValue);
+    }
+
+    function formatPropertyValueForLabel(value, propertyType) {
+      if (propertyType === 'BOOLEAN') {
+        return value === 'true' ? 'True' : 'False';
+      }
+      return value || '(Empty)';
+    }
+
+    function formatInstancePropertyNameForLabel(propertyKey) {
+      if (propertyKey === null || propertyKey === undefined) return '';
+      const rawKey = String(propertyKey);
+      const hashIndex = rawKey.lastIndexOf('#');
+      return hashIndex > 0 ? rawKey.slice(0, hashIndex) : rawKey;
+    }
+
+    function collectInstanceNodesForRandomization(nodes) {
+      const topLevelInstances = [];
+      const nestedInstances = [];
+
+      const walk = (node, depth) => {
+        if (!node || typeof node !== 'object') return;
+        if (node.type === 'INSTANCE') {
+          if (depth === 0) {
+            topLevelInstances.push(node);
+          } else {
+            nestedInstances.push(node);
+          }
+        }
+        if (Array.isArray(node.children)) {
+          node.children.forEach(child => walk(child, depth + 1));
+        }
+      };
+
+      (Array.isArray(nodes) ? nodes : []).forEach(node => walk(node, 0));
+      return { topLevelInstances, nestedInstances };
+    }
+
+    function buildInstanceRandomizationFields(baseFields = [], selectionData = [], mode = 'duplicate', buildOptions = {}) {
+      const isLoading = buildOptions && buildOptions.isLoading === true;
+      const toggleCondition = getInstanceRandomizationCondition(mode);
+      const { topLevelInstances, nestedInstances } = collectInstanceNodesForRandomization(selectionData);
+      const allInstances = [...topLevelInstances, ...nestedInstances];
+      const propertyMap = new Map();
+
+      allInstances.forEach((instanceNode) => {
+        const componentProperties = instanceNode.componentProperties || {};
+        const componentDefinitions = instanceNode.componentPropertyDefinitions || {};
+
+        Object.entries(componentProperties).forEach(([propertyKey, propertyState]) => {
+          const definition = componentDefinitions[propertyKey] || null;
+          const propertyType = normalizeInstancePropertyType(definition, propertyState && propertyState.value);
+          if (!propertyType) return;
+
+          let entry = propertyMap.get(propertyKey);
+          if (!entry) {
+            entry = {
+              propertyKey,
+              propertyType,
+              currentValues: new Set(),
+              allowedValues: new Set(),
+            };
+            propertyMap.set(propertyKey, entry);
+          }
+
+          const currentValue = normalizePropertyValueForUi(propertyState && propertyState.value, propertyType);
+          if (currentValue !== '') {
+            entry.currentValues.add(currentValue);
+          } else if (propertyType === 'TEXT') {
+            entry.currentValues.add('');
+          }
+
+          if (propertyType === 'VARIANT') {
+            const variantOptions = Array.isArray(definition && definition.variantOptions) ? definition.variantOptions : [];
+            variantOptions.forEach(option => {
+              entry.allowedValues.add(normalizePropertyValueForUi(option, propertyType));
+            });
+          } else if (propertyType === 'BOOLEAN') {
+            entry.allowedValues.add('true');
+            entry.allowedValues.add('false');
+          } else if (propertyType === 'TEXT') {
+            entry.currentValues.forEach(value => entry.allowedValues.add(value));
+          }
+        });
+      });
+
+      const propertyEntries = Array.from(propertyMap.values())
+        .map((entry, index) => {
+          const allowedValues = Array.from(entry.allowedValues);
+          const currentValues = Array.from(entry.currentValues);
+          return {
+            ...entry,
+            index,
+            allowedValues,
+            currentValues,
+            fieldKey: `randomizePropertyValues_${index}`
+          };
+        })
+        .sort((a, b) => a.propertyKey.localeCompare(b.propertyKey));
+
+      const hasAvailableProperties = propertyEntries.length > 0;
+      const propertyOptions = propertyEntries.map((entry) => {
+        const currentValuesLabel = entry.currentValues.length > 0
+          ? entry.currentValues.map(value => formatPropertyValueForLabel(value, entry.propertyType)).join(', ')
+          : 'None';
+        const allowedValuesLabel = entry.allowedValues.length > 0
+          ? entry.allowedValues.map(value => formatPropertyValueForLabel(value, entry.propertyType)).join(', ')
+          : 'None';
+
+        return {
+          value: escapePromptOptionValue(entry.propertyKey),
+          label: formatInstancePropertyNameForLabel(entry.propertyKey),
+          detail: `${entry.propertyType} · Current: ${currentValuesLabel} · Allowed: ${allowedValuesLabel}`
+        };
+      });
+
+      const propertyFields = propertyEntries.map((entry) => {
+        const currentValuesLabel = entry.currentValues.length > 0
+          ? entry.currentValues.map(value => formatPropertyValueForLabel(value, entry.propertyType)).join(', ')
+          : 'None';
+        const allowedValuesLabel = entry.allowedValues.length > 0
+          ? entry.allowedValues.map(value => formatPropertyValueForLabel(value, entry.propertyType)).join(', ')
+          : 'None';
+        const isValuePickerDisabled = entry.allowedValues.length <= 1;
+        const valueOptions = entry.allowedValues.map(value => ({
+          value: escapePromptOptionValue(value),
+          label: formatPropertyValueForLabel(value, entry.propertyType),
+          detail: entry.currentValues.includes(value) ? 'Seen in selection' : 'Available option'
+        }));
+
+        return {
+          key: entry.fieldKey,
+          type: 'select',
+          label: `${formatInstancePropertyNameForLabel(entry.propertyKey)} Values`,
+          multi: true,
+          searchable: true,
+          showThumbnails: false,
+          default: entry.allowedValues,
+          disabled: isValuePickerDisabled,
+          options: valueOptions,
+          ...(toggleCondition ? { showWhen: toggleCondition } : {})
+        };
+      });
+
+      const randomizationFields = [
+        {
+          key: 'randomizeProperties',
+          type: 'select',
+          label: 'Properties to Randomize',
+          multi: true,
+          searchable: true,
+          showThumbnails: false,
+          default: propertyEntries.map(entry => entry.propertyKey),
+          disabled: !hasAvailableProperties,
+          actionButton: {
+            action: 'refresh-instance-randomization-fields',
+            label: 'Refresh'
+          },
+          options: propertyOptions,
+          hint: hasAvailableProperties
+            ? (mode === 'randomizeOnly'
+              ? ''
+              : 'Choose which properties can change for duplicated instances. The selected rules apply to all matching instances in the selection.')
+            : (isLoading
+              ? 'Loading instance properties...'
+              : (mode === 'randomizeOnly'
+                ? 'Select one or more component instances, then click Refresh to load available properties and values.'
+                : 'Select component instances, then click Refresh to load available properties and values.')),
+          ...(toggleCondition ? { showWhen: toggleCondition } : {})
+        },
+        ...propertyFields
+      ];
+
+      const enrichedFields = mode === 'randomizeOnly'
+        ? [...baseFields, ...randomizationFields]
+        : (() => {
+          const output = [];
+          baseFields.forEach((field) => {
+            output.push(field);
+            if (field.key === 'randomizeNestedInstances') {
+              output.push(...randomizationFields);
+            }
+          });
+          return output;
+        })();
+
+      return {
+        fields: enrichedFields,
+        metadata: propertyEntries.map(entry => ({
+          propertyKey: entry.propertyKey,
+          propertyType: entry.propertyType,
+          fieldKey: entry.fieldKey,
+          allowedValues: [...entry.allowedValues],
+          currentValues: [...entry.currentValues]
+        })),
+        hasAvailableProperties
+      };
+    }
+
+    function buildRandomizeConfigFromAction(values, actionMeta) {
+      let randomizeConfig = null;
+      if (Array.isArray(actionMeta?.randomizePropertyMetadata) && actionMeta.randomizePropertyMetadata.length > 0) {
+        const selectedProperties = Array.isArray(values.randomizeProperties)
+          ? values.randomizeProperties.map(value => String(value))
+          : [];
+        if (selectedProperties.length > 0) {
+          const propertyValues = {};
+          actionMeta.randomizePropertyMetadata.forEach((meta) => {
+            if (!selectedProperties.includes(meta.propertyKey)) return;
+            const selectedValues = Array.isArray(values[meta.fieldKey])
+              ? values[meta.fieldKey].map(value => String(value))
+              : [];
+            propertyValues[meta.propertyKey] = selectedValues;
+          });
+          randomizeConfig = {
+            propertyKeys: selectedProperties,
+            propertyValues
+          };
+        }
+      }
+      return randomizeConfig;
+    }
+
+    function isInstanceRandomizationPromptAction(action = currentPromptAction) {
+      return !!action && (
+        action.directAction === 'duplicateWithInstructions' ||
+        action.directAction === 'randomizeSelectedInstances'
+      );
+    }
+
+    function sanitizeRandomizationDrawerValues(values, metadata) {
+      const nextValues = { ...(values || {}) };
+      const propertyKeys = Array.isArray(metadata) ? metadata.map(item => item.propertyKey) : [];
+      const selectedProperties = Array.isArray(nextValues.randomizeProperties)
+        ? nextValues.randomizeProperties.map(value => String(value)).filter(value => propertyKeys.includes(value))
+        : [];
+      nextValues.randomizeProperties = selectedProperties;
+
+      (Array.isArray(metadata) ? metadata : []).forEach((meta) => {
+        if (!selectedProperties.includes(meta.propertyKey)) {
+          delete nextValues[meta.fieldKey];
+          return;
+        }
+        const selectedValues = Array.isArray(nextValues[meta.fieldKey])
+          ? nextValues[meta.fieldKey].map(value => String(value)).filter(value => meta.allowedValues.includes(value))
+          : [];
+        nextValues[meta.fieldKey] = selectedValues.length > 0 ? selectedValues : [...meta.allowedValues];
+      });
+
+      return nextValues;
+    }
+
+    async function refreshOpenInstanceRandomizationDrawerFromSelection() {
+      if (!promptDrawer.classList.contains('open') || !isInstanceRandomizationPromptAction()) return;
+
+      const refreshVersion = ++randomizeDrawerRefreshVersion;
+      const preservedValues = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+      const mode = currentPromptAction?.directAction === 'randomizeSelectedInstances' ? 'randomizeOnly' : 'duplicate';
+      const baseFields = currentPromptAction?.randomizeBaseFields || [];
+      const selectionResult = await requestSelectionData(true, false, 'all');
+
+      if (refreshVersion !== randomizeDrawerRefreshVersion) return;
+      if (!promptDrawer.classList.contains('open') || !isInstanceRandomizationPromptAction()) return;
+
+      const refreshed = buildInstanceRandomizationFields(baseFields, selectionResult.data || [], mode);
+      const localizedFields = refreshed.fields.map(localizeTaskField);
+      currentPromptAction.fields = localizedFields;
+      currentPromptAction.randomizePropertyMetadata = refreshed.metadata;
+      currentPromptAction.randomizePropertiesAvailable = refreshed.hasAvailableProperties;
+
+      const nextValues = sanitizeRandomizationDrawerValues(preservedValues, refreshed.metadata);
+      renderPromptFields(localizedFields, nextValues);
+      promptDrawerFields.classList.remove('hidden');
+    }
+
+    async function triggerInstanceRandomizationDrawerRefresh(buttonEl = null) {
+      if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.classList.add('loading');
+      }
+      try {
+        await refreshOpenInstanceRandomizationDrawerFromSelection();
+      } catch (error) {
+        console.warn('Failed to manually refresh instance randomization drawer:', error);
+        showToast('Failed to refresh instance properties from selection', 'error');
+      } finally {
+        if (buttonEl) {
+          buttonEl.disabled = false;
+          buttonEl.classList.remove('loading');
+        }
+      }
+    }
 
     function normalizeDirectUISections(data) {
       if (!Array.isArray(data)) return [];
@@ -12232,6 +12577,9 @@ Generate ONLY the reply text, nothing else.`;
         // Normalize prompt template fallback
         const template = actionData.promptTemplate || actionData.prompt || '';
         currentPromptAction = { ...actionData, promptTemplate: template };
+        if (isInstanceRandomizationPromptAction(currentPromptAction)) {
+          currentPromptAction.randomizeBaseFields = actionData.fields || [];
+        }
 
         // Set title and icon
         promptDrawerTitle.textContent = localizedAction.displayName || actionData.name;
@@ -12239,7 +12587,9 @@ Generate ONLY the reply text, nothing else.`;
 
         // Set help text - only show if help exists and this action uses the help panel
         const hidePromptDrawerHelp =
-          actionData.name === 'Vertical text' || actionData.name === 'Font preview';
+          actionData.name === 'Vertical text' ||
+          actionData.name === 'Font preview' ||
+          actionData.directAction === 'randomizeSelectedInstances';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
@@ -12340,6 +12690,16 @@ Generate ONLY the reply text, nothing else.`;
           hydratedFields = await hydrateCreateGraphFields(actionData.fields);
         } else if (actionData.name === 'Vertical text') {
           hydratedFields = await hydrateVerticalTextFields(actionData.fields);
+        } else if (actionData.directAction === 'duplicateWithInstructions' || actionData.directAction === 'randomizeSelectedInstances') {
+          const duplicateRandomizeData = buildInstanceRandomizationFields(
+            actionData.fields || [],
+            [],
+            actionData.directAction === 'randomizeSelectedInstances' ? 'randomizeOnly' : 'duplicate',
+            { isLoading: true }
+          );
+          hydratedFields = duplicateRandomizeData.fields;
+          currentPromptAction.randomizePropertyMetadata = duplicateRandomizeData.metadata;
+          currentPromptAction.randomizePropertiesAvailable = duplicateRandomizeData.hasAvailableProperties;
         }
 
         // Apply history if available for this action
@@ -12368,6 +12728,7 @@ Generate ONLY the reply text, nothing else.`;
 
         // Render fields (Screen type, Platform, etc.)
         const localizedHydratedFields = hydratedFields.map(localizeTaskField);
+        currentPromptAction.fields = localizedHydratedFields;
         if (actionData.name === 'UI Section Outline') {
           renderPromptFields(localizedHydratedFields, directUIFieldValues);
           promptDrawerFields.classList.remove('hidden');
@@ -12408,6 +12769,14 @@ Generate ONLY the reply text, nothing else.`;
         // Open drawer
         promptDrawer.classList.add('open');
         promptDrawerOverlay.classList.add('open');
+
+        if (actionData.directAction === 'duplicateWithInstructions' || actionData.directAction === 'randomizeSelectedInstances') {
+          setTimeout(() => {
+            refreshOpenInstanceRandomizationDrawerFromSelection().catch((error) => {
+              console.warn('Failed to hydrate instance randomization fields after opening drawer:', error);
+            });
+          }, 0);
+        }
 
         // Initialize 3D Camera Selector AFTER drawer is open (for correct dimensions)
         setTimeout(async () => {
@@ -13340,15 +13709,30 @@ Generate ONLY the reply text, nothing else.`;
           ` : '';
 
           const canAddOption = field.key === 'tone' || field.key === 'imagePreset' || field.key === 'reStylePreset' || field.key === 'renamePreset' || field.key === 'styleCategory';
-          const fieldHeaderHtml = canAddOption ? `
-            <div class="prompt-field-label-row">
+          const actionButtonHtml = field.actionButton ? `
+            <button class="prompt-ai-btn prompt-refresh-instance-scope-btn" data-prompt-action="${escapeHtml(field.actionButton.action || '')}" type="button"${field.disabled || forceDisabled ? ' disabled' : ''}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>${escapeHtml(field.actionButton.label || 'Refresh')}</span>
+            </button>
+          ` : '';
+          const addOptionButtonHtml = canAddOption ? `
+            <button class="add-option-btn" data-add-for="${field.key}" title="${tu('actions.prompt.add')} ${field.label || field.key}"${forceDisabled ? ' disabled' : ''}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span>${tu('actions.prompt.add')}</span>
+            </button>
+          ` : '';
+          const fieldHeaderHtml = (canAddOption || field.actionButton) ? `
+            <div class="prompt-field-header">
               <label class="prompt-field-label">${field.label}</label>
-              <button class="add-option-btn" data-add-for="${field.key}" title="${tu('actions.prompt.add')} ${field.label || field.key}"${forceDisabled ? ' disabled' : ''}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-                <span>${tu('actions.prompt.add')}</span>
-              </button>
+              <div class="prompt-ai-actions">
+                ${actionButtonHtml}
+                ${addOptionButtonHtml}
+              </div>
             </div>
           ` : `<label class="prompt-field-label">${field.label}</label>`;
 
@@ -13756,6 +14140,18 @@ Generate ONLY the reply text, nothing else.`;
             ? preservedValues[field.key]
             : (field.default || '');
 
+          const actionButtonHtml = field.actionButton ? `
+            <div class="prompt-ai-actions">
+              <button class="prompt-ai-btn prompt-refresh-instance-scope-btn" data-prompt-action="${escapeHtml(field.actionButton.action || '')}" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 4v6h-6M1 20v-6h6"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                <span>${escapeHtml(field.actionButton.label || 'Refresh')}</span>
+              </button>
+            </div>
+          ` : '';
+
           const translateBtnHtml = field.translate ? `
             <div class="prompt-ai-actions">
               <button class="prompt-ai-btn" data-ai-action="translate" title="${escapeHtml(tu('actions.prompt.translateTitle'))}" type="button">
@@ -13769,13 +14165,14 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                ${actionButtonHtml}
                 ${translateBtnHtml}
               </div>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <input type="text" id="${fieldId}" data-field-key="${field.key}" 
                 value="${textValue}" 
                 placeholder="${field.placeholder || ''}"
-                ${disabledAttr}>
+                ${field.actionButton ? 'readonly' : disabledAttr}>
             </div>
           `;
         }
@@ -13836,6 +14233,14 @@ Generate ONLY the reply text, nothing else.`;
           e.preventDefault();
           e.stopPropagation();
           showOptionContextMenu(e, btn.dataset.fieldKey, btn.dataset.optionValue, btn.dataset.optionId);
+        };
+      });
+
+      promptDrawerFields.querySelectorAll('.prompt-refresh-instance-scope-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          triggerInstanceRandomizationDrawerRefresh(btn);
         };
       });
 
@@ -15203,7 +15608,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       if (!el) return '';
       if (el.classList.contains('prompt-custom-select')) {
         if (el.dataset.multi === 'true') {
-          return parseSelectedValues(el.dataset.selected).join(',');
+          return parsePromptSelectedValues(el.dataset.selected).join(',');
         }
         return el.dataset.selected || '';
       }
@@ -15327,6 +15732,20 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         if (caseOnlyEnabled) {
           updatePromptFieldIndicator('renamePrompt', { visible: false });
         }
+      }
+
+      if (currentPromptAction?.directAction === 'duplicateWithInstructions' || currentPromptAction?.directAction === 'randomizeSelectedInstances') {
+        const randomizationEnabled = getPromptVisibilityValue('randomizeInstance') === 'true' || getPromptVisibilityValue('randomizeNestedInstances') === 'true';
+        const selectedProperties = new Set(parsePromptSelectedValues(getPromptVisibilityValue('randomizeProperties')));
+        const propertyMetadata = Array.isArray(currentPromptAction.randomizePropertyMetadata)
+          ? currentPromptAction.randomizePropertyMetadata
+          : [];
+
+        propertyMetadata.forEach((meta) => {
+          const fieldEl = promptDrawerFields.querySelector(`[data-field-key="${meta.fieldKey}"]`)?.closest('.prompt-field');
+          if (!fieldEl) return;
+          fieldEl.style.display = randomizationEnabled && selectedProperties.has(meta.propertyKey) ? '' : 'none';
+        });
       }
 
       // 2b. Handle Button component set field visibility
@@ -18971,6 +19390,8 @@ Return as JSON with colors array containing objects with hierarchical names. Use
           numCopies = customInstructions.length;
         }
 
+        const randomizeConfig = buildRandomizeConfigFromAction(values, actionMeta);
+
         // Send message to code.ts for duplication
         // Reality Data and Randomize Instance will be applied AFTER duplication to selected duplicates
         parent.postMessage({
@@ -18982,6 +19403,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
               realityData: values.realityData || false, // Will be applied after selection
               randomizeInstance: values.randomizeInstance || false, // Will be applied after selection
               randomizeNestedInstances: values.randomizeNestedInstances || false,
+              randomizeConfig,
               customInstructions: customInstructions,
               numCopies: numCopies,
               hasImage: !!imageData
@@ -19017,6 +19439,27 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       } catch (error) {
         console.error('Duplicate with instructions failed:', error);
         showToast('Failed to duplicate nodes: ' + error.message, 'error');
+      }
+    }
+
+    async function runRandomizeSelectedInstancesAction(values, actionMeta) {
+      try {
+        const randomizeConfig = buildRandomizeConfigFromAction(values, actionMeta);
+        const result = await runLocalActionRequest({
+          requestType: 'randomize-selected-instances',
+          resultType: 'randomize-selected-instances-result',
+          payload: {
+            randomizeInstance: values.randomizeInstance || false,
+            randomizeNestedInstances: values.randomizeNestedInstances || false,
+            randomizeConfig
+          },
+          errorPrefixes: ['Failed to randomize selected instances', 'Please select at least one instance']
+        });
+
+        showToast(result.message || 'Randomized selected instances', 'success');
+      } catch (error) {
+        console.error('Randomize selected instances failed:', error);
+        showToast(error.message || 'Failed to randomize selected instances', 'error');
       }
     }
 
@@ -19093,6 +19536,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'duplicateWithInstructions':
           await runDuplicateWithInstructionsAction(values, actionMeta);
+          break;
+        case 'randomizeSelectedInstances':
+          await runRandomizeSelectedInstancesAction(values, actionMeta);
           break;
         case 'turnIntoComponentSet':
           await runTurnIntoComponentSetAction(values, actionMeta);
