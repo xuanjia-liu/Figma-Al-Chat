@@ -519,6 +519,12 @@
       gap: var(--space-sm);
     }
 
+    .gfp-font-source-row {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
     .gfp-bookmark-bar {
       display: flex;
       flex-direction: column;
@@ -1109,7 +1115,7 @@
     .gfp-bookmark-popover {
       box-sizing: border-box;
       max-width: min(240px, 72vw);
-      padding: var(--space-sm) var(--space-md);
+      padding: var(--space-lg);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border-intense, var(--border));
       background: var(--bg-primary);

@@ -1891,6 +1891,52 @@ function numericPreviewWeightToFigmaStyle(weight: number): string {
   return normalizeFontStyle(best);
 }
 
+function pickBestLocalStyle(available: string[], weightNum: number, preferred?: string): string {
+  if (available.length === 0) {
+    throw new Error('No font styles available');
+  }
+  if (preferred && available.includes(preferred)) {
+    return preferred;
+  }
+  const want = numericPreviewWeightToFigmaStyle(weightNum);
+  if (available.includes(want)) {
+    return want;
+  }
+  const wLower = want.toLowerCase().replace(/\s+/g, '');
+  for (const s of available) {
+    const sl = s.toLowerCase().replace(/\s+/g, '');
+    if (sl === wLower || sl.includes(wLower) || wLower.includes(sl)) {
+      return s;
+    }
+  }
+  const italicPair = `${want} Italic`;
+  if (available.includes(italicPair)) {
+    return italicPair;
+  }
+  for (const fallback of ['Regular', 'Normal', 'Book', 'Roman', 'Medium']) {
+    const hit = available.find(x => x === fallback);
+    if (hit) {
+      return hit;
+    }
+  }
+  return available[0];
+}
+
+async function loadFontForLocalPreviewApply(
+  family: string,
+  weightNum: number,
+  styles: string[],
+  preferredStyle?: string
+): Promise<FontName> {
+  if (!styles.length) {
+    throw new Error(`Font "${family}" has no style list. Reload the font preview.`);
+  }
+  const target = pickBestLocalStyle(styles, weightNum, preferredStyle);
+  const fontName: FontName = { family, style: target };
+  await figma.loadFontAsync(fontName);
+  return fontName;
+}
+
 /** Pick the closest value in `allowed` to `value` (for font static weight buckets). */
 function nearestInList(value: number, allowed: readonly number[]): number {
   let best = allowed[0];
@@ -5272,6 +5318,39 @@ figma.ui.onmessage = async (msg: {
       break;
     }
 
+    case 'list-font-preview-local-fonts': {
+      try {
+        const listed = await figma.listAvailableFontsAsync();
+        const byFamily = new Map<string, Set<string>>();
+        for (const font of listed) {
+          const fn = font.fontName as FontName;
+          const fam = typeof fn.family === 'string' ? fn.family.trim() : '';
+          const sty = typeof fn.style === 'string' ? fn.style.trim() : '';
+          if (!fam || !sty) {
+            continue;
+          }
+          if (!byFamily.has(fam)) {
+            byFamily.set(fam, new Set());
+          }
+          byFamily.get(fam)!.add(sty);
+        }
+        const families = [...byFamily.entries()]
+          .map(([family, styles]) => ({
+            family,
+            styles: [...styles].sort((a, b) => a.localeCompare(b)),
+          }))
+          .sort((a, b) => a.family.localeCompare(b.family));
+        figma.ui.postMessage({ type: 'font-preview-local-fonts-result', families });
+      } catch (error: any) {
+        figma.ui.postMessage({
+          type: 'font-preview-local-fonts-result',
+          families: [],
+          error: error?.message || 'listAvailableFonts failed',
+        });
+      }
+      break;
+    }
+
     case 'get-font-preview-bookmarks': {
       try {
         const raw = await figma.clientStorage.getAsync(SETTINGS_KEYS.FONT_PREVIEW_BOOKMARKS);
@@ -5323,6 +5402,12 @@ figma.ui.onmessage = async (msg: {
           : parseFloat(String(rawW ?? ''));
       const weightNum = Number.isFinite(parsedW) ? parsedW : 400;
       const wghtCss = typeof anyMsg.wghtCss === 'string' ? anyMsg.wghtCss : '';
+      const applySource = anyMsg.source === 'local' ? 'local' : 'google';
+      const localStylesRaw = anyMsg.localStyles;
+      const localStyles: string[] = Array.isArray(localStylesRaw)
+        ? localStylesRaw.filter((x: unknown) => typeof x === 'string' && String(x).trim()).map((x: string) => String(x).trim())
+        : [];
+      const localStylePref = typeof anyMsg.localStyle === 'string' ? anyMsg.localStyle.trim() : '';
       if (!family) {
         figma.ui.postMessage({ type: 'font-preview-apply-result', ok: false, applied: 0, failed: 0, error: 'noFamily' });
         break;
@@ -5338,7 +5423,10 @@ figma.ui.onmessage = async (msg: {
       for (const textNode of textNodes) {
         try {
           await loadAllFontsForTextNode(textNode);
-          const loaded = await loadFontForFontPreviewApply(family, weightNum, wghtCss);
+          const loaded =
+            applySource === 'local'
+              ? await loadFontForLocalPreviewApply(family, weightNum, localStyles, localStylePref || undefined)
+              : await loadFontForFontPreviewApply(family, weightNum, wghtCss);
           const len = textNode.characters.length;
           if (len > 0) {
             textNode.setRangeFontName(0, len, loaded);

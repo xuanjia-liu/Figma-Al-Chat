@@ -53,6 +53,67 @@ function hasSubset(f, key) {
 }
 
 /**
+ * Approximate language/script filter for local fonts (Figma does not expose Google-style subsets).
+ * Uses family-name heuristics; results are imperfect for ambiguous or short names.
+ * @param {string} famLower
+ * @param {string} lang - same values as LANGUAGE_OPTIONS / Google subset keys
+ */
+function localFontMatchesLangSubset(famLower, lang) {
+  if (!lang) return true;
+  switch (lang) {
+    case 'japanese':
+      return /japanese|japan|(?:^|[\s._-])jp(?:[\s._-]|$)|hiragino|kozuka|gothic|mincho|noto sans jp|noto serif jp|noto sans cjk jp|noto serif cjk jp|source han sans jp|source han serif jp|yu gothic|yu mincho|meiryo|yu gothic ui|ms gothic|ms pgothic|ms mincho|msgothic|ipam|ipaex|mplus 1p|rounded mplus|zen kaku|sarasa|line seed|ヒラギノ|游ゴ|noto.*\bjp\b/i.test(
+        famLower
+      );
+    case 'korean':
+      return /korean|hangul|malgun|nanum|pretendard|gulim|dotum|batang|applesdgothic|apple sd gothic|noto sans kr|noto serif kr|source han sans kr|source han serif kr|noto sans cjk kr|yeon sung|black han|본고딕|본명조/i.test(famLower);
+    case 'chinese-simplified':
+      return /simplified|han sans cn|han serif cn|noto sans cjk sc|noto serif cjk sc|source han sans sc|source han serif sc|pingfang sc|microsoft yahei|yahei|simhei|simsun|nsimsun|kaiti|fangsong|stkaiti|stheiti|wqy|noto sans sc\b|noto serif sc\b|harmonyos sans sc|简体中文|汉仪|华文黑体|华文宋体/i.test(
+        famLower
+      );
+    case 'chinese-traditional':
+      return /traditional|han sans tw|han serif tw|noto sans cjk tc|noto serif cjk tc|source han sans tc|source han serif tc|pingfang tc|microsoft jhenghei|jhenghei|noto sans tc\b|noto serif tc\b|標楷|繁體|繁体|黑體|明體|蘋方/i.test(famLower);
+    case 'arabic':
+      return /\barabic\b|naskh|qalam|amiri|scheherazade|noto sans arabic|noto naskh|dubai|sakkal|traditional arabic|arabic typesetting/i.test(famLower);
+    case 'hebrew':
+      return /hebrew|david|gisha|arial hebrew|noto sans hebrew|frank ruehl|new peninim/i.test(famLower);
+    case 'devanagari':
+      return /devanagari|hindi|nagari|noto sans devanagari|noto serif devanagari|mangal|nirmala ui|kokila/i.test(famLower);
+    case 'thai':
+      return /\bthai\b|noto sans thai|sarabun|leelawadee|cordia new|angsana new|th sarabun/i.test(famLower);
+    case 'tamil':
+      return /tamil|noto sans tamil|noto serif tamil|latha|vijaya|tamil sangam/i.test(famLower);
+    case 'bengali':
+      return /bengali|noto sans bengali|noto serif bengali|shonar bangla|vrinda|solaiman/i.test(famLower);
+    case 'latin':
+      return localFontLikelyLatinPrimary(famLower);
+    default:
+      return true;
+  }
+}
+
+/** For "Latin": keep fonts that do not look like non-Latin–only families. */
+function localFontLikelyLatinPrimary(famLower) {
+  if (
+    /hiragino|kozuka|noto sans jp|noto serif jp|noto sans cjk|noto serif cjk|source han sans|source han serif|pingfang|microsoft yahei|jhenghei|simhei|simsun|meiryo|yu gothic|yu mincho|malgun|nanum|applesdgothic|gulim|dotum|pretendard|msgothic|ms mincho|ipaex|\bmplus\b|rounded mplus|line seed jp|black han|yeon sung/i.test(
+      famLower
+    )
+  ) {
+    return false;
+  }
+  if (
+    /\b(arabic|hebrew|devanagari|bengali|gurmukhi|khmer|lao|myanmar|sinhala|ethiopic|georgian|mongolian|tibetan|syriac)(?:\s|$|_)/i.test(famLower) &&
+    !/(unicode|pan-|global)/i.test(famLower)
+  ) {
+    return false;
+  }
+  if ((/\btamil\b|\bthai\b|\bkorean\b|\bhangul\b/i.test(famLower) && !/(latin|unicode)/i.test(famLower))) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * CSS font-family for .gfp-font-sample. Latin-only families have no JP glyphs; without a GF
  * Japanese fallback the browser uses system UI fonts, which often only expose ~2 weights.
  */
@@ -62,6 +123,10 @@ function gfpJpPreviewFallbackFamily(f) {
 }
 
 function gfpSampleFontFamilyCss(f) {
+  if (f && f.source === 'local') {
+    const primary = `'${String(f.family || '').replace(/'/g, "\\'")}'`;
+    return `${primary}, var(--font-ui, system-ui, sans-serif)`;
+  }
   const primary = `'${String(f.family || '').replace(/'/g, "\\'")}'`;
   if (hasSubset(f, 'japanese')) {
     return `${primary}, var(--font-ui, system-ui)`;
@@ -181,8 +246,65 @@ function gfpFormatRowWeightStyle(effectiveWght, tu) {
   return tu('actions.fontPreview.weightStyleMeta', { weight: String(w), style: tu(styleKey) });
 }
 
+const LOCAL_BOOKMARK_PREFIX = 'LOCAL|';
+
+function parseBookmarkFamilyKey(key) {
+  const s = String(key || '');
+  if (s.startsWith(LOCAL_BOOKMARK_PREFIX)) {
+    return { source: 'local', family: s.slice(LOCAL_BOOKMARK_PREFIX.length) };
+  }
+  return { source: 'google', family: s };
+}
+
+function formatBookmarkFamilyKey(source, family) {
+  const fam = String(family || '').trim();
+  if (!fam) return '';
+  return source === 'local' ? `${LOCAL_BOOKMARK_PREFIX}${fam}` : fam;
+}
+
+function gfpSyntheticLocalMeta(family) {
+  const fam = String(family || '').trim() || 'Unknown';
+  return {
+    family: fam,
+    source: 'local',
+    styles: ['Regular'],
+    category: 'Local',
+    subsets: [],
+    classifications: [],
+    stroke: null,
+    popularity: 9999,
+    thickness: 5,
+    wghtMin: 100,
+    wghtMax: 900,
+    wghtCss: '100..900',
+  };
+}
+
+function buildLocalFontEntry(family, styles) {
+  return {
+    family,
+    source: 'local',
+    styles: Array.isArray(styles) && styles.length ? [...styles] : ['Regular'],
+    category: 'Local',
+    subsets: [],
+    classifications: [],
+    stroke: null,
+    popularity: 5000,
+    thickness: 5,
+    wghtMin: 100,
+    wghtMax: 900,
+    wghtCss: '100..900',
+  };
+}
+
 /** @param {(k: string, vars?: object) => string} tu */
 function gfpFamilyWeightCatalogSummary(f, tu) {
+  if (f && f.source === 'local' && Array.isArray(f.styles)) {
+    const n = f.styles.length;
+    return n <= 1
+      ? tu('actions.fontPreview.localFontStylesOne')
+      : tu('actions.fontPreview.localFontStylesCount', { count: String(n) });
+  }
   const css = f && typeof f.wghtCss === 'string' ? f.wghtCss.trim() : '';
   if (css.includes('..')) {
     return tu('actions.fontPreview.weightFamilyVariable');
@@ -236,6 +358,12 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   let allFamilies = [];
   /** @type {Map<string, object>} */
   let familyByName = new Map();
+  let allLocalFamilies = [];
+  /** @type {Map<string, object>} */
+  let localFamilyByName = new Map();
+  /** @type {'google' | 'local'} */
+  let fontSource = 'google';
+  let localFontsLoadAttempted = false;
   const loadedCss = new Set();
   /** @type {IntersectionObserver | null} */
   let listObserver = null;
@@ -264,6 +392,18 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
           </div>
           <div class="gfp-lang-row">
             <select class="gfp-select gfp-lang-primary" aria-label="${escapeAttr(tu('actions.fontPreview.languagePrimaryAria'))}"></select>
+          </div>
+        </section>
+        <section class="gfp-filter-block">
+          <div class="gfp-filter-heading">
+            <span class="gfp-filter-heading-icon" aria-hidden="true">Aa</span>
+            ${escapeAttr(tu('actions.fontPreview.fontLibraryHeading'))}
+          </div>
+          <div class="gfp-font-source-row">
+            <select class="gfp-select gfp-font-source-select" aria-label="${escapeAttr(tu('actions.fontPreview.fontSourceSelectAria'))}">
+              <option value="google">${escapeAttr(tu('actions.fontPreview.fontSourceGoogle'))}</option>
+              <option value="local">${escapeAttr(tu('actions.fontPreview.fontSourceLocal'))}</option>
+            </select>
           </div>
         </section>
         <section class="gfp-filter-block">
@@ -338,6 +478,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const weightSelect = container.querySelector('.gfp-weight-select');
   const weightRange = container.querySelector('.gfp-weight-range');
   const langPrimary = container.querySelector('.gfp-lang-primary');
+  const fontSourceSelect = container.querySelector('.gfp-font-source-select');
   const bookmarkListSelect = container.querySelector('.gfp-bookmark-list-select');
   const bookmarkRenameBtn = container.querySelector('.gfp-bookmark-rename-btn');
   const bookmarkDeleteBtn = container.querySelector('.gfp-bookmark-delete-btn');
@@ -490,6 +631,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   function showPairPopoverForRow(row, f) {
     if (disposed) return;
+    if (f && f.source === 'local') return;
     fillPairPopover(f);
     pairPopover.hidden = false;
     requestAnimationFrame(() => {
@@ -511,8 +653,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     pairShowTimer = setTimeout(() => {
       pairShowTimer = null;
       if (disposed || pairHoverRow !== row) return;
-      const meta = familyByName.get(row.dataset.family);
-      if (meta) showPairPopoverForRow(row, meta);
+      const meta = metaFromDatasetRow(row);
+      if (meta && meta.source !== 'local') showPairPopoverForRow(row, meta);
     }, 150);
   }
 
@@ -535,8 +677,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       pairShowTimer = setTimeout(() => {
         pairShowTimer = null;
         if (disposed || pairHoverRow !== other) return;
-        const meta = familyByName.get(other.dataset.family);
-        if (meta) showPairPopoverForRow(other, meta);
+        const meta = metaFromDatasetRow(other);
+        if (meta && meta.source !== 'local') showPairPopoverForRow(other, meta);
       }, 150);
       return;
     }
@@ -557,8 +699,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     clearTimeout(pairShowTimer);
     pairShowTimer = null;
     pairHoverRow = row;
-    const meta = familyByName.get(row.dataset.family);
-    if (meta) showPairPopoverForRow(row, meta);
+    const meta = metaFromDatasetRow(row);
+    if (meta && meta.source !== 'local') showPairPopoverForRow(row, meta);
   }
 
   function onListFocusOut(e) {
@@ -691,23 +833,41 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     return bookmarkLists.find(l => l.id === activeListId) || null;
   }
 
-  function getFamilyMeta(familyName) {
-    const fromMap = familyByName.get(familyName);
-    if (fromMap) return fromMap;
-    return gfpSyntheticFamilyMeta(familyName);
+  function getFamilyMeta(storedKey) {
+    const p = parseBookmarkFamilyKey(storedKey);
+    if (p.source === 'local') {
+      return localFamilyByName.get(p.family) || gfpSyntheticLocalMeta(p.family);
+    }
+    return familyByName.get(p.family) || gfpSyntheticFamilyMeta(p.family);
+  }
+
+  function metaFromDatasetRow(row) {
+    const fam = row?.dataset?.family || '';
+    if (!fam) return null;
+    if (row.dataset.fontSource === 'local') {
+      return localFamilyByName.get(fam) || gfpSyntheticLocalMeta(fam);
+    }
+    return familyByName.get(fam) || gfpSyntheticFamilyMeta(fam);
   }
 
   function familyPassesFilters(f) {
     const q = state.search.trim().toLowerCase();
     const needFeeling = state.feeling.size > 0;
     const needAppearance = state.appearance.size > 0;
+    const isLocal = f && f.source === 'local';
     if (q && !familyLower(f).includes(q)) return false;
-    if (state.langSubset && !hasSubset(f, state.langSubset)) return false;
-    if (needFeeling) {
+    if (state.langSubset) {
+      if (isLocal) {
+        if (!localFontMatchesLangSubset(familyLower(f), state.langSubset)) return false;
+      } else if (!hasSubset(f, state.langSubset)) {
+        return false;
+      }
+    }
+    if (needFeeling && !isLocal) {
       const ok = [...state.feeling].some(tag => FEELING_TEST[tag]?.(f));
       if (!ok) return false;
     }
-    if (needAppearance) {
+    if (needAppearance && !isLocal) {
       const ok = [...state.appearance].some(tag => APPEARANCE_TEST[tag]?.(f));
       if (!ok) return false;
     }
@@ -906,7 +1066,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     bookmarkPopover.style.zIndex = '31';
   }
 
-  function fillBookmarkPopoverInner(family) {
+  function fillBookmarkPopoverInner(family, source) {
+    const src = source === 'local' ? 'local' : 'google';
     bookmarkPopover.replaceChildren();
     const inner = document.createElement('div');
     inner.className = 'gfp-bookmark-popover-inner';
@@ -969,8 +1130,9 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         rebuildBookmarkSelect();
       }
       if (!targetList) return;
-      if (!targetList.families.includes(family)) {
-        targetList.families.push(family);
+      const entryKey = formatBookmarkFamilyKey(src, family);
+      if (!targetList.families.includes(entryKey)) {
+        targetList.families.push(entryKey);
       }
       scheduleSaveBookmarks();
       showToast(tu('actions.fontPreview.bookmarkAddedToast', { list: targetList.name }), 'success');
@@ -991,7 +1153,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   function showBookmarkPopoverForFamily(row, family) {
     hidePairPopover();
     hideRenameListPopover();
-    fillBookmarkPopoverInner(family);
+    const src = row.dataset.fontSource === 'local' ? 'local' : 'google';
+    fillBookmarkPopoverInner(family, src);
     bookmarkAnchorRow = row;
     bookmarkPopover.hidden = false;
     requestAnimationFrame(() => {
@@ -1053,7 +1216,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         }
       }
     } else {
-      base = allFamilies;
+      base = fontSource === 'local' ? allLocalFamilies : allFamilies;
     }
 
     state.filtered = base.filter(familyPassesFilters);
@@ -1061,6 +1224,21 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     listEl.innerHTML = '';
     if (state.filtered.length === 0 && activeListId) {
       listEl.innerHTML = `<div class="gfp-bookmarks-empty-hint">${escapeAttr(tu('actions.fontPreview.bookmarksEmptyList'))}</div>`;
+    } else if (
+      state.filtered.length === 0 &&
+      !activeListId &&
+      fontSource === 'local' &&
+      !localFontsLoadAttempted
+    ) {
+      listEl.innerHTML = `<div class="gfp-bookmarks-empty-hint">${escapeAttr(tu('actions.fontPreview.localFontsLoading'))}</div>`;
+    } else if (
+      state.filtered.length === 0 &&
+      !activeListId &&
+      fontSource === 'local' &&
+      localFontsLoadAttempted &&
+      allLocalFamilies.length === 0
+    ) {
+      listEl.innerHTML = `<div class="gfp-bookmarks-empty-hint">${escapeAttr(tu('actions.fontPreview.localFontsEmpty'))}</div>`;
     }
     countEl.textContent = tu('actions.fontPreview.showingCount', {
       shown: Math.min(BATCH, state.filtered.length),
@@ -1084,7 +1262,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   /** Load Noto Sans/Serif JP so mixed JP/Latin preview text respects weight for CJK, not system 2-master fonts. */
   function ensureJpPreviewFallbackCss(meta) {
-    if (!meta || hasSubset(meta, 'japanese') || disposed) return;
+    if (!meta || meta.source === 'local' || hasSubset(meta, 'japanese') || disposed) return;
     const jp = gfpJpPreviewFallbackFamily(meta);
     if (familyByName.has(jp)) loadFontCss(jp);
   }
@@ -1097,6 +1275,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       const row = document.createElement('div');
       row.className = 'gfp-font-row';
       row.dataset.family = f.family;
+      row.dataset.fontSource = f.source === 'local' ? 'local' : 'google';
       const label = document.createElement('div');
       label.className = 'gfp-font-name';
       const titleEl = document.createElement('span');
@@ -1134,7 +1313,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       markBtn.className = 'gfp-font-row-btn gfp-font-row-btn--bookmark';
       markBtn.dataset.family = f.family;
       const listForRow = getActiveBookmarkList();
-      const inActiveList = !!(activeListId && listForRow && listForRow.families.includes(f.family));
+      const bookmarkKey = formatBookmarkFamilyKey(f.source === 'local' ? 'local' : 'google', f.family);
+      const inActiveList = !!(activeListId && listForRow && listForRow.families.includes(bookmarkKey));
       if (inActiveList) {
         markBtn.classList.add('gfp-font-row-btn--bookmark-on');
         markBtn.title = tu('actions.fontPreview.bookmarkRemoveTitle');
@@ -1189,6 +1369,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   function onRowVisible(row) {
     const fam = row.dataset.family;
     if (!fam) return;
+    if (row.dataset.fontSource === 'local') return;
     const meta = familyByName.get(fam);
     ensureJpPreviewFallbackCss(meta);
     loadFontCss(fam);
@@ -1225,6 +1406,22 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   function onGfpPluginWindowMessage(ev) {
     const pm = ev.data?.pluginMessage;
     if (!pm) return;
+    if (pm.type === 'font-preview-local-fonts-result') {
+      localFontsLoadAttempted = true;
+      if (pm.error && typeof pm.error === 'string') {
+        showToast(tu('actions.fontPreview.localFontsLoadError', { message: pm.error }), 'error');
+      }
+      const fams = Array.isArray(pm.families) ? pm.families : [];
+      allLocalFamilies = fams.map(({ family, styles }) =>
+        buildLocalFontEntry(typeof family === 'string' ? family : '', Array.isArray(styles) ? styles : [])
+      );
+      localFamilyByName = new Map(allLocalFamilies.map(f => [f.family, f]));
+      if (fontSource === 'local') {
+        applyFilters();
+        setupListObserver();
+      }
+      return;
+    }
     if (pm.type === 'font-preview-bookmarks-result' && pm.data) {
       applyBookmarksFromServer(pm.data);
       return;
@@ -1348,7 +1545,10 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       if (activeListId) {
         const list = getActiveBookmarkList();
         if (list) {
-          list.families = list.families.filter(n => n !== family);
+          const row = btn.closest('.gfp-font-row');
+          const src = row?.dataset.fontSource === 'local' ? 'local' : 'google';
+          const key = formatBookmarkFamilyKey(src, family);
+          list.families = list.families.filter(n => n !== key);
           scheduleSaveBookmarks();
           showToast(tu('actions.fontPreview.bookmarkRemovedToast'), 'success');
           applyFilters();
@@ -1365,11 +1565,23 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       return;
     }
     if (btn.classList.contains('gfp-font-row-btn--apply')) {
-      const meta = getFamilyMeta(family);
+      const row = btn.closest('.gfp-font-row');
+      const meta = metaFromDatasetRow(row);
+      if (!meta) return;
+      const src = row?.dataset.fontSource === 'local' ? 'local' : 'google';
       const w = gfpClampWght(meta, state.fontWght);
-      const wghtCss = meta && typeof meta.wghtCss === 'string' ? meta.wghtCss : '';
+      const wghtCss = src === 'local' ? '' : meta && typeof meta.wghtCss === 'string' ? meta.wghtCss : '';
       parent.postMessage(
-        { pluginMessage: { type: 'font-preview-apply-family', family, weight: w, wghtCss } },
+        {
+          pluginMessage: {
+            type: 'font-preview-apply-family',
+            family: meta.family,
+            weight: w,
+            wghtCss,
+            source: src,
+            localStyles: src === 'local' && Array.isArray(meta.styles) ? meta.styles : [],
+          },
+        },
         '*'
       );
     }
@@ -1399,8 +1611,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   function applyWeightToSamples() {
     listEl.querySelectorAll('.gfp-font-row').forEach(row => {
-      const name = row.dataset.family;
-      const meta = name ? getFamilyMeta(name) : null;
+      const meta = metaFromDatasetRow(row);
+      if (!meta) return;
       const sample = row.querySelector('.gfp-font-sample');
       const w = gfpClampWght(meta, state.fontWght);
       if (sample) sample.style.fontWeight = String(w);
@@ -1429,6 +1641,18 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     applyFilters();
     setupListObserver();
   });
+
+  if (fontSourceSelect) {
+    fontSourceSelect.value = fontSource;
+    fontSourceSelect.addEventListener('change', () => {
+      hideBookmarkPopover();
+      hideRenameListPopover();
+      hidePairPopover();
+      fontSource = fontSourceSelect.value === 'local' ? 'local' : 'google';
+      applyFilters();
+      setupListObserver();
+    });
+  }
 
   rebuildBookmarkSelect();
   syncBookmarkManageRowDisabled();
@@ -1567,6 +1791,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   syncSize(false);
   syncWeight(false);
   parent.postMessage({ pluginMessage: { type: 'get-font-preview-bookmarks' } }, '*');
+  parent.postMessage({ pluginMessage: { type: 'list-font-preview-local-fonts' } }, '*');
   loadCatalog();
 
   return () => {
