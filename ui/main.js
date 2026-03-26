@@ -17393,6 +17393,116 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return 0;
     }
 
+    const ICON_FONT_SYNONYM_MAP = {
+      add: ['plus', 'create', 'new'],
+      alert: ['warning', 'error', 'notification'],
+      archive: ['box', 'inbox'],
+      arrow: ['chevron', 'caret'],
+      attachment: ['paperclip', 'clip'],
+      bell: ['notification', 'alert'],
+      bin: ['trash', 'delete', 'remove'],
+      calendar: ['date', 'event'],
+      chat: ['message', 'comment', 'bubble'],
+      check: ['done', 'confirm', 'success'],
+      close: ['dismiss', 'cancel', 'x'],
+      cog: ['gear', 'settings'],
+      comment: ['message', 'chat', 'bubble'],
+      create: ['add', 'plus', 'new'],
+      date: ['calendar', 'event'],
+      delete: ['trash', 'remove', 'bin'],
+      dismiss: ['close', 'cancel', 'x'],
+      download: ['arrow-down', 'import'],
+      edit: ['pencil', 'pen', 'write'],
+      email: ['mail', 'envelope', 'message'],
+      error: ['alert', 'warning'],
+      event: ['calendar', 'date'],
+      find: ['search', 'magnifier', 'magnify'],
+      gear: ['settings', 'cog'],
+      home: ['house'],
+      house: ['home'],
+      import: ['download', 'arrow-down'],
+      info: ['information', 'details'],
+      mail: ['email', 'envelope', 'message'],
+      menu: ['hamburger', 'bars', 'navigation'],
+      message: ['chat', 'comment', 'bubble', 'mail'],
+      new: ['add', 'plus', 'create'],
+      notification: ['bell', 'alert'],
+      password: ['lock', 'key', 'security'],
+      pen: ['pencil', 'edit', 'write'],
+      pencil: ['edit', 'pen', 'write'],
+      person: ['user', 'profile', 'account'],
+      photo: ['image', 'picture'],
+      picture: ['image', 'photo'],
+      plus: ['add', 'create', 'new'],
+      profile: ['user', 'person', 'account'],
+      remove: ['delete', 'trash', 'bin'],
+      search: ['find', 'magnifier', 'magnify'],
+      security: ['shield', 'lock', 'password'],
+      settings: ['gear', 'cog'],
+      shield: ['security', 'protect'],
+      success: ['check', 'done', 'confirm'],
+      trash: ['delete', 'remove', 'bin'],
+      upload: ['arrow-up', 'export'],
+      user: ['person', 'profile', 'account'],
+      warning: ['alert', 'error'],
+      write: ['edit', 'pencil', 'pen'],
+      x: ['close', 'dismiss', 'cancel']
+    };
+
+    function expandIconFontSynonymTerms(...queries) {
+      const seen = new Set();
+      const terms = [];
+      const push = (value) => {
+        const normalized = String(value || '')
+          .toLowerCase()
+          .replace(/["']/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        terms.push(normalized);
+      };
+
+      queries.filter(Boolean).forEach(push);
+
+      queries.forEach(query => {
+        const normalized = String(query || '')
+          .toLowerCase()
+          .replace(/["']/g, '')
+          .replace(/[_-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!normalized) return;
+
+        const direct = ICON_FONT_SYNONYM_MAP[normalized] || [];
+        direct.forEach(push);
+
+        const tokens = normalized.split(' ').filter(Boolean);
+        tokens.forEach((token, index) => {
+          const synonyms = ICON_FONT_SYNONYM_MAP[token] || [];
+          synonyms.forEach(push);
+          synonyms.forEach(synonym => {
+            const replaced = [...tokens];
+            replaced[index] = synonym;
+            push(replaced.join(' '));
+          });
+        });
+      });
+
+      return terms;
+    }
+
+    function scoreIconFontMatch(name, queries) {
+      const list = Array.isArray(queries) ? queries : [queries];
+      return list.reduce((best, query) => {
+        return Math.max(
+          best,
+          scoreGenericIconName(name, query),
+          scoreMaterialIconName(name, query)
+        );
+      }, 0);
+    }
+
     async function searchMaterialIconsByCodepoints(query, limit = 20, fontFamily = 'Material Icons') {
       const unicodeMap = await loadIconFontUnicodeMap('Material Icons');
       const queryNormalized = (query || '').toLowerCase().trim();
@@ -17822,6 +17932,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         cleanDesc,
         slug
       ].filter(Boolean).join(' ').trim();
+      const iconFontSearchTerms = expandIconFontSynonymTerms(slug, cleanDesc, searchQuery).slice(0, 10);
 
       let matches = [];
       if (iconApiSource === 'antv') {
@@ -17840,11 +17951,13 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         }
         matches = allResults;
       } else if (iconApiSource === 'iconfont') {
-        const queries = [
-          slug,
-          cleanDesc,
-          searchQuery,
-        ].filter(Boolean);
+        const queries = iconFontSearchTerms.length
+          ? iconFontSearchTerms
+          : [
+            slug,
+            cleanDesc,
+            searchQuery,
+          ].filter(Boolean);
         const allResults = [];
         const iconFontSearchConfigs = [
           { fontFamily: 'Font Awesome 5 Free', prefixes: ICON_FONT_FAMILY_CONFIG['Font Awesome 5 Free']?.iconifyPrefixes || ['fa-solid', 'fa-regular'] },
@@ -17896,11 +18009,22 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           const newMatches = (loosened || []).filter(m => !existingIds.has(m.id));
           matches = [...matches, ...newMatches];
         } else if (iconApiSource === 'iconfont') {
-          const broadenedQuery = description || slug || 'icon';
+          const broadenedQuery = iconFontSearchTerms[0] || description || slug || 'icon';
+          const broadenedTerms = expandIconFontSynonymTerms(broadenedQuery).slice(0, 6);
           const loosenedGroups = await Promise.all([
-            searchIconifyAcrossPrefixes(ICON_FONT_FAMILY_CONFIG['Font Awesome 5 Free']?.iconifyPrefixes || ['fa-solid', 'fa-regular'], broadenedQuery, 30, 'Font Awesome 5 Free'),
-            searchIconifyAcrossPrefixes(ICON_FONT_FAMILY_CONFIG['Font Awesome 6 Free']?.iconifyPrefixes || ['fa6-solid', 'fa6-regular'], broadenedQuery, 30, 'Font Awesome 6 Free'),
-            searchMaterialIconsByCodepoints(broadenedQuery, 30, 'Material Icons')
+            ...broadenedTerms.map(term => searchIconifyAcrossPrefixes(
+              ICON_FONT_FAMILY_CONFIG['Font Awesome 5 Free']?.iconifyPrefixes || ['fa-solid', 'fa-regular'],
+              term,
+              30,
+              'Font Awesome 5 Free'
+            )),
+            ...broadenedTerms.map(term => searchIconifyAcrossPrefixes(
+              ICON_FONT_FAMILY_CONFIG['Font Awesome 6 Free']?.iconifyPrefixes || ['fa6-solid', 'fa6-regular'],
+              term,
+              30,
+              'Font Awesome 6 Free'
+            )),
+            ...broadenedTerms.map(term => searchMaterialIconsByCodepoints(term, 30, 'Material Icons'))
           ]);
           matches = [...matches, ...loosenedGroups.flat().filter(Boolean)];
         } else {
@@ -17920,12 +18044,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       if (iconApiSource === 'iconfont') {
         matches = matches.filter(match => {
           const iconName = parseIconNameFromId(match.id);
-          const score = Math.max(
-            scoreGenericIconName(iconName, cleanDesc),
-            scoreGenericIconName(iconName, slug),
-            scoreMaterialIconName(iconName, cleanDesc),
-            scoreMaterialIconName(iconName, slug)
-          );
+          const score = scoreIconFontMatch(iconName, iconFontSearchTerms);
           return score > 0;
         });
       }
