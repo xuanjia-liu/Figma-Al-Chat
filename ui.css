@@ -894,8 +894,8 @@
     }
 
     .gfp-view-toggle-btn:hover {
-      color: var(--text-primary);
-      background: var(--bg-secondary);
+      opacity: 0.7;
+      transition: opacity 0.12s ease;
     }
 
     .gfp-view-toggle-btn:focus-visible {
@@ -904,8 +904,8 @@
     }
 
     .gfp-view-toggle-btn--active {
-      background: var(--bg-primary);
-      color: var(--text-primary);
+      background: var(--text-secondary);
+      color: var(--bg-secondary);
     }
 
     .gfp-view-toggle-btn-icon {
@@ -948,6 +948,7 @@
       gap: 4px;
       padding: var(--space-sm) var(--space-md);
       border-radius: var(--radius-md);
+      cursor: pointer;
     }
 
     .gfp-list--grid .gfp-font-row {
@@ -961,6 +962,11 @@
 
     .gfp-font-row:hover {
       background: var(--bg-secondary);
+    }
+
+    .gfp-font-row:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
     }
 
     .gfp-list--grid .gfp-font-row:hover {

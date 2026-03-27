@@ -1458,6 +1458,27 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     loadFontCss(catalogFam);
   }
 
+  function applyFontFromRow(row) {
+    const meta = metaFromDatasetRow(row);
+    if (!meta) return;
+    const src = row?.dataset.fontSource === 'local' ? 'local' : 'google';
+    const w = gfpClampWght(meta, state.fontWght);
+    const wghtCss = src === 'local' ? '' : meta && typeof meta.wghtCss === 'string' ? meta.wghtCss : '';
+    parent.postMessage(
+      {
+        pluginMessage: {
+          type: 'font-preview-apply-family',
+          family: meta.family,
+          weight: w,
+          wghtCss,
+          source: src,
+          localStyles: src === 'local' && Array.isArray(meta.styles) ? meta.styles : [],
+        },
+      },
+      '*'
+    );
+  }
+
   function appendBatch() {
     const end = Math.min(state.renderOffset + BATCH, state.filtered.length);
     const frag = document.createDocumentFragment();
@@ -1473,6 +1494,9 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       row.className = 'gfp-font-row';
       row.dataset.family = f.family;
       row.dataset.fontSource = f.source === 'local' ? 'local' : 'google';
+      row.tabIndex = 0;
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-label', tu('actions.fontPreview.applyToSelectionTitle'));
       const label = document.createElement('div');
       label.className = 'gfp-font-name';
       const titleEl = document.createElement('span');
@@ -1497,14 +1521,6 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       ensureJpPreviewFallbackCss(sampleFont);
       const actions = document.createElement('div');
       actions.className = 'gfp-font-row-actions';
-      const applyBtn = document.createElement('button');
-      applyBtn.type = 'button';
-      applyBtn.className = 'gfp-font-row-btn gfp-font-row-btn--apply';
-      applyBtn.dataset.family = f.family;
-      applyBtn.title = tu('actions.fontPreview.applyToSelectionTitle');
-      applyBtn.setAttribute('aria-label', tu('actions.fontPreview.applyToSelectionTitle'));
-      applyBtn.innerHTML =
-        '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
       const markBtn = document.createElement('button');
       markBtn.type = 'button';
       markBtn.className = 'gfp-font-row-btn gfp-font-row-btn--bookmark';
@@ -1533,7 +1549,6 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       copyBtn.innerHTML =
         '<svg class="gfp-font-row-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>';
       actions.appendChild(markBtn);
-      actions.appendChild(applyBtn);
       actions.appendChild(copyBtn);
       row.appendChild(label);
       row.appendChild(sample);
@@ -1764,29 +1779,26 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       copyFamilyNameToClipboard(family);
       return;
     }
-    if (btn.classList.contains('gfp-font-row-btn--apply')) {
-      const row = btn.closest('.gfp-font-row');
-      const meta = metaFromDatasetRow(row);
-      if (!meta) return;
-      const src = row?.dataset.fontSource === 'local' ? 'local' : 'google';
-      const w = gfpClampWght(meta, state.fontWght);
-      const wghtCss = src === 'local' ? '' : meta && typeof meta.wghtCss === 'string' ? meta.wghtCss : '';
-      parent.postMessage(
-        {
-          pluginMessage: {
-            type: 'font-preview-apply-family',
-            family: meta.family,
-            weight: w,
-            wghtCss,
-            source: src,
-            localStyles: src === 'local' && Array.isArray(meta.styles) ? meta.styles : [],
-          },
-        },
-        '*'
-      );
-    }
   }
   container.addEventListener('click', onGfpRowActionClick);
+
+  function onGfpRowClick(ev) {
+    if (ev.target.closest('.gfp-font-row-btn')) return;
+    const row = ev.target.closest('.gfp-font-row');
+    if (!row || !listEl.contains(row)) return;
+    applyFontFromRow(row);
+  }
+  listEl.addEventListener('click', onGfpRowClick);
+
+  function onGfpRowKeydown(ev) {
+    if (ev.target.closest('.gfp-font-row-btn')) return;
+    const row = ev.target.closest('.gfp-font-row');
+    if (!row || !listEl.contains(row)) return;
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    ev.preventDefault();
+    applyFontFromRow(row);
+  }
+  listEl.addEventListener('keydown', onGfpRowKeydown);
 
   if (getSelectionBtn) {
     getSelectionBtn.addEventListener('click', () => {
@@ -2013,6 +2025,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     hidePairPopover();
     window.removeEventListener('message', onGfpPluginWindowMessage);
     container.removeEventListener('click', onGfpRowActionClick);
+    listEl.removeEventListener('click', onGfpRowClick);
+    listEl.removeEventListener('keydown', onGfpRowKeydown);
     if (listObserver) listObserver.disconnect();
     rowObserver.disconnect();
     mo.disconnect();
