@@ -30191,6 +30191,8 @@ Selection data now includes "fillsDetailed" array with gradient info including t
 - setParagraphIndent: { "action": "setParagraphIndent", "nodeId": "xxx", "value": 12, "start": 0, "end": 40 } (start/end optional; applies to range or entire node)
 - setParagraphSpacing: { "action": "setParagraphSpacing", "nodeId": "xxx", "value": 8, "start": 0, "end": 40 } (start/end optional; applies to range or entire node)
 - setTextDecoration: { "action": "setTextDecoration", "nodeId": "xxx", "decoration": "NONE/UNDERLINE/STRIKETHROUGH" }
+- setFontSize, setFontFamily, setFontWeight, setLineHeight, setLetterSpacing, setParagraphIndent, setParagraphSpacing, and setTextDecoration work on TEXT, STICKY, and SHAPE_WITH_TEXT nodes. FigJam stickies and shape-with-text nodes apply them to their text sublayers.
+- setTextAlign remains TEXT-only because FigJam text sublayers do not expose alignment controls in the Figma Plugin API.
 - Note: OpenType/OT features like vertical alternates aren't exposed in the Figma Plugin API, so they cannot be set programmatically.
 
 === RUBY/FURIGANA ===

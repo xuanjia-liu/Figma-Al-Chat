@@ -758,6 +758,21 @@ async function loadAllFontsForTextSublayerNode(textSublayer: TextSublayerNode): 
   }
 }
 
+function getTextFormattingTarget(node: SceneNode): TextNode | TextSublayerNode | null {
+  if (node.type === 'TEXT') return node as TextNode;
+  if (node.type === 'STICKY') return (node as StickyNode).text;
+  if (node.type === 'SHAPE_WITH_TEXT') return (node as ShapeWithTextNode).text;
+  return null;
+}
+
+async function loadAllFontsForFormattingTarget(target: TextNode | TextSublayerNode): Promise<void> {
+  if ((target as SceneNode).type === 'TEXT') {
+    await loadAllFontsForTextNode(target as TextNode);
+  } else {
+    await loadAllFontsForTextSublayerNode(target as TextSublayerNode);
+  }
+}
+
 // Check if a node and all its ancestors are visible
 function isEffectivelyVisible(node: SceneNode): boolean {
   try {
@@ -17801,46 +17816,61 @@ figma.ui.onmessage = async (msg: {
               break;
 
             case 'setFontSize':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                await loadAllFontsForTextNode(textNode);
-                textNode.fontSize = cmd.size;
-                success++;
-              } else {
-                failed++;
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  await loadAllFontsForFormattingTarget(textTarget);
+                  textTarget.fontSize = cmd.size;
+                  success++;
+                } else {
+                  failed++;
+                }
               }
               break;
 
             case 'setTextAlign':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                textNode.textAlignHorizontal = cmd.align || 'LEFT';
-                success++;
-              } else {
-                failed++;
+              {
+                if (node.type === 'TEXT') {
+                  const textNode = node as TextNode;
+                  await loadAllFontsForTextNode(textNode);
+                  textNode.textAlignHorizontal = cmd.align || 'LEFT';
+                  success++;
+                } else {
+                  if (!firstError && (node.type === 'STICKY' || node.type === 'SHAPE_WITH_TEXT')) {
+                    firstError = {
+                      action: cmd.action,
+                      nodeId: node.id,
+                      message: 'Text alignment is not exposed on FigJam text sublayers by the Figma Plugin API.'
+                    };
+                  }
+                  failed++;
+                }
               }
               break;
 
             case 'setFontFamily':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                const family = cmd.family || 'Inter';
-                const style = normalizeFontStyle(cmd.weight || cmd.style || 'Regular');
-                if (textNode.fontName === figma.mixed) {
-                  await loadAllFontsForTextNode(textNode);
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  const family = cmd.family || 'Inter';
+                  const style = normalizeFontStyle(cmd.weight || cmd.style || 'Regular');
+                  if (textTarget.fontName === figma.mixed) {
+                    await loadAllFontsForFormattingTarget(textTarget);
+                  }
+                  const loaded = await smartLoadFont({ family, style });
+                  textTarget.fontName = loaded;
+                  success++;
+                } else {
+                  failed++;
                 }
-                const loaded = await smartLoadFont({ family, style });
-                textNode.fontName = loaded;
-                success++;
-              } else {
-                failed++;
               }
               break;
 
             case 'setTextStyle':
-              if (node.type === 'TEXT') {
+              {
                 const styleId = cmd.styleId || cmd.id || cmd.textStyleId;
-                if (!styleId || typeof styleId !== 'string') {
+                const textTarget = getTextFormattingTarget(node);
+                if (!textTarget || !styleId || typeof styleId !== 'string') {
                   failed++;
                   break;
                 }
@@ -17855,10 +17885,15 @@ figma.ui.onmessage = async (msg: {
                       console.warn('getStyleByIdAsync failed', err);
                     }
                   }
-                  if ('setTextStyleIdAsync' in node && typeof (node as any).setTextStyleIdAsync === 'function') {
-                    await (node as any).setTextStyleIdAsync(styleId);
+                  await loadAllFontsForFormattingTarget(textTarget);
+                  if ((textTarget as SceneNode).type === 'TEXT') {
+                    if ('setTextStyleIdAsync' in node && typeof (node as any).setTextStyleIdAsync === 'function') {
+                      await (node as any).setTextStyleIdAsync(styleId);
+                    } else {
+                      await (node as TextNode).setTextStyleIdAsync(styleId);
+                    }
                   } else {
-                    await (node as TextNode).setTextStyleIdAsync(styleId);
+                    await textTarget.setRangeTextStyleIdAsync(0, textTarget.characters.length, styleId);
                   }
                   success++;
                 } catch (error) {
@@ -17866,102 +17901,109 @@ figma.ui.onmessage = async (msg: {
                   if (!firstError) firstError = { action: cmd.action, nodeId: node.id, message: (error as Error)?.message || 'setTextStyle failed' };
                   failed++;
                 }
-              } else {
-                failed++;
               }
               break;
 
             case 'setFontWeight':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                const targetStyle = normalizeFontStyle(cmd.weight || 'Regular');
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  const targetStyle = normalizeFontStyle(cmd.weight || 'Regular');
 
-                if (textNode.fontName === figma.mixed) {
-                  // Mixed fonts: apply weight to each segment, preserving each family
-                  const segments = textNode.getStyledTextSegments(['fontName']);
-                  for (const seg of segments) {
-                    const family = (seg.fontName as FontName).family;
-                    const loaded = await smartLoadFont({ family, style: targetStyle });
-                    textNode.setRangeFontName(seg.start, seg.end, loaded);
+                  if (textTarget.fontName === figma.mixed) {
+                    const segments = textTarget.getStyledTextSegments(['fontName']);
+                    for (const seg of segments) {
+                      const family = (seg.fontName as FontName).family;
+                      const loaded = await smartLoadFont({ family, style: targetStyle });
+                      textTarget.setRangeFontName(seg.start, seg.end, loaded);
+                    }
+                  } else {
+                    const currentFont = textTarget.fontName as FontName;
+                    const loaded = await smartLoadFont({ family: currentFont.family, style: targetStyle });
+                    textTarget.fontName = loaded;
                   }
+                  success++;
                 } else {
-                  const currentFont = textNode.fontName as FontName;
-                  const loaded = await smartLoadFont({ family: currentFont.family, style: targetStyle });
-                  textNode.fontName = loaded;
+                  failed++;
                 }
-                success++;
-              } else {
-                failed++;
               }
               break;
 
             case 'setLineHeight':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                await loadAllFontsForTextNode(textNode);
-                if (cmd.value && cmd.unit === 'PERCENT') {
-                  textNode.lineHeight = { value: cmd.value, unit: 'PERCENT' };
-                } else if (cmd.value) {
-                  textNode.lineHeight = { value: cmd.value, unit: 'PIXELS' };
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  await loadAllFontsForFormattingTarget(textTarget);
+                  if (cmd.value && cmd.unit === 'PERCENT') {
+                    textTarget.lineHeight = { value: cmd.value, unit: 'PERCENT' };
+                  } else if (cmd.value) {
+                    textTarget.lineHeight = { value: cmd.value, unit: 'PIXELS' };
+                  } else {
+                    textTarget.lineHeight = { unit: 'AUTO' };
+                  }
+                  success++;
                 } else {
-                  textNode.lineHeight = { unit: 'AUTO' };
+                  failed++;
                 }
-                success++;
-              } else {
-                failed++;
               }
               break;
 
             case 'setLetterSpacing':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                await loadAllFontsForTextNode(textNode);
-                textNode.letterSpacing = { value: cmd.value || 0, unit: 'PIXELS' };
-                success++;
-              } else {
-                failed++;
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  await loadAllFontsForFormattingTarget(textTarget);
+                  textTarget.letterSpacing = { value: cmd.value || 0, unit: 'PIXELS' };
+                  success++;
+                } else {
+                  failed++;
+                }
               }
               break;
 
             case 'setParagraphIndent':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                try {
-                  await loadAllFontsForTextNode(textNode);
-                  const indent = typeof cmd.value === 'number' ? cmd.value : 0;
-                  if (typeof cmd.start === 'number' && typeof cmd.end === 'number') {
-                    textNode.setRangeParagraphIndent(cmd.start, cmd.end, indent);
-                  } else {
-                    textNode.paragraphIndent = indent;
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  try {
+                    await loadAllFontsForFormattingTarget(textTarget);
+                    const indent = typeof cmd.value === 'number' ? cmd.value : 0;
+                    if (typeof cmd.start === 'number' && typeof cmd.end === 'number') {
+                      textTarget.setRangeParagraphIndent(cmd.start, cmd.end, indent);
+                    } else {
+                      textTarget.paragraphIndent = indent;
+                    }
+                    success++;
+                  } catch (error) {
+                    console.error('Failed to set paragraph indent', error);
+                    failed++;
                   }
-                  success++;
-                } catch (error) {
-                  console.error('Failed to set paragraph indent', error);
+                } else {
                   failed++;
                 }
-              } else {
-                failed++;
               }
               break;
 
             case 'setParagraphSpacing':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                try {
-                  await loadAllFontsForTextNode(textNode);
-                  const spacing = typeof cmd.value === 'number' ? cmd.value : 0;
-                  if (typeof cmd.start === 'number' && typeof cmd.end === 'number') {
-                    textNode.setRangeParagraphSpacing(cmd.start, cmd.end, spacing);
-                  } else {
-                    textNode.paragraphSpacing = spacing;
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  try {
+                    await loadAllFontsForFormattingTarget(textTarget);
+                    const spacing = typeof cmd.value === 'number' ? cmd.value : 0;
+                    if (typeof cmd.start === 'number' && typeof cmd.end === 'number') {
+                      textTarget.setRangeParagraphSpacing(cmd.start, cmd.end, spacing);
+                    } else {
+                      textTarget.paragraphSpacing = spacing;
+                    }
+                    success++;
+                  } catch (error) {
+                    console.error('Failed to set paragraph spacing', error);
+                    failed++;
                   }
-                  success++;
-                } catch (error) {
-                  console.error('Failed to set paragraph spacing', error);
+                } else {
                   failed++;
                 }
-              } else {
-                failed++;
               }
               break;
 
@@ -18115,12 +18157,15 @@ figma.ui.onmessage = async (msg: {
               break;
 
             case 'setTextDecoration':
-              if (node.type === 'TEXT') {
-                const textNode = node as TextNode;
-                textNode.textDecoration = cmd.decoration || 'NONE'; // NONE, UNDERLINE, STRIKETHROUGH
-                success++;
-              } else {
-                failed++;
+              {
+                const textTarget = getTextFormattingTarget(node);
+                if (textTarget) {
+                  await loadAllFontsForFormattingTarget(textTarget);
+                  textTarget.textDecoration = cmd.decoration || 'NONE'; // NONE, UNDERLINE, STRIKETHROUGH
+                  success++;
+                } else {
+                  failed++;
+                }
               }
               break;
 
