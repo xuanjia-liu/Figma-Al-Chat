@@ -776,16 +776,84 @@
       flex-shrink: 0;
     }
 
+    .gfp-search-shell {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+    }
+
+    .gfp-search-group {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: stretch;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-tertiary);
+      overflow: hidden;
+    }
+
     .gfp-search {
       flex: 1;
       min-width: 0;
       box-sizing: border-box;
       padding: 8px 12px;
-      border-radius: var(--radius-md);
-      border: 1px solid var(--border);
-      background: var(--bg-tertiary);
+      border-radius: 0;
+      border: 0;
+      background: transparent;
       color: var(--text-primary);
       font-size: var(--text-sm);
+    }
+
+    .gfp-search:focus {
+      outline: none;
+    }
+
+    .gfp-search-group:focus-within {
+      border-color: var(--accent-primary, var(--border-intense));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-primary, #4f46e5) 20%, transparent);
+    }
+
+    .gfp-search-ai-toggle {
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+    }
+
+    .gfp-search-ai-toggle {
+      margin: 4px;
+      min-width: 38px;
+      padding: 0 10px;
+      border-radius: calc(var(--radius-md) - 4px);
+      border-color: transparent;
+      background: color-mix(in srgb, var(--bg-secondary) 72%, white 28%);
+    }
+
+    .gfp-search-ai-toggle:hover {
+      color: var(--text-primary);
+      border-color: var(--border-intense);
+    }
+
+    .gfp-search-ai-toggle:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .gfp-search-meta {
+      min-height: 16px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: calc(var(--space-xs) * -1);
     }
 
     .gfp-size-select {
@@ -20452,6 +20520,84 @@
     const w400 = f.fonts && f.fonts["400"];
     return w400 && typeof w400.thickness === "number" ? w400.thickness : 5;
   }
+  function normalizeSearchText(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+  function tokenizeSearchText(value) {
+    const normalized = normalizeSearchText(value);
+    return normalized ? normalized.split(/\s+/).filter(Boolean) : [];
+  }
+  function expandSemanticQueryTokens(query2) {
+    const tokens = tokenizeSearchText(query2).filter((token) => !GENERIC_SEARCH_TOKENS.has(token));
+    const expanded = new Set(tokens);
+    for (const token of tokens) {
+      const aliases = SEMANTIC_QUERY_EXPANSIONS[token] || [];
+      for (const alias of aliases) expanded.add(alias);
+    }
+    return [...expanded];
+  }
+  function getAdditionalSemanticDescriptors(f) {
+    const lower = familyLower(f);
+    const descriptors = [];
+    if (/round|rounded|circle|circular|bubble|soft|baloo|fredoka|comfortaa|quicksand|nunito|sniglet|varela round/i.test(lower)) {
+      descriptors.push("rounded", "circular", "soft");
+    }
+    if (/geometric|futura|montserrat|poppins|urbanist|space grotesk|sora|jost|league spartan|manrope/i.test(lower)) {
+      descriptors.push("geometric", "clean");
+    }
+    if (/condensed|narrow|compressed|compact|oswald|anton|archivo narrow|barlow condensed/i.test(lower)) {
+      descriptors.push("condensed", "narrow", "compact");
+    }
+    if (typeof f.thickness === "number" && f.thickness >= 7 || /black|heavy|bold|ultra|fat|chunk|impact/i.test(lower)) {
+      descriptors.push("heavy", "bold", "thick");
+    }
+    if (f.category === "Serif" || /playfair|cormorant|bodoni|didot|editorial|display serif|prata|baskervville|fraunces/i.test(lower)) {
+      descriptors.push("elegant", "editorial", "refined");
+    }
+    if (f.category === "Handwriting" || /script|hand|brush|marker|calligraphy|signature|cursive/i.test(lower)) {
+      descriptors.push("handwritten", "script");
+    }
+    return [...new Set(descriptors)];
+  }
+  function buildSemanticProfile(f) {
+    const feeling = Object.keys(FEELING_TEST).filter((tag) => {
+      var _a;
+      return (_a = FEELING_TEST[tag]) == null ? void 0 : _a.call(FEELING_TEST, f);
+    });
+    const appearance = Object.keys(APPEARANCE_TEST).filter((tag) => {
+      var _a;
+      return tag !== "—" && ((_a = APPEARANCE_TEST[tag]) == null ? void 0 : _a.call(APPEARANCE_TEST, f));
+    });
+    const descriptors = getAdditionalSemanticDescriptors(f);
+    const parts = [
+      "family ".concat(f.family),
+      "category ".concat(f.category || "Unknown")
+    ];
+    if (f.stroke) parts.push("stroke ".concat(f.stroke));
+    if (Array.isArray(f.classifications) && f.classifications.length) {
+      parts.push("classifications ".concat(f.classifications.join(", ")));
+    }
+    if (Array.isArray(f.subsets) && f.subsets.length) {
+      parts.push("scripts ".concat(f.subsets.join(", ")));
+    }
+    if (descriptors.length) parts.push("traits ".concat(descriptors.join(", ")));
+    if (feeling.length) parts.push("feeling ".concat(feeling.join(", ")));
+    if (appearance.length) parts.push("appearance ".concat(appearance.join(", ")));
+    if (typeof f.thickness === "number") {
+      parts.push("weight feel ".concat(f.thickness >= 7 ? "heavy bold" : f.thickness <= 3 ? "light thin" : "balanced"));
+    }
+    if (typeof f.wghtMin === "number" && typeof f.wghtMax === "number") {
+      parts.push("weight range ".concat(f.wghtMin, " to ").concat(f.wghtMax));
+    }
+    if (typeof f.popularity === "number") {
+      parts.push("popularity ".concat(f.popularity));
+    }
+    return {
+      descriptors,
+      profileText: parts.join(" | "),
+      normalizedProfileText: normalizeSearchText(parts.join(" "))
+    };
+  }
   function escapeAttr(s) {
     return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   }
@@ -20570,7 +20716,7 @@
       wghtCss: "100..900"
     };
   }
-  function mountGoogleFontPreview(container, { tu, showToast }) {
+  function mountGoogleFontPreview(container, { tu, showToast, canUseSemanticFontSearch, runSemanticFontSearch }) {
     let disposed = false;
     let allFamilies = [];
     let familyByName = /* @__PURE__ */ new Map();
@@ -20590,11 +20736,14 @@
       langSubset: "",
       feeling: /* @__PURE__ */ new Set(),
       appearance: /* @__PURE__ */ new Set(),
+      aiSearchPending: false,
+      aiResults: null,
+      aiLastQuery: "",
       filtered: [],
       renderOffset: 0
     };
     const BATCH = 48;
-    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <div class="gfp-sidebar-lang-font-pair">\n          <section class="gfp-filter-block">\n            <div class="gfp-filter-heading">\n              <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke-linecap="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>\n              ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n            </div>\n            <div class="gfp-lang-row">\n              <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            </div>\n          </section>\n          <section class="gfp-filter-block">\n            <div class="gfp-filter-heading">\n              <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>\n              ').concat(escapeAttr(tu("actions.fontPreview.fontLibraryHeading")), '\n            </div>\n            <div class="gfp-font-source-row">\n              <select class="gfp-select gfp-font-source-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.fontSourceSelectAria")), '">\n                <option value="google">').concat(escapeAttr(tu("actions.fontPreview.fontSourceGoogle")), '</option>\n                <option value="local">').concat(escapeAttr(tu("actions.fontPreview.fontSourceLocal")), '</option>\n              </select>\n            </div>\n          </section>\n        </div>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>\n            ').concat(escapeAttr(tu("actions.fontPreview.bookmarksHeading")), '\n          </div>\n          <div class="gfp-bookmark-bar">\n            <select class="gfp-select gfp-bookmark-list-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkListSelectAria")), '"></select>\n            <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkToolbarAria")), '">\n              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkRename")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkRename")), '">\n                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>\n              </button>\n              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkDeleteList")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkDeleteList")), '">\n                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>\n              </button>\n              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkNewList")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkNewList")), '">\n                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>\n              </button>\n            </div>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h.008v.008H9.75V9.75zm4.5 0h.008v.008h-.008V9.75z"/></svg>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm-4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0z"/></svg>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="1"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n          <select class="gfp-weight-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '"></select>\n        </div>\n        <div class="gfp-sliders-row" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.sizeAndWeightControlsAria")), '">\n          <div class="gfp-size-slider-row">\n            <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n          </div>\n          <div class="gfp-weight-slider-row">\n            <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '" />\n          </div>\n        </div>\n        <div class="gfp-list-meta">\n          <span class="gfp-count"></span>\n          <div class="gfp-view-toggle" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.viewToggleAria")), '">\n            <button\n              type="button"\n              class="gfp-view-toggle-btn gfp-view-toggle-btn--active"\n              data-view="list"\n              aria-pressed="true"\n              title="').concat(escapeAttr(tu("actions.fontPreview.viewList")), '"\n              aria-label="').concat(escapeAttr(tu("actions.fontPreview.viewList")), '"\n            >\n              <svg class="gfp-view-toggle-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" d="M8 6h12M8 12h12M8 18h12"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h.01M4 12h.01M4 18h.01"/></svg>\n            </button>\n            <button\n              type="button"\n              class="gfp-view-toggle-btn"\n              data-view="grid"\n              aria-pressed="false"\n              title="').concat(escapeAttr(tu("actions.fontPreview.viewGrid")), '"\n              aria-label="').concat(escapeAttr(tu("actions.fontPreview.viewGrid")), '"\n            >\n              <svg class="gfp-view-toggle-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>\n            </button>\n          </div>\n        </div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
+    container.innerHTML = '\n    <div class="gfp-root">\n      <aside class="gfp-sidebar" aria-label="'.concat(escapeAttr(tu("actions.fontPreview.filtersAria")), '">\n        <div class="gfp-sidebar-lang-font-pair">\n          <section class="gfp-filter-block">\n            <div class="gfp-filter-heading">\n              <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke-linecap="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 12h20"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>\n              ').concat(escapeAttr(tu("actions.fontPreview.language")), '\n            </div>\n            <div class="gfp-lang-row">\n              <select class="gfp-select gfp-lang-primary" aria-label="').concat(escapeAttr(tu("actions.fontPreview.languagePrimaryAria")), '"></select>\n            </div>\n          </section>\n          <section class="gfp-filter-block">\n            <div class="gfp-filter-heading">\n              <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>\n              ').concat(escapeAttr(tu("actions.fontPreview.fontLibraryHeading")), '\n            </div>\n            <div class="gfp-font-source-row">\n              <select class="gfp-select gfp-font-source-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.fontSourceSelectAria")), '">\n                <option value="google">').concat(escapeAttr(tu("actions.fontPreview.fontSourceGoogle")), '</option>\n                <option value="local">').concat(escapeAttr(tu("actions.fontPreview.fontSourceLocal")), '</option>\n              </select>\n            </div>\n          </section>\n        </div>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>\n            ').concat(escapeAttr(tu("actions.fontPreview.bookmarksHeading")), '\n          </div>\n          <div class="gfp-bookmark-bar">\n            <select class="gfp-select gfp-bookmark-list-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkListSelectAria")), '"></select>\n            <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkToolbarAria")), '">\n              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkRename")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkRename")), '">\n                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>\n              </button>\n              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkDeleteList")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkDeleteList")), '">\n                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>\n              </button>\n              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="').concat(escapeAttr(tu("actions.fontPreview.bookmarkNewList")), '" aria-label="').concat(escapeAttr(tu("actions.fontPreview.bookmarkNewList")), '">\n                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>\n              </button>\n            </div>\n          </div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h.008v.008H9.75V9.75zm4.5 0h.008v.008h-.008V9.75z"/></svg>\n            ').concat(escapeAttr(tu("actions.fontPreview.feeling")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="feeling"></div>\n        </section>\n        <section class="gfp-filter-block">\n          <div class="gfp-filter-heading">\n            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm-4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0z"/></svg>\n            ').concat(escapeAttr(tu("actions.fontPreview.appearance")), '\n          </div>\n          <div class="gfp-tag-grid" data-group="appearance"></div>\n        </section>\n      </aside>\n      <div class="gfp-main">\n        <section class="gfp-preview-block">\n          <div class="gfp-preview-label-row">\n            <div class="gfp-section-label">').concat(escapeAttr(tu("actions.fontPreview.preview")), '</div>\n            <button type="button" class="gfp-get-selection-btn">').concat(escapeAttr(tu("actions.fontPreview.getFromSelection")), '</button>\n          </div>\n          <textarea class="gfp-preview-input" rows="1"></textarea>\n        </section>\n        <div class="gfp-toolbar">\n          <div class="gfp-search-shell">\n            <div class="gfp-search-group">\n              <input type="search" class="gfp-search" placeholder="').concat(escapeAttr(tu("actions.fontPreview.searchFamilies")), '" />\n              <button type="button" class="gfp-search-ai-toggle">AI</button>\n            </div>\n          </div>\n          <select class="gfp-size-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '"></select>\n          <select class="gfp-weight-select" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '"></select>\n        </div>\n        <div class="gfp-search-meta" aria-live="polite"></div>\n        <div class="gfp-sliders-row" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.sizeAndWeightControlsAria")), '">\n          <div class="gfp-size-slider-row">\n            <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="').concat(escapeAttr(tu("actions.fontPreview.size")), '" />\n          </div>\n          <div class="gfp-weight-slider-row">\n            <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="').concat(escapeAttr(tu("actions.fontPreview.weight")), '" />\n          </div>\n        </div>\n        <div class="gfp-list-meta">\n          <span class="gfp-count"></span>\n          <div class="gfp-view-toggle" role="group" aria-label="').concat(escapeAttr(tu("actions.fontPreview.viewToggleAria")), '">\n            <button\n              type="button"\n              class="gfp-view-toggle-btn gfp-view-toggle-btn--active"\n              data-view="list"\n              aria-pressed="true"\n              title="').concat(escapeAttr(tu("actions.fontPreview.viewList")), '"\n              aria-label="').concat(escapeAttr(tu("actions.fontPreview.viewList")), '"\n            >\n              <svg class="gfp-view-toggle-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" d="M8 6h12M8 12h12M8 18h12"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h.01M4 12h.01M4 18h.01"/></svg>\n            </button>\n            <button\n              type="button"\n              class="gfp-view-toggle-btn"\n              data-view="grid"\n              aria-pressed="false"\n              title="').concat(escapeAttr(tu("actions.fontPreview.viewGrid")), '"\n              aria-label="').concat(escapeAttr(tu("actions.fontPreview.viewGrid")), '"\n            >\n              <svg class="gfp-view-toggle-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>\n            </button>\n          </div>\n        </div>\n        <div class="gfp-list-scroll">\n          <div class="gfp-list"></div>\n          <div class="gfp-list-sentinel"></div>\n        </div>\n      </div>\n    </div>\n  ');
     const textarea = container.querySelector(".gfp-preview-input");
     const getSelectionBtn = container.querySelector(".gfp-get-selection-btn");
     const sizeSelect = container.querySelector(".gfp-size-select");
@@ -20610,6 +20759,8 @@
     const feelingGrid = container.querySelector('.gfp-tag-grid[data-group="feeling"]');
     const appearanceGrid = container.querySelector('.gfp-tag-grid[data-group="appearance"]');
     const searchInput = container.querySelector(".gfp-search");
+    const searchMeta = container.querySelector(".gfp-search-meta");
+    const aiSearchToggle = container.querySelector(".gfp-search-ai-toggle");
     const listEl = container.querySelector(".gfp-list");
     const sentinel = container.querySelector(".gfp-list-sentinel");
     const countEl = container.querySelector(".gfp-count");
@@ -20642,6 +20793,7 @@
     let pairShowTimer = null;
     let pairHideTimer = null;
     let pairHoverRow = null;
+    let aiSearchNonce = 0;
     function isGridMode() {
       return state.viewMode === "grid";
     }
@@ -20891,6 +21043,7 @@
     pairPopover.addEventListener("focusout", onPairPopoverFocusOut);
     textarea.placeholder = tu("actions.fontPreview.placeholder");
     syncViewMode();
+    updateAiSearchUi();
     const sizeOpts = [];
     for (let px = 10; px <= 120; px++) {
       sizeOpts.push('<option value="'.concat(px, '"').concat(px === 24 ? " selected" : "", ">").concat(px, "px</option>"));
@@ -20961,8 +21114,16 @@
       }
       return familyByName.get(fam) || gfpSyntheticFamilyMeta(fam);
     }
-    function familyPassesFilters(f) {
-      const q = state.search.trim().toLowerCase();
+    function getBaseFamilies() {
+      if (activeListId) {
+        const list = getActiveBookmarkList();
+        if (!list) return [];
+        return list.families.map((name2) => getFamilyMeta(name2));
+      }
+      return fontSource === "local" ? allLocalFamilies : allFamilies;
+    }
+    function familyPassesFilters(f, { includeSearch = true } = {}) {
+      const q = includeSearch ? state.search.trim().toLowerCase() : "";
       const needFeeling = state.feeling.size > 0;
       const needAppearance = state.appearance.size > 0;
       const isLocal = f && f.source === "local";
@@ -20989,6 +21150,89 @@
         if (!ok) return false;
       }
       return true;
+    }
+    function getSemanticSearchMeta(f) {
+      if (!f) return null;
+      if (f.source === "local") {
+        const catalogKey = resolveGoogleCatalogFamilyName(f.family);
+        const cat = catalogKey ? familyByName.get(catalogKey) : null;
+        if (!cat) return null;
+        return __spreadProps(__spreadValues({}, cat), {
+          family: f.family,
+          source: "local",
+          styles: f.styles,
+          gfpCatalogMatch: true
+        });
+      }
+      return f;
+    }
+    function buildSemanticSearchCandidates(baseFamilies) {
+      const queryTokens = expandSemanticQueryTokens(state.search);
+      return baseFamilies.map((f) => {
+        const semanticMeta = getSemanticSearchMeta(f);
+        if (!semanticMeta) return null;
+        const semanticProfile = buildSemanticProfile(semanticMeta);
+        let localScore = 0;
+        if (queryTokens.length > 0) {
+          for (const token of queryTokens) {
+            if (semanticProfile.normalizedProfileText.includes(token)) {
+              localScore += token.length >= 6 ? 8 : 5;
+            }
+          }
+        }
+        const popularity = typeof semanticMeta.popularity === "number" ? semanticMeta.popularity : 9999;
+        localScore += Math.max(0, 3 - Math.min(popularity, 3e3) / 1e3);
+        return {
+          family: semanticMeta.family,
+          source: semanticMeta.source === "local" ? "local" : "google",
+          semanticProfile: semanticProfile.profileText,
+          localScore,
+          displayMeta: f,
+          popularity
+        };
+      }).filter(Boolean).sort((a, b) => {
+        if (b.localScore !== a.localScore) return b.localScore - a.localScore;
+        if (a.popularity !== b.popularity) return a.popularity - b.popularity;
+        return String(a.family).localeCompare(String(b.family));
+      }).slice(0, 250);
+    }
+    function hasActiveAiResults() {
+      return Array.isArray(state.aiResults) && state.aiResults.length > 0;
+    }
+    function getDisplayFamilies() {
+      if (hasActiveAiResults()) return state.aiResults;
+      return getBaseFamilies().filter((f) => familyPassesFilters(f, { includeSearch: true }));
+    }
+    function updateAiSearchUi() {
+      const canSearch = typeof canUseSemanticFontSearch === "function" && canUseSemanticFontSearch();
+      if (aiSearchToggle) {
+        aiSearchToggle.disabled = state.aiSearchPending || !canSearch;
+        aiSearchToggle.title = state.aiSearchPending ? tu("actions.fontPreview.semanticSearchRunning") : tu("actions.fontPreview.semanticSearchAction");
+        aiSearchToggle.setAttribute(
+          "aria-label",
+          state.aiSearchPending ? tu("actions.fontPreview.semanticSearchRunning") : tu("actions.fontPreview.semanticSearchAction")
+        );
+        aiSearchToggle.textContent = state.aiSearchPending ? tu("actions.fontPreview.semanticSearchRunningShort") : "AI";
+      }
+      if (searchMeta) {
+        searchMeta.textContent = "";
+        searchMeta.hidden = true;
+      }
+    }
+    function clearAiSearchState({ keepQuery = true } = {}) {
+      aiSearchNonce += 1;
+      state.aiSearchPending = false;
+      state.aiResults = null;
+      state.aiLastQuery = keepQuery ? state.aiLastQuery : "";
+      updateAiSearchUi();
+    }
+    function invalidateAiResults() {
+      if (!state.aiSearchPending && !state.aiResults && !state.aiLastQuery) return;
+      aiSearchNonce += 1;
+      state.aiSearchPending = false;
+      state.aiResults = null;
+      state.aiLastQuery = "";
+      updateAiSearchUi();
     }
     function buildBookmarkPayload() {
       return {
@@ -21037,8 +21281,7 @@
       activeListId = bookmarkLastSelectedListId && bookmarkLists.some((l) => l.id === bookmarkLastSelectedListId) ? bookmarkLastSelectedListId : "";
       rebuildBookmarkSelect();
       syncBookmarkManageRowDisabled();
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
     }
     function hideRenameListPopover() {
       if (renameListPopover.contains(document.activeElement)) {
@@ -21187,8 +21430,7 @@
         if (bookmarkListSelect) bookmarkListSelect.value = id;
         syncBookmarkManageRowDisabled();
         scheduleSaveBookmarks();
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
         hideRenameListPopover();
       }
       saveBtn.addEventListener("click", commitNewList);
@@ -21323,8 +21565,7 @@
         showToast(tu("actions.fontPreview.bookmarkAddedToast", { list: targetList.name }), "success");
         hideBookmarkPopover();
         if (activeListId === targetListId) {
-          applyFilters();
-          setupListObserver();
+          refreshVisibleResults({ invalidateAi: true });
         }
       });
       inner.appendChild(header);
@@ -21384,19 +21625,7 @@
       pairHideTimer = null;
       pairHoverRow = null;
       hidePairPopover();
-      let base;
-      if (activeListId) {
-        const list = getActiveBookmarkList();
-        base = [];
-        if (list) {
-          for (const name2 of list.families) {
-            base.push(getFamilyMeta(name2));
-          }
-        }
-      } else {
-        base = fontSource === "local" ? allLocalFamilies : allFamilies;
-      }
-      state.filtered = base.filter(familyPassesFilters);
+      state.filtered = getDisplayFamilies();
       state.renderOffset = 0;
       listEl.innerHTML = "";
       if (state.filtered.length === 0 && activeListId) {
@@ -21411,6 +21640,82 @@
         total: state.filtered.length
       });
       appendBatch();
+    }
+    async function triggerSemanticSearch() {
+      const query2 = state.search.trim();
+      if (!query2) {
+        showToast(tu("actions.fontPreview.semanticSearchNeedQuery"), "info");
+        return;
+      }
+      const canSearch = typeof canUseSemanticFontSearch === "function" && canUseSemanticFontSearch();
+      if (!canSearch || typeof runSemanticFontSearch !== "function") {
+        showToast(tu("actions.fontPreview.semanticSearchUnavailable"), "error");
+        return;
+      }
+      const baseFamilies = getBaseFamilies().filter((f) => familyPassesFilters(f, { includeSearch: false }));
+      const candidates = buildSemanticSearchCandidates(baseFamilies);
+      if (candidates.length === 0) {
+        state.aiResults = null;
+        state.aiLastQuery = query2;
+        updateAiSearchUi();
+        refreshVisibleResults();
+        showToast(tu("actions.fontPreview.semanticSearchNoMatches"), "info");
+        return;
+      }
+      const requestNonce = ++aiSearchNonce;
+      state.aiSearchPending = true;
+      updateAiSearchUi();
+      try {
+        const result = await runSemanticFontSearch({
+          query: query2,
+          candidates: candidates.map((candidate) => ({
+            family: candidate.family,
+            source: candidate.source,
+            semanticProfile: candidate.semanticProfile,
+            localScore: candidate.localScore
+          }))
+        });
+        if (disposed || requestNonce !== aiSearchNonce) return;
+        const matches = Array.isArray(result == null ? void 0 : result.matches) ? result.matches : [];
+        const candidateMap = new Map(candidates.map((candidate) => ["".concat(candidate.source, "::").concat(candidate.family), candidate.displayMeta]));
+        const rankedFamilies = [];
+        const seen = /* @__PURE__ */ new Set();
+        for (const match of matches) {
+          const source = (match == null ? void 0 : match.source) === "local" ? "local" : (match == null ? void 0 : match.source) === "google" ? "google" : "";
+          const family = String((match == null ? void 0 : match.family) || "").trim();
+          if (!family || !source) continue;
+          const key = "".concat(source, "::").concat(family);
+          if (seen.has(key) || !candidateMap.has(key)) continue;
+          seen.add(key);
+          rankedFamilies.push(candidateMap.get(key));
+        }
+        if (rankedFamilies.length === 0) {
+          state.aiResults = null;
+          state.aiLastQuery = query2;
+          showToast(tu("actions.fontPreview.semanticSearchNoMatches"), "info");
+        } else {
+          state.aiResults = rankedFamilies;
+          state.aiLastQuery = query2;
+        }
+        refreshVisibleResults();
+      } catch (error) {
+        if (disposed || requestNonce !== aiSearchNonce) return;
+        state.aiResults = null;
+        state.aiLastQuery = "";
+        refreshVisibleResults();
+        const message = (error == null ? void 0 : error.code) === "AI_UNAVAILABLE" ? tu("actions.fontPreview.semanticSearchUnavailable") : tu("actions.fontPreview.semanticSearchFailed", { message: (error == null ? void 0 : error.message) || "Unknown error" });
+        showToast(message, "error");
+      } finally {
+        if (requestNonce === aiSearchNonce) {
+          state.aiSearchPending = false;
+          updateAiSearchUi();
+        }
+      }
+    }
+    function refreshVisibleResults({ invalidateAi = false } = {}) {
+      if (invalidateAi) invalidateAiResults();
+      applyFilters();
+      setupListObserver();
     }
     function loadFontCss(family) {
       if (loadedCss.has(family) || disposed) return;
@@ -21617,8 +21922,7 @@
         );
         localFamilyByName = new Map(allLocalFamilies.map((f) => [f.family, f]));
         if (fontSource === "local") {
-          applyFilters();
-          setupListObserver();
+          refreshVisibleResults({ invalidateAi: true });
         }
         return;
       }
@@ -21746,8 +22050,7 @@
             list.families = list.families.filter((n) => n !== key);
             scheduleSaveBookmarks();
             showToast(tu("actions.fontPreview.bookmarkRemovedToast"), "success");
-            applyFilters();
-            setupListObserver();
+            refreshVisibleResults({ invalidateAi: true });
           }
         } else {
           const row = btn.closest(".gfp-font-row");
@@ -21823,8 +22126,7 @@
     weightRange.addEventListener("input", () => syncWeight(true));
     langPrimary.addEventListener("change", () => {
       state.langSubset = langPrimary.value;
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
     });
     if (fontSourceSelect) {
       fontSourceSelect.value = fontSource;
@@ -21833,8 +22135,7 @@
         hideRenameListPopover();
         hidePairPopover();
         fontSource = fontSourceSelect.value === "local" ? "local" : "google";
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
       });
     }
     rebuildBookmarkSelect();
@@ -21845,8 +22146,7 @@
         activeListId = bookmarkListSelect.value || "";
         syncBookmarkManageRowDisabled();
         scheduleSaveBookmarks();
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
       });
     }
     if (bookmarkRenameBtn) {
@@ -21869,8 +22169,7 @@
         rebuildBookmarkSelect();
         syncBookmarkManageRowDisabled();
         scheduleSaveBookmarks();
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
       });
     }
     if (bookmarkNewBtn) {
@@ -21884,9 +22183,15 @@
     }
     searchInput.addEventListener("input", () => {
       state.search = searchInput.value;
-      applyFilters();
-      setupListObserver();
+      invalidateAiResults();
+      refreshVisibleResults();
     });
+    if (aiSearchToggle) {
+      aiSearchToggle.addEventListener("click", () => {
+        if (state.aiSearchPending) return;
+        triggerSemanticSearch();
+      });
+    }
     viewToggleButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const nextMode = btn.dataset.view === "grid" ? "grid" : "list";
@@ -21908,8 +22213,7 @@
         set.add(tag);
         btn.classList.add("gfp-tag--on");
       }
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
     });
     function loadCatalog() {
       listEl.innerHTML = '<div class="gfp-loading">'.concat(escapeAttr(tu("actions.fontPreview.loading")), "</div>");
@@ -21931,8 +22235,7 @@
         familyByName = new Map(allFamilies.map((f) => [f.family, f]));
         syncCatalogFamilyIndex();
         listEl.innerHTML = "";
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
         listEl.querySelectorAll('.gfp-font-row[data-font-source="local"]').forEach((r) => primeLocalRowFontCss(r));
         if (usedFallback && fallback.length > 0) {
           showToast(tu("actions.fontPreview.usingBundledCatalog"), "info");
@@ -21989,7 +22292,7 @@
       container.innerHTML = "";
     };
   }
-  var LANGUAGE_OPTIONS, FEELING_TAGS, APPEARANCE_TAGS, FEELING_TEST, APPEARANCE_TEST, LOCAL_BOOKMARK_PREFIX;
+  var LANGUAGE_OPTIONS, FEELING_TAGS, APPEARANCE_TAGS, FEELING_TEST, APPEARANCE_TEST, GENERIC_SEARCH_TOKENS, SEMANTIC_QUERY_EXPANSIONS, LOCAL_BOOKMARK_PREFIX;
   var init_google_font_preview = __esm({
     "ui/features/font-preview/google-font-preview.js"() {
       "use strict";
@@ -22082,6 +22385,37 @@
         Tuscan: (f) => /tuscan|western|spurs|rizoma/i.test(familyLower(f)),
         Shaded: (f) => /shade|shadow|emboss|3d|extrusion/i.test(familyLower(f)),
         "—": () => false
+      };
+      GENERIC_SEARCH_TOKENS = /* @__PURE__ */ new Set([
+        "font",
+        "fonts",
+        "typeface",
+        "typefaces",
+        "typography",
+        "style",
+        "styles",
+        "look",
+        "looks"
+      ]);
+      SEMANTIC_QUERY_EXPANSIONS = {
+        round: ["rounded", "circular", "circle", "soft", "bubble", "blobby"],
+        rounded: ["round", "circular", "circle", "soft", "bubble", "blobby"],
+        circular: ["round", "rounded", "circle", "soft", "bubble"],
+        circle: ["round", "rounded", "circular", "soft", "bubble", "blobby"],
+        bubble: ["round", "rounded", "soft", "blobby", "playful"],
+        geometric: ["geometry", "constructed", "clean", "modern"],
+        modern: ["geometric", "clean", "minimal"],
+        condensed: ["narrow", "compact", "compressed", "tight"],
+        narrow: ["condensed", "compact", "compressed"],
+        bold: ["heavy", "black", "thick", "chunky"],
+        heavy: ["bold", "black", "chunky", "thick"],
+        elegant: ["editorial", "luxury", "refined", "serif"],
+        editorial: ["elegant", "luxury", "refined", "serif"],
+        luxury: ["elegant", "editorial", "refined"],
+        handwritten: ["handwriting", "script", "brush", "marker", "calligraphy"],
+        handwriting: ["handwritten", "script", "brush", "marker"],
+        script: ["handwritten", "handwriting", "calligraphy", "brush"],
+        playful: ["cute", "friendly", "rounded", "bubble"]
       };
       LOCAL_BOOKMARK_PREFIX = "LOCAL|";
     }
@@ -24039,6 +24373,13 @@
           "actions.fontPreview.feeling": "Feeling",
           "actions.fontPreview.appearance": "Appearance",
           "actions.fontPreview.searchFamilies": "Search families…",
+          "actions.fontPreview.semanticSearchAction": "Search with AI",
+          "actions.fontPreview.semanticSearchRunning": "Searching…",
+          "actions.fontPreview.semanticSearchRunningShort": "...",
+          "actions.fontPreview.semanticSearchUnavailable": "AI semantic search needs an active AI provider and API key.",
+          "actions.fontPreview.semanticSearchNeedQuery": "Enter a search query first.",
+          "actions.fontPreview.semanticSearchFailed": "AI semantic search failed: {message}",
+          "actions.fontPreview.semanticSearchNoMatches": "No semantic matches found. Showing the regular filtered list.",
           "actions.fontPreview.loading": "Loading Google Fonts catalog…",
           "actions.fontPreview.loadError": "Could not load font catalog. Check your network connection.",
           "actions.fontPreview.usingBundledCatalog": "Using built-in font list; live catalog unavailable.",
@@ -24454,6 +24795,13 @@
           "actions.fontPreview.feeling": "雰囲気",
           "actions.fontPreview.appearance": "外観",
           "actions.fontPreview.searchFamilies": "ファミリーを検索…",
+          "actions.fontPreview.semanticSearchAction": "AI で検索",
+          "actions.fontPreview.semanticSearchRunning": "検索中…",
+          "actions.fontPreview.semanticSearchRunningShort": "...",
+          "actions.fontPreview.semanticSearchUnavailable": "AI の意味検索には有効な AI プロバイダーと API キーが必要です。",
+          "actions.fontPreview.semanticSearchNeedQuery": "先に検索語を入力してください。",
+          "actions.fontPreview.semanticSearchFailed": "AI 検索に失敗しました: {message}",
+          "actions.fontPreview.semanticSearchNoMatches": "意味的に一致するフォントが見つかりませんでした。通常の絞り込み結果を表示します。",
           "actions.fontPreview.loading": "Google Fonts カタログを読み込み中…",
           "actions.fontPreview.loadError": "フォントカタログを読み込めませんでした。ネットワークを確認してください。",
           "actions.fontPreview.usingBundledCatalog": "同梱のフォント一覧を使用中です（ライブ取得不可）。",
@@ -24869,6 +25217,13 @@
           "actions.fontPreview.feeling": "气质",
           "actions.fontPreview.appearance": "外观",
           "actions.fontPreview.searchFamilies": "搜索字体家族…",
+          "actions.fontPreview.semanticSearchAction": "AI 搜索",
+          "actions.fontPreview.semanticSearchRunning": "搜索中…",
+          "actions.fontPreview.semanticSearchRunningShort": "...",
+          "actions.fontPreview.semanticSearchUnavailable": "AI 语义搜索需要可用的 AI 提供方和 API Key。",
+          "actions.fontPreview.semanticSearchNeedQuery": "请先输入搜索词。",
+          "actions.fontPreview.semanticSearchFailed": "AI 语义搜索失败：{message}",
+          "actions.fontPreview.semanticSearchNoMatches": "没有找到语义匹配字体，已显示常规筛选结果。",
           "actions.fontPreview.loading": "正在加载 Google Fonts 目录…",
           "actions.fontPreview.loadError": "无法加载字体目录，请检查网络连接。",
           "actions.fontPreview.usingBundledCatalog": "正在使用内置字体列表（无法获取在线目录）。",
@@ -26604,6 +26959,25 @@
         if (!isAiOffModeEnabled()) return true;
         showToast(getAiOffBlockedMessage(actionLabel), "error");
         return false;
+      }
+      function canUseSemanticFontSearch() {
+        return !isAiOffModeEnabled() && !!getCurrentApiKey();
+      }
+      function extractJsonObjectFromText(text) {
+        const src = String(text || "").trim();
+        if (!src) return null;
+        try {
+          return JSON.parse(src);
+        } catch (e) {
+          const start = src.indexOf("{");
+          const end = src.lastIndexOf("}");
+          if (start === -1 || end === -1 || end <= start) return null;
+          try {
+            return JSON.parse(src.slice(start, end + 1));
+          } catch (e2) {
+            return null;
+          }
+        }
       }
       function isDirectActionAllowedInAiOff(actionKey) {
         return NON_AI_DIRECT_ACTIONS.has(actionKey);
@@ -29707,6 +30081,75 @@
       async function generateAuditContent(systemPrompt, userContent, apiKey) {
         const result = await callAISimple({ systemPrompt, userContent, temperature: 0.7, maxTokens: 4096 });
         return result.text;
+      }
+      async function runSemanticFontSearch({ query: query2, candidates }) {
+        if (!canUseSemanticFontSearch()) {
+          const unavailableError = new Error("AI semantic font search is unavailable.");
+          unavailableError.code = "AI_UNAVAILABLE";
+          throw unavailableError;
+        }
+        const normalizedQuery = String(query2 || "").trim();
+        const candidateList = Array.isArray(candidates) ? candidates.slice(0, 250) : [];
+        if (!normalizedQuery || candidateList.length === 0) {
+          return { matches: [] };
+        }
+        const allowedMatches = /* @__PURE__ */ new Map();
+        const promptCandidates = candidateList.map((candidate, index) => {
+          const family = String(candidate.family || "").trim();
+          const source = candidate.source === "local" ? "local" : "google";
+          const key = "".concat(source, "::").concat(family);
+          allowedMatches.set(key, { family, source });
+          return {
+            index: index + 1,
+            family,
+            source,
+            profile: String(candidate.semanticProfile || "").trim().slice(0, 320),
+            localScore: Number.isFinite(candidate.localScore) ? Number(candidate.localScore) : 0
+          };
+        }).filter((candidate) => candidate.family);
+        if (promptCandidates.length === 0) {
+          return { matches: [] };
+        }
+        const systemPrompt = 'You are a typography search expert. Rank candidate fonts by semantic fit to a user\'s description.\n\nRules:\n- Use ONLY the provided candidates.\n- Prefer semantic meaning over exact word overlap.\n- Return no more than 60 matches.\n- Every match MUST include "family" and "source" copied exactly from the candidates.\n- "source" must be either "google" or "local".\n- "reason" must be brief and concrete.\n- "score" must be a number from 0 to 100.\n- If nothing fits, return {"matches":[]}.\n- Output JSON only.';
+        const userContent = JSON.stringify({
+          query: normalizedQuery,
+          maxMatches: 60,
+          candidates: promptCandidates,
+          outputSchema: {
+            matches: [{ family: "Font Family", source: "google", reason: "why it fits", score: 92 }]
+          }
+        });
+        const response = await callAISimple({
+          systemPrompt,
+          userContent,
+          temperature: 0.2,
+          maxTokens: 4096,
+          jsonMode: selectedProvider === "gemini" || selectedProvider === "openai"
+        });
+        const parsed = extractJsonObjectFromText(response.text);
+        if (!parsed || !Array.isArray(parsed.matches)) {
+          const parseError = new Error("Invalid semantic font search response.");
+          parseError.code = "INVALID_RESPONSE";
+          throw parseError;
+        }
+        const seen = /* @__PURE__ */ new Set();
+        const matches = [];
+        for (const rawMatch of parsed.matches) {
+          const family = String((rawMatch == null ? void 0 : rawMatch.family) || "").trim();
+          const source = (rawMatch == null ? void 0 : rawMatch.source) === "local" ? "local" : (rawMatch == null ? void 0 : rawMatch.source) === "google" ? "google" : "";
+          if (!family || !source) continue;
+          const key = "".concat(source, "::").concat(family);
+          if (!allowedMatches.has(key) || seen.has(key)) continue;
+          seen.add(key);
+          matches.push({
+            family,
+            source,
+            reason: String((rawMatch == null ? void 0 : rawMatch.reason) || "").trim(),
+            score: Number.isFinite(Number(rawMatch == null ? void 0 : rawMatch.score)) ? Number(rawMatch.score) : null
+          });
+          if (matches.length >= 60) break;
+        }
+        return { matches };
       }
       var customTones = [];
       var customImagePresets = [];
@@ -35833,7 +36276,12 @@
             promptDrawerFields.classList.remove("hidden");
             const gfpMount = promptDrawerFields.querySelector(".gfp-mount");
             if (gfpMount) {
-              disposeGoogleFontPreview = mountGoogleFontPreview(gfpMount, { tu, showToast });
+              disposeGoogleFontPreview = mountGoogleFontPreview(gfpMount, {
+                tu,
+                showToast,
+                canUseSemanticFontSearch,
+                runSemanticFontSearch
+              });
             }
             const resetBtn = document.getElementById("promptDrawerReset");
             if (resetBtn) {
@@ -35848,7 +36296,12 @@
                 }
                 const mountEl = promptDrawerFields.querySelector(".gfp-mount");
                 if (mountEl) {
-                  disposeGoogleFontPreview = mountGoogleFontPreview(mountEl, { tu, showToast });
+                  disposeGoogleFontPreview = mountGoogleFontPreview(mountEl, {
+                    tu,
+                    showToast,
+                    canUseSemanticFontSearch,
+                    runSemanticFontSearch
+                  });
                 }
               };
             }

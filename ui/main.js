@@ -899,6 +899,27 @@ import {
       return false;
     }
 
+    function canUseSemanticFontSearch() {
+      return !isAiOffModeEnabled() && !!getCurrentApiKey();
+    }
+
+    function extractJsonObjectFromText(text) {
+      const src = String(text || '').trim();
+      if (!src) return null;
+      try {
+        return JSON.parse(src);
+      } catch {
+        const start = src.indexOf('{');
+        const end = src.lastIndexOf('}');
+        if (start === -1 || end === -1 || end <= start) return null;
+        try {
+          return JSON.parse(src.slice(start, end + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+
     function isDirectActionAllowedInAiOff(actionKey) {
       return NON_AI_DIRECT_ACTIONS.has(actionKey);
     }
@@ -4938,6 +4959,96 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     async function generateAuditContent(systemPrompt, userContent, apiKey) {
       const result = await callAISimple({ systemPrompt, userContent, temperature: 0.7, maxTokens: 4096 });
       return result.text;
+    }
+
+    async function runSemanticFontSearch({ query, candidates }) {
+      if (!canUseSemanticFontSearch()) {
+        const unavailableError = new Error('AI semantic font search is unavailable.');
+        unavailableError.code = 'AI_UNAVAILABLE';
+        throw unavailableError;
+      }
+
+      const normalizedQuery = String(query || '').trim();
+      const candidateList = Array.isArray(candidates) ? candidates.slice(0, 250) : [];
+      if (!normalizedQuery || candidateList.length === 0) {
+        return { matches: [] };
+      }
+
+      const allowedMatches = new Map();
+      const promptCandidates = candidateList.map((candidate, index) => {
+        const family = String(candidate.family || '').trim();
+        const source = candidate.source === 'local' ? 'local' : 'google';
+        const key = `${source}::${family}`;
+        allowedMatches.set(key, { family, source });
+        return {
+          index: index + 1,
+          family,
+          source,
+          profile: String(candidate.semanticProfile || '').trim().slice(0, 320),
+          localScore: Number.isFinite(candidate.localScore) ? Number(candidate.localScore) : 0,
+        };
+      }).filter(candidate => candidate.family);
+
+      if (promptCandidates.length === 0) {
+        return { matches: [] };
+      }
+
+      const systemPrompt = `You are a typography search expert. Rank candidate fonts by semantic fit to a user's description.
+
+Rules:
+- Use ONLY the provided candidates.
+- Prefer semantic meaning over exact word overlap.
+- Return no more than 60 matches.
+- Every match MUST include "family" and "source" copied exactly from the candidates.
+- "source" must be either "google" or "local".
+- "reason" must be brief and concrete.
+- "score" must be a number from 0 to 100.
+- If nothing fits, return {"matches":[]}.
+- Output JSON only.`;
+
+      const userContent = JSON.stringify({
+        query: normalizedQuery,
+        maxMatches: 60,
+        candidates: promptCandidates,
+        outputSchema: {
+          matches: [{ family: 'Font Family', source: 'google', reason: 'why it fits', score: 92 }]
+        }
+      });
+
+      const response = await callAISimple({
+        systemPrompt,
+        userContent,
+        temperature: 0.2,
+        maxTokens: 4096,
+        jsonMode: selectedProvider === 'gemini' || selectedProvider === 'openai',
+      });
+
+      const parsed = extractJsonObjectFromText(response.text);
+      if (!parsed || !Array.isArray(parsed.matches)) {
+        const parseError = new Error('Invalid semantic font search response.');
+        parseError.code = 'INVALID_RESPONSE';
+        throw parseError;
+      }
+
+      const seen = new Set();
+      const matches = [];
+      for (const rawMatch of parsed.matches) {
+        const family = String(rawMatch?.family || '').trim();
+        const source = rawMatch?.source === 'local' ? 'local' : rawMatch?.source === 'google' ? 'google' : '';
+        if (!family || !source) continue;
+        const key = `${source}::${family}`;
+        if (!allowedMatches.has(key) || seen.has(key)) continue;
+        seen.add(key);
+        matches.push({
+          family,
+          source,
+          reason: String(rawMatch?.reason || '').trim(),
+          score: Number.isFinite(Number(rawMatch?.score)) ? Number(rawMatch.score) : null,
+        });
+        if (matches.length >= 60) break;
+      }
+
+      return { matches };
     }
 
     // ============================================
@@ -13038,7 +13149,12 @@ Generate ONLY the reply text, nothing else.`;
           promptDrawerFields.classList.remove('hidden');
           const gfpMount = promptDrawerFields.querySelector('.gfp-mount');
           if (gfpMount) {
-            disposeGoogleFontPreview = mountGoogleFontPreview(gfpMount, { tu, showToast });
+            disposeGoogleFontPreview = mountGoogleFontPreview(gfpMount, {
+              tu,
+              showToast,
+              canUseSemanticFontSearch,
+              runSemanticFontSearch,
+            });
           }
 
           const resetBtn = document.getElementById('promptDrawerReset');
@@ -13054,7 +13170,12 @@ Generate ONLY the reply text, nothing else.`;
               }
               const mountEl = promptDrawerFields.querySelector('.gfp-mount');
               if (mountEl) {
-                disposeGoogleFontPreview = mountGoogleFontPreview(mountEl, { tu, showToast });
+                disposeGoogleFontPreview = mountGoogleFontPreview(mountEl, {
+                  tu,
+                  showToast,
+                  canUseSemanticFontSearch,
+                  runSemanticFontSearch,
+                });
               }
             };
           }

@@ -204,6 +204,126 @@ const APPEARANCE_TEST = {
   '—': () => false,
 };
 
+const GENERIC_SEARCH_TOKENS = new Set([
+  'font',
+  'fonts',
+  'typeface',
+  'typefaces',
+  'typography',
+  'style',
+  'styles',
+  'look',
+  'looks',
+]);
+
+const SEMANTIC_QUERY_EXPANSIONS = {
+  round: ['rounded', 'circular', 'circle', 'soft', 'bubble', 'blobby'],
+  rounded: ['round', 'circular', 'circle', 'soft', 'bubble', 'blobby'],
+  circular: ['round', 'rounded', 'circle', 'soft', 'bubble'],
+  circle: ['round', 'rounded', 'circular', 'soft', 'bubble', 'blobby'],
+  bubble: ['round', 'rounded', 'soft', 'blobby', 'playful'],
+  geometric: ['geometry', 'constructed', 'clean', 'modern'],
+  modern: ['geometric', 'clean', 'minimal'],
+  condensed: ['narrow', 'compact', 'compressed', 'tight'],
+  narrow: ['condensed', 'compact', 'compressed'],
+  bold: ['heavy', 'black', 'thick', 'chunky'],
+  heavy: ['bold', 'black', 'chunky', 'thick'],
+  elegant: ['editorial', 'luxury', 'refined', 'serif'],
+  editorial: ['elegant', 'luxury', 'refined', 'serif'],
+  luxury: ['elegant', 'editorial', 'refined'],
+  handwritten: ['handwriting', 'script', 'brush', 'marker', 'calligraphy'],
+  handwriting: ['handwritten', 'script', 'brush', 'marker'],
+  script: ['handwritten', 'handwriting', 'calligraphy', 'brush'],
+  playful: ['cute', 'friendly', 'rounded', 'bubble'],
+};
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function tokenizeSearchText(value) {
+  const normalized = normalizeSearchText(value);
+  return normalized ? normalized.split(/\s+/).filter(Boolean) : [];
+}
+
+function expandSemanticQueryTokens(query) {
+  const tokens = tokenizeSearchText(query).filter(token => !GENERIC_SEARCH_TOKENS.has(token));
+  const expanded = new Set(tokens);
+  for (const token of tokens) {
+    const aliases = SEMANTIC_QUERY_EXPANSIONS[token] || [];
+    for (const alias of aliases) expanded.add(alias);
+  }
+  return [...expanded];
+}
+
+function getAdditionalSemanticDescriptors(f) {
+  const lower = familyLower(f);
+  const descriptors = [];
+  if (
+    /round|rounded|circle|circular|bubble|soft|baloo|fredoka|comfortaa|quicksand|nunito|sniglet|varela round/i.test(lower)
+  ) {
+    descriptors.push('rounded', 'circular', 'soft');
+  }
+  if (
+    /geometric|futura|montserrat|poppins|urbanist|space grotesk|sora|jost|league spartan|manrope/i.test(lower)
+  ) {
+    descriptors.push('geometric', 'clean');
+  }
+  if (/condensed|narrow|compressed|compact|oswald|anton|archivo narrow|barlow condensed/i.test(lower)) {
+    descriptors.push('condensed', 'narrow', 'compact');
+  }
+  if ((typeof f.thickness === 'number' && f.thickness >= 7) || /black|heavy|bold|ultra|fat|chunk|impact/i.test(lower)) {
+    descriptors.push('heavy', 'bold', 'thick');
+  }
+  if (
+    f.category === 'Serif' ||
+    /playfair|cormorant|bodoni|didot|editorial|display serif|prata|baskervville|fraunces/i.test(lower)
+  ) {
+    descriptors.push('elegant', 'editorial', 'refined');
+  }
+  if (f.category === 'Handwriting' || /script|hand|brush|marker|calligraphy|signature|cursive/i.test(lower)) {
+    descriptors.push('handwritten', 'script');
+  }
+  return [...new Set(descriptors)];
+}
+
+function buildSemanticProfile(f) {
+  const feeling = Object.keys(FEELING_TEST).filter(tag => FEELING_TEST[tag]?.(f));
+  const appearance = Object.keys(APPEARANCE_TEST).filter(tag => tag !== '—' && APPEARANCE_TEST[tag]?.(f));
+  const descriptors = getAdditionalSemanticDescriptors(f);
+  const parts = [
+    `family ${f.family}`,
+    `category ${f.category || 'Unknown'}`,
+  ];
+  if (f.stroke) parts.push(`stroke ${f.stroke}`);
+  if (Array.isArray(f.classifications) && f.classifications.length) {
+    parts.push(`classifications ${f.classifications.join(', ')}`);
+  }
+  if (Array.isArray(f.subsets) && f.subsets.length) {
+    parts.push(`scripts ${f.subsets.join(', ')}`);
+  }
+  if (descriptors.length) parts.push(`traits ${descriptors.join(', ')}`);
+  if (feeling.length) parts.push(`feeling ${feeling.join(', ')}`);
+  if (appearance.length) parts.push(`appearance ${appearance.join(', ')}`);
+  if (typeof f.thickness === 'number') {
+    parts.push(`weight feel ${f.thickness >= 7 ? 'heavy bold' : f.thickness <= 3 ? 'light thin' : 'balanced'}`);
+  }
+  if (typeof f.wghtMin === 'number' && typeof f.wghtMax === 'number') {
+    parts.push(`weight range ${f.wghtMin} to ${f.wghtMax}`);
+  }
+  if (typeof f.popularity === 'number') {
+    parts.push(`popularity ${f.popularity}`);
+  }
+  return {
+    descriptors,
+    profileText: parts.join(' | '),
+    normalizedProfileText: normalizeSearchText(parts.join(' ')),
+  };
+}
+
 function escapeAttr(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -350,10 +470,15 @@ function gfpSyntheticFamilyMeta(name) {
 
 /**
  * @param {HTMLElement} container
- * @param {{ tu: (k: string) => string; showToast: (msg: string, type?: string) => void }} deps
+ * @param {{
+ *   tu: (k: string, vars?: object) => string;
+ *   showToast: (msg: string, type?: string) => void;
+ *   canUseSemanticFontSearch?: () => boolean;
+ *   runSemanticFontSearch?: (args: { query: string; candidates: object[] }) => Promise<{ matches?: { family: string; source: string; reason?: string; score?: number | null }[] }>;
+ * }} deps
  * @returns {() => void}
  */
-export function mountGoogleFontPreview(container, { tu, showToast }) {
+export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanticFontSearch, runSemanticFontSearch }) {
   let disposed = false;
   let allFamilies = [];
   /** @type {Map<string, object>} */
@@ -379,6 +504,9 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     langSubset: '',
     feeling: new Set(),
     appearance: new Set(),
+    aiSearchPending: false,
+    aiResults: null,
+    aiLastQuery: '',
     filtered: [],
     renderOffset: 0,
   };
@@ -455,10 +583,16 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
           <textarea class="gfp-preview-input" rows="1"></textarea>
         </section>
         <div class="gfp-toolbar">
-          <input type="search" class="gfp-search" placeholder="${escapeAttr(tu('actions.fontPreview.searchFamilies'))}" />
+          <div class="gfp-search-shell">
+            <div class="gfp-search-group">
+              <input type="search" class="gfp-search" placeholder="${escapeAttr(tu('actions.fontPreview.searchFamilies'))}" />
+              <button type="button" class="gfp-search-ai-toggle">AI</button>
+            </div>
+          </div>
           <select class="gfp-size-select" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}"></select>
           <select class="gfp-weight-select" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}"></select>
         </div>
+        <div class="gfp-search-meta" aria-live="polite"></div>
         <div class="gfp-sliders-row" role="group" aria-label="${escapeAttr(tu('actions.fontPreview.sizeAndWeightControlsAria'))}">
           <div class="gfp-size-slider-row">
             <input type="range" class="gfp-size-range" min="10" max="120" step="1" value="24" aria-label="${escapeAttr(tu('actions.fontPreview.size'))}" />
@@ -515,6 +649,8 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const feelingGrid = container.querySelector('.gfp-tag-grid[data-group="feeling"]');
   const appearanceGrid = container.querySelector('.gfp-tag-grid[data-group="appearance"]');
   const searchInput = container.querySelector('.gfp-search');
+  const searchMeta = container.querySelector('.gfp-search-meta');
+  const aiSearchToggle = container.querySelector('.gfp-search-ai-toggle');
   const listEl = container.querySelector('.gfp-list');
   const sentinel = container.querySelector('.gfp-list-sentinel');
   const countEl = container.querySelector('.gfp-count');
@@ -557,6 +693,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   let pairShowTimer = null;
   let pairHideTimer = null;
   let pairHoverRow = null;
+  let aiSearchNonce = 0;
 
   function isGridMode() {
     return state.viewMode === 'grid';
@@ -827,6 +964,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   textarea.placeholder = tu('actions.fontPreview.placeholder');
   syncViewMode();
+  updateAiSearchUi();
 
   // One option per px so slider and select stay in sync (sparse presets left blanks when value had no <option>)
   const sizeOpts = [];
@@ -912,8 +1050,17 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     return familyByName.get(fam) || gfpSyntheticFamilyMeta(fam);
   }
 
-  function familyPassesFilters(f) {
-    const q = state.search.trim().toLowerCase();
+  function getBaseFamilies() {
+    if (activeListId) {
+      const list = getActiveBookmarkList();
+      if (!list) return [];
+      return list.families.map(name => getFamilyMeta(name));
+    }
+    return fontSource === 'local' ? allLocalFamilies : allFamilies;
+  }
+
+  function familyPassesFilters(f, { includeSearch = true } = {}) {
+    const q = includeSearch ? state.search.trim().toLowerCase() : '';
     const needFeeling = state.feeling.size > 0;
     const needAppearance = state.appearance.size > 0;
     const isLocal = f && f.source === 'local';
@@ -934,6 +1081,107 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       if (!ok) return false;
     }
     return true;
+  }
+
+  function getSemanticSearchMeta(f) {
+    if (!f) return null;
+    if (f.source === 'local') {
+      const catalogKey = resolveGoogleCatalogFamilyName(f.family);
+      const cat = catalogKey ? familyByName.get(catalogKey) : null;
+      if (!cat) return null;
+      return {
+        ...cat,
+        family: f.family,
+        source: 'local',
+        styles: f.styles,
+        gfpCatalogMatch: true,
+      };
+    }
+    return f;
+  }
+
+  function buildSemanticSearchCandidates(baseFamilies) {
+    const queryTokens = expandSemanticQueryTokens(state.search);
+    return baseFamilies
+      .map(f => {
+        const semanticMeta = getSemanticSearchMeta(f);
+        if (!semanticMeta) return null;
+        const semanticProfile = buildSemanticProfile(semanticMeta);
+        let localScore = 0;
+        if (queryTokens.length > 0) {
+          for (const token of queryTokens) {
+            if (semanticProfile.normalizedProfileText.includes(token)) {
+              localScore += token.length >= 6 ? 8 : 5;
+            }
+          }
+        }
+        const popularity = typeof semanticMeta.popularity === 'number' ? semanticMeta.popularity : 9999;
+        localScore += Math.max(0, 3 - Math.min(popularity, 3000) / 1000);
+        return {
+          family: semanticMeta.family,
+          source: semanticMeta.source === 'local' ? 'local' : 'google',
+          semanticProfile: semanticProfile.profileText,
+          localScore,
+          displayMeta: f,
+          popularity,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (b.localScore !== a.localScore) return b.localScore - a.localScore;
+        if (a.popularity !== b.popularity) return a.popularity - b.popularity;
+        return String(a.family).localeCompare(String(b.family));
+      })
+      .slice(0, 250);
+  }
+
+  function hasActiveAiResults() {
+    return Array.isArray(state.aiResults) && state.aiResults.length > 0;
+  }
+
+  function getDisplayFamilies() {
+    if (hasActiveAiResults()) return state.aiResults;
+    return getBaseFamilies().filter(f => familyPassesFilters(f, { includeSearch: true }));
+  }
+
+  function updateAiSearchUi() {
+    const canSearch = typeof canUseSemanticFontSearch === 'function' && canUseSemanticFontSearch();
+    if (aiSearchToggle) {
+      aiSearchToggle.disabled = state.aiSearchPending || !canSearch;
+      aiSearchToggle.title = state.aiSearchPending
+        ? tu('actions.fontPreview.semanticSearchRunning')
+        : tu('actions.fontPreview.semanticSearchAction');
+      aiSearchToggle.setAttribute(
+        'aria-label',
+        state.aiSearchPending
+          ? tu('actions.fontPreview.semanticSearchRunning')
+          : tu('actions.fontPreview.semanticSearchAction')
+      );
+      aiSearchToggle.textContent = state.aiSearchPending
+        ? tu('actions.fontPreview.semanticSearchRunningShort')
+        : 'AI';
+    }
+    if (searchMeta) {
+      searchMeta.textContent = '';
+      searchMeta.hidden = true;
+    }
+  }
+
+  function clearAiSearchState({ keepQuery = true } = {}) {
+    aiSearchNonce += 1;
+    state.aiSearchPending = false;
+    state.aiResults = null;
+    state.aiLastQuery = keepQuery ? state.aiLastQuery : '';
+    updateAiSearchUi();
+  }
+
+  function invalidateAiResults() {
+    if (!state.aiSearchPending && !state.aiResults && !state.aiLastQuery) return;
+    aiSearchNonce += 1;
+    state.aiSearchPending = false;
+    state.aiResults = null;
+    state.aiLastQuery = '';
+    updateAiSearchUi();
   }
 
   function buildBookmarkPayload() {
@@ -997,8 +1245,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
         : '';
     rebuildBookmarkSelect();
     syncBookmarkManageRowDisabled();
-    applyFilters();
-    setupListObserver();
+    refreshVisibleResults({ invalidateAi: true });
   }
 
   function hideRenameListPopover() {
@@ -1158,8 +1405,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       if (bookmarkListSelect) bookmarkListSelect.value = id;
       syncBookmarkManageRowDisabled();
       scheduleSaveBookmarks();
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
       hideRenameListPopover();
     }
     saveBtn.addEventListener('click', commitNewList);
@@ -1299,8 +1545,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       showToast(tu('actions.fontPreview.bookmarkAddedToast', { list: targetList.name }), 'success');
       hideBookmarkPopover();
       if (activeListId === targetListId) {
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
       }
     });
     inner.appendChild(header);
@@ -1366,21 +1611,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     pairHoverRow = null;
     hidePairPopover();
 
-    /** @type {object[]} */
-    let base;
-    if (activeListId) {
-      const list = getActiveBookmarkList();
-      base = [];
-      if (list) {
-        for (const name of list.families) {
-          base.push(getFamilyMeta(name));
-        }
-      }
-    } else {
-      base = fontSource === 'local' ? allLocalFamilies : allFamilies;
-    }
-
-    state.filtered = base.filter(familyPassesFilters);
+    state.filtered = getDisplayFamilies();
     state.renderOffset = 0;
     listEl.innerHTML = '';
     if (state.filtered.length === 0 && activeListId) {
@@ -1406,6 +1637,91 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       total: state.filtered.length,
     });
     appendBatch();
+  }
+
+  async function triggerSemanticSearch() {
+    const query = state.search.trim();
+    if (!query) {
+      showToast(tu('actions.fontPreview.semanticSearchNeedQuery'), 'info');
+      return;
+    }
+    const canSearch = typeof canUseSemanticFontSearch === 'function' && canUseSemanticFontSearch();
+    if (!canSearch || typeof runSemanticFontSearch !== 'function') {
+      showToast(tu('actions.fontPreview.semanticSearchUnavailable'), 'error');
+      return;
+    }
+
+    const baseFamilies = getBaseFamilies().filter(f => familyPassesFilters(f, { includeSearch: false }));
+    const candidates = buildSemanticSearchCandidates(baseFamilies);
+    if (candidates.length === 0) {
+      state.aiResults = null;
+      state.aiLastQuery = query;
+      updateAiSearchUi();
+      refreshVisibleResults();
+      showToast(tu('actions.fontPreview.semanticSearchNoMatches'), 'info');
+      return;
+    }
+
+    const requestNonce = ++aiSearchNonce;
+    state.aiSearchPending = true;
+    updateAiSearchUi();
+
+    try {
+      const result = await runSemanticFontSearch({
+        query,
+        candidates: candidates.map(candidate => ({
+          family: candidate.family,
+          source: candidate.source,
+          semanticProfile: candidate.semanticProfile,
+          localScore: candidate.localScore,
+        })),
+      });
+      if (disposed || requestNonce !== aiSearchNonce) return;
+
+      const matches = Array.isArray(result?.matches) ? result.matches : [];
+      const candidateMap = new Map(candidates.map(candidate => [`${candidate.source}::${candidate.family}`, candidate.displayMeta]));
+      const rankedFamilies = [];
+      const seen = new Set();
+      for (const match of matches) {
+        const source = match?.source === 'local' ? 'local' : match?.source === 'google' ? 'google' : '';
+        const family = String(match?.family || '').trim();
+        if (!family || !source) continue;
+        const key = `${source}::${family}`;
+        if (seen.has(key) || !candidateMap.has(key)) continue;
+        seen.add(key);
+        rankedFamilies.push(candidateMap.get(key));
+      }
+
+      if (rankedFamilies.length === 0) {
+        state.aiResults = null;
+        state.aiLastQuery = query;
+        showToast(tu('actions.fontPreview.semanticSearchNoMatches'), 'info');
+      } else {
+        state.aiResults = rankedFamilies;
+        state.aiLastQuery = query;
+      }
+      refreshVisibleResults();
+    } catch (error) {
+      if (disposed || requestNonce !== aiSearchNonce) return;
+      state.aiResults = null;
+      state.aiLastQuery = '';
+      refreshVisibleResults();
+      const message = error?.code === 'AI_UNAVAILABLE'
+        ? tu('actions.fontPreview.semanticSearchUnavailable')
+        : tu('actions.fontPreview.semanticSearchFailed', { message: error?.message || 'Unknown error' });
+      showToast(message, 'error');
+    } finally {
+      if (requestNonce === aiSearchNonce) {
+        state.aiSearchPending = false;
+        updateAiSearchUi();
+      }
+    }
+  }
+
+  function refreshVisibleResults({ invalidateAi = false } = {}) {
+    if (invalidateAi) invalidateAiResults();
+    applyFilters();
+    setupListObserver();
   }
 
   function loadFontCss(family) {
@@ -1632,8 +1948,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       );
       localFamilyByName = new Map(allLocalFamilies.map(f => [f.family, f]));
       if (fontSource === 'local') {
-        applyFilters();
-        setupListObserver();
+        refreshVisibleResults({ invalidateAi: true });
       }
       return;
     }
@@ -1766,8 +2081,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
           list.families = list.families.filter(n => n !== key);
           scheduleSaveBookmarks();
           showToast(tu('actions.fontPreview.bookmarkRemovedToast'), 'success');
-          applyFilters();
-          setupListObserver();
+          refreshVisibleResults({ invalidateAi: true });
         }
       } else {
         const row = btn.closest('.gfp-font-row');
@@ -1851,8 +2165,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   langPrimary.addEventListener('change', () => {
     state.langSubset = langPrimary.value;
-    applyFilters();
-    setupListObserver();
+    refreshVisibleResults({ invalidateAi: true });
   });
 
   if (fontSourceSelect) {
@@ -1862,8 +2175,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       hideRenameListPopover();
       hidePairPopover();
       fontSource = fontSourceSelect.value === 'local' ? 'local' : 'google';
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
     });
   }
 
@@ -1876,8 +2188,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       activeListId = bookmarkListSelect.value || '';
       syncBookmarkManageRowDisabled();
       scheduleSaveBookmarks();
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
     });
   }
 
@@ -1902,8 +2213,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       rebuildBookmarkSelect();
       syncBookmarkManageRowDisabled();
       scheduleSaveBookmarks();
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
     });
   }
 
@@ -1919,9 +2229,16 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   searchInput.addEventListener('input', () => {
     state.search = searchInput.value;
-    applyFilters();
-    setupListObserver();
+    invalidateAiResults();
+    refreshVisibleResults();
   });
+
+  if (aiSearchToggle) {
+    aiSearchToggle.addEventListener('click', () => {
+      if (state.aiSearchPending) return;
+      triggerSemanticSearch();
+    });
+  }
 
   viewToggleButtons.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1945,8 +2262,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       set.add(tag);
       btn.classList.add('gfp-tag--on');
     }
-    applyFilters();
-    setupListObserver();
+    refreshVisibleResults({ invalidateAi: true });
   });
 
   function loadCatalog() {
@@ -1972,8 +2288,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
       familyByName = new Map(allFamilies.map(f => [f.family, f]));
       syncCatalogFamilyIndex();
       listEl.innerHTML = '';
-      applyFilters();
-      setupListObserver();
+      refreshVisibleResults({ invalidateAi: true });
       listEl.querySelectorAll('.gfp-font-row[data-font-source="local"]').forEach(r => primeLocalRowFontCss(r));
       if (usedFallback && fallback.length > 0) {
         showToast(tu('actions.fontPreview.usingBundledCatalog'), 'info');
