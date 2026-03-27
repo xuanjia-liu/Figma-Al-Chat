@@ -15126,6 +15126,9 @@ figma.ui.onmessage = async (msg: {
               if (node && 'fills' in node) {
                 try {
                   const scaleMode = cmd.scaleMode || 'FILL';
+                  const scalingFactor = typeof cmd.scalingFactor === 'number' && Number.isFinite(cmd.scalingFactor)
+                    ? cmd.scalingFactor
+                    : undefined;
                   const currentFills = (node as any).fills;
                   if (currentFills === figma.mixed) {
                     throw new Error('Mixed fills not supported for setImageFill');
@@ -15156,11 +15159,19 @@ figma.ui.onmessage = async (msg: {
                     fills.push({
                       type: 'IMAGE',
                       imageHash: nextImageHash,
-                      scaleMode
+                      scaleMode,
+                      ...(scaleMode === 'TILE' && scalingFactor !== undefined ? { scalingFactor } : {})
                     } as ImagePaint);
                   } else {
                     const existing = fills[imageFillIndex] as ImagePaint;
-                    fills[imageFillIndex] = { ...existing, imageHash: nextImageHash, scaleMode };
+                    fills[imageFillIndex] = {
+                      ...existing,
+                      imageHash: nextImageHash,
+                      scaleMode,
+                      ...(scaleMode === 'TILE'
+                        ? { scalingFactor: scalingFactor ?? existing.scalingFactor ?? 1 }
+                        : { scalingFactor: undefined })
+                    } as ImagePaint;
                   }
 
                   (node as any).fills = fills;

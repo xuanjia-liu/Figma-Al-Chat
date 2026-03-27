@@ -18,6 +18,15 @@ export const stylingImageTasks = [
                 { value: 'CROP', label: 'Crop' },
                 { value: 'TILE', label: 'Tile' }
               ]
+            },
+            {
+              key: 'tileScale',
+              type: 'number',
+              label: 'Tile scale',
+              default: 1,
+              min: 0.01,
+              step: 0.1,
+              showWhen: { field: 'scaleMode', equals: 'TILE' }
             }
           ]
         },

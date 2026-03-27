@@ -19712,8 +19712,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     async function runSetImageFillFromSelectionAction(values, actionMeta) {
       const scaleMode = values.scaleMode || 'FILL';
+      const tileScaleRaw = values.tileScale;
+      const tileScale = scaleMode === 'TILE' && tileScaleRaw !== undefined && tileScaleRaw !== null && tileScaleRaw !== ''
+        ? Number(tileScaleRaw)
+        : undefined;
 
       try {
+        if (scaleMode === 'TILE' && (!Number.isFinite(tileScale) || tileScale <= 0)) {
+          showToast('Tile scale must be a positive number', 'error');
+          return;
+        }
+
         const result = await requestSelectionData(false, false, 'styleOnly');
         const selection = Array.isArray(result?.data) ? result.data : [];
         const imageNodes = selection.filter(node =>
@@ -19753,16 +19762,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               commands: imageNodes.map(node => ({
                 action: 'setImageFill',
                 nodeId: node.id,
-                scaleMode
+                scaleMode,
+                ...(scaleMode === 'TILE' && tileScale !== undefined ? { scalingFactor: tileScale } : {})
               }))
             }
           }, '*');
         });
 
-        showToast(
-          `Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${scaleMode.toLowerCase()}`,
-          'success'
-        );
+        const modeSummary = scaleMode === 'TILE' && tileScale !== undefined
+          ? `${scaleMode.toLowerCase()} (${tileScale}x)`
+          : scaleMode.toLowerCase();
+        showToast(`Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${modeSummary}`, 'success');
       } catch (error) {
         console.error('Set image fill failed:', error);
         showToast(error.message || `Failed to run ${actionMeta?.name || 'Set image fill'}`, 'error');

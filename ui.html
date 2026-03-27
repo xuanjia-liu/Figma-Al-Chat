@@ -17901,6 +17901,15 @@
                 { value: "CROP", label: "Crop" },
                 { value: "TILE", label: "Tile" }
               ]
+            },
+            {
+              key: "tileScale",
+              type: "number",
+              label: "Tile scale",
+              default: 1,
+              min: 0.01,
+              step: 0.1,
+              showWhen: { field: "scaleMode", equals: "TILE" }
             }
           ]
         },
@@ -40429,7 +40438,13 @@
       }
       async function runSetImageFillFromSelectionAction(values, actionMeta) {
         const scaleMode = values.scaleMode || "FILL";
+        const tileScaleRaw = values.tileScale;
+        const tileScale = scaleMode === "TILE" && tileScaleRaw !== void 0 && tileScaleRaw !== null && tileScaleRaw !== "" ? Number(tileScaleRaw) : void 0;
         try {
+          if (scaleMode === "TILE" && (!Number.isFinite(tileScale) || tileScale <= 0)) {
+            showToast("Tile scale must be a positive number", "error");
+            return;
+          }
           const result = await requestSelectionData(false, false, "styleOnly");
           const selection = Array.isArray(result == null ? void 0 : result.data) ? result.data : [];
           const imageNodes = selection.filter(
@@ -40461,18 +40476,16 @@
             parent.postMessage({
               pluginMessage: {
                 type: "execute-commands",
-                commands: imageNodes.map((node) => ({
+                commands: imageNodes.map((node) => __spreadValues({
                   action: "setImageFill",
                   nodeId: node.id,
                   scaleMode
-                }))
+                }, scaleMode === "TILE" && tileScale !== void 0 ? { scalingFactor: tileScale } : {}))
               }
             }, "*");
           });
-          showToast(
-            "Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(scaleMode.toLowerCase()),
-            "success"
-          );
+          const modeSummary = scaleMode === "TILE" && tileScale !== void 0 ? "".concat(scaleMode.toLowerCase(), " (").concat(tileScale, "x)") : scaleMode.toLowerCase();
+          showToast("Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(modeSummary), "success");
         } catch (error) {
           console.error("Set image fill failed:", error);
           showToast(error.message || "Failed to run ".concat((actionMeta == null ? void 0 : actionMeta.name) || "Set image fill"), "error");
