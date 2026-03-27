@@ -13,10 +13,13 @@ export const INITIAL_BOT_MESSAGE_HTML = `
           </div>
         `;
 
+export const DEFAULT_GEMINI_CHAT_MODEL = 'gemini-3-flash-preview';
+export const DEFAULT_GEMINI_TITLE_MODEL = 'gemini-3.1-flash-lite-preview';
+export const DEFAULT_OPENAI_CHAT_MODEL = 'gpt-5';
+
 export const DEFAULT_GEMINI_MODELS = [
-  { id: 'gemini-2.0-flash', displayName: 'Gemini 2.0 Flash (Fast)' },
-  { id: 'gemini-1.5-pro-latest', displayName: 'Gemini 1.5 Pro (Advanced)' },
-  { id: 'gemini-2.0-flash-lite', displayName: 'Gemini 2.0 Flash Lite (Fastest)' }
+  { id: DEFAULT_GEMINI_TITLE_MODEL, displayName: 'Gemini 3.1 Flash Lite Preview' },
+  { id: DEFAULT_GEMINI_CHAT_MODEL, displayName: 'Gemini 3 Flash Preview' }
 ];
 
 export const DEFAULT_IMAGE_MODELS = [
@@ -27,11 +30,8 @@ export const DEFAULT_IMAGE_MODELS = [
 ];
 
 export const DEFAULT_OPENAI_MODELS = [
-  { id: 'gpt-4o', displayName: 'GPT-4o (Latest)' },
-  { id: 'gpt-4o-mini', displayName: 'GPT-4o Mini (Fast)' },
-  { id: 'o1-preview', displayName: 'o1 Preview' },
-  { id: 'o1-mini', displayName: 'o1 Mini' },
-  { id: 'gpt-4-turbo', displayName: 'GPT-4 Turbo' }
+  { id: 'gpt-5-nano', displayName: 'GPT-5 Nano' },
+  { id: DEFAULT_OPENAI_CHAT_MODEL, displayName: 'GPT-5' }
 ];
 
 export const DEFAULT_ANTHROPIC_MODELS = [

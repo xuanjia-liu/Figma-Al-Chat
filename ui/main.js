@@ -4,8 +4,11 @@ import {
   ASK_BACK_GUIDANCE,
   COMMENTS_CACHE_TTL,
   DEFAULT_ANTHROPIC_MODELS,
+  DEFAULT_GEMINI_CHAT_MODEL,
   DEFAULT_GEMINI_MODELS,
+  DEFAULT_GEMINI_TITLE_MODEL,
   DEFAULT_IMAGE_MODELS,
+  DEFAULT_OPENAI_CHAT_MODEL,
   DEFAULT_OPENAI_MODELS,
   FIGMA_MAX_IMAGE_DIMENSION,
   INITIAL_BOT_MESSAGE_HTML,
@@ -64,9 +67,9 @@ import {
     let aiOffMode = false;
     let lightMode = false;
     let geminiApiKey = '';
-    let geminiModel = 'gemini-2.0-flash';
+    let geminiModel = DEFAULT_GEMINI_CHAT_MODEL;
     let openaiApiKey = '';
-    let openaiModel = 'gpt-4o';
+    let openaiModel = DEFAULT_OPENAI_CHAT_MODEL;
     let anthropicApiKey = '';
     let anthropicModel = 'claude-3-5-sonnet-20241022';
     let currentSettingsLocale = DEFAULT_SETTINGS_LOCALE;
@@ -1845,15 +1848,14 @@ import {
     function getCommonModels(provider) {
       const commonModels = {
         gemini: [
-          'gemini-2.0-flash',
-          'gemini-1.5-pro-latest',
-          'gemini-2.0-flash-lite',
+          DEFAULT_GEMINI_TITLE_MODEL,
+          DEFAULT_GEMINI_CHAT_MODEL,
           'imagen-4.0-fast-generate-001',
           'imagen-4.0-generate-001'
         ],
         openai: [
-          'gpt-4o',
-          'gpt-4o-mini'
+          'gpt-5-nano',
+          DEFAULT_OPENAI_CHAT_MODEL
         ],
         anthropic: [
           'claude-sonnet-4-20250514',
@@ -2382,9 +2384,9 @@ import {
         provider: providerSelect.value || 'gemini',
         aiOffMode: noAiModeToggle?.checked === true,
         geminiApiKey: geminiApiKeyInput.value || '',
-        geminiModel: geminiModelSelect.value || 'gemini-2.0-flash',
+        geminiModel: geminiModelSelect.value || DEFAULT_GEMINI_CHAT_MODEL,
         openaiApiKey: openaiApiKeyInput.value || '',
-        openaiModel: openaiModelSelect.value || 'gpt-4o',
+        openaiModel: openaiModelSelect.value || DEFAULT_OPENAI_CHAT_MODEL,
         anthropicApiKey: anthropicApiKeyInput.value || '',
         anthropicModel: anthropicModelSelect.value || 'claude-sonnet-4-20250514',
         cssFormat: cssFormatSelect.value || 'classes',
@@ -2434,9 +2436,9 @@ import {
         noAiModeToggle.checked = lastSavedSettings.aiOffMode === true;
       }
       geminiApiKeyInput.value = lastSavedSettings.geminiApiKey || '';
-      populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, lastSavedSettings.geminiModel || 'gemini-2.0-flash');
+      populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, lastSavedSettings.geminiModel || DEFAULT_GEMINI_CHAT_MODEL);
       openaiApiKeyInput.value = lastSavedSettings.openaiApiKey || '';
-      populateOpenAIModelSelect(DEFAULT_OPENAI_MODELS, lastSavedSettings.openaiModel || 'gpt-4o');
+      populateOpenAIModelSelect(DEFAULT_OPENAI_MODELS, lastSavedSettings.openaiModel || DEFAULT_OPENAI_CHAT_MODEL);
       anthropicApiKeyInput.value = lastSavedSettings.anthropicApiKey || '';
       populateAnthropicModelSelect(DEFAULT_ANTHROPIC_MODELS, lastSavedSettings.anthropicModel || 'claude-sonnet-4-20250514');
       cssFormatSelect.value = lastSavedSettings.cssFormat || 'classes';
@@ -4821,7 +4823,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           }
 
           const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
           );
           if (!response.ok) {
@@ -8041,7 +8043,7 @@ Generate a suitable, professional response.
 - Output ONLY the response text.
 - Be concise.`;
 
-            const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+            const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -8599,7 +8601,7 @@ ${existingText ? `User's draft/notes: "${existingText}"` : ''}
           throw new Error('Please configure your Gemini API key in Settings');
         }
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -8699,7 +8701,7 @@ Requirements:
           throw new Error('Please configure your Gemini API key in Settings');
         }
 
-        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -15326,7 +15328,7 @@ Generate ONLY the reply text, nothing else.`;
           if (useWebSearch) {
             requestBody.tools = [{ googleSearch: {} }];
           }
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestBody)
@@ -17822,7 +17824,7 @@ TECHNICAL RULES:
         let apiError = null;
 
         if (selectedProvider === 'gemini') {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -17923,7 +17925,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       try {
         let responseText = '';
         if (selectedProvider === 'gemini') {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel || DEFAULT_GEMINI_CHAT_MODEL}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -20172,7 +20174,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           showToast('API key required for AI auto-detect. Using "random" instead.', 'warning');
           return 'random';
         }
-        const model = geminiModelSelect ? geminiModelSelect.value : 'gemini-2.0-flash';
+        const model = geminiModelSelect ? geminiModelSelect.value : DEFAULT_GEMINI_CHAT_MODEL;
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const resp = await fetch(apiUrl, {
           method: 'POST',
@@ -22785,9 +22787,9 @@ Example structure:
       selectedProvider = normalizedProvider;
       aiOffMode = savedAiOffMode;
       geminiApiKey = settings?.geminiApiKey || '';
-      geminiModel = settings?.geminiModel || 'gemini-2.0-flash';
+      geminiModel = settings?.geminiModel || DEFAULT_GEMINI_CHAT_MODEL;
       openaiApiKey = settings?.openaiApiKey || '';
-      openaiModel = settings?.openaiModel || 'gpt-4o';
+      openaiModel = settings?.openaiModel || DEFAULT_OPENAI_CHAT_MODEL;
       anthropicApiKey = settings?.anthropicApiKey || '';
       anthropicModel = settings?.anthropicModel || 'claude-sonnet-4-20250514';
       cssFormat = settings?.cssFormat || 'classes';
@@ -23032,9 +23034,9 @@ Example structure:
         provider: providerSelect.value || 'gemini',
         aiOffMode: noAiModeToggle?.checked === true,
         geminiApiKey: geminiApiKeyInput.value || '',
-        geminiModel: geminiModelSelect.value || 'gemini-2.0-flash',
+        geminiModel: geminiModelSelect.value || DEFAULT_GEMINI_CHAT_MODEL,
         openaiApiKey: openaiApiKeyInput.value || '',
-        openaiModel: openaiModelSelect.value || 'gpt-4o',
+        openaiModel: openaiModelSelect.value || DEFAULT_OPENAI_CHAT_MODEL,
         anthropicApiKey: anthropicApiKeyInput.value || '',
         anthropicModel: anthropicModelSelect.value || 'claude-sonnet-4-20250514',
         cssFormat: cssFormatSelect.value || 'classes',
@@ -24143,7 +24145,7 @@ Example structure:
         let generatedTitle = null;
 
         if (selectedProvider === 'gemini') {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_TITLE_MODEL}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -29129,7 +29131,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
 
     // Fast models for intent classification (cheaper/faster than user's selected model)
     const INTENT_FAST_MODELS = {
-      gemini: 'gemini-2.0-flash',
+      gemini: DEFAULT_GEMINI_CHAT_MODEL,
       openai: 'gpt-4o-mini',
       anthropic: 'claude-3-5-haiku-latest'
     };

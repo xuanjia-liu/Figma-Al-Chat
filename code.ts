@@ -4691,7 +4691,7 @@ figma.ui.onmessage = async (msg: {
         const provider = await figma.clientStorage.getAsync(SETTINGS_KEYS.PROVIDER) || 'gemini';
         const aiOffMode = await figma.clientStorage.getAsync(SETTINGS_KEYS.AI_OFF_MODE) === true;
         const geminiApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.GEMINI_API_KEY) || '';
-        const geminiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.GEMINI_MODEL) || 'gemini-2.0-flash';
+        const geminiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.GEMINI_MODEL) || 'gemini-3-flash-preview';
         const openaiApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_API_KEY) || '';
         const openaiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_MODEL) || 'gpt-4o';
         const anthropicApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY) || '';
@@ -4735,7 +4735,7 @@ figma.ui.onmessage = async (msg: {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-2.0-flash', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
         });
       }
       break;
@@ -4913,7 +4913,7 @@ figma.ui.onmessage = async (msg: {
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PROVIDER, provider || 'gemini');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.AI_OFF_MODE, aiOffMode === true);
         await figma.clientStorage.setAsync(SETTINGS_KEYS.GEMINI_API_KEY, geminiApiKey || '');
-        await figma.clientStorage.setAsync(SETTINGS_KEYS.GEMINI_MODEL, geminiModel || 'gemini-2.0-flash');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.GEMINI_MODEL, geminiModel || 'gemini-3-flash-preview');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_API_KEY, openaiApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_MODEL, openaiModel || 'gpt-4o');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY, anthropicApiKey || '');
