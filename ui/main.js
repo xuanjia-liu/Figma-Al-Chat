@@ -12174,6 +12174,9 @@ Generate ONLY the reply text, nothing else.`;
     let isPromptComposing = false;  // Track IME composition in prompt drawer inputs
     let isApplyingPreset = false;   // Track if we are currently applying a preset
     let randomizeDrawerRefreshVersion = 0;
+    let realtimePromptActionTimer = null;
+    let realtimePromptActionInFlight = false;
+    let realtimePromptActionQueued = false;
 
     // --- Multi-minimized-drawer state ---
     const minimizedDrawers = new Map(); // id -> { id, actionData, iconHtml, title, color, fieldValues, isRunning, directUIPhase, directUISections, directUIFieldValues, directUIHydratedFields }
@@ -12492,6 +12495,56 @@ Generate ONLY the reply text, nothing else.`;
       );
     }
 
+    function isRealtimePromptAction(action = currentPromptAction) {
+      return !!action && action.directAction === 'setImageFillFromSelection';
+    }
+
+    function clearRealtimePromptActionState() {
+      if (realtimePromptActionTimer) {
+        clearTimeout(realtimePromptActionTimer);
+        realtimePromptActionTimer = null;
+      }
+      realtimePromptActionInFlight = false;
+      realtimePromptActionQueued = false;
+    }
+
+    async function applyRealtimePromptActionNow() {
+      if (!isRealtimePromptAction() || !promptDrawer.classList.contains('open') || !currentPromptAction) return;
+
+      if (realtimePromptActionInFlight) {
+        realtimePromptActionQueued = true;
+        return;
+      }
+
+      realtimePromptActionInFlight = true;
+      try {
+        const action = currentPromptAction;
+        const values = getPromptFieldValues();
+        await runDirectAction(action.directAction, values, action);
+      } catch (error) {
+        console.warn('Realtime prompt action failed:', error);
+      } finally {
+        realtimePromptActionInFlight = false;
+        if (realtimePromptActionQueued) {
+          realtimePromptActionQueued = false;
+          scheduleRealtimePromptAction(0);
+        }
+      }
+    }
+
+    function scheduleRealtimePromptAction(delay = 120) {
+      if (!isRealtimePromptAction()) return;
+      if (realtimePromptActionTimer) {
+        clearTimeout(realtimePromptActionTimer);
+      }
+      realtimePromptActionTimer = setTimeout(() => {
+        realtimePromptActionTimer = null;
+        applyRealtimePromptActionNow().catch((error) => {
+          console.warn('Failed to apply realtime prompt action:', error);
+        });
+      }, delay);
+    }
+
     function cloneTaskFields(fields) {
       try {
         return JSON.parse(JSON.stringify(Array.isArray(fields) ? fields : []));
@@ -12595,6 +12648,7 @@ Generate ONLY the reply text, nothing else.`;
 
     async function openPromptDrawer(actionData, options = {}) {
       const skipHistory = options.skipHistory === true;
+      clearRealtimePromptActionState();
       if (actionData && actionData.name) {
         recordQuickActionUsage(actionData.name);
       }
@@ -12810,6 +12864,10 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawer.classList.add('open');
         promptDrawerOverlay.classList.add('open');
 
+        if (isRealtimePromptAction(currentPromptAction)) {
+          scheduleRealtimePromptAction(0);
+        }
+
         if (actionData.directAction === 'duplicateWithInstructions' || actionData.directAction === 'randomizeSelectedInstances') {
           setTimeout(() => {
             refreshOpenInstanceRandomizationDrawerFromSelection().catch((error) => {
@@ -13014,7 +13072,7 @@ Generate ONLY the reply text, nothing else.`;
           // Show submit button for other actions
           const submitBtn = document.getElementById('promptDrawerSubmit');
           if (submitBtn) {
-            submitBtn.style.display = '';
+            submitBtn.style.display = isRealtimePromptAction(currentPromptAction) ? 'none' : '';
           }
 
           // Restore refresh/close buttons if they were changed
@@ -13026,7 +13084,9 @@ Generate ONLY the reply text, nothing else.`;
           }
           const cancelBtn = document.getElementById('promptDrawerCancel');
           if (cancelBtn) {
-            cancelBtn.textContent = tu('actions.prompt.backToList');
+            cancelBtn.textContent = isRealtimePromptAction(currentPromptAction)
+              ? tu('actions.prompt.close')
+              : tu('actions.prompt.backToList');
           }
 
           // Remove AI action group if exists
@@ -13043,6 +13103,7 @@ Generate ONLY the reply text, nothing else.`;
     }
 
     function closePromptDrawer() {
+      clearRealtimePromptActionState();
       removeAiActionMenu();
       if (typeof disposeGoogleFontPreview === 'function') {
         disposeGoogleFontPreview();
@@ -14350,10 +14411,17 @@ Generate ONLY the reply text, nothing else.`;
               buttonText: tu('actions.prompt.reset')
             });
           }
+
+        }
+        if (isRealtimePromptAction()) {
+          scheduleRealtimePromptAction();
         }
       });
-      promptDrawerFields.addEventListener('change', () => {
+      promptDrawerFields.addEventListener('change', (e) => {
         savePromptHistory();
+        if (isRealtimePromptAction()) {
+          scheduleRealtimePromptAction();
+        }
       });
 
       // Initialize image chips if there are any images
@@ -14448,6 +14516,9 @@ Generate ONLY the reply text, nothing else.`;
       actionToReset.fields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
       actionToReset._originalFields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
       await openPromptDrawer(actionToReset, { skipHistory: true });
+      if (isRealtimePromptAction(currentPromptAction)) {
+        scheduleRealtimePromptAction(0);
+      }
 
       showToast(tu('actions.prompt.resetToast', { name: localizeActionString(originalName) }));
     }
@@ -19737,18 +19808,15 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const tileScale = scaleMode === 'TILE' && Number.isFinite(tileScalePercent)
         ? tileScalePercent / 100
         : undefined;
-      const applyImageAdjustments = values.applyImageAdjustments === true || values.applyImageAdjustments === 'true';
       const filterKeys = ['exposure', 'contrast', 'saturation', 'temperature', 'tint', 'highlights', 'shadows'];
-      const imageFilters = applyImageAdjustments
-        ? filterKeys.reduce((acc, key) => {
-            const rawValue = values[key];
-            const parsedValue = rawValue !== undefined && rawValue !== null && rawValue !== '' ? Number(rawValue) : 0;
-            if (Number.isFinite(parsedValue)) {
-              acc[key] = Math.max(-1, Math.min(1, parsedValue / 100));
-            }
-            return acc;
-          }, {})
-        : undefined;
+      const imageFilters = filterKeys.reduce((acc, key) => {
+        const rawValue = values[key];
+        const parsedValue = rawValue !== undefined && rawValue !== null && rawValue !== '' ? Number(rawValue) : 0;
+        if (Number.isFinite(parsedValue)) {
+          acc[key] = Math.max(-1, Math.min(1, parsedValue / 100));
+        }
+        return acc;
+      }, {});
 
       try {
         if (scaleMode === 'TILE' && (!Number.isFinite(tileScalePercent) || tileScalePercent <= 0)) {
@@ -19806,7 +19874,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         const modeSummary = scaleMode === 'TILE' && tileScalePercent !== undefined
           ? `${scaleMode.toLowerCase()} (${tileScalePercent}%)`
           : scaleMode.toLowerCase();
-        const adjustmentSummary = imageFilters ? ' with adjustments' : '';
+        const hasNonZeroAdjustment = Object.values(imageFilters).some(value => Math.abs(Number(value) || 0) > 0);
+        const adjustmentSummary = hasNonZeroAdjustment ? ' with adjustments' : '';
         showToast(`Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${modeSummary}${adjustmentSummary}`, 'success');
       } catch (error) {
         console.error('Set image fill failed:', error);
@@ -21227,7 +21296,8 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         if (action.directAction) {
           // Only close drawer if it's not a multi-step action like browseIconSet
           const keepDrawerOpenForCreateIcon = action.directAction === 'createIcon' && values.showResultsInDrawer !== false;
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon) {
+          const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForRealtimeAction) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -21245,7 +21315,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForRealtimeAction) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             promptDrawerSubmit.textContent = 'Run Action';

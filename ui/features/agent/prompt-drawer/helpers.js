@@ -62,6 +62,7 @@ export function createPromptDrawerHelpers({
           if (opt) opt.classList.remove('selected');
           syncSelectState(selectEl);
           applyPromptFieldVisibility();
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
           savePromptHistory();
         });
       });
@@ -398,6 +399,7 @@ export function createPromptDrawerHelpers({
           }
 
           syncSelectState(selectEl);
+          selectEl.dispatchEvent(new Event('change', { bubbles: true }));
           if (searchInput) {
             if (isMulti) {
               searchInput.value = '';
@@ -447,6 +449,7 @@ export function createPromptDrawerHelpers({
             }
             syncSelectState(selectEl);
             applyPromptFieldVisibility();
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
           });
 
           embeddedInput.addEventListener('focus', openSelect);

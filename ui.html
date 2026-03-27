@@ -16383,6 +16383,7 @@
             if (opt) opt.classList.remove("selected");
             syncSelectState(selectEl);
             applyPromptFieldVisibility();
+            selectEl.dispatchEvent(new Event("change", { bubbles: true }));
             savePromptHistory();
           });
         });
@@ -16669,6 +16670,7 @@
               optionEl.classList.add("selected");
             }
             syncSelectState(selectEl);
+            selectEl.dispatchEvent(new Event("change", { bubbles: true }));
             if (searchInput) {
               if (isMulti) {
                 searchInput.value = "";
@@ -16715,6 +16717,7 @@
               }
               syncSelectState(selectEl);
               applyPromptFieldVisibility();
+              selectEl.dispatchEvent(new Event("change", { bubbles: true }));
             });
             embeddedInput.addEventListener("focus", openSelect);
             embeddedInput.addEventListener("blur", closeSelect);
@@ -17915,24 +17918,16 @@
               showWhen: { field: "scaleMode", equals: "TILE" }
             },
             {
-              key: "applyImageAdjustments",
-              type: "checkbox",
-              label: "Adjust image",
-              default: false
-            },
-            {
               key: "exposure",
               type: "slider",
               label: "Exposure",
               default: 0,
               min: -100,
               max: 100,
-              step: 1,
-              showWhen: { field: "applyImageAdjustments", equals: true }
+              step: 1
             },
             {
               type: "row",
-              showWhen: { field: "applyImageAdjustments", equals: true },
               fields: [
                 {
                   key: "contrast",
@@ -17956,7 +17951,6 @@
             },
             {
               type: "row",
-              showWhen: { field: "applyImageAdjustments", equals: true },
               fields: [
                 {
                   key: "temperature",
@@ -17980,7 +17974,6 @@
             },
             {
               type: "row",
-              showWhen: { field: "applyImageAdjustments", equals: true },
               fields: [
                 {
                   key: "highlights",
@@ -35025,6 +35018,9 @@
       var isPromptComposing = false;
       var isApplyingPreset = false;
       var randomizeDrawerRefreshVersion = 0;
+      var realtimePromptActionTimer = null;
+      var realtimePromptActionInFlight = false;
+      var realtimePromptActionQueued = false;
       var minimizedDrawers = /* @__PURE__ */ new Map();
       var minimizedIdCounter = 0;
       var directUIPhase = 0;
@@ -35279,6 +35275,50 @@
       function isInstanceRandomizationPromptAction(action = currentPromptAction) {
         return !!action && (action.directAction === "duplicateWithInstructions" || action.directAction === "randomizeSelectedInstances");
       }
+      function isRealtimePromptAction(action = currentPromptAction) {
+        return !!action && action.directAction === "setImageFillFromSelection";
+      }
+      function clearRealtimePromptActionState() {
+        if (realtimePromptActionTimer) {
+          clearTimeout(realtimePromptActionTimer);
+          realtimePromptActionTimer = null;
+        }
+        realtimePromptActionInFlight = false;
+        realtimePromptActionQueued = false;
+      }
+      async function applyRealtimePromptActionNow() {
+        if (!isRealtimePromptAction() || !promptDrawer.classList.contains("open") || !currentPromptAction) return;
+        if (realtimePromptActionInFlight) {
+          realtimePromptActionQueued = true;
+          return;
+        }
+        realtimePromptActionInFlight = true;
+        try {
+          const action = currentPromptAction;
+          const values = getPromptFieldValues();
+          await runDirectAction(action.directAction, values, action);
+        } catch (error) {
+          console.warn("Realtime prompt action failed:", error);
+        } finally {
+          realtimePromptActionInFlight = false;
+          if (realtimePromptActionQueued) {
+            realtimePromptActionQueued = false;
+            scheduleRealtimePromptAction(0);
+          }
+        }
+      }
+      function scheduleRealtimePromptAction(delay = 120) {
+        if (!isRealtimePromptAction()) return;
+        if (realtimePromptActionTimer) {
+          clearTimeout(realtimePromptActionTimer);
+        }
+        realtimePromptActionTimer = setTimeout(() => {
+          realtimePromptActionTimer = null;
+          applyRealtimePromptActionNow().catch((error) => {
+            console.warn("Failed to apply realtime prompt action:", error);
+          });
+        }, delay);
+      }
       function cloneTaskFields(fields) {
         try {
           return JSON.parse(JSON.stringify(Array.isArray(fields) ? fields : []));
@@ -35362,6 +35402,7 @@
       var promptDrawerBack = document.getElementById("promptDrawerBack");
       async function openPromptDrawer(actionData, options = {}) {
         const skipHistory = options.skipHistory === true;
+        clearRealtimePromptActionState();
         if (actionData && actionData.name) {
           recordQuickActionUsage(actionData.name);
         }
@@ -35524,6 +35565,9 @@
           setupExampleClicks();
           promptDrawer.classList.add("open");
           promptDrawerOverlay.classList.add("open");
+          if (isRealtimePromptAction(currentPromptAction)) {
+            scheduleRealtimePromptAction(0);
+          }
           if (actionData.directAction === "duplicateWithInstructions" || actionData.directAction === "randomizeSelectedInstances") {
             setTimeout(() => {
               refreshOpenInstanceRandomizationDrawerFromSelection().catch((error) => {
@@ -35658,7 +35702,7 @@
           } else {
             const submitBtn2 = document.getElementById("promptDrawerSubmit");
             if (submitBtn2) {
-              submitBtn2.style.display = "";
+              submitBtn2.style.display = isRealtimePromptAction(currentPromptAction) ? "none" : "";
             }
             const resetBtn = document.getElementById("promptDrawerReset");
             if (resetBtn) {
@@ -35668,7 +35712,7 @@
             }
             const cancelBtn = document.getElementById("promptDrawerCancel");
             if (cancelBtn) {
-              cancelBtn.textContent = tu("actions.prompt.backToList");
+              cancelBtn.textContent = isRealtimePromptAction(currentPromptAction) ? tu("actions.prompt.close") : tu("actions.prompt.backToList");
             }
             const footer = document.querySelector(".prompt-drawer-footer");
             if (footer) {
@@ -35682,6 +35726,7 @@
         }
       }
       function closePromptDrawer() {
+        clearRealtimePromptActionState();
         removeAiActionMenu();
         if (typeof disposeGoogleFontPreview === "function") {
           disposeGoogleFontPreview();
@@ -36389,9 +36434,15 @@
               });
             }
           }
+          if (isRealtimePromptAction()) {
+            scheduleRealtimePromptAction();
+          }
         });
-        promptDrawerFields.addEventListener("change", () => {
+        promptDrawerFields.addEventListener("change", (e) => {
           savePromptHistory();
+          if (isRealtimePromptAction()) {
+            scheduleRealtimePromptAction();
+          }
         });
         updatePromptDrawerImageChips();
       }
@@ -36461,6 +36512,9 @@
         actionToReset.fields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
         actionToReset._originalFields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
         await openPromptDrawer(actionToReset, { skipHistory: true });
+        if (isRealtimePromptAction(currentPromptAction)) {
+          scheduleRealtimePromptAction(0);
+        }
         showToast(tu("actions.prompt.resetToast", { name: localizeActionString(originalName) }));
       }
       function setupIndicatorListeners() {
@@ -40546,16 +40600,15 @@
         const tileScalePercentRaw = values.tileScale;
         const tileScalePercent = scaleMode === "TILE" && tileScalePercentRaw !== void 0 && tileScalePercentRaw !== null && tileScalePercentRaw !== "" ? Number(tileScalePercentRaw) : void 0;
         const tileScale = scaleMode === "TILE" && Number.isFinite(tileScalePercent) ? tileScalePercent / 100 : void 0;
-        const applyImageAdjustments = values.applyImageAdjustments === true || values.applyImageAdjustments === "true";
         const filterKeys = ["exposure", "contrast", "saturation", "temperature", "tint", "highlights", "shadows"];
-        const imageFilters = applyImageAdjustments ? filterKeys.reduce((acc, key) => {
+        const imageFilters = filterKeys.reduce((acc, key) => {
           const rawValue = values[key];
           const parsedValue = rawValue !== void 0 && rawValue !== null && rawValue !== "" ? Number(rawValue) : 0;
           if (Number.isFinite(parsedValue)) {
             acc[key] = Math.max(-1, Math.min(1, parsedValue / 100));
           }
           return acc;
-        }, {}) : void 0;
+        }, {});
         try {
           if (scaleMode === "TILE" && (!Number.isFinite(tileScalePercent) || tileScalePercent <= 0)) {
             showToast("Tile scale must be a positive percentage", "error");
@@ -40601,7 +40654,8 @@
             }, "*");
           });
           const modeSummary = scaleMode === "TILE" && tileScalePercent !== void 0 ? "".concat(scaleMode.toLowerCase(), " (").concat(tileScalePercent, "%)") : scaleMode.toLowerCase();
-          const adjustmentSummary = imageFilters ? " with adjustments" : "";
+          const hasNonZeroAdjustment = Object.values(imageFilters).some((value) => Math.abs(Number(value) || 0) > 0);
+          const adjustmentSummary = hasNonZeroAdjustment ? " with adjustments" : "";
           showToast("Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(modeSummary).concat(adjustmentSummary), "success");
         } catch (error) {
           console.error("Set image fill failed:", error);
@@ -41755,7 +41809,8 @@
           }
           if (action.directAction) {
             const keepDrawerOpenForCreateIcon = action.directAction === "createIcon" && values.showResultsInDrawer !== false;
-            if (action.directAction !== "browseIconSet" && !keepDrawerOpenForCreateIcon) {
+            const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
+            if (action.directAction !== "browseIconSet" && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForRealtimeAction) {
               closePromptDrawer();
             }
             closeCommandsDrawer();
@@ -41768,7 +41823,7 @@
               setMode("agent");
               await runDirectAction(action.directAction, values, action);
             }
-            if (action.directAction === "browseIconSet" || keepDrawerOpenForCreateIcon) {
+            if (action.directAction === "browseIconSet" || keepDrawerOpenForCreateIcon || keepDrawerOpenForRealtimeAction) {
               isSubmittingPrompt = false;
               promptDrawerSubmit.disabled = false;
               promptDrawerSubmit.textContent = "Run Action";

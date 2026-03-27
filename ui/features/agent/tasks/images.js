@@ -32,24 +32,16 @@ export const stylingImageTasks = [
               showWhen: { field: 'scaleMode', equals: 'TILE' }
             },
             {
-              key: 'applyImageAdjustments',
-              type: 'checkbox',
-              label: 'Adjust image',
-              default: false
-            },
-            {
               key: 'exposure',
               type: 'slider',
               label: 'Exposure',
               default: 0,
               min: -100,
               max: 100,
-              step: 1,
-              showWhen: { field: 'applyImageAdjustments', equals: true }
+              step: 1
             },
             {
               type: 'row',
-              showWhen: { field: 'applyImageAdjustments', equals: true },
               fields: [
                 {
                   key: 'contrast',
@@ -73,7 +65,6 @@ export const stylingImageTasks = [
             },
             {
               type: 'row',
-              showWhen: { field: 'applyImageAdjustments', equals: true },
               fields: [
                 {
                   key: 'temperature',
@@ -97,7 +88,6 @@ export const stylingImageTasks = [
             },
             {
               type: 'row',
-              showWhen: { field: 'applyImageAdjustments', equals: true },
               fields: [
                 {
                   key: 'highlights',
