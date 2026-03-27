@@ -29917,6 +29917,7 @@ AVAILABLE COMMANDS:
 === BASIC OPERATIONS ===
 - rename: { "action": "rename", "nodeId": "xxx", "name": "New Name" }
 - resize: { "action": "resize", "nodeId": "xxx", "width": 100, "height": 50 }
+  - For FigJam: SHAPE_WITH_TEXT supports resize normally; STICKY only supports square vs wide width (not arbitrary freeform sizing); CONNECTOR does not support resize.
 - move: { "action": "move", "nodeId": "xxx", "x": 10, "y": 20 }
 - setFill: { "action": "setFill", "nodeId": "xxx", "color": "#FF0000" } (sets solid fill, or preserves gradients by modifying hue using OKLCH color space)
 - setLinearGradient: { "action": "setLinearGradient", "nodeId": "xxx", "angle": 90, "stops": [{ "color": "#FF0000", "position": 0 }, { "color": "#0000FF", "position": 1 }] }
@@ -30205,6 +30206,7 @@ Selection data now includes "fillsDetailed" array with gradient info including t
 
 === FIGJAM STICKY NOTES ===
 - createSticky: { "action": "createSticky", "x": 0, "y": 0, "text": "Sticky note content", "name": "My Sticky" }
+- resize on STICKY notes only toggles between square and wide formats based on the requested aspect ratio; it does NOT support arbitrary width/height.
 - IMPORTANT: When creating FigJam nodes (createSticky, createConnector, createShapeWithText) with a selection present, omit x/y coordinates (or use 0,0) to enable automatic smart positioning:
   * No selection: centers in viewport
   * Selection is SECTION/GROUP: positions inside (centered)
@@ -30219,6 +30221,7 @@ Selection data now includes "fillsDetailed" array with gradient info including t
 === FIGJAM CONNECTORS ===
 - createConnector: { "action": "createConnector", "startNodeId": "node1", "endNodeId": "node2", "lineType": "ELBOWED/STRAIGHT/CURVED", "strokeColor": "#000000", "strokeWeight": 2 }
 - createConnector with positions: { "action": "createConnector", "startX": 0, "startY": 0, "endX": 100, "endY": 100 }
+- CONNECTOR nodes do NOT support resize/rescale. To change their length or route, use setConnectorEndpoints or move the connected nodes.
 - IMPORTANT: When creating FigJam nodes (createSticky, createConnector, createShapeWithText) with a selection present, omit x/y coordinates (or use 0,0) to enable automatic smart positioning (see FIGJAM STICKY NOTES section for positioning rules)
 - setConnectorLineType: { "action": "setConnectorLineType", "nodeId": "xxx", "lineType": "ELBOWED/STRAIGHT/CURVED" }
 - setConnectorStroke: { "action": "setConnectorStroke", "nodeId": "xxx", "color": "#000000", "weight": 2 }

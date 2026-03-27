@@ -14832,18 +14832,54 @@ figma.ui.onmessage = async (msg: {
             }
 
             case 'resize':
-              if ('resize' in node) {
+              if (node.type === 'STICKY') {
+                const stickyNode = node as StickyNode;
+                const targetWidth = typeof cmd.width === 'number' ? cmd.width : stickyNode.width;
+                const targetHeight = typeof cmd.height === 'number' ? cmd.height : stickyNode.height;
+                // FigJam stickies only support square vs wide width via the plugin API.
+                stickyNode.isWideWidth = targetWidth > targetHeight * 1.15;
+                success++;
+              } else if (node.type === 'CONNECTOR') {
+                if (!firstError) {
+                  firstError = {
+                    action: cmd.action,
+                    nodeId: node.id,
+                    message: 'FigJam connectors do not support resize(); use setConnectorEndpoints or move the connected nodes instead.'
+                  };
+                }
+                failed++;
+              } else if ('resize' in node) {
                 const newWidth = typeof cmd.width === 'number' ? cmd.width : (node as any).width;
                 const newHeight = typeof cmd.height === 'number' ? cmd.height : (node as any).height;
                 (node as any).resize(newWidth, newHeight);
                 success++;
               } else {
+                if (!firstError && (node.type === 'STICKY' || node.type === 'CONNECTOR' || node.type === 'SHAPE_WITH_TEXT')) {
+                  firstError = {
+                    action: cmd.action,
+                    nodeId: node.id,
+                    message: `This FigJam node type (${node.type}) does not support generic resize handling.`
+                  };
+                }
                 failed++;
               }
               break;
 
             case 'rescale':
-              if ('rescale' in node && typeof cmd.scale === 'number') {
+              if (node.type === 'STICKY' && typeof cmd.scale === 'number') {
+                const stickyNode = node as StickyNode;
+                stickyNode.isWideWidth = cmd.scale > 1.15;
+                success++;
+              } else if (node.type === 'CONNECTOR' && typeof cmd.scale === 'number') {
+                if (!firstError) {
+                  firstError = {
+                    action: cmd.action,
+                    nodeId: node.id,
+                    message: 'FigJam connectors do not support rescale(); use setConnectorEndpoints instead.'
+                  };
+                }
+                failed++;
+              } else if ('rescale' in node && typeof cmd.scale === 'number') {
                 (node as any).rescale(cmd.scale);
                 success++;
               } else {
@@ -18102,7 +18138,7 @@ figma.ui.onmessage = async (msg: {
                   'violet': { r: 0.737, g: 0.522, b: 1 },
                   'purple': { r: 0.737, g: 0.522, b: 1 },
                   'red': { r: 1, g: 0.721, b: 0.658 },
-                  'teal': { r: 0.337, g: 0.761, b: 0.365 },
+                  'teal': { r: 0.337, g: 0.761, b: 0.761 },
                   'light_gray': { r: 0.961, g: 0.961, b: 0.961 }
                 };
                 const stickyColor = colorMap[(cmd.color || 'yellow').toLowerCase()];
