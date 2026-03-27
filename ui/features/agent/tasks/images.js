@@ -22,10 +22,13 @@ export const stylingImageTasks = [
             {
               key: 'tileScale',
               type: 'number',
-              label: 'Tile scale',
-              default: 1,
-              min: 0.01,
-              step: 0.1,
+              label: 'Tile scale (%)',
+              default: 100,
+              min: 1,
+              max: 500,
+              step: 1,
+              numberWithSlider: true,
+              hint: '10 means 10%, 100 means original size',
               showWhen: { field: 'scaleMode', equals: 'TILE' }
             }
           ]

@@ -19712,14 +19712,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     async function runSetImageFillFromSelectionAction(values, actionMeta) {
       const scaleMode = values.scaleMode || 'FILL';
-      const tileScaleRaw = values.tileScale;
-      const tileScale = scaleMode === 'TILE' && tileScaleRaw !== undefined && tileScaleRaw !== null && tileScaleRaw !== ''
-        ? Number(tileScaleRaw)
+      const tileScalePercentRaw = values.tileScale;
+      const tileScalePercent = scaleMode === 'TILE' && tileScalePercentRaw !== undefined && tileScalePercentRaw !== null && tileScalePercentRaw !== ''
+        ? Number(tileScalePercentRaw)
+        : undefined;
+      const tileScale = scaleMode === 'TILE' && Number.isFinite(tileScalePercent)
+        ? tileScalePercent / 100
         : undefined;
 
       try {
-        if (scaleMode === 'TILE' && (!Number.isFinite(tileScale) || tileScale <= 0)) {
-          showToast('Tile scale must be a positive number', 'error');
+        if (scaleMode === 'TILE' && (!Number.isFinite(tileScalePercent) || tileScalePercent <= 0)) {
+          showToast('Tile scale must be a positive percentage', 'error');
           return;
         }
 
@@ -19769,8 +19772,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           }, '*');
         });
 
-        const modeSummary = scaleMode === 'TILE' && tileScale !== undefined
-          ? `${scaleMode.toLowerCase()} (${tileScale}x)`
+        const modeSummary = scaleMode === 'TILE' && tileScalePercent !== undefined
+          ? `${scaleMode.toLowerCase()} (${tileScalePercent}%)`
           : scaleMode.toLowerCase();
         showToast(`Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${modeSummary}`, 'success');
       } catch (error) {

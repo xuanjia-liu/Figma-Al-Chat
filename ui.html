@@ -17905,10 +17905,13 @@
             {
               key: "tileScale",
               type: "number",
-              label: "Tile scale",
-              default: 1,
-              min: 0.01,
-              step: 0.1,
+              label: "Tile scale (%)",
+              default: 100,
+              min: 1,
+              max: 500,
+              step: 1,
+              numberWithSlider: true,
+              hint: "10 means 10%, 100 means original size",
               showWhen: { field: "scaleMode", equals: "TILE" }
             }
           ]
@@ -40438,11 +40441,12 @@
       }
       async function runSetImageFillFromSelectionAction(values, actionMeta) {
         const scaleMode = values.scaleMode || "FILL";
-        const tileScaleRaw = values.tileScale;
-        const tileScale = scaleMode === "TILE" && tileScaleRaw !== void 0 && tileScaleRaw !== null && tileScaleRaw !== "" ? Number(tileScaleRaw) : void 0;
+        const tileScalePercentRaw = values.tileScale;
+        const tileScalePercent = scaleMode === "TILE" && tileScalePercentRaw !== void 0 && tileScalePercentRaw !== null && tileScalePercentRaw !== "" ? Number(tileScalePercentRaw) : void 0;
+        const tileScale = scaleMode === "TILE" && Number.isFinite(tileScalePercent) ? tileScalePercent / 100 : void 0;
         try {
-          if (scaleMode === "TILE" && (!Number.isFinite(tileScale) || tileScale <= 0)) {
-            showToast("Tile scale must be a positive number", "error");
+          if (scaleMode === "TILE" && (!Number.isFinite(tileScalePercent) || tileScalePercent <= 0)) {
+            showToast("Tile scale must be a positive percentage", "error");
             return;
           }
           const result = await requestSelectionData(false, false, "styleOnly");
@@ -40484,7 +40488,7 @@
               }
             }, "*");
           });
-          const modeSummary = scaleMode === "TILE" && tileScale !== void 0 ? "".concat(scaleMode.toLowerCase(), " (").concat(tileScale, "x)") : scaleMode.toLowerCase();
+          const modeSummary = scaleMode === "TILE" && tileScalePercent !== void 0 ? "".concat(scaleMode.toLowerCase(), " (").concat(tileScalePercent, "%)") : scaleMode.toLowerCase();
           showToast("Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(modeSummary), "success");
         } catch (error) {
           console.error("Set image fill failed:", error);
