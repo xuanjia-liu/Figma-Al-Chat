@@ -26975,11 +26975,10 @@
           return "High-performance next-gen model.";
         }
         if (id.includes("gpt-image")) return "Specialized model for high-fidelity image understanding and generation.";
-        if (id.includes("gpt-4o-mini")) return "Fast, affordable model for small-scale tasks.";
-        if (id.includes("gpt-4o")) return "OpenAI's high-intelligence flagship model for complex tasks.";
+        if (id.includes("gpt-5-mini")) return "Fast, affordable next-gen model for small-scale tasks.";
+        if (id.includes("gpt-5")) return "OpenAI's high-intelligence flagship model for complex tasks.";
         if (id.includes("o1-preview")) return "Advanced reasoning model for complex logical problems.";
         if (id.includes("o1-mini")) return "Fast reasoning model optimized for coding and STEM.";
-        if (id.includes("gpt-4-turbo")) return "High-performance model with advanced capabilities.";
         if (id.includes("gpt-4")) return "Standard GPT-4 model.";
         if (id.includes("gpt-3.5-turbo")) return "Capable and cost-effective model for simpler tasks.";
         return "";
@@ -29641,7 +29640,7 @@
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": "Bearer ".concat(apiKey) },
-              body: JSON.stringify(buildOpenAIRequestBody(openaiModel || "gpt-4o-mini", messages, openaiOptions))
+              body: JSON.stringify(buildOpenAIRequestBody(openaiModel || "gpt-5-mini", messages, openaiOptions))
             });
             if (!response.ok) {
               const errData = await response.json().catch(() => ({}));
@@ -37302,7 +37301,7 @@
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": "Bearer ".concat(apiKey) },
-              body: JSON.stringify(buildOpenAIRequestBody(openaiModel || "gpt-4o-mini", [
+              body: JSON.stringify(buildOpenAIRequestBody(openaiModel || "gpt-5-mini", [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }
               ], { max_tokens: maxTokens, temperature }))
@@ -39238,7 +39237,7 @@
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": "Bearer ".concat(apiKey) },
-              body: JSON.stringify(buildOpenAIRequestBody(openaiModel || "gpt-4o-mini", [
+              body: JSON.stringify(buildOpenAIRequestBody(openaiModel || "gpt-5-mini", [
                 { role: "system", content: systemPrompt },
                 { role: "user", content: userPrompt }
               ], { max_tokens: 2048, temperature: 0.1 }))
@@ -39326,7 +39325,7 @@
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": "Bearer ".concat(apiKey) },
               body: JSON.stringify({
-                model: openaiModel || "gpt-4o-mini",
+                model: openaiModel || "gpt-5-mini",
                 messages: [
                   { role: "system", content: systemPrompt },
                   { role: "user", content: userPrompt }
@@ -43839,7 +43838,7 @@
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
               method: "POST",
               headers: { "Content-Type": "application/json", "Authorization": "Bearer ".concat(apiKey) },
-              body: JSON.stringify(buildOpenAIRequestBody("gpt-4o-mini", [{ role: "user", content: prompt }], {
+              body: JSON.stringify(buildOpenAIRequestBody("gpt-5-mini", [{ role: "user", content: prompt }], {
                 max_tokens: 20,
                 temperature: 0.3
               }))
@@ -46071,14 +46070,14 @@
         if (hasImages && isImageEditModel) {
           return await sendToOpenAIImageEdit(message, images, apiKey, signal, openaiModel);
         }
-        const visionCapableModels = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision", "chatgpt-4o"];
-        const nonVisionModels = ["o1", "gpt-5", "gpt-3.5"];
+        const visionCapableModels = ["gpt-5", "gpt-5-mini", "gpt-4-vision", "chatgpt-4o"];
+        const nonVisionModels = ["o1", "gpt-3.5"];
         if (hasImages) {
           const isVisionCapable = visionCapableModels.some((m) => modelLower.includes(m));
           const isNonVision = nonVisionModels.some((m) => modelLower.startsWith(m));
           if (isNonVision || !isVisionCapable) {
-            console.warn("Model ".concat(openaiModel, " may not support vision. Using gpt-4o for image analysis."));
-            effectiveModel = "gpt-4o";
+            console.warn("Model ".concat(openaiModel, " may not support vision. Using gpt-5 for image analysis."));
+            effectiveModel = "gpt-5";
           }
         }
         const messages = [{ role: "system", content: systemPrompt }];
@@ -46474,14 +46473,14 @@
         if (hasImages && isImageEditModel) {
           return await sendToOpenAIImageEditAgent(message, imageData, apiKey, signal, openaiModel);
         }
-        const visionCapableModels = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision", "chatgpt-4o"];
-        const nonVisionModels = ["o1", "gpt-5", "gpt-3.5"];
+        const visionCapableModels = ["gpt-5", "gpt-5-mini", "gpt-4-vision", "chatgpt-4o"];
+        const nonVisionModels = ["o1", "gpt-3.5"];
         if (hasImages) {
           const isVisionCapable = visionCapableModels.some((m) => modelLower.includes(m));
           const isNonVision = nonVisionModels.some((m) => modelLower.startsWith(m));
           if (isNonVision || !isVisionCapable) {
-            console.warn("Model ".concat(openaiModel, " may not support vision. Using gpt-4o for image analysis."));
-            effectiveModel = "gpt-4o";
+            console.warn("Model ".concat(openaiModel, " may not support vision. Using gpt-5 for image analysis."));
+            effectiveModel = "gpt-5";
           }
         }
         const messages = [
@@ -46862,15 +46861,15 @@
         const userMessage = message || "この選択された要素のUI/UXレビューを行ってください。";
         const hasImages = !!imageData;
         let effectiveModel = openaiModel;
-        const visionCapableModels = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision", "chatgpt-4o"];
-        const nonVisionModels = ["o1", "gpt-5", "gpt-3.5"];
+        const visionCapableModels = ["gpt-5", "gpt-5-mini", "gpt-4-vision", "chatgpt-4o"];
+        const nonVisionModels = ["o1", "gpt-3.5"];
         if (hasImages) {
           const modelLower = openaiModel.toLowerCase();
           const isVisionCapable = visionCapableModels.some((m) => modelLower.includes(m));
           const isNonVision = nonVisionModels.some((m) => modelLower.startsWith(m));
           if (isNonVision || !isVisionCapable) {
-            console.warn("Model ".concat(openaiModel, " may not support vision. Using gpt-4o for image analysis."));
-            effectiveModel = "gpt-4o";
+            console.warn("Model ".concat(openaiModel, " may not support vision. Using gpt-5 for image analysis."));
+            effectiveModel = "gpt-5";
           }
         }
         const messages = [
@@ -47499,7 +47498,7 @@
       var pendingContextLockReject = null;
       var INTENT_FAST_MODELS = {
         gemini: DEFAULT_GEMINI_CHAT_MODEL,
-        openai: "gpt-4o-mini",
+        openai: "gpt-5-mini",
         anthropic: "claude-3-5-haiku-latest"
       };
       function getTokenBudget() {

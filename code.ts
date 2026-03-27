@@ -4693,7 +4693,7 @@ figma.ui.onmessage = async (msg: {
         const geminiApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.GEMINI_API_KEY) || '';
         const geminiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.GEMINI_MODEL) || 'gemini-3-flash-preview';
         const openaiApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_API_KEY) || '';
-        const openaiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_MODEL) || 'gpt-4o';
+        const openaiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_MODEL) || 'gpt-5';
         const anthropicApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY) || '';
         const anthropicModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.ANTHROPIC_MODEL) || 'claude-sonnet-4-20250514';
         const cssFormat = await figma.clientStorage.getAsync(SETTINGS_KEYS.CSS_FORMAT) || 'classes';
@@ -4735,7 +4735,7 @@ figma.ui.onmessage = async (msg: {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-4o', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
         });
       }
       break;
@@ -4915,7 +4915,7 @@ figma.ui.onmessage = async (msg: {
         await figma.clientStorage.setAsync(SETTINGS_KEYS.GEMINI_API_KEY, geminiApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.GEMINI_MODEL, geminiModel || 'gemini-3-flash-preview');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_API_KEY, openaiApiKey || '');
-        await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_MODEL, openaiModel || 'gpt-4o');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_MODEL, openaiModel || 'gpt-5');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY, anthropicApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_MODEL, anthropicModel || 'claude-sonnet-4-20250514');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.CSS_FORMAT, cssFormat || 'classes');
