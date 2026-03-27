@@ -19699,11 +19699,73 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         case 'extractDesignSystem':
           await runExtractDesignSystemAction(values, actionMeta);
           break;
+        case 'setImageFillFromSelection':
+          await runSetImageFillFromSelectionAction(values, actionMeta);
+          break;
         case 'fillFromOnlineImage':
           await runFillFromOnlineImageAction(values, actionMeta);
           break;
         default:
           showToast('Unknown action', 'error');
+      }
+    }
+
+    async function runSetImageFillFromSelectionAction(values, actionMeta) {
+      const scaleMode = values.scaleMode || 'FILL';
+
+      try {
+        const result = await requestSelectionData(false, false, 'styleOnly');
+        const selection = Array.isArray(result?.data) ? result.data : [];
+        const imageNodes = selection.filter(node =>
+          (Array.isArray(node.fillsDetailed) && node.fillsDetailed.some(paint => paint && paint.type === 'IMAGE')) ||
+          (Array.isArray(node.fills) && node.fills.some(paint => paint && paint.type === 'IMAGE'))
+        );
+
+        if (imageNodes.length === 0) {
+          showToast('Please select at least one node with an image fill', 'error');
+          return;
+        }
+
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            reject(new Error('Timeout applying image fill'));
+          }, 15000);
+
+          const handler = (event) => {
+            const msg = event.data.pluginMessage;
+            if (!msg) return;
+            if (msg.type === 'commands-executed') {
+              clearTimeout(timeout);
+              window.removeEventListener('message', handler);
+              if (msg.success > 0) {
+                resolve(msg);
+              } else {
+                reject(new Error(msg.error || msg.message || 'Failed to apply image fill'));
+              }
+            }
+          };
+
+          window.addEventListener('message', handler);
+          parent.postMessage({
+            pluginMessage: {
+              type: 'execute-commands',
+              commands: imageNodes.map(node => ({
+                action: 'setImageFill',
+                nodeId: node.id,
+                scaleMode
+              }))
+            }
+          }, '*');
+        });
+
+        showToast(
+          `Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${scaleMode.toLowerCase()}`,
+          'success'
+        );
+      } catch (error) {
+        console.error('Set image fill failed:', error);
+        showToast(error.message || `Failed to run ${actionMeta?.name || 'Set image fill'}`, 'error');
       }
     }
 

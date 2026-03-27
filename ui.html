@@ -13961,6 +13961,7 @@
         "flattenStructure",
         "easyWrapper",
         "extractDesignSystem",
+        "setImageFillFromSelection",
         "fillFromOnlineImage",
         "listAllComments",
         "browseStyles",
@@ -17887,7 +17888,7 @@
           name: "Set image fill",
           desc: "Apply image fill to selected node",
           requiredContext: ContextMode.STYLE_ONLY,
-          promptTemplate: 'Use the current selection. If exactly one selected node has an image fill, return ONLY JSON with commands: [{"action":"setImageFill","nodeId":"<SELECTED_NODE_ID>","scaleMode":"{scaleMode}"}]. Do not ask for nodeId or image data. If no selection or the selection has no image fill, ask the user to select a node with an image fill.',
+          directAction: "setImageFillFromSelection",
           fields: [
             {
               key: "scaleMode",
@@ -40416,11 +40417,65 @@
           case "extractDesignSystem":
             await runExtractDesignSystemAction(values, actionMeta);
             break;
+          case "setImageFillFromSelection":
+            await runSetImageFillFromSelectionAction(values, actionMeta);
+            break;
           case "fillFromOnlineImage":
             await runFillFromOnlineImageAction(values, actionMeta);
             break;
           default:
             showToast("Unknown action", "error");
+        }
+      }
+      async function runSetImageFillFromSelectionAction(values, actionMeta) {
+        const scaleMode = values.scaleMode || "FILL";
+        try {
+          const result = await requestSelectionData(false, false, "styleOnly");
+          const selection = Array.isArray(result == null ? void 0 : result.data) ? result.data : [];
+          const imageNodes = selection.filter(
+            (node) => Array.isArray(node.fillsDetailed) && node.fillsDetailed.some((paint) => paint && paint.type === "IMAGE") || Array.isArray(node.fills) && node.fills.some((paint) => paint && paint.type === "IMAGE")
+          );
+          if (imageNodes.length === 0) {
+            showToast("Please select at least one node with an image fill", "error");
+            return;
+          }
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              window.removeEventListener("message", handler);
+              reject(new Error("Timeout applying image fill"));
+            }, 15e3);
+            const handler = (event) => {
+              const msg = event.data.pluginMessage;
+              if (!msg) return;
+              if (msg.type === "commands-executed") {
+                clearTimeout(timeout);
+                window.removeEventListener("message", handler);
+                if (msg.success > 0) {
+                  resolve(msg);
+                } else {
+                  reject(new Error(msg.error || msg.message || "Failed to apply image fill"));
+                }
+              }
+            };
+            window.addEventListener("message", handler);
+            parent.postMessage({
+              pluginMessage: {
+                type: "execute-commands",
+                commands: imageNodes.map((node) => ({
+                  action: "setImageFill",
+                  nodeId: node.id,
+                  scaleMode
+                }))
+              }
+            }, "*");
+          });
+          showToast(
+            "Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(scaleMode.toLowerCase()),
+            "success"
+          );
+        } catch (error) {
+          console.error("Set image fill failed:", error);
+          showToast(error.message || "Failed to run ".concat((actionMeta == null ? void 0 : actionMeta.name) || "Set image fill"), "error");
         }
       }
       async function runSmartRenameCaseOnlyAction(values) {

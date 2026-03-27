@@ -9,7 +9,7 @@ export const stylingImageTasks = [
           name: 'Set image fill',
           desc: 'Apply image fill to selected node',
           requiredContext: ContextMode.STYLE_ONLY,
-          promptTemplate: 'Use the current selection. If exactly one selected node has an image fill, return ONLY JSON with commands: [{"action":"setImageFill","nodeId":"<SELECTED_NODE_ID>","scaleMode":"{scaleMode}"}]. Do not ask for nodeId or image data. If no selection or the selection has no image fill, ask the user to select a node with an image fill.',
+          directAction: 'setImageFillFromSelection',
           fields: [
             {
               key: 'scaleMode', type: 'select', label: 'Image fill type', default: 'FILL', options: [
