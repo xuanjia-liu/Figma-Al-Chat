@@ -120,8 +120,8 @@
       position: fixed;
       bottom: 2px;
       right: 2px;
-      width: 30px;
-      height: 30px;
+      width: 12px;
+      height: 12px;
       cursor: nwse-resize;
       z-index: 9999;
       display: flex;
@@ -131,8 +131,8 @@
     }
 
     .resize-handle-icon {
-      width: 20px;
-      height: 20px;
+      width: 12px;
+      height: 12px;
       color: var(--text-muted);
       opacity: 0.5;
       transition: opacity 0.2s ease, color 0.2s ease;
@@ -141,7 +141,7 @@
     .resize-handle-icon path {
       fill: none;
       stroke: currentColor;
-      stroke-width: 2.25;
+      stroke-width: 4;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
@@ -13967,7 +13967,7 @@
   <!-- Resize Handle -->
   <div id="resizeHandle" class="resize-handle">
     <svg class="resize-handle-icon" viewBox="0 0 32 32" aria-hidden="true">
-      <path d="M1 31H15A16 16 0 0 0 31 15V1" />
+      <path d="M31 1v.968C31 18.002 18.002 31 1.968 31H1" />
     </svg>
   </div>
 

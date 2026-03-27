@@ -113,8 +113,8 @@
       position: fixed;
       bottom: 2px;
       right: 2px;
-      width: 30px;
-      height: 30px;
+      width: 12px;
+      height: 12px;
       cursor: nwse-resize;
       z-index: 9999;
       display: flex;
@@ -124,8 +124,8 @@
     }
 
     .resize-handle-icon {
-      width: 20px;
-      height: 20px;
+      width: 12px;
+      height: 12px;
       color: var(--text-muted);
       opacity: 0.5;
       transition: opacity 0.2s ease, color 0.2s ease;
@@ -134,7 +134,7 @@
     .resize-handle-icon path {
       fill: none;
       stroke: currentColor;
-      stroke-width: 2.25;
+      stroke-width: 4;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
