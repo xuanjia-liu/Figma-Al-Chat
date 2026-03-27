@@ -374,6 +374,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     previewText: '',
     fontSizePx: 24,
     fontWght: 400,
+    viewMode: 'list',
     search: '',
     langSubset: '',
     feeling: new Set(),
@@ -466,7 +467,31 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
             <input type="range" class="gfp-weight-range" min="1" max="1000" step="1" value="400" aria-label="${escapeAttr(tu('actions.fontPreview.weight'))}" />
           </div>
         </div>
-        <div class="gfp-list-meta"><span class="gfp-count"></span></div>
+        <div class="gfp-list-meta">
+          <span class="gfp-count"></span>
+          <div class="gfp-view-toggle" role="group" aria-label="${escapeAttr(tu('actions.fontPreview.viewToggleAria'))}">
+            <button
+              type="button"
+              class="gfp-view-toggle-btn gfp-view-toggle-btn--active"
+              data-view="list"
+              aria-pressed="true"
+              title="${escapeAttr(tu('actions.fontPreview.viewList'))}"
+              aria-label="${escapeAttr(tu('actions.fontPreview.viewList'))}"
+            >
+              <svg class="gfp-view-toggle-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" d="M8 6h12M8 12h12M8 18h12"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
+            </button>
+            <button
+              type="button"
+              class="gfp-view-toggle-btn"
+              data-view="grid"
+              aria-pressed="false"
+              title="${escapeAttr(tu('actions.fontPreview.viewGrid'))}"
+              aria-label="${escapeAttr(tu('actions.fontPreview.viewGrid'))}"
+            >
+              <svg class="gfp-view-toggle-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>
+            </button>
+          </div>
+        </div>
         <div class="gfp-list-scroll">
           <div class="gfp-list"></div>
           <div class="gfp-list-sentinel"></div>
@@ -493,6 +518,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   const listEl = container.querySelector('.gfp-list');
   const sentinel = container.querySelector('.gfp-list-sentinel');
   const countEl = container.querySelector('.gfp-count');
+  const viewToggleButtons = Array.from(container.querySelectorAll('.gfp-view-toggle-btn'));
   const scrollBox = container.querySelector('.gfp-list-scroll');
   const mainEl = container.querySelector('.gfp-main');
 
@@ -531,6 +557,28 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   let pairShowTimer = null;
   let pairHideTimer = null;
   let pairHoverRow = null;
+
+  function isGridMode() {
+    return state.viewMode === 'grid';
+  }
+
+  function syncViewMode() {
+    const gridMode = isGridMode();
+    listEl.classList.toggle('gfp-list--grid', gridMode);
+    viewToggleButtons.forEach(btn => {
+      const active = btn.dataset.view === state.viewMode;
+      btn.classList.toggle('gfp-view-toggle-btn--active', active);
+      btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    if (gridMode) hidePairPopover();
+  }
+
+  function syncGridTileSize() {
+    let minCol = '64px';
+    if (state.fontSizePx > 80) minCol = '120px';
+    else if (state.fontSizePx > 40) minCol = '80px';
+    listEl.style.setProperty('--gfp-grid-min-col', minCol);
+  }
 
   function hidePairPopover() {
     if (pairPopover.contains(document.activeElement)) {
@@ -635,6 +683,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
 
   function showPairPopoverForRow(row, f) {
     if (disposed) return;
+    if (isGridMode()) return;
     if (f && f.source === 'local') return;
     fillPairPopover(f);
     pairPopover.hidden = false;
@@ -647,6 +696,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   function onListMouseOver(e) {
+    if (isGridMode()) return;
     const row = e.target.closest?.('.gfp-font-row');
     if (!row || !listEl.contains(row)) return;
     if (pairHoverRow === row) return;
@@ -663,6 +713,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   function onListMouseOut(e) {
+    if (isGridMode()) return;
     const row = e.target.closest?.('.gfp-font-row');
     if (!row || !listEl.contains(row)) return;
     const rel = e.relatedTarget;
@@ -696,6 +747,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   function onListFocusIn(e) {
+    if (isGridMode()) return;
     const row = e.target.closest?.('.gfp-font-row');
     if (!row || !listEl.contains(row)) return;
     clearTimeout(pairHideTimer);
@@ -708,6 +760,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   }
 
   function onListFocusOut(e) {
+    if (isGridMode()) return;
     const row = e.target.closest?.('.gfp-font-row');
     if (!row || !listEl.contains(row)) return;
     requestAnimationFrame(() => {
@@ -773,6 +826,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
   pairPopover.addEventListener('focusout', onPairPopoverFocusOut);
 
   textarea.placeholder = tu('actions.fontPreview.placeholder');
+  syncViewMode();
 
   // One option per px so slider and select stay in sync (sparse presets left blanks when value had no <option>)
   const sizeOpts = [];
@@ -1750,6 +1804,7 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     state.fontSizePx = px;
     sizeSelect.value = String(px);
     sizeRange.value = String(px);
+    syncGridTileSize();
     listEl.querySelectorAll('.gfp-font-sample').forEach(el => {
       el.style.fontSize = `${px}px`;
     });
@@ -1854,6 +1909,15 @@ export function mountGoogleFontPreview(container, { tu, showToast }) {
     state.search = searchInput.value;
     applyFilters();
     setupListObserver();
+  });
+
+  viewToggleButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const nextMode = btn.dataset.view === 'grid' ? 'grid' : 'list';
+      if (state.viewMode === nextMode) return;
+      state.viewMode = nextMode;
+      syncViewMode();
+    });
   });
 
   container.addEventListener('click', ev => {

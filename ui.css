@@ -857,8 +857,60 @@
     }
 
     .gfp-list-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
       font-size: var(--text-xs);
       color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .gfp-view-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      overflow: hidden;
+    }
+
+    .gfp-view-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 20px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition:
+        background 0.12s ease,
+        color 0.12s ease;
+    }
+
+    .gfp-view-toggle-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+    }
+
+    .gfp-view-toggle-btn:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
+    }
+
+    .gfp-view-toggle-btn--active {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    .gfp-view-toggle-btn-icon {
+      width: 15px;
+      height: 15px;
       flex-shrink: 0;
     }
 
@@ -879,6 +931,12 @@
       padding: var(--space-xs);
     }
 
+    .gfp-list.gfp-list--grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--gfp-grid-min-col, 64px), 1fr));
+      gap: var(--space-xs);
+    }
+
     .gfp-list-sentinel {
       height: 4px;
     }
@@ -892,7 +950,21 @@
       border-radius: var(--radius-md);
     }
 
+    .gfp-list--grid .gfp-font-row {
+      aspect-ratio: 1 / 1;
+      justify-content: space-between;
+      gap: 0;
+      padding: 0;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
     .gfp-font-row:hover {
+      background: var(--bg-secondary);
+    }
+
+    .gfp-list--grid .gfp-font-row:hover {
+      border-color: var(--border-intense);
       background: var(--bg-secondary);
     }
 
@@ -907,10 +979,27 @@
       font-size: var(--text-xs);
     }
 
+    .gfp-list--grid .gfp-font-name {
+      padding: var(--space-xs);
+      color: var(--text-on-accent);
+      font-size: var(--text-2xs);
+      font-weight: 500;
+      text-align: center;
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+      background: var(--bg-primary);
+    }
+
     .gfp-font-name-title {
       flex-shrink: 0;
       font-weight: 600;
       color: var(--text-secondary);
+    }
+
+    .gfp-list--grid .gfp-font-name-title {
+      width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .gfp-font-name-meta {
@@ -938,6 +1027,22 @@
       line-height: 1.25;
       word-break: break-word;
       text-align: left;
+    }
+
+    .gfp-list--grid .gfp-font-sample {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      overflow: hidden;
+      text-align: center;
+      line-height: 1.1;
+    }
+
+    .gfp-list--grid .gfp-font-name-meta,
+    .gfp-list--grid .gfp-font-name-wght-count,
+    .gfp-list--grid .gfp-font-row-actions {
+      display: none;
     }
 
     .gfp-font-row-actions {
