@@ -12492,6 +12492,15 @@ Generate ONLY the reply text, nothing else.`;
       );
     }
 
+    function cloneTaskFields(fields) {
+      try {
+        return JSON.parse(JSON.stringify(Array.isArray(fields) ? fields : []));
+      } catch (error) {
+        console.warn('Failed to clone task fields, falling back to shallow copy', error);
+        return Array.isArray(fields) ? fields.map(field => ({ ...field })) : [];
+      }
+    }
+
     function sanitizeRandomizationDrawerValues(values, metadata) {
       const nextValues = { ...(values || {}) };
       const propertyKeys = Array.isArray(metadata) ? metadata.map(item => item.propertyKey) : [];
@@ -12584,7 +12593,8 @@ Generate ONLY the reply text, nothing else.`;
 
     const promptDrawerBack = document.getElementById('promptDrawerBack');
 
-    async function openPromptDrawer(actionData) {
+    async function openPromptDrawer(actionData, options = {}) {
+      const skipHistory = options.skipHistory === true;
       if (actionData && actionData.name) {
         recordQuickActionUsage(actionData.name);
       }
@@ -12600,7 +12610,13 @@ Generate ONLY the reply text, nothing else.`;
 
         // Normalize prompt template fallback
         const template = actionData.promptTemplate || actionData.prompt || '';
-        currentPromptAction = { ...actionData, promptTemplate: template };
+        currentPromptAction = {
+          ...actionData,
+          promptTemplate: template,
+          _originalFields: Array.isArray(actionData._originalFields)
+            ? cloneTaskFields(actionData._originalFields)
+            : cloneTaskFields(actionData.fields || [])
+        };
         if (isInstanceRandomizationPromptAction(currentPromptAction)) {
           currentPromptAction.randomizeBaseFields = actionData.fields || [];
         }
@@ -12727,7 +12743,7 @@ Generate ONLY the reply text, nothing else.`;
         }
 
         // Apply history if available for this action
-        const savedActionHistory = promptHistory[actionData.name];
+        const savedActionHistory = !skipHistory ? promptHistory[actionData.name] : null;
         if (savedActionHistory) {
           hydratedFields = hydratedFields.map(field => {
             if (savedActionHistory[field.key] !== undefined) {
@@ -14032,7 +14048,7 @@ Generate ONLY the reply text, nothing else.`;
           // Slider with number input
           const sliderValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
-            : (field.default || field.min || 0);
+            : (field.default !== undefined ? field.default : (field.min !== undefined ? field.min : 0));
           const min = field.min !== undefined ? field.min : 0;
           const max = field.max !== undefined ? field.max : 100;
           const step = field.step !== undefined ? field.step : 1;
@@ -14428,8 +14444,10 @@ Generate ONLY the reply text, nothing else.`;
       // Update storage
       parent.postMessage({ pluginMessage: { type: 'save-prompt-history', history: promptHistory } }, '*');
 
-      // Re-open (this will use actionToReset.fields which are the original defaults)
-      await openPromptDrawer(actionToReset);
+      // Re-open using the original field definitions and explicitly bypass saved history.
+      actionToReset.fields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
+      actionToReset._originalFields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
+      await openPromptDrawer(actionToReset, { skipHistory: true });
 
       showToast(tu('actions.prompt.resetToast', { name: localizeActionString(originalName) }));
     }
@@ -19719,6 +19737,18 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const tileScale = scaleMode === 'TILE' && Number.isFinite(tileScalePercent)
         ? tileScalePercent / 100
         : undefined;
+      const applyImageAdjustments = values.applyImageAdjustments === true || values.applyImageAdjustments === 'true';
+      const filterKeys = ['exposure', 'contrast', 'saturation', 'temperature', 'tint', 'highlights', 'shadows'];
+      const imageFilters = applyImageAdjustments
+        ? filterKeys.reduce((acc, key) => {
+            const rawValue = values[key];
+            const parsedValue = rawValue !== undefined && rawValue !== null && rawValue !== '' ? Number(rawValue) : 0;
+            if (Number.isFinite(parsedValue)) {
+              acc[key] = Math.max(-1, Math.min(1, parsedValue / 100));
+            }
+            return acc;
+          }, {})
+        : undefined;
 
       try {
         if (scaleMode === 'TILE' && (!Number.isFinite(tileScalePercent) || tileScalePercent <= 0)) {
@@ -19766,7 +19796,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
                 action: 'setImageFill',
                 nodeId: node.id,
                 scaleMode,
-                ...(scaleMode === 'TILE' && tileScale !== undefined ? { scalingFactor: tileScale } : {})
+                ...(scaleMode === 'TILE' && tileScale !== undefined ? { scalingFactor: tileScale } : {}),
+                ...(imageFilters ? { filters: imageFilters } : {})
               }))
             }
           }, '*');
@@ -19775,7 +19806,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         const modeSummary = scaleMode === 'TILE' && tileScalePercent !== undefined
           ? `${scaleMode.toLowerCase()} (${tileScalePercent}%)`
           : scaleMode.toLowerCase();
-        showToast(`Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${modeSummary}`, 'success');
+        const adjustmentSummary = imageFilters ? ' with adjustments' : '';
+        showToast(`Updated ${imageNodes.length} image fill${imageNodes.length === 1 ? '' : 's'} to ${modeSummary}${adjustmentSummary}`, 'success');
       } catch (error) {
         console.error('Set image fill failed:', error);
         showToast(error.message || `Failed to run ${actionMeta?.name || 'Set image fill'}`, 'error');

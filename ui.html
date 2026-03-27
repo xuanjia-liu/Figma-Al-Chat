@@ -17913,6 +17913,94 @@
               numberWithSlider: true,
               hint: "10 means 10%, 100 means original size",
               showWhen: { field: "scaleMode", equals: "TILE" }
+            },
+            {
+              key: "applyImageAdjustments",
+              type: "checkbox",
+              label: "Adjust image",
+              default: false
+            },
+            {
+              key: "exposure",
+              type: "slider",
+              label: "Exposure",
+              default: 0,
+              min: -100,
+              max: 100,
+              step: 1,
+              showWhen: { field: "applyImageAdjustments", equals: true }
+            },
+            {
+              type: "row",
+              showWhen: { field: "applyImageAdjustments", equals: true },
+              fields: [
+                {
+                  key: "contrast",
+                  type: "slider",
+                  label: "Contrast",
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                },
+                {
+                  key: "saturation",
+                  type: "slider",
+                  label: "Saturation",
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                }
+              ]
+            },
+            {
+              type: "row",
+              showWhen: { field: "applyImageAdjustments", equals: true },
+              fields: [
+                {
+                  key: "temperature",
+                  type: "slider",
+                  label: "Temperature",
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                },
+                {
+                  key: "tint",
+                  type: "slider",
+                  label: "Tint",
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                }
+              ]
+            },
+            {
+              type: "row",
+              showWhen: { field: "applyImageAdjustments", equals: true },
+              fields: [
+                {
+                  key: "highlights",
+                  type: "slider",
+                  label: "Highlights",
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                },
+                {
+                  key: "shadows",
+                  type: "slider",
+                  label: "Shadows",
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                }
+              ]
             }
           ]
         },
@@ -35191,6 +35279,14 @@
       function isInstanceRandomizationPromptAction(action = currentPromptAction) {
         return !!action && (action.directAction === "duplicateWithInstructions" || action.directAction === "randomizeSelectedInstances");
       }
+      function cloneTaskFields(fields) {
+        try {
+          return JSON.parse(JSON.stringify(Array.isArray(fields) ? fields : []));
+        } catch (error) {
+          console.warn("Failed to clone task fields, falling back to shallow copy", error);
+          return Array.isArray(fields) ? fields.map((field) => __spreadValues({}, field)) : [];
+        }
+      }
       function sanitizeRandomizationDrawerValues(values, metadata2) {
         const nextValues = __spreadValues({}, values || {});
         const propertyKeys = Array.isArray(metadata2) ? metadata2.map((item) => item.propertyKey) : [];
@@ -35264,7 +35360,8 @@
         }];
       }
       var promptDrawerBack = document.getElementById("promptDrawerBack");
-      async function openPromptDrawer(actionData) {
+      async function openPromptDrawer(actionData, options = {}) {
+        const skipHistory = options.skipHistory === true;
         if (actionData && actionData.name) {
           recordQuickActionUsage(actionData.name);
         }
@@ -35276,7 +35373,10 @@
           lastSelectedCategoryBeforePrompt = selectedCategory;
           closeCommandsDrawer();
           const template = actionData.promptTemplate || actionData.prompt || "";
-          currentPromptAction = __spreadProps(__spreadValues({}, actionData), { promptTemplate: template });
+          currentPromptAction = __spreadProps(__spreadValues({}, actionData), {
+            promptTemplate: template,
+            _originalFields: Array.isArray(actionData._originalFields) ? cloneTaskFields(actionData._originalFields) : cloneTaskFields(actionData.fields || [])
+          });
           if (isInstanceRandomizationPromptAction(currentPromptAction)) {
             currentPromptAction.randomizeBaseFields = actionData.fields || [];
           }
@@ -35374,7 +35474,7 @@
             currentPromptAction.randomizePropertyMetadata = duplicateRandomizeData.metadata;
             currentPromptAction.randomizePropertiesAvailable = duplicateRandomizeData.hasAvailableProperties;
           }
-          const savedActionHistory = promptHistory[actionData.name];
+          const savedActionHistory = !skipHistory ? promptHistory[actionData.name] : null;
           if (savedActionHistory) {
             hydratedFields = hydratedFields.map((field) => {
               if (savedActionHistory[field.key] !== void 0) {
@@ -36171,7 +36271,7 @@
             const textValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default || "";
             fieldHtml += '\n            <div class="prompt-field'.concat(wrapperClass).concat(field.disabled ? " disabled" : "", '"').concat(conditionalAttrs, '>\n              <label class="prompt-field-label" for="').concat(fieldId, '">').concat(field.label, "</label>\n              ").concat(field.hint ? '<span class="prompt-field-hint">'.concat(field.hint, "</span>") : "", '\n              <div class="prompt-text-with-tags" data-field-key="').concat(field.key, '">\n                <input type="text" id="').concat(fieldId, '" data-field-key="').concat(field.key, '" \n                  value="').concat(escapeHtml(textValue), '" \n                  placeholder="').concat(field.placeholder || "", '"\n                  ').concat(disabledAttr, '>\n                <div class="prompt-suggestion-tags">').concat(tagsHtml, "</div>\n              </div>\n            </div>\n          ");
           } else if (field.type === "slider") {
-            const sliderValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default || field.min || 0;
+            const sliderValue = preservedValues && preservedValues[field.key] !== void 0 ? preservedValues[field.key] : field.default !== void 0 ? field.default : field.min !== void 0 ? field.min : 0;
             const min = field.min !== void 0 ? field.min : 0;
             const max = field.max !== void 0 ? field.max : 100;
             const step = field.step !== void 0 ? field.step : 1;
@@ -36358,7 +36458,9 @@
         const originalName = actionToReset.name;
         delete promptHistory[originalName];
         parent.postMessage({ pluginMessage: { type: "save-prompt-history", history: promptHistory } }, "*");
-        await openPromptDrawer(actionToReset);
+        actionToReset.fields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
+        actionToReset._originalFields = cloneTaskFields(currentPromptAction._originalFields || currentPromptAction.fields || []);
+        await openPromptDrawer(actionToReset, { skipHistory: true });
         showToast(tu("actions.prompt.resetToast", { name: localizeActionString(originalName) }));
       }
       function setupIndicatorListeners() {
@@ -40444,6 +40546,16 @@
         const tileScalePercentRaw = values.tileScale;
         const tileScalePercent = scaleMode === "TILE" && tileScalePercentRaw !== void 0 && tileScalePercentRaw !== null && tileScalePercentRaw !== "" ? Number(tileScalePercentRaw) : void 0;
         const tileScale = scaleMode === "TILE" && Number.isFinite(tileScalePercent) ? tileScalePercent / 100 : void 0;
+        const applyImageAdjustments = values.applyImageAdjustments === true || values.applyImageAdjustments === "true";
+        const filterKeys = ["exposure", "contrast", "saturation", "temperature", "tint", "highlights", "shadows"];
+        const imageFilters = applyImageAdjustments ? filterKeys.reduce((acc, key) => {
+          const rawValue = values[key];
+          const parsedValue = rawValue !== void 0 && rawValue !== null && rawValue !== "" ? Number(rawValue) : 0;
+          if (Number.isFinite(parsedValue)) {
+            acc[key] = Math.max(-1, Math.min(1, parsedValue / 100));
+          }
+          return acc;
+        }, {}) : void 0;
         try {
           if (scaleMode === "TILE" && (!Number.isFinite(tileScalePercent) || tileScalePercent <= 0)) {
             showToast("Tile scale must be a positive percentage", "error");
@@ -40480,16 +40592,17 @@
             parent.postMessage({
               pluginMessage: {
                 type: "execute-commands",
-                commands: imageNodes.map((node) => __spreadValues({
+                commands: imageNodes.map((node) => __spreadValues(__spreadValues({
                   action: "setImageFill",
                   nodeId: node.id,
                   scaleMode
-                }, scaleMode === "TILE" && tileScale !== void 0 ? { scalingFactor: tileScale } : {}))
+                }, scaleMode === "TILE" && tileScale !== void 0 ? { scalingFactor: tileScale } : {}), imageFilters ? { filters: imageFilters } : {}))
               }
             }, "*");
           });
           const modeSummary = scaleMode === "TILE" && tileScalePercent !== void 0 ? "".concat(scaleMode.toLowerCase(), " (").concat(tileScalePercent, "%)") : scaleMode.toLowerCase();
-          showToast("Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(modeSummary), "success");
+          const adjustmentSummary = imageFilters ? " with adjustments" : "";
+          showToast("Updated ".concat(imageNodes.length, " image fill").concat(imageNodes.length === 1 ? "" : "s", " to ").concat(modeSummary).concat(adjustmentSummary), "success");
         } catch (error) {
           console.error("Set image fill failed:", error);
           showToast(error.message || "Failed to run ".concat((actionMeta == null ? void 0 : actionMeta.name) || "Set image fill"), "error");

@@ -30,6 +30,94 @@ export const stylingImageTasks = [
               numberWithSlider: true,
               hint: '10 means 10%, 100 means original size',
               showWhen: { field: 'scaleMode', equals: 'TILE' }
+            },
+            {
+              key: 'applyImageAdjustments',
+              type: 'checkbox',
+              label: 'Adjust image',
+              default: false
+            },
+            {
+              key: 'exposure',
+              type: 'slider',
+              label: 'Exposure',
+              default: 0,
+              min: -100,
+              max: 100,
+              step: 1,
+              showWhen: { field: 'applyImageAdjustments', equals: true }
+            },
+            {
+              type: 'row',
+              showWhen: { field: 'applyImageAdjustments', equals: true },
+              fields: [
+                {
+                  key: 'contrast',
+                  type: 'slider',
+                  label: 'Contrast',
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                },
+                {
+                  key: 'saturation',
+                  type: 'slider',
+                  label: 'Saturation',
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                }
+              ]
+            },
+            {
+              type: 'row',
+              showWhen: { field: 'applyImageAdjustments', equals: true },
+              fields: [
+                {
+                  key: 'temperature',
+                  type: 'slider',
+                  label: 'Temperature',
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                },
+                {
+                  key: 'tint',
+                  type: 'slider',
+                  label: 'Tint',
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                }
+              ]
+            },
+            {
+              type: 'row',
+              showWhen: { field: 'applyImageAdjustments', equals: true },
+              fields: [
+                {
+                  key: 'highlights',
+                  type: 'slider',
+                  label: 'Highlights',
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                },
+                {
+                  key: 'shadows',
+                  type: 'slider',
+                  label: 'Shadows',
+                  default: 0,
+                  min: -100,
+                  max: 100,
+                  step: 1
+                }
+              ]
             }
           ]
         },
