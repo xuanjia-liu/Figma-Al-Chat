@@ -285,6 +285,7 @@ export const uiLayoutTasks = [
           help: 'Create grids with different patterns (Grid, Brick, Radial, Spiral) and shapes (Rectangle, Ellipse, Polygon, Star, Line, Arrow, Frame).',
           noSelection: true,
           requiredContext: ContextMode.LAYOUT_ONLY,
+          directAction: 'createAdvancedGrid',
           fields: [
             {
               key: 'pattern', type: 'select', label: 'Grid Pattern', default: 'grid', options: [
