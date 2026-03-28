@@ -118,6 +118,87 @@ import {
       element.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
+    function generateAttachmentId(prefix = 'att') {
+      return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function createImageAttachment(item) {
+      return {
+        id: generateAttachmentId('img'),
+        kind: 'image',
+        name: item.name || `image-${Date.now()}.png`,
+        data: item.data
+      };
+    }
+
+    function createCodeAttachment(type, content) {
+      const normalized = String(type || 'TEXT').toUpperCase();
+      const lang = normalized === 'CSS' ? 'css' : normalized === 'SVG' ? 'svg' : 'text';
+      const name = normalized === 'CSS' ? 'CSS export' : normalized === 'SVG' ? 'SVG export' : 'Text export';
+      return {
+        id: generateAttachmentId('code'),
+        kind: 'code',
+        exportType: normalized,
+        lang,
+        name,
+        content: String(content || '')
+      };
+    }
+
+    function getStagedImageAttachments() {
+      return stagedAttachments.filter(item => item.kind === 'image');
+    }
+
+    function getStagedCodeAttachments() {
+      return stagedAttachments.filter(item => item.kind === 'code');
+    }
+
+    function buildCodeAttachmentText(item) {
+      const label = item.exportType || 'TEXT';
+      const lang = item.lang || 'text';
+      return `Attached ${label}:\n\`\`\`${lang}\n${item.content || ''}\n\`\`\``;
+    }
+
+    function getSerializedCodeAttachmentTexts(items = getStagedCodeAttachments()) {
+      return items.map(buildCodeAttachmentText);
+    }
+
+    function buildUserTextWithCodeAttachments(message, codeTexts = []) {
+      const segments = [];
+      if (message && message.trim()) segments.push(message.trim());
+      if (codeTexts.length > 0) segments.push(codeTexts.join('\n\n'));
+      return segments.join('\n\n').trim();
+    }
+
+    function createUserHistoryParts(message, imageDataUrls = [], codeTexts = []) {
+      const parts = [];
+
+      imageDataUrls.forEach((dataUrl) => {
+        const base64Data = dataUrl.split(',')[1];
+        const mimeType = dataUrl.split(',')[0].split(':')[1].split(';')[0] || 'image/png';
+        parts.push({
+          inline_data: {
+            mime_type: mimeType,
+            data: base64Data
+          }
+        });
+      });
+
+      if (message && message.trim()) {
+        parts.push({ text: message.trim() });
+      }
+
+      codeTexts.forEach((text) => {
+        parts.push({ text });
+      });
+
+      if (parts.length === 0) {
+        parts.push({ text: 'What can you tell me about these attachments?' });
+      }
+
+      return parts;
+    }
+
     function formatBytes(bytes, decimals = 1) {
       if (!bytes || bytes === 0) return '0 B';
       const k = 1024;
@@ -488,8 +569,9 @@ import {
         if (e.key === 'Escape') popover.remove();
       };
 
-      // Determine which images to show (passed images or stagedImages fallback)
-      const imagesToShow = images || (stagedImages && stagedImages.length > 0 ? stagedImages.map((img, i) => ({
+      // Determine which images to show (passed images or staged image attachments fallback)
+      const stagedImageAttachments = getStagedImageAttachments();
+      const imagesToShow = images || (stagedImageAttachments.length > 0 ? stagedImageAttachments.map((img, i) => ({
         ref: `image${i + 1}`,
         src: typeof img === 'string' ? img : `data:image/png;base64,${arrayBufferToBase64(img.data)}`
       })) : []);
@@ -732,7 +814,7 @@ import {
     // 1 minute cache TTL
     let showResolvedComments = false; // Toggle for showing resolved comments
     let figmaCurrentUser = null; // Current user info from Figma API (handle, id, etc.)
-    let stagedImages = []; // For staging images before sending
+    let stagedAttachments = []; // Shared attachment staging before sending
     let settingsLoaded = false;
     let settingsDirty = false;
     let settingsBaseline = null;
@@ -2953,7 +3035,7 @@ import {
     const imagePreviewModal = document.getElementById('imagePreviewModal');
     const imagePreviewImg = document.getElementById('imagePreviewImg');
     const imagePreviewClose = document.getElementById('imagePreviewClose');
-    const imageStaging = document.getElementById('imageStaging');
+    const attachmentStaging = document.getElementById('attachmentStaging');
     const settingsModal = document.getElementById('settingsModal');
     const openSettingsBtn = document.getElementById('openSettingsBtn');
     const openSettingsBtnNoAi = document.getElementById('openSettingsBtnNoAi');
@@ -6580,8 +6662,8 @@ CRITICAL RULES:
         // Show user message with quick action display
         addMessage('user', displayPrompt, null, { name: actionName, icon: actionIcon });
 
-        // Clear staged images immediately after sending
-        clearStagedImages();
+        // Clear staged attachments immediately after sending
+        clearStagedAttachments();
 
         // Send to AI with images
         await sendToAI(aiPrompt, imageData, null);
@@ -24400,6 +24482,11 @@ Example structure:
           contentDiv.appendChild(continueContainer);
         }
       });
+
+      chatMessages.querySelectorAll('.message-preview-body img').forEach((img) => {
+        if (img.dataset.removed === 'true') return;
+        img.onclick = () => openImagePreview(img.src);
+      });
     }
 
     async function loadChatFromArchive(chatId) {
@@ -26218,26 +26305,55 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       updateUndoRedoBtns();
     }
 
-    function openCodeEditor(codeBlockContainer) {
+    function getStagedAttachmentById(attachmentId) {
+      return stagedAttachments.find(item => item.id === attachmentId) || null;
+    }
+
+    function getCodeEditorTargetDetails(target) {
+      if (!target) return null;
+
+      if (target instanceof Element) {
+        const codeEl = target.querySelector('code');
+        if (!codeEl) return null;
+        const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-'));
+        return {
+          type: 'message-code-block',
+          code: codeEl.textContent || '',
+          lang: langClass ? langClass.replace('language-', '') : 'text',
+          codeEl,
+          container: target
+        };
+      }
+
+      if (target.type === 'staged-attachment') {
+        const attachment = getStagedAttachmentById(target.attachmentId);
+        if (!attachment || attachment.kind !== 'code') return null;
+        return {
+          type: 'staged-attachment',
+          code: attachment.content || '',
+          lang: attachment.lang || 'text',
+          attachment
+        };
+      }
+
+      return null;
+    }
+
+    function openCodeEditor(target) {
       const modal = document.getElementById('codeEditorModal');
       const textarea = document.getElementById('codeEditorTextarea');
-      const highlightCode_el = document.getElementById('codeEditorHighlightCode');
       const langBadge = document.getElementById('codeEditorLangBadge');
-      const codeEl = codeBlockContainer.querySelector('code');
-      if (!codeEl) return;
+      const details = getCodeEditorTargetDetails(target);
+      if (!details) return;
 
-      _codeEditorTarget = codeBlockContainer;
+      _codeEditorTarget = target;
 
-      const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-'));
-      const lang = langClass ? langClass.replace('language-', '') : 'text';
-      langBadge.textContent = lang;
-
-      const rawCode = codeEl.textContent;
-      textarea.value = rawCode;
-      syncCodeEditorHighlight(rawCode, lang);
+      langBadge.textContent = details.lang;
+      textarea.value = details.code;
+      syncCodeEditorHighlight(details.code, details.lang);
 
       resetCodeEditorHistory();
-      codeEditorPushState(rawCode);
+      codeEditorPushState(details.code);
 
       modal.classList.add('show');
       requestAnimationFrame(() => textarea.focus());
@@ -26268,12 +26384,11 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     function saveCodeEditor() {
       if (!_codeEditorTarget) return;
       const textarea = document.getElementById('codeEditorTextarea');
-      const codeEl = _codeEditorTarget.querySelector('code');
-      if (!codeEl) return;
+      const details = getCodeEditorTargetDetails(_codeEditorTarget);
+      if (!details) return;
 
       const newCode = textarea.value;
-      const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-'));
-      const lang = langClass ? langClass.replace('language-', '') : 'text';
+      const lang = details.lang;
 
       const escapeHtml = (str) => str
         .replace(/&/g, '&amp;')
@@ -26282,26 +26397,30 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
       const escaped = escapeHtml(newCode);
-      codeEl.innerHTML = (lang && lang !== 'text') ? highlightCode(escaped, lang) : escaped;
 
-      // Update dataset.content on the parent message if it exists
-      const messageDiv = _codeEditorTarget.closest('.message');
-      if (messageDiv && messageDiv.dataset.content) {
-        const oldContent = messageDiv.dataset.content;
-        // Rebuild: replace the code block in the raw markdown with updated code
-        const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
-        const containers = messageDiv.querySelectorAll('.code-block-container');
-        const targetIdx = Array.from(containers).indexOf(_codeEditorTarget);
-        if (targetIdx >= 0) {
-          let matchIdx = 0;
-          const updatedContent = oldContent.replace(codeBlockRegex, (match, matchLang, matchCode) => {
-            if (matchIdx++ === targetIdx) {
-              return '```' + (matchLang || '') + '\n' + newCode + '\n```';
-            }
-            return match;
-          });
-          messageDiv.dataset.content = updatedContent;
+      if (details.type === 'message-code-block') {
+        details.codeEl.innerHTML = (lang && lang !== 'text') ? highlightCode(escaped, lang) : escaped;
+
+        const messageDiv = details.container.closest('.message');
+        if (messageDiv && messageDiv.dataset.content) {
+          const oldContent = messageDiv.dataset.content;
+          const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
+          const containers = messageDiv.querySelectorAll('.code-block-container');
+          const targetIdx = Array.from(containers).indexOf(details.container);
+          if (targetIdx >= 0) {
+            let matchIdx = 0;
+            const updatedContent = oldContent.replace(codeBlockRegex, (match, matchLang) => {
+              if (matchIdx++ === targetIdx) {
+                return '```' + (matchLang || '') + '\n' + newCode + '\n```';
+              }
+              return match;
+            });
+            messageDiv.dataset.content = updatedContent;
+          }
         }
+      } else if (details.type === 'staged-attachment') {
+        details.attachment.content = newCode;
+        renderStagedAttachments();
       }
 
       showToast(tu('aux.code.updated'), 'success');
@@ -26364,9 +26483,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     // Sync highlight as user types
     document.getElementById('codeEditorTextarea').addEventListener('input', (e) => {
       if (!_codeEditorTarget) return;
-      const codeEl = _codeEditorTarget.querySelector('code');
-      const langClass = codeEl ? Array.from(codeEl.classList).find(c => c.startsWith('language-')) : null;
-      const lang = langClass ? langClass.replace('language-', '') : 'text';
+      const details = getCodeEditorTargetDetails(_codeEditorTarget);
+      const lang = details ? details.lang : 'text';
       syncCodeEditorHighlight(e.target.value, lang);
     });
 
@@ -26405,9 +26523,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     function getCodeEditorLang() {
       if (!_codeEditorTarget) return 'text';
-      const codeEl = _codeEditorTarget.querySelector('code');
-      const cls = codeEl ? Array.from(codeEl.classList).find(c => c.startsWith('language-')) : null;
-      return cls ? cls.replace('language-', '') : 'text';
+      const details = getCodeEditorTargetDetails(_codeEditorTarget);
+      return details ? details.lang : 'text';
     }
 
     // Selection toolbar
@@ -27008,7 +27125,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
             e.preventDefault();
             e.stopPropagation();
 
-            // Gather images for this context (if in drawer, get drawer images; otherwise openPlaceholderPopover will fallback to stagedImages)
+            // Gather images for this context (if in drawer, get drawer images; otherwise openPlaceholderPopover will fallback to staged image attachments)
             let images = null;
             if (promptDrawerFields && promptDrawerFields.contains(textarea)) {
               const slots = Array.from(promptDrawerFields.querySelectorAll('.prompt-image-upload-slot.has-image, .prompt-image-upload.has-image'));
@@ -27063,7 +27180,50 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const bodyDiv = document.createElement('div');
       bodyDiv.className = 'message-preview-body';
 
-      if (type === 'PNG') {
+      if (type === 'ATTACHMENTS') {
+        const imageItems = data.filter(item => item.kind === 'image');
+        const codeItems = data.filter(item => item.kind === 'code');
+
+        imageItems.forEach(item => {
+          const url = item.src || URL.createObjectURL(new Blob([new Uint8Array(item.data)], { type: 'image/png' }));
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = item.name;
+          img.addEventListener('click', () => openImagePreview(url));
+          bodyDiv.appendChild(img);
+        });
+
+        if (codeItems.length > 0) {
+          const codeList = document.createElement('div');
+          codeList.className = 'message-preview-code-list';
+
+          codeItems.forEach(item => {
+            const codeCard = document.createElement('div');
+            codeCard.className = 'message-preview-code-item';
+            const meta = document.createElement('div');
+            meta.className = 'message-preview-code-meta';
+
+            const type = document.createElement('span');
+            type.className = 'message-preview-type';
+            type.textContent = item.exportType;
+
+            const name = document.createElement('span');
+            name.className = 'message-preview-code-name';
+            name.textContent = item.name;
+
+            const preview = document.createElement('pre');
+            preview.textContent = getCodePreviewText(item.content);
+
+            meta.appendChild(type);
+            meta.appendChild(name);
+            codeCard.appendChild(meta);
+            codeCard.appendChild(preview);
+            codeList.appendChild(codeCard);
+          });
+
+          bodyDiv.appendChild(codeList);
+        }
+      } else if (type === 'PNG') {
         data.forEach(item => {
           const blob = new Blob([new Uint8Array(item.data)], { type: 'image/png' });
           const url = URL.createObjectURL(blob);
@@ -27103,7 +27263,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     }
 
     // Send message to AI (supports Gemini, OpenAI, Anthropic)
-    async function sendToAI(message, images = null, selectionData = null) {
+    async function sendToAI(message, images = null, selectionData = null, codeTexts = []) {
       if (!guardAiAction('Ask mode')) {
         return;
       }
@@ -27151,13 +27311,13 @@ ${JSON.stringify(selectionData, null, 2)}`;
 
         switch (selectedProvider) {
           case 'gemini':
-            aiResponse = await sendToGemini(message, images, apiKey, signal, systemPrompt);
+            aiResponse = await sendToGemini(message, images, apiKey, signal, systemPrompt, codeTexts);
             break;
           case 'openai':
-            aiResponse = await sendToOpenAI(message, images, apiKey, signal, systemPrompt);
+            aiResponse = await sendToOpenAI(message, images, apiKey, signal, systemPrompt, codeTexts);
             break;
           case 'anthropic':
-            aiResponse = await sendToAnthropic(message, images, apiKey, signal, systemPrompt);
+            aiResponse = await sendToAnthropic(message, images, apiKey, signal, systemPrompt, codeTexts);
             break;
           default:
             throw new Error('Unknown provider');
@@ -27210,7 +27370,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
     }
 
     // Send to Google Gemini
-    async function sendToGemini(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT) {
+    async function sendToGemini(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT, codeTexts = []) {
       const parts = [];
 
       if (images && images.length > 0) {
@@ -27236,6 +27396,8 @@ ${JSON.stringify(selectionData, null, 2)}`;
       } else if (images) {
         parts.push({ text: 'What can you tell me about these images?' });
       }
+
+      codeTexts.forEach(text => parts.push({ text }));
 
       chatHistory.push({ role: 'user', parts });
 
@@ -27264,7 +27426,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
     }
 
     // Send to OpenAI
-    async function sendToOpenAI(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT) {
+    async function sendToOpenAI(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT, codeTexts = []) {
       // Check if images are present and model supports vision
       const hasImages = images && images.length > 0;
       let effectiveModel = openaiModel;
@@ -27274,7 +27436,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
       const isImageEditModel = modelLower.includes('gpt-image');
 
       // If using gpt-image model with images, use the images/edits API
-      if (hasImages && isImageEditModel) {
+      if (hasImages && isImageEditModel && codeTexts.length === 0) {
         return await sendToOpenAIImageEdit(message, images, apiKey, signal, openaiModel);
       }
 
@@ -27321,10 +27483,10 @@ ${JSON.stringify(selectionData, null, 2)}`;
           });
         }
       }
-      content.push({ type: 'text', text: message || 'What can you tell me about these images?' });
+      content.push({ type: 'text', text: buildUserTextWithCodeAttachments(message || 'What can you tell me about these images?', codeTexts) });
 
       messages.push({ role: 'user', content });
-      chatHistory.push({ role: 'user', parts: [{ text: message || 'What can you tell me about these images?' }] });
+      chatHistory.push({ role: 'user', parts: createUserHistoryParts(message || 'What can you tell me about these images?', [], codeTexts) });
 
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -27436,7 +27598,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
     }
 
     // Send to Anthropic Claude
-    async function sendToAnthropic(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT) {
+    async function sendToAnthropic(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT, codeTexts = []) {
       const messages = chatHistory.map(msg => ({
         role: msg.role === 'model' ? 'assistant' : msg.role,
         content: msg.parts.map(p => p.text || '').join('')
@@ -27463,10 +27625,10 @@ ${JSON.stringify(selectionData, null, 2)}`;
           });
         }
       }
-      content.push({ type: 'text', text: message || 'What can you tell me about these images?' });
+      content.push({ type: 'text', text: buildUserTextWithCodeAttachments(message || 'What can you tell me about these images?', codeTexts) });
 
       messages.push({ role: 'user', content });
-      chatHistory.push({ role: 'user', parts: [{ text: message || 'What can you tell me about these images?' }] });
+      chatHistory.push({ role: 'user', parts: createUserHistoryParts(message || 'What can you tell me about these images?', [], codeTexts) });
 
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -27543,18 +27705,19 @@ ${JSON.stringify(selectionData, null, 2)}`;
       try {
         let agentResponse;
         const imageData = metadata?.images; // Get all images from metadata if provided
+        const codeTexts = metadata?.codeTexts || [];
 
         updateThinkingIndicator(`Consulting ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}...`);
 
         switch (selectedProvider) {
           case 'gemini':
-            agentResponse = await sendToGeminiAgent(message, systemPrompt, apiKey, signal, imageData);
+            agentResponse = await sendToGeminiAgent(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'openai':
-            agentResponse = await sendToOpenAIAgent(message, systemPrompt, apiKey, signal, imageData);
+            agentResponse = await sendToOpenAIAgent(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'anthropic':
-            agentResponse = await sendToAnthropicAgent(message, systemPrompt, apiKey, signal, imageData);
+            agentResponse = await sendToAnthropicAgent(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           default:
             throw new Error('Unknown provider');
@@ -27721,7 +27884,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
     }
 
     // Gemini Agent request
-    async function sendToGeminiAgent(message, systemPrompt, apiKey, signal, imageData = null) {
+    async function sendToGeminiAgent(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       const parts = [];
 
       // Add images if provided FIRST
@@ -27748,6 +27911,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
 
       // Add user message
       parts.push({ text: message });
+      codeTexts.forEach(text => parts.push({ text }));
 
       // Build contents array with chat history
       const contents = [...chatHistory, { role: 'user', parts }];
@@ -27807,7 +27971,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
     }
 
     // OpenAI Agent request
-    async function sendToOpenAIAgent(message, systemPrompt, apiKey, signal, imageData = null) {
+    async function sendToOpenAIAgent(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       // Check if images are present and model supports vision
       const hasImages = imageData && (Array.isArray(imageData) ? imageData.length > 0 : true);
       let effectiveModel = openaiModel;
@@ -27817,7 +27981,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
       const isImageEditModel = modelLower.includes('gpt-image');
 
       // If using gpt-image model with images, use the images/edits API
-      if (hasImages && isImageEditModel) {
+      if (hasImages && isImageEditModel && codeTexts.length === 0) {
         return await sendToOpenAIImageEditAgent(message, imageData, apiKey, signal, openaiModel);
       }
 
@@ -27860,7 +28024,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
           });
         }
       }
-      content.push({ type: 'text', text: message });
+      content.push({ type: 'text', text: buildUserTextWithCodeAttachments(message, codeTexts) });
 
       messages.push({ role: 'user', content });
 
@@ -27974,7 +28138,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
     }
 
     // Anthropic Agent request
-    async function sendToAnthropicAgent(message, systemPrompt, apiKey, signal, imageData = null) {
+    async function sendToAnthropicAgent(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       // Build messages array with chat history
       const messages = [];
 
@@ -28009,7 +28173,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
           }
         }
       }
-      content.push({ type: 'text', text: message });
+      content.push({ type: 'text', text: buildUserTextWithCodeAttachments(message, codeTexts) });
 
       messages.push({ role: 'user', content });
 
@@ -28194,7 +28358,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
     }
 
     // Send to AI in Audit mode
-    async function sendToAIAudit(message, selectionData, images = null) {
+    async function sendToAIAudit(message, selectionData, images = null, codeTexts = []) {
       if (!guardAiAction('Audit mode')) {
         return;
       }
@@ -28235,13 +28399,13 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
 
         switch (selectedProvider) {
           case 'gemini':
-            auditResponse = await sendToGeminiAudit(message, systemPrompt, apiKey, signal, imageData);
+            auditResponse = await sendToGeminiAudit(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'openai':
-            auditResponse = await sendToOpenAIAudit(message, systemPrompt, apiKey, signal, imageData);
+            auditResponse = await sendToOpenAIAudit(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'anthropic':
-            auditResponse = await sendToAnthropicAudit(message, systemPrompt, apiKey, signal, imageData);
+            auditResponse = await sendToAnthropicAudit(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           default:
             throw new Error('Unknown provider');
@@ -28333,7 +28497,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
     }
 
     // Gemini Audit request
-    async function sendToGeminiAudit(message, systemPrompt, apiKey, signal, imageData = null) {
+    async function sendToGeminiAudit(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       const userMessage = message || 'この選択された要素のUI/UXレビューを行ってください。';
       const parts = [];
 
@@ -28354,8 +28518,8 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
         }
       }
 
-      // Add text message
       parts.push({ text: systemPrompt + '\n\n【ユーザーからのリクエスト】\n' + userMessage });
+      codeTexts.forEach(text => parts.push({ text }));
 
       // Build contents array with chat history
       const contents = [...chatHistory, { role: 'user', parts }];
@@ -28383,7 +28547,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
     }
 
     // OpenAI Audit request
-    async function sendToOpenAIAudit(message, systemPrompt, apiKey, signal, imageData = null) {
+    async function sendToOpenAIAudit(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       const userMessage = message || 'この選択された要素のUI/UXレビューを行ってください。';
 
       // Check if images are present and model supports vision
@@ -28425,7 +28589,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
           image_url: { url: imageData }
         });
       }
-      content.push({ type: 'text', text: userMessage });
+      content.push({ type: 'text', text: buildUserTextWithCodeAttachments(userMessage, codeTexts) });
 
       messages.push({ role: 'user', content });
 
@@ -28455,7 +28619,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
     }
 
     // Anthropic Audit request
-    async function sendToAnthropicAudit(message, systemPrompt, apiKey, signal, imageData = null) {
+    async function sendToAnthropicAudit(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       const userMessage = message || 'この選択された要素のUI/UXレビューを行ってください。';
 
       // Build messages array with chat history
@@ -28487,7 +28651,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
           console.error('Failed to parse image data for Anthropic audit:', e);
         }
       }
-      content.push({ type: 'text', text: userMessage });
+      content.push({ type: 'text', text: buildUserTextWithCodeAttachments(userMessage, codeTexts) });
 
       messages.push({ role: 'user', content });
 
@@ -29161,77 +29325,127 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       }
     }
 
-    // Add export data to staging or input
+    function getCodePreviewText(content) {
+      const normalized = String(content || '').trim();
+      return normalized.length > 180 ? `${normalized.slice(0, 180)}…` : normalized;
+    }
+
+    function stageAttachments(items) {
+      if (!Array.isArray(items) || items.length === 0) return;
+      stagedAttachments = stagedAttachments.concat(items);
+      renderStagedAttachments();
+      updateTokenCount();
+    }
+
+    function stageImages(images) {
+      stageAttachments(images.map(createImageAttachment));
+    }
+
+    function stageCodeAttachment(type, content) {
+      stageAttachments([createCodeAttachment(type, content)]);
+    }
+
+    function renderStagedAttachments() {
+      attachmentStaging.innerHTML = '';
+
+      if (stagedAttachments.length === 0) {
+        attachmentStaging.classList.remove('show');
+        return;
+      }
+
+      attachmentStaging.classList.add('show');
+
+      stagedAttachments.forEach((item) => {
+        const stagingItem = document.createElement('div');
+        stagingItem.className = 'attachment-staging-item';
+
+        if (item.kind === 'image') {
+          const blob = new Blob([new Uint8Array(item.data)], { type: 'image/png' });
+          const url = URL.createObjectURL(blob);
+          stagingItem.innerHTML = `
+            <img src="${url}" alt="${item.name}" />
+            <button class="attachment-staging-remove" data-attachment-id="${item.id}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          `;
+        } else {
+          stagingItem.classList.add('code', 'clickable');
+          stagingItem.dataset.attachmentId = item.id;
+          const meta = document.createElement('div');
+          meta.className = 'attachment-staging-code-meta';
+
+          const type = document.createElement('span');
+          type.className = 'message-preview-type';
+          type.textContent = item.exportType;
+
+          const preview = document.createElement('pre');
+          preview.className = 'attachment-staging-code-preview';
+          preview.textContent = getCodePreviewText(item.content);
+
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'attachment-staging-remove';
+          removeBtn.dataset.attachmentId = item.id;
+          removeBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          `;
+
+          meta.appendChild(type);
+          stagingItem.appendChild(meta);
+          stagingItem.appendChild(preview);
+          stagingItem.appendChild(removeBtn);
+
+          stagingItem.addEventListener('click', (event) => {
+            if (event.target.closest('.attachment-staging-remove')) return;
+            openCodeEditor({ type: 'staged-attachment', attachmentId: item.id });
+          });
+        }
+
+        stagingItem.querySelector('.attachment-staging-remove').addEventListener('click', (event) => {
+          event.stopPropagation();
+          removeStagedAttachment(item.id);
+        });
+
+        attachmentStaging.appendChild(stagingItem);
+      });
+    }
+
+    function removeStagedAttachment(attachmentId) {
+      stagedAttachments = stagedAttachments.filter(item => item.id !== attachmentId);
+      renderStagedAttachments();
+      updateTokenCount();
+    }
+
+    function clearStagedAttachments() {
+      stagedAttachments = [];
+      renderStagedAttachments();
+      updateTokenCount();
+    }
+
+    // Add export data to staging instead of directly injecting text
     function addExportToInput(type, data) {
       currentPreviewType = type;
       currentPreviewData = data;
 
       if (type === 'PNG') {
-        // Stage images above input instead of sending directly
         stageImages(data);
         chatInput.focus();
         showToast(`${data.length} image(s) staged - add text and send`);
-      } else {
-        // For text-based exports, add to input at cursor position
-        setInputValueWithUndo(chatInput, data, false);
-
-        showToast(`${type} exported to chat!`);
-      }
-    }
-
-    // Stage images in the staging area
-    function stageImages(images) {
-      stagedImages = images;
-      renderStagedImages();
-      updateTokenCount();
-    }
-
-    // Render staged images
-    function renderStagedImages() {
-      imageStaging.innerHTML = '';
-
-      if (stagedImages.length === 0) {
-        imageStaging.classList.remove('show');
         return;
       }
 
-      imageStaging.classList.add('show');
+      if (['CSS', 'SVG', 'TEXT'].includes(type)) {
+        stageCodeAttachment(type, data);
+        chatInput.focus();
+        showToast(`${type} staged - add text and send`);
+        return;
+      }
 
-      stagedImages.forEach((item, index) => {
-        const blob = new Blob([new Uint8Array(item.data)], { type: 'image/png' });
-        const url = URL.createObjectURL(blob);
-
-        const stagingItem = document.createElement('div');
-        stagingItem.className = 'image-staging-item';
-        stagingItem.innerHTML = `
-          <img src="${url}" alt="${item.name}" />
-          <button class="image-staging-remove" data-index="${index}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        `;
-
-        stagingItem.querySelector('.image-staging-remove').addEventListener('click', () => {
-          removeStagedImage(index);
-        });
-
-        imageStaging.appendChild(stagingItem);
-      });
-    }
-
-    // Remove a staged image
-    function removeStagedImage(index) {
-      stagedImages.splice(index, 1);
-      renderStagedImages();
-      updateTokenCount();
-    }
-
-    // Clear all staged images
-    function clearStagedImages() {
-      stagedImages = [];
-      renderStagedImages();
-      updateTokenCount();
+      setInputValueWithUndo(chatInput, data, false);
+      showToast(`${type} exported to chat!`);
     }
 
     // Agent mode: Get selection data from plugin
@@ -29880,10 +30094,11 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
         // Selection tokens: selection JSON size / 4 (roughly)
         const selectionTokens = Math.ceil(currentSelectionDataSize / 4);
 
-        // Image tokens: rough estimate 1000 per staged image
-        const imageTokens = (typeof stagedImages !== 'undefined' ? stagedImages : []).length * 1000;
+        const stagedImageTokens = getStagedImageAttachments().length * 1000;
+        const stagedCodeTokens = getStagedCodeAttachments()
+          .reduce((sum, item) => sum + Math.ceil((item.content || '').length / 4), 0);
 
-        const totalTokens = Math.ceil(promptTokens + selectionTokens + imageTokens);
+        const totalTokens = Math.ceil(promptTokens + selectionTokens + stagedImageTokens + stagedCodeTokens);
         tokenCountValue.textContent = totalTokens.toLocaleString();
 
         if (currentSelectionDataSize === 0) {
@@ -30673,7 +30888,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       let images = [];
       if (context.input === chatInput) {
-        images = stagedImages.map((img, idx) => {
+        images = getStagedImageAttachments().map((img, idx) => {
           const blob = new Blob([new Uint8Array(img.data)], { type: 'image/png' });
           return {
             name: img.name,
@@ -31227,17 +31442,22 @@ Based on the user's instruction, generate the appropriate commands to modify the
     // Send message function
     async function sendMessage() {
       const message = chatInput.value.trim();
-      const hasImages = stagedImages.length > 0;
-      const imagesToSend = hasImages ? [...stagedImages] : [];
+      const stagedImageAttachments = getStagedImageAttachments();
+      const stagedCodeAttachments = getStagedCodeAttachments();
+      const hasImages = stagedImageAttachments.length > 0;
+      const hasAttachments = stagedAttachments.length > 0;
+      const imagesToSend = hasImages ? [...stagedImageAttachments] : [];
+      const codeTextsToSend = getSerializedCodeAttachmentTexts(stagedCodeAttachments);
+      const attachmentPreviewData = hasAttachments ? stagedAttachments.map(item => ({ ...item })) : [];
 
-      if (!message && !hasImages) return;
+      if (!message && !hasAttachments) return;
       if (isAiOffModeEnabled()) {
         showToast(getAiOffBlockedMessage('Chat message'), 'error');
         return;
       }
 
       // Prevent slash quick actions in Ask mode; guide user instead of sending
-      if (currentMode === 'ask' && !hasImages && message.startsWith('/')) {
+      if (currentMode === 'ask' && !hasAttachments && message.startsWith('/')) {
         closeSlashActionsMenu();
         addMessage('bot', 'Slash quick actions run in Agent mode. Please switch to Agent mode to use "' + (message.split(/\s+/)[0] || '/...') + '".');
         return;
@@ -31245,13 +31465,13 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       closeSlashActionsMenu();
 
-      // Clear staged images immediately for better UX
-      if (hasImages) {
-        clearStagedImages();
+      // Clear staged attachments immediately for better UX
+      if (hasAttachments) {
+        clearStagedAttachments();
       }
 
       // Check for /image shorthand command (Agent mode only)
-      if (currentMode === 'agent' && !hasImages) {
+      if (currentMode === 'agent' && !hasAttachments) {
         const imageMeta = parseImageChatMessage(message);
         if (imageMeta) {
           chatInput.value = '';
@@ -31414,7 +31634,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
           updateThinkingIndicator('Processing images...');
 
-          // Convert staged images to base64 data URLs for metadata
+          // Convert staged image attachments to base64 data URLs for metadata
           let imageMetadata = [];
           if (hasImages && imagesToSend.length > 0) {
             imageMetadata = imagesToSend.map(img => {
@@ -31477,11 +31697,20 @@ Based on the user's instruction, generate the appropriate commands to modify the
           // Reset the specific comment solving flag after prompt is assembled
           window.solvingCommentId = null;
 
-          // Show user message with images if any
-          if (hasImages || isFallback) {
-            const previewType = isFallback ? 'PNG_DATA_URLS' : 'PNG';
-            const previewData = isFallback ? imageMetadata : imagesToSend;
-            addMessage('user', finalMessage || (hasImages ? 'Here are some images:' : 'Here is the design:'), { type: previewType, data: previewData });
+          const previewAttachments = attachmentPreviewData.map(item => ({ ...item }));
+          if (isFallback && fallbackImages) {
+            fallbackImages.forEach((url, index) => {
+              previewAttachments.push({
+                id: `fallback-${index}`,
+                kind: 'image',
+                name: `Selection capture ${index + 1}`,
+                src: url
+              });
+            });
+          }
+
+          if (previewAttachments.length > 0) {
+            addMessage('user', finalMessage || (hasAttachments ? 'Here are some attachments:' : 'Here is the design:'), { type: 'ATTACHMENTS', data: previewAttachments });
           } else {
             addMessage('user', finalMessage);
           }
@@ -31491,19 +31720,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           // Reset noSelection flag after use
           chatInput.dataset.noSelection = 'false';
 
-          // Add user message to chat history for archiving (without comments context for cleaner history)
-          const userParts = [{ text: finalMessage }];
-          if (imageMetadata.length > 0) {
-            imageMetadata.forEach(dataUrl => {
-              const base64Data = dataUrl.split(',')[1];
-              userParts.push({
-                inline_data: {
-                  mime_type: 'image/png',
-                  data: base64Data
-                }
-              });
-            });
-          }
+          const userParts = createUserHistoryParts(finalMessage, imageMetadata, codeTextsToSend);
           chatHistory.push({ role: 'user', parts: userParts });
 
           // ============================================
@@ -31522,7 +31739,13 @@ Based on the user's instruction, generate the appropriate commands to modify the
             forced: !!manualContextMode
           };
 
-          await sendToAIAgent(promptForMessage, selectionData || [], tokenContext, flattenedData, imageMetadata.length > 0 ? { images: imageMetadata } : null);
+          await sendToAIAgent(
+            promptForMessage,
+            selectionData || [],
+            tokenContext,
+            flattenedData,
+            (imageMetadata.length > 0 || codeTextsToSend.length > 0) ? { images: imageMetadata, codeTexts: codeTextsToSend } : null
+          );
 
           // Clear lock after execution
           activeContextLock = null;
@@ -31568,7 +31791,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
           updateThinkingIndicator('Processing images...');
 
-          // Convert staged images to base64 data URLs
+          // Convert staged image attachments to base64 data URLs
           let imageDataArray = [];
           if (hasImages && imagesToSend.length > 0) {
             imageDataArray = imagesToSend.map(img => {
@@ -31585,11 +31808,20 @@ Based on the user's instruction, generate the appropriate commands to modify the
             promptForMessage += "\n\n(Note: Selection was too large for full metadata. I'm using a snapshot and a lightweight node index instead, so you can still refer to elements by name.)";
           }
 
-          // Show user message with images if any
-          if (hasImages || isFallback) {
-            const previewType = (isFallback || (hasImages && imageDataArray.length > 0)) ? 'PNG_DATA_URLS' : 'PNG';
-            const previewData = (isFallback || (hasImages && imageDataArray.length > 0)) ? imageDataArray : imagesToSend;
-            addMessage('user', promptForMessage, { type: previewType, data: previewData });
+          const previewAttachments = attachmentPreviewData.map(item => ({ ...item }));
+          if (isFallback && fallbackImages) {
+            fallbackImages.forEach((url, index) => {
+              previewAttachments.push({
+                id: `fallback-${index}`,
+                kind: 'image',
+                name: `Selection capture ${index + 1}`,
+                src: url
+              });
+            });
+          }
+
+          if (previewAttachments.length > 0) {
+            addMessage('user', promptForMessage, { type: 'ATTACHMENTS', data: previewAttachments });
           } else {
             addMessage('user', promptForMessage);
           }
@@ -31597,23 +31829,16 @@ Based on the user's instruction, generate the appropriate commands to modify the
           chatInput.value = '';
           chatInput.style.height = 'auto';
 
-          // Add user message to chat history for archiving
-          const userParts = [{ text: promptForMessage }];
-          if (imageDataArray.length > 0) {
-            imageDataArray.forEach(dataUrl => {
-              const base64Data = dataUrl.split(',')[1];
-              userParts.push({
-                inline_data: {
-                  mime_type: 'image/png',
-                  data: base64Data
-                }
-              });
-            });
-          }
+          const userParts = createUserHistoryParts(promptForMessage, imageDataArray, codeTextsToSend);
           chatHistory.push({ role: 'user', parts: userParts });
 
           // Send to AI with audit context (pass empty array if no selection)
-          await sendToAIAudit(promptForMessage, selectionData || [], imageDataArray.length > 0 ? imageDataArray : null);
+          await sendToAIAudit(
+            promptForMessage,
+            selectionData || [],
+            imageDataArray.length > 0 ? imageDataArray : null,
+            codeTextsToSend
+          );
           pendingAskBackContext = null;
           chatInput.dataset.askBackActive = 'false';
 
@@ -31651,7 +31876,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       updateThinkingIndicator('Processing images...');
 
-      // Convert staged images to base64 data URLs for metadata
+      // Convert staged image attachments to base64 data URLs for metadata
       let imageDataArray = [];
       if (hasImages && imagesToSend.length > 0) {
         imageDataArray = imagesToSend.map(img => {
@@ -31668,11 +31893,20 @@ Based on the user's instruction, generate the appropriate commands to modify the
         promptForMessage += "\n\n(Note: Selection was too large for metadata, so I'm using an image snapshot instead.)";
       }
 
-      // Show message with images if any
-      if (hasImages || isFallback) {
-        const previewType = (isFallback || (hasImages && imageDataArray.length > 0)) ? 'PNG_DATA_URLS' : 'PNG';
-        const previewData = (isFallback || (hasImages && imageDataArray.length > 0)) ? imageDataArray : imagesToSend;
-        addMessage('user', promptForMessage || (hasImages ? 'Here are some images:' : 'Here is the design:'), { type: previewType, data: previewData });
+      const previewAttachments = attachmentPreviewData.map(item => ({ ...item }));
+      if (isFallback && fallbackImages) {
+        fallbackImages.forEach((url, index) => {
+          previewAttachments.push({
+            id: `fallback-${index}`,
+            kind: 'image',
+            name: `Selection capture ${index + 1}`,
+            src: url
+          });
+        });
+      }
+
+      if (previewAttachments.length > 0) {
+        addMessage('user', promptForMessage || (hasAttachments ? 'Here are some attachments:' : 'Here is the design:'), { type: 'ATTACHMENTS', data: previewAttachments });
       } else {
         addMessage('user', promptForMessage);
       }
@@ -31680,22 +31914,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       chatInput.value = '';
       chatInput.style.height = 'auto';
 
-      // Add user message to chat history for archiving
-      const userParts = [{ text: promptForMessage || 'What can you tell me about this design?' }];
-      if (imageDataArray.length > 0) {
-        imageDataArray.forEach(dataUrl => {
-          const base64Data = dataUrl.split(',')[1];
-          userParts.push({
-            inline_data: {
-              mime_type: 'image/png',
-              data: base64Data
-            }
-          });
-        });
-      }
-      chatHistory.push({ role: 'user', parts: userParts });
-
-      await sendToAI(promptForMessage, imageDataArray.length > 0 ? imageDataArray : null, selectionData);
+      await sendToAI(promptForMessage, imageDataArray.length > 0 ? imageDataArray : null, selectionData, codeTextsToSend);
       pendingAskBackContext = null;
       chatInput.dataset.askBackActive = 'false';
     }
@@ -31840,7 +32059,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
         // For chat messages, we don't necessarily have "staged" images anymore as the message is already sent,
         // but we can show the images that were sent with this message if we want.
-        // For now, openPlaceholderPopover will fallback to current stagedImages which is fine for "editing before send" scenarios.
+        // For now, openPlaceholderPopover will fallback to current staged image attachments which is fine for "editing before send" scenarios.
         openPlaceholderPopover(placeholder, type, value, (newValue) => {
           const newFull = type === 'brace' ? `{${newValue}}` : `[${newValue}]`;
 
