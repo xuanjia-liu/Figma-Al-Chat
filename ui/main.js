@@ -59,6 +59,37 @@ import {
 } from './i18n/actions.js';
 import { optimize as optimizeSvg } from 'svgo/browser';
 
+    const quickActionNoSelectionBadgeIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 9.42 5.1a1 1 0 0 0 .53.53L13.25 7 9.95 8.37a1 1 0 0 0-.58.58L8 12.25 6.63 8.95a1 1 0 0 0-.58-.58L2.75 7l3.3-1.37a1 1 0 0 0 .58-.58L8 1.75Z"/></svg>';
+    const quickActionImmediateBadgeIcon = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.25 3.35c0-.62.68-1 1.2-.67l5.77 3.65a.79.79 0 0 1 0 1.34L6.45 11.32a.8.8 0 0 1-1.2-.67V3.35Z"/></svg>';
+
+    function quickActionHasFields(task) {
+      return !!(task && Array.isArray(task.fields) && task.fields.length > 0);
+    }
+
+    function buildQuickActionBadges(task, options = {}) {
+      if (!task) return '';
+      const compact = options.compact === true;
+      const badges = [];
+
+      if (task.noSelection === true) {
+        badges.push(`
+          <span class="quick-action-badge quick-action-badge--no-selection${compact ? ' quick-action-badge--compact' : ''}" title="${tu('actions.commands.noSelectionRequired')}">
+            ${quickActionNoSelectionBadgeIcon}
+          </span>
+        `);
+      }
+
+      if (!quickActionHasFields(task)) {
+        badges.push(`
+          <span class="quick-action-badge quick-action-badge--immediate${compact ? ' quick-action-badge--compact' : ''}" title="Runs immediately">
+            ${quickActionImmediateBadgeIcon}
+          </span>
+        `);
+      }
+
+      return badges.join('');
+    }
+
     // State
     let currentPreviewData = null;
     let currentPreviewType = null;
@@ -6468,18 +6499,16 @@ Rules:
         const localizedTask = getLocalizedTask(task);
         const taskCategory = task.category || selectedCategory;
         const icon = getActionIconForTask(task, taskCategory);
-        const noSelectionClass = task.noSelection ? ' no-selection' : '';
-        const noSelectionBadge = task.noSelection ? `<span class="no-selection-badge" title="${tu('actions.commands.noSelectionRequired')}">✨</span>` : '';
+        const commandBadges = buildQuickActionBadges(task);
         // Escape icon for data attribute (encode HTML)
         const iconEncoded = encodeURIComponent(icon);
         // Check if this action has fields (needs custom drawer)
-        const hasFields = task.fields && task.fields.length > 0;
-        const fieldsIndicator = hasFields ? `<span class="fields-badge" title="${tu('actions.commands.opensSettingsPanel')}">⚙️</span>` : '';
+        const hasFields = quickActionHasFields(task);
         const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${localizeActionString(task.category)}</div>` : '';
         const itemTitle = localizedTask.displayDesc || localizedTask.displayName || task.name;
         html += `
-                <button class="command-item${noSelectionClass}" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="false" title="${itemTitle}">
-            <div class="command-item-icon">${icon}${noSelectionBadge}${fieldsIndicator}</div>
+                <button class="command-item" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="false" title="${itemTitle}">
+            <div class="command-item-icon">${icon}${commandBadges}</div>
             <div class="command-item-text">
               <div class="command-item-name">${localizedTask.displayName}</div>
               <div class="command-item-desc">${localizedTask.displayDesc}</div>
@@ -30730,21 +30759,23 @@ Based on the user's instruction, generate the appropriate commands to modify the
         return;
       }
 
-      const itemsHtml = slashMenuItems.map((action, idx) => {
-        const isActive = idx === slashMenuSelectedIndex;
-        const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
+	      const itemsHtml = slashMenuItems.map((action, idx) => {
+	        const isActive = idx === slashMenuSelectedIndex;
+	        const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
         const disabledAttrs = isDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
-        const displayName = localizeActionString(action.name || '');
-        const displayDesc = localizeActionString(action.desc || '');
-        const title = isDisabled ? getAiOffBlockedMessage(displayName || 'Quick action') : (displayDesc || displayName || action.name);
-        return `
-          <button class="slash-action-item ${isActive ? 'active' : ''}${disabledClass}" data-index="${idx}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" title="${title}"${disabledAttrs}>
-            <div class="slash-action-icon">${action.icon || defaultActionIcon}</div>
-            <div class="slash-action-name">${displayName || action.name}</div>
-          </button>
-        `;
-      }).join('');
+	        const displayName = localizeActionString(action.name || '');
+	        const displayDesc = localizeActionString(action.desc || '');
+	        const title = isDisabled ? getAiOffBlockedMessage(displayName || 'Quick action') : (displayDesc || displayName || action.name);
+          const slashBadges = buildQuickActionBadges(action.task, { compact: true });
+	        return `
+	          <button class="slash-action-item ${isActive ? 'active' : ''}${disabledClass}" data-index="${idx}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" title="${title}"${disabledAttrs}>
+	            <div class="slash-action-icon">${action.icon || defaultActionIcon}</div>
+	            <div class="slash-action-name">${displayName || action.name}</div>
+              <div class="slash-action-badges">${slashBadges}</div>
+	          </button>
+	        `;
+	      }).join('');
 
       slashActionsMenu.innerHTML = `
         <div class="slash-actions-list">
