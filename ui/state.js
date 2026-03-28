@@ -41,6 +41,10 @@ export const DEFAULT_ANTHROPIC_MODELS = [
 ];
 
 export const NON_AI_DIRECT_ACTIONS = new Set([
+  'swapColors',
+  'removeAllEffects',
+  'textLinkColor',
+  'removeUnusedProperties',
   'createIcon',
   'browseIconSet',
   'createGridLines',

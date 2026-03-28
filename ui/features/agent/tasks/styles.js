@@ -7,6 +7,7 @@ export const stylingTasks = [
           prompt: '', // Not used when fields are present
           help: 'One-way replace or two-way swap across fills, strokes, gradients, and effects.',
           requiredContext: ContextMode.STYLE_ONLY,
+          directAction: 'swapColors',
           fields: [
             { key: 'fromColor', type: 'color', label: 'From Color', default: '#3B82F6' },
             { key: 'toColor', type: 'color', label: 'To Color', default: '#8B5CF6' },
@@ -36,6 +37,7 @@ export const stylingTasks = [
           name: 'Remove all effects',
           desc: 'Strip shadows & blur',
           requiredContext: ContextMode.STYLE_ONLY,
+          directAction: 'removeAllEffects',
           prompt: 'For each selected element (and all descendants), use clearEffects to remove all effects including drop shadows, inner shadows, layer blur, and background blur.'
         },
 {
@@ -66,6 +68,7 @@ export const stylingTasks = [
           desc: 'Add link or recolor text substrings (one per line)',
           isTextAction: true,
           requiredContext: ContextMode.TEXT_ONLY,
+          directAction: 'textLinkColor',
           promptTemplate: function (values) {
             const textAction = values.textAction || 'link';
             const substrings = (values.textSubstring || '').split('\n').map(s => s.trim()).filter(s => s.length > 0);
@@ -107,6 +110,7 @@ export const stylingTasks = [
           name: 'Remove unused properties',
           desc: 'Delete unused component properties',
           requiredContext: ContextMode.HIERARCHY,
+          directAction: 'removeUnusedProperties',
           prompt: 'Identify the current selection. If it is a component, component set, or instance, return ONLY JSON: [{"action":"removeUnusedComponentProperties","nodeId":"<SELECTED_ID>"}]. This helper scans for usage of component properties (text, boolean, instance swap) and deletes those that are not linked to any descendant node. Variant properties are never removed. Return a list of commands, one for each component or component set you find in the selection or its ancestors.'
         },
 {

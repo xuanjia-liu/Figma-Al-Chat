@@ -19974,6 +19974,220 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runSwapColorsAction(values, actionMeta) {
+      const fromColor = normalizeHexColor(values.fromColor || '');
+      const toColor = normalizeHexColor(values.toColor || '');
+      const swapMode = values.swapMode || 'replace';
+
+      if (!fromColor || !toColor) {
+        showToast('Please provide both From Color and To Color.', 'error');
+        return;
+      }
+
+      const result = await requestSelectionData(false, false, 'styleOnly');
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      if (selection.length === 0) {
+        showToast('Please select at least one layer.', 'error');
+        return;
+      }
+
+      const action = swapMode === 'swap' ? 'swapPaintsTwoWay' : 'swapPaints';
+      const commands = selection.map(node => ({
+        action,
+        nodeId: node.id,
+        fromColor,
+        toColor,
+        includeGradients: values.includeGradients !== false,
+        includeStrokes: values.includeStrokes !== false,
+        includeEffects: values.includeEffects !== false
+      }));
+
+      const execResult = await executeCommands(commands);
+      const success = execResult?.success || 0;
+      const failed = execResult?.failed || 0;
+      if (success > 0) {
+        const modeLabel = swapMode === 'swap' ? 'swapped' : 'replaced';
+        showToast(`Colors ${modeLabel} on ${success} selection${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`, failed > 0 ? 'warning' : 'success');
+      }
+    }
+
+    async function runRemoveAllEffectsAction() {
+      const result = await requestSelectionData(false, false, 'styleOnly');
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      if (selection.length === 0) {
+        showToast('Please select at least one layer.', 'error');
+        return;
+      }
+
+      const commands = selection.map(node => ({
+        action: 'clearEffects',
+        nodeId: node.id
+      }));
+
+      const execResult = await executeCommands(commands);
+      const success = execResult?.success || 0;
+      const failed = execResult?.failed || 0;
+      if (success > 0) {
+        showToast(`Removed effects from ${success} selection${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`, failed > 0 ? 'warning' : 'success');
+      }
+    }
+
+    async function runTextLinkColorAction(values) {
+      const result = await requestSelectionData(false, false, 'textOnly');
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      const textNodes = selection.filter(node => node?.type === 'TEXT');
+      if (textNodes.length === 0) {
+        showToast('Please select at least one text layer.', 'error');
+        return;
+      }
+
+      const textAction = values.textAction || 'link';
+      const rawSubstrings = String(values.textSubstring || '')
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      if (textAction === 'link') {
+        const linkUrl = String(values.linkUrl || '').trim();
+        if (!linkUrl) {
+          showToast('Link URL is required.', 'error');
+          return;
+        }
+
+        const commands = [];
+        for (const node of textNodes) {
+          if (rawSubstrings.length === 0) {
+            commands.push({
+              action: 'setRangeHyperlink',
+              nodeId: node.id,
+              start: 0,
+              end: 9999,
+              linkType: 'URL',
+              url: linkUrl
+            });
+            continue;
+          }
+
+          rawSubstrings.forEach(substring => {
+            commands.push({
+              action: 'setRangeHyperlink',
+              nodeId: node.id,
+              start: 0,
+              end: 9999,
+              linkType: 'URL',
+              url: linkUrl,
+              textSubstring: substring
+            });
+          });
+        }
+
+        const execResult = await executeCommands(commands);
+        const success = execResult?.success || 0;
+        const failed = execResult?.failed || 0;
+        if (success > 0) {
+          showToast(`Applied links to ${success} text range${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`, failed > 0 ? 'warning' : 'success');
+        }
+        return;
+      }
+
+      const color = normalizeHexColor(values.color || '');
+      if (!color) {
+        showToast('Text color is required.', 'error');
+        return;
+      }
+
+      const commands = [];
+      for (const node of textNodes) {
+        if (rawSubstrings.length === 0) {
+          commands.push({
+            action: 'setRangeFills',
+            nodeId: node.id,
+            start: 0,
+            end: 9999,
+            color
+          });
+          continue;
+        }
+
+        rawSubstrings.forEach(substring => {
+          commands.push({
+            action: 'setRangeFills',
+            nodeId: node.id,
+            start: 0,
+            end: 9999,
+            color,
+            textSubstring: substring
+          });
+        });
+      }
+
+      const execResult = await executeCommands(commands);
+      const success = execResult?.success || 0;
+      const failed = execResult?.failed || 0;
+      if (success > 0) {
+        showToast(`Applied text color to ${success} text range${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`, failed > 0 ? 'warning' : 'success');
+      }
+    }
+
+    async function runRemoveUnusedPropertiesAction() {
+      const result = await requestSelectionData(false, false, 'hierarchy');
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      if (selection.length === 0) {
+        showToast('Please select a component, component set, instance, or a layer inside one.', 'error');
+        return;
+      }
+
+      const supportedTypes = new Set(['COMPONENT', 'COMPONENT_SET', 'INSTANCE', 'FRAME', 'GROUP', 'TEXT', 'RECTANGLE', 'ELLIPSE', 'POLYGON', 'STAR', 'VECTOR', 'LINE', 'BOOLEAN_OPERATION', 'SECTION']);
+      const candidateNodes = selection.filter(node => node?.id && supportedTypes.has(node.type));
+      if (candidateNodes.length === 0) {
+        showToast('No supported component targets found in the selection.', 'warning');
+        return;
+      }
+
+      const removedByNode = new Map();
+      const waitForResults = new Promise((resolve) => {
+        const expected = candidateNodes.length;
+        let settled = 0;
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          resolve();
+        }, 15000);
+
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (!msg || msg.type !== 'remove-unused-component-properties-result') return;
+          removedByNode.set(msg.nodeId, Array.isArray(msg.removed) ? msg.removed : []);
+          settled += 1;
+          if (settled >= expected) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve();
+          }
+        };
+
+        window.addEventListener('message', handler);
+      });
+
+      const commands = candidateNodes.map(node => ({
+        action: 'removeUnusedComponentProperties',
+        nodeId: node.id
+      }));
+
+      const execResult = await executeCommands(commands);
+      await waitForResults;
+
+      const success = execResult?.success || 0;
+      const failed = execResult?.failed || 0;
+      const removedCount = Array.from(removedByNode.values()).reduce((sum, removed) => sum + removed.length, 0);
+
+      if (success > 0) {
+        const summary = removedCount > 0
+          ? `Removed ${removedCount} unused component propert${removedCount === 1 ? 'y' : 'ies'} across ${success} target${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`
+          : `Checked ${success} target${success === 1 ? '' : 's'} and found no removable component properties${failed > 0 ? ` (${failed} skipped)` : ''}.`;
+        showToast(summary, failed > 0 ? 'warning' : 'success');
+      }
+    }
+
     function triggerImageBasedDuplication(imageData, nodeIds, customInstructions) {
       setMode('agent');
       const instructionContext = customInstructions.length > 0
@@ -20050,6 +20264,18 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'randomizeSelectedInstances':
           await runRandomizeSelectedInstancesAction(values, actionMeta);
+          break;
+        case 'swapColors':
+          await runSwapColorsAction(values, actionMeta);
+          break;
+        case 'removeAllEffects':
+          await runRemoveAllEffectsAction(values, actionMeta);
+          break;
+        case 'textLinkColor':
+          await runTextLinkColorAction(values, actionMeta);
+          break;
+        case 'removeUnusedProperties':
+          await runRemoveUnusedPropertiesAction(values, actionMeta);
           break;
         case 'turnIntoComponentSet':
           await runTurnIntoComponentSetAction(values, actionMeta);
