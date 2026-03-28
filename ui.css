@@ -5408,6 +5408,63 @@
       color: #ccc;
     }
 
+    body.light-mode .message-content .code-block-container,
+    body.light-mode .code-editor-highlight {
+      background: #ffffff;
+    }
+
+    body.light-mode .code-block-header {
+      background: rgba(24, 24, 27, 0.03);
+      border-bottom-color: rgba(24, 24, 27, 0.08);
+    }
+
+    body.light-mode .code-block-copy-btn:hover,
+    body.light-mode .code-block-edit-btn:hover,
+    body.light-mode .code-editor-modal-copy:hover,
+    body.light-mode .code-editor-modal-close:hover,
+    body.light-mode .code-sel-btn:hover {
+      background: rgba(24, 24, 27, 0.06);
+    }
+
+    body.light-mode .message.bot .message-content pre code,
+    body.light-mode .code-editor-highlight code {
+      color: #1f2937;
+    }
+
+    body.light-mode .syn-kw,
+    body.light-mode .syn-tag,
+    body.light-mode .syn-op {
+      color: #c0266d;
+    }
+
+    body.light-mode .syn-str,
+    body.light-mode .syn-val,
+    body.light-mode .syn-regex {
+      color: #a16207;
+    }
+
+    body.light-mode .syn-num,
+    body.light-mode .syn-const {
+      color: #7c3aed;
+    }
+
+    body.light-mode .syn-cm {
+      color: #64748b;
+    }
+
+    body.light-mode .syn-fn,
+    body.light-mode .syn-attr {
+      color: #059669;
+    }
+
+    body.light-mode .syn-type {
+      color: #0f766e;
+    }
+
+    body.light-mode .syn-punct {
+      color: #6b7280;
+    }
+
     .message.bot .message-content blockquote {
       margin: 6px 0;
       padding: 8px 12px;
