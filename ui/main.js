@@ -57,6 +57,7 @@ import {
   getExactTranslationVariantsForSearch,
   getLocalizedActionText,
 } from './i18n/actions.js';
+import { optimize as optimizeSvg } from 'svgo/browser';
 
     // State
     let currentPreviewData = null;
@@ -161,6 +162,47 @@ import {
 
     function getSerializedCodeAttachmentTexts(items = getStagedCodeAttachments()) {
       return items.map(buildCodeAttachmentText);
+    }
+
+    function optimizeExportedSvgMarkup(input) {
+      const text = String(input || '').trim();
+      if (!text) return text;
+
+      const svgBlockRegex = /(?:<!--[\s\S]*?-->\s*)?<svg[\s\S]*?<\/svg>/gi;
+      const matches = text.match(svgBlockRegex);
+
+      const optimizeSingle = (block) => {
+        const blockMatch = block.match(/^(\s*<!--[\s\S]*?-->\s*)?(<svg[\s\S]*<\/svg>)\s*$/i);
+        const comment = blockMatch?.[1]?.trim() || '';
+        const svg = blockMatch?.[2] || block;
+
+        try {
+          const optimized = optimizeSvg(svg, {
+            multipass: true,
+            js2svg: { pretty: false }
+          });
+          const optimizedSvg = 'data' in optimized ? optimized.data : svg;
+          return comment ? `${comment}\n${optimizedSvg}` : optimizedSvg;
+        } catch (error) {
+          console.warn('SVGO optimization failed, using original SVG block:', error);
+          return block.trim();
+        }
+      };
+
+      if (matches && matches.length > 0) {
+        return matches.map(optimizeSingle).join('\n\n');
+      }
+
+      try {
+        const optimized = optimizeSvg(text, {
+          multipass: true,
+          js2svg: { pretty: false }
+        });
+        return 'data' in optimized ? optimized.data : text;
+      } catch (error) {
+        console.warn('SVGO optimization failed, using original SVG text:', error);
+        return text;
+      }
     }
 
     function buildUserTextWithCodeAttachments(message, codeTexts = []) {
@@ -32997,7 +33039,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           break;
 
         case 'svg-result':
-          addExportToInput('SVG', msg.data);
+          addExportToInput('SVG', optimizeExportedSvgMarkup(msg.data));
           break;
 
         case 'png-result':

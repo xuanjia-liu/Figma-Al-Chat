@@ -4948,6 +4948,7 @@
       border-radius: var(--radius-lg);
       background: var(--bg-tertiary);
       overflow: hidden;
+      border: 1px solid var(--border-intense);
     }
 
     .message-content .code-block-container pre {
@@ -7125,7 +7126,7 @@
       align-items: center;
       gap: var(--space-sm);
       padding: var(--space-2xs);
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
     }
@@ -7172,12 +7173,12 @@
     .attachment-staging-code-preview {
       margin: 0;
       font-family: 'Space Mono', monospace;
-      font-size: 10px;
-      line-height: 1.4;
+      font-size: 8px;
+      line-height: 1.2;
       color: var(--text-secondary);
       white-space: pre-wrap;
       word-break: break-word;
-      max-height: 40px;
+      max-height: 28px;
       overflow: hidden;
     }
 
