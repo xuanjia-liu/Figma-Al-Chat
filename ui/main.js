@@ -19838,14 +19838,15 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       setSendButtonMode(true);
       const mode = values.mode || 'each';
       const isConvert = mode === 'convert';
+      const isSameParentTogether = mode === 'sameParentTogether';
       const wrapper = isConvert ? null : (values.wrapper || 'autoLayout');
       const isAutoLayout = wrapper === 'autoLayout';
       const wantWrap = isConvert
         ? values.convertLayoutWrap === true
-        : (isAutoLayout && values.layoutWrap === true);
+        : (isSameParentTogether && isAutoLayout && values.layoutWrap === true);
       const gapRaw = isConvert ? values.convertCounterAxisSpacing : values.counterAxisSpacing;
       const gapNum = gapRaw !== undefined && gapRaw !== null && gapRaw !== '' ? Number(gapRaw) : 0;
-      const direction = isConvert || isAutoLayout
+      const direction = isConvert || (isSameParentTogether && isAutoLayout)
         ? (values.direction === 'HORIZONTAL' || values.direction === 'VERTICAL'
         ? values.direction
         : undefined)
@@ -30757,8 +30758,9 @@ Selection data now includes "fillsDetailed" array with gradient info including t
   - If multiple nodes are selected, analyzes their spatial positions and creates nested auto layout structure.
   - 'direction' is optional; if omitted, automatically detects the best layout direction.
   - 'nodeIds' is optional; if omitted, uses the current selection.
-- easyWrapper: { "action": "easyWrapper", "mode": "each|convert", "wrapper": "group|frame|autoLayout", "direction": "VERTICAL/HORIZONTAL", "layoutWrap": "WRAP", "counterAxisSpacing": 12, "name": "Container", "nodeIds": ["id1", "id2"] }
-  - Structured wrapping without guessing: mode "each" wraps every selected node separately as a group, frame, or auto-layout frame; "convert" turns existing frames/groups/components/instances into auto layout.
+- easyWrapper: { "action": "easyWrapper", "mode": "each|sameParentTogether|convert", "wrapper": "group|frame|autoLayout", "direction": "VERTICAL/HORIZONTAL", "layoutWrap": "WRAP", "counterAxisSpacing": 12, "name": "Container", "nodeIds": ["id1", "id2"] }
+  - Structured wrapping without guessing: mode "each" wraps every selected node separately; mode "sameParentTogether" wraps selected sibling layers together per parent; "convert" turns existing frames/groups/components/instances into auto layout.
+  - "wrapper" applies to "each" and "sameParentTogether": group, plain frame, or auto-layout frame.
   - Optional "layoutWrap": "WRAP" enables Figma auto-layout wrap rows; optional "counterAxisSpacing" sets row gap (defaults to item spacing when omitted).
   - "name" sets the wrapper name; "nodeIds" optional (defaults to current selection).
 - setAutoLayout: { "action": "setAutoLayout", "nodeId": "xxx", "direction": "VERTICAL/HORIZONTAL/GRID", "gap": 10, "padding": 16, "paddingTop": 16, "paddingRight": 16, "paddingBottom": 16, "paddingLeft": 16, "primaryAxisAlignItems": "MIN/CENTER/MAX/SPACE_BETWEEN", "counterAxisAlignItems": "MIN/CENTER/MAX/BASELINE", "primaryAxisSizingMode": "FIXED/AUTO", "counterAxisSizingMode": "FIXED/AUTO", "layoutWrap": "NO_WRAP/WRAP", "counterAxisSpacing": 10, "gridColumnCount": 3, "gridRowCount": 2, "gridColumnGap": 10, "gridRowGap": 10, "gridRowSizes": [{ "type": "FLEX", "value": 1 }], "gridColumnSizes": [{ "type": "FIXED", "value": 120 }], "gridChildHorizontalAlign": "MIN/CENTER/MAX/AUTO", "gridChildVerticalAlign": "MIN/CENTER/MAX/AUTO" }

@@ -9421,6 +9421,23 @@ figma.ui.onmessage = async (msg: {
           frame.primaryAxisAlignItems = 'MIN';
           frame.counterAxisAlignItems = 'MIN';
 
+          // Preserve multiline wrapping when a single text layer is wrapped into auto layout.
+          // Without this, the new wrapper hugs the text width and the text can collapse to one line.
+          if (sortedNodes.length === 1 && sortedNodes[0].type === 'TEXT') {
+            const textNode = sortedNodes[0] as TextNode;
+            const originalWidth = Math.max(bounds.width, 1);
+            const currentHeight = Math.max(frame.height, 1);
+            if (direction === 'VERTICAL') {
+              frame.counterAxisSizingMode = 'FIXED';
+              frame.resize(originalWidth, currentHeight);
+              if ('layoutAlign' in textNode) textNode.layoutAlign = 'STRETCH';
+            } else {
+              frame.primaryAxisSizingMode = 'FIXED';
+              frame.resize(originalWidth, currentHeight);
+              if ('layoutGrow' in textNode) textNode.layoutGrow = 1;
+            }
+          }
+
           // Set padding with the relative offset included
           frame.paddingTop = relativeOffsetTop;
           frame.paddingLeft = relativeOffsetLeft;
@@ -13852,6 +13869,26 @@ figma.ui.onmessage = async (msg: {
                 return targetParent;
               };
 
+              const groupNodesByTargetParent = (nodes: SceneNode[]) => {
+                const grouped = new Map<BaseNode & ChildrenMixin, SceneNode[]>();
+                for (const node of nodes) {
+                  if (node.removed || node.locked) continue;
+                  const targetParent = pickTargetParent(node);
+                  const existing = grouped.get(targetParent);
+                  if (existing) {
+                    existing.push(node);
+                  } else {
+                    grouped.set(targetParent, [node]);
+                  }
+                }
+                for (const [parent, nodesForParent] of grouped.entries()) {
+                  if ('children' in parent) {
+                    nodesForParent.sort((a, b) => parent.children.indexOf(a) - parent.children.indexOf(b));
+                  }
+                }
+                return grouped;
+              };
+
               if (modeRaw === 'convert') {
                 const converted: FrameNode[] = [];
                 for (const n of ewNodes) {
@@ -13905,6 +13942,45 @@ figma.ui.onmessage = async (msg: {
                   if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: 'Easy wrapper: nothing wrapped (locked or invalid).' };
                   continue;
                 }
+                figma.currentPage.selection = out;
+                success++;
+                continue;
+              }
+
+              if (modeRaw === 'sameparenttogether') {
+                const out: SceneNode[] = [];
+                const groupedByParent = groupNodesByTargetParent(ewNodes);
+
+                for (const [targetParent, nodesForParent] of groupedByParent.entries()) {
+                  if (nodesForParent.length === 0) continue;
+                  const nm = groupedByParent.size > 1
+                    ? `${wrapName} ${out.length + 1}`
+                    : wrapName;
+
+                  if (wrapperKind === 'group') {
+                    try {
+                      const group = figma.group(nodesForParent, targetParent);
+                      group.name = nm;
+                      out.push(group);
+                    } catch (e) {
+                      console.warn('[easyWrapper] sameParentTogether group failed', e);
+                    }
+                  } else if (wrapperKind === 'frame') {
+                    out.push(wrapNodesInPlainFrame(nodesForParent, targetParent, nm));
+                  } else {
+                    const frame = wrapNodesInAutoLayoutFrame(nodesForParent, targetParent, nm);
+                    if (dir) applySmartAutoLayout(frame, dir);
+                    applyWrapToAutoLayoutFrame(frame);
+                    out.push(frame);
+                  }
+                }
+
+                if (out.length === 0) {
+                  failed++;
+                  if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: 'Easy wrapper: no sibling groups could be wrapped (locked or invalid).' };
+                  continue;
+                }
+
                 figma.currentPage.selection = out;
                 success++;
                 continue;

@@ -401,7 +401,7 @@ export const uiLayoutTasks = [
 {
           name: 'Easy wrapper',
           desc: 'Wrap or convert frames, groups, and auto layout',
-          help: 'Wrap each selected layer separately as a group, frame, or auto layout; or convert existing frames/groups to auto layout. Optional wrapped rows are available for auto layout. Works in No AI mode.',
+          help: 'Wrap each selected layer separately, or wrap selected sibling layers together per parent, using group, frame, or auto layout. Convert mode turns existing frames/groups into auto layout. Wrapped rows are available for auto layout where applicable. Works in No AI mode.',
           requiredContext: ContextMode.LAYOUT_ONLY,
           directAction: 'easyWrapper',
           fields: [
@@ -412,6 +412,7 @@ export const uiLayoutTasks = [
               default: 'each',
               options: [
                 { value: 'each', label: 'Wrap each selected layer separately' },
+                { value: 'sameParentTogether', label: 'Wrap selected sibling layers together (per parent)' },
                 { value: 'convert', label: 'Convert to auto layout (existing frame/group)' },
               ],
             },
@@ -425,7 +426,12 @@ export const uiLayoutTasks = [
                 { value: 'frame', label: 'Frame' },
                 { value: 'autoLayout', label: 'Auto layout' },
               ],
-              showWhen: { field: 'mode', equals: 'each' },
+              showWhen: {
+                anyOf: [
+                  [{ field: 'mode', equals: 'each' }],
+                  [{ field: 'mode', equals: 'sameParentTogether' }],
+                ],
+              },
             },
             {
               key: 'direction',
@@ -438,7 +444,7 @@ export const uiLayoutTasks = [
                 { value: 'VERTICAL', label: 'Vertical' },
               ],
               showWhen: [
-                { field: 'mode', equals: 'each' },
+                { field: 'mode', equals: 'sameParentTogether' },
                 { field: 'wrapper', equals: 'autoLayout' },
               ],
             },
@@ -449,7 +455,7 @@ export const uiLayoutTasks = [
               default: false,
               hint: 'Figma auto-layout wrap: items flow onto new rows when space is tight.',
               showWhen: [
-                { field: 'mode', equals: 'each' },
+                { field: 'mode', equals: 'sameParentTogether' },
                 { field: 'wrapper', equals: 'autoLayout' },
               ],
             },
@@ -462,7 +468,7 @@ export const uiLayoutTasks = [
               max: 500,
               hint: 'Vertical gap between wrapped rows; 0 uses the frame’s item spacing.',
               showWhen: [
-                { field: 'mode', equals: 'each' },
+                { field: 'mode', equals: 'sameParentTogether' },
                 { field: 'wrapper', equals: 'autoLayout' },
                 { field: 'layoutWrap', equals: 'true' },
               ],
