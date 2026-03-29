@@ -9302,6 +9302,14 @@ figma.ui.onmessage = async (msg: {
       const wrapNodesInAutoLayoutFrame = (nodes: SceneNode[], parent: BaseNode & ChildrenMixin, name: string, outerBounds?: { x: number, y: number, width: number, height: number }, outerDirection?: 'HORIZONTAL' | 'VERTICAL'): FrameNode => {
         const bounds = getNodesBounds(nodes);
         const frame = figma.createFrame();
+        const sharedParent = nodes[0]?.parent || null;
+        const allSameParent = !!(sharedParent && nodes.every(n => n.parent === sharedParent));
+        const insertIndex = allSameParent && sharedParent === parent && 'children' in parent
+          ? Math.min(...nodes.map(n => {
+            const idx = (parent as ChildrenMixin).children.indexOf(n);
+            return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
+          }))
+          : null;
 
         const absX = bounds.x;
         const absY = bounds.y;
@@ -9319,7 +9327,11 @@ figma.ui.onmessage = async (msg: {
 
         console.log(`[wrapNodes] ${name}: absY=${absY}, outerBounds.y=${outerBounds?.y}, relativeOffsetTop=${relativeOffsetTop}`);
 
-        parent.appendChild(frame);
+        if (insertIndex !== null && Number.isFinite(insertIndex)) {
+          parent.insertChild(insertIndex, frame);
+        } else {
+          parent.appendChild(frame);
+        }
 
         const parentAbsX = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[0][2] : 0;
         const parentAbsY = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[1][2] : 0;
@@ -9457,10 +9469,13 @@ figma.ui.onmessage = async (msg: {
           });
         }
         const frame = figma.createFrame();
-        parent.appendChild(frame);
-        const pAny = parent as FrameNode;
-        if ('layoutMode' in pAny && pAny.layoutMode && pAny.layoutMode !== 'NONE') {
-          frame.layoutPositioning = 'ABSOLUTE';
+        const insertIndex = allSameParent && refParent === parent
+          ? Math.min(...snapshot.map(s => s.siblingIndex))
+          : null;
+        if (insertIndex !== null && Number.isFinite(insertIndex)) {
+          parent.insertChild(insertIndex, frame);
+        } else {
+          parent.appendChild(frame);
         }
         const parentAbsX = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[0][2] : 0;
         const parentAbsY = (parent as any).absoluteTransform ? (parent as any).absoluteTransform[1][2] : 0;
@@ -9471,8 +9486,8 @@ figma.ui.onmessage = async (msg: {
         frame.fills = [];
         for (const s of snapshot) {
           frame.appendChild(s.node);
-          s.node.x = s.absX - frame.absoluteTransform[0][2];
-          s.node.y = s.absY - frame.absoluteTransform[1][2];
+          s.node.x = s.absX - bounds.x;
+          s.node.y = s.absY - bounds.y;
         }
         return frame;
       };
@@ -13802,9 +13817,9 @@ figma.ui.onmessage = async (msg: {
                 continue;
               }
 
-              const modeRaw = typeof cmd.mode === 'string' ? cmd.mode.toLowerCase() : 'together';
-              const wrapperRaw = typeof cmd.wrapper === 'string' ? cmd.wrapper.toLowerCase() : 'frame';
-              const wrapperKind = wrapperRaw === 'group' ? 'group' : (wrapperRaw === 'autolayout') ? 'autoLayout' : 'frame';
+              const modeRaw = typeof cmd.mode === 'string' ? cmd.mode.toLowerCase() : 'each';
+              const wrapperRaw = typeof cmd.wrapper === 'string' ? cmd.wrapper.toLowerCase() : 'autolayout';
+              const wrapperKind = wrapperRaw === 'group' ? 'group' : (wrapperRaw === 'frame' ? 'frame' : 'autoLayout');
 
               let dir: 'HORIZONTAL' | 'VERTICAL' | undefined;
               if (typeof cmd.direction === 'string') {
@@ -13827,7 +13842,7 @@ figma.ui.onmessage = async (msg: {
               };
 
               const defaultWrapName = (kind: string) =>
-                kind === 'group' ? 'Group' : kind === 'autoLayout' ? 'Auto layout' : 'Frame';
+                kind === 'group' ? 'Group' : kind === 'frame' ? 'Frame' : 'Auto layout';
 
               const pickTargetParent = (n: SceneNode) => {
                 let targetParent = (n.parent || figma.currentPage) as BaseNode & ChildrenMixin;
@@ -13860,32 +13875,6 @@ figma.ui.onmessage = async (msg: {
               }
 
               const wrapName = (cmd.name && String(cmd.name).trim()) || defaultWrapName(wrapperKind);
-
-              if (modeRaw === 'together') {
-                const targetParent = pickTargetParent(ewNodes[0]);
-                if (wrapperKind === 'group') {
-                  try {
-                    const group = figma.group(ewNodes, targetParent);
-                    group.name = wrapName;
-                    figma.currentPage.selection = [group];
-                    success++;
-                  } catch (groupErr) {
-                    failed++;
-                    if (!firstError) firstError = { action: cmd.action, nodeId: 'N/A', message: (groupErr as Error)?.message || 'Easy wrapper: group requires sibling layers.' };
-                  }
-                } else if (wrapperKind === 'frame') {
-                  const frame = wrapNodesInPlainFrame(ewNodes, targetParent, wrapName);
-                  figma.currentPage.selection = [frame];
-                  success++;
-                } else {
-                  const frame = wrapNodesInAutoLayoutFrame(ewNodes, targetParent, wrapName);
-                  if (dir) applySmartAutoLayout(frame, dir);
-                  applyWrapToAutoLayoutFrame(frame);
-                  figma.currentPage.selection = [frame];
-                  success++;
-                }
-                continue;
-              }
 
               if (modeRaw === 'each') {
                 const out: SceneNode[] = [];

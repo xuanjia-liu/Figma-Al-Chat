@@ -401,7 +401,7 @@ export const uiLayoutTasks = [
 {
           name: 'Easy wrapper',
           desc: 'Wrap or convert frames, groups, and auto layout',
-          help: 'Wrap the selection together (choose frame, group, or auto layout) or wrap each layer separately (always auto layout); convert existing frames/groups to auto layout; optional wrapped rows (layout wrap). Works in No AI mode.',
+          help: 'Wrap each selected layer separately as a group, frame, or auto layout; or convert existing frames/groups to auto layout. Optional wrapped rows are available for auto layout. Works in No AI mode.',
           requiredContext: ContextMode.LAYOUT_ONLY,
           directAction: 'easyWrapper',
           fields: [
@@ -409,9 +409,8 @@ export const uiLayoutTasks = [
               key: 'mode',
               type: 'select',
               label: 'Mode',
-              default: 'together',
+              default: 'each',
               options: [
-                { value: 'together', label: 'Wrap selection together' },
                 { value: 'each', label: 'Wrap each selected layer separately' },
                 { value: 'convert', label: 'Convert to auto layout (existing frame/group)' },
               ],
@@ -420,13 +419,13 @@ export const uiLayoutTasks = [
               key: 'wrapper',
               type: 'select',
               label: 'Container',
-              default: 'frame',
+              default: 'autoLayout',
               options: [
-                { value: 'frame', label: 'Frame' },
                 { value: 'group', label: 'Group' },
+                { value: 'frame', label: 'Frame' },
                 { value: 'autoLayout', label: 'Auto layout' },
               ],
-              showWhen: { field: 'mode', equals: 'together' },
+              showWhen: { field: 'mode', equals: 'each' },
             },
             {
               key: 'direction',
@@ -438,15 +437,10 @@ export const uiLayoutTasks = [
                 { value: 'HORIZONTAL', label: 'Horizontal' },
                 { value: 'VERTICAL', label: 'Vertical' },
               ],
-              showWhen: {
-                anyOf: [
-                  [{ field: 'mode', equals: 'each' }],
-                  [
-                    { field: 'mode', equals: 'together' },
-                    { field: 'wrapper', equals: 'autoLayout' },
-                  ],
-                ],
-              },
+              showWhen: [
+                { field: 'mode', equals: 'each' },
+                { field: 'wrapper', equals: 'autoLayout' },
+              ],
             },
             {
               key: 'layoutWrap',
@@ -454,15 +448,10 @@ export const uiLayoutTasks = [
               label: 'Wrap rows (layout wrap)',
               default: false,
               hint: 'Figma auto-layout wrap: items flow onto new rows when space is tight.',
-              showWhen: {
-                anyOf: [
-                  [{ field: 'mode', equals: 'each' }],
-                  [
-                    { field: 'mode', equals: 'together' },
-                    { field: 'wrapper', equals: 'autoLayout' },
-                  ],
-                ],
-              },
+              showWhen: [
+                { field: 'mode', equals: 'each' },
+                { field: 'wrapper', equals: 'autoLayout' },
+              ],
             },
             {
               key: 'counterAxisSpacing',
@@ -472,19 +461,11 @@ export const uiLayoutTasks = [
               min: 0,
               max: 500,
               hint: 'Vertical gap between wrapped rows; 0 uses the frame’s item spacing.',
-              showWhen: {
-                anyOf: [
-                  [
-                    { field: 'mode', equals: 'each' },
-                    { field: 'layoutWrap', equals: 'true' },
-                  ],
-                  [
-                    { field: 'mode', equals: 'together' },
-                    { field: 'wrapper', equals: 'autoLayout' },
-                    { field: 'layoutWrap', equals: 'true' },
-                  ],
-                ],
-              },
+              showWhen: [
+                { field: 'mode', equals: 'each' },
+                { field: 'wrapper', equals: 'autoLayout' },
+                { field: 'layoutWrap', equals: 'true' },
+              ],
             },
             {
               key: 'wrapperName',
