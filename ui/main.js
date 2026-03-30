@@ -17373,7 +17373,85 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
     }
 
-    function sanitizeAgentCommands(commands) {
+    function isGraphManualLayoutEnabled(metadata) {
+      return !!(metadata && (metadata.enforceGraphManualLayout || metadata.quickActionName === 'Create Graph'));
+    }
+
+    function sanitizeGraphLayoutCommands(commands, metadata = null) {
+      if (!Array.isArray(commands) || !isGraphManualLayoutEnabled(metadata)) return Array.isArray(commands) ? commands : [];
+
+      const blockedActions = new Set(['setAutoLayout', 'applyAutoLayout']);
+      const autoLayoutOnlyFields = [
+        'layoutWrap',
+        'counterAxisSpacing',
+        'counterAxisAlignContent',
+        'primaryAxisAlignItems',
+        'counterAxisAlignItems',
+        'primaryAxisSizingMode',
+        'counterAxisSizingMode',
+        'gridColumnCount',
+        'gridRowCount',
+        'gridColumnGap',
+        'gridRowGap',
+        'gridRowSizes',
+        'gridColumnSizes',
+        'gridChildHorizontalAlign',
+        'gridChildVerticalAlign',
+        'padding',
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft'
+      ];
+
+      const sanitized = [];
+      for (const rawCmd of commands) {
+        if (!rawCmd || typeof rawCmd !== 'object') continue;
+        if (blockedActions.has(rawCmd.action)) continue;
+
+        if (rawCmd.action === 'easyWrapper') {
+          const mode = typeof rawCmd.mode === 'string' ? rawCmd.mode.toLowerCase() : '';
+          const wrapper = typeof rawCmd.wrapper === 'string' ? rawCmd.wrapper.toLowerCase() : 'autolayout';
+          if (mode === 'convert' || wrapper === 'autolayout') {
+            continue;
+          }
+        }
+
+        const cmd = { ...rawCmd };
+
+        for (const field of autoLayoutOnlyFields) {
+          delete cmd[field];
+        }
+
+        if (cmd.action === 'createFrame') {
+          if (typeof cmd.direction === 'string') {
+            const direction = cmd.direction.toUpperCase();
+            if (direction === 'HORIZONTAL' || direction === 'VERTICAL' || direction === 'GRID') {
+              delete cmd.direction;
+            }
+          }
+          delete cmd.gap;
+        }
+
+        if (cmd.action === 'setSizing') {
+          if (typeof cmd.horizontal === 'string' && cmd.horizontal.toUpperCase() !== 'FIXED') {
+            delete cmd.horizontal;
+          }
+          if (typeof cmd.vertical === 'string' && cmd.vertical.toUpperCase() !== 'FIXED') {
+            delete cmd.vertical;
+          }
+          delete cmd.layoutAlign;
+          delete cmd.layoutGrow;
+          delete cmd.layoutPositioning;
+        }
+
+        sanitized.push(cmd);
+      }
+
+      return sanitized;
+    }
+
+    function sanitizeAgentCommands(commands, metadata = null) {
       if (!Array.isArray(commands)) return [];
       const safe = [];
       for (const cmd of commands) {
@@ -17392,7 +17470,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           safe.push(cmd);
         }
       }
-      return safe;
+      return sanitizeGraphLayoutCommands(safe, metadata);
     }
 
     function checkSvgQuality(svg) {
@@ -21747,9 +21825,14 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           currentMetadata = { images: imageDataUrls };
         }
 
+        currentMetadata = currentMetadata || {};
+        currentMetadata.quickActionName = action.name;
+        if (action.name === 'Create Graph') {
+          currentMetadata.enforceGraphManualLayout = true;
+        }
+
         // Mark fresh designs so the backend skips slow page-wide node searches
         if (action.noSelection) {
-          currentMetadata = currentMetadata || {};
           currentMetadata.freshDesign = true;
         }
 
@@ -21865,7 +21948,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           await sendQuickActionMessage(finalPrompt, action.noSelection || false, {
             name: action.name,
             icon: action.icon
-          }, action.includeTokens || false, action.requiredContext || 'all', currentMetadata, showEnhancedLoader ? {
+          }, action.includeTokens || false, action.requiredContext || 'all', Object.keys(currentMetadata).length > 0 ? currentMetadata : null, showEnhancedLoader ? {
             onBeforeExecute: () => {
               closePromptDrawer();
               closeCommandsDrawer();
@@ -28050,7 +28133,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
           return;
         }
 
-        const safeCommands = sanitizeAgentCommands(parsed.commands || []);
+        const safeCommands = sanitizeAgentCommands(parsed.commands || [], metadata);
 
         if (safeCommands.length > 0) {
           removeThinkingIndicator();
@@ -29054,6 +29137,8 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
     let pendingCommandsResolve = null;
 
     async function executeCommands(commands, metadata = null) {
+      commands = sanitizeGraphLayoutCommands(commands, metadata);
+
       // Pre-process createIconifyIcon commands
       for (let i = 0; i < commands.length; i++) {
         const cmd = commands[i];

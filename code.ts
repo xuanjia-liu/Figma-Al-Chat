@@ -8793,7 +8793,74 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'execute-commands': {
-      const { commands = [], metadata } = msg as any;
+      const { commands: incomingCommands = [], metadata } = msg as any;
+      const enforceGraphManualLayout = !!(metadata && (metadata.enforceGraphManualLayout || metadata.quickActionName === 'Create Graph'));
+      const graphAutoLayoutOnlyFields = [
+        'layoutWrap',
+        'counterAxisSpacing',
+        'counterAxisAlignContent',
+        'primaryAxisAlignItems',
+        'counterAxisAlignItems',
+        'primaryAxisSizingMode',
+        'counterAxisSizingMode',
+        'gridColumnCount',
+        'gridRowCount',
+        'gridColumnGap',
+        'gridRowGap',
+        'gridRowSizes',
+        'gridColumnSizes',
+        'gridChildHorizontalAlign',
+        'gridChildVerticalAlign',
+        'padding',
+        'paddingTop',
+        'paddingRight',
+        'paddingBottom',
+        'paddingLeft'
+      ];
+      const graphSanitizeCommand = (rawCmd: any) => {
+        if (!rawCmd || typeof rawCmd !== 'object') return null;
+        if (!enforceGraphManualLayout) return rawCmd;
+        if (rawCmd.action === 'setAutoLayout' || rawCmd.action === 'applyAutoLayout') return null;
+        if (rawCmd.action === 'easyWrapper') {
+          const mode = typeof rawCmd.mode === 'string' ? rawCmd.mode.toLowerCase() : '';
+          const wrapper = typeof rawCmd.wrapper === 'string' ? rawCmd.wrapper.toLowerCase() : 'autolayout';
+          if (mode === 'convert' || wrapper === 'autolayout') {
+            return null;
+          }
+        }
+
+        const cmd = { ...rawCmd };
+        for (const field of graphAutoLayoutOnlyFields) {
+          delete cmd[field];
+        }
+
+        if (cmd.action === 'createFrame') {
+          if (typeof cmd.direction === 'string') {
+            const direction = cmd.direction.toUpperCase();
+            if (direction === 'HORIZONTAL' || direction === 'VERTICAL' || direction === 'GRID') {
+              delete cmd.direction;
+            }
+          }
+          delete cmd.gap;
+        }
+
+        if (cmd.action === 'setSizing') {
+          if (typeof cmd.horizontal === 'string' && cmd.horizontal.toUpperCase() !== 'FIXED') {
+            delete cmd.horizontal;
+          }
+          if (typeof cmd.vertical === 'string' && cmd.vertical.toUpperCase() !== 'FIXED') {
+            delete cmd.vertical;
+          }
+          delete cmd.layoutAlign;
+          delete cmd.layoutGrow;
+          delete cmd.layoutPositioning;
+        }
+
+        return cmd;
+      };
+      const commands = Array.isArray(incomingCommands)
+        ? incomingCommands.map(graphSanitizeCommand).filter(Boolean)
+        : [];
       console.log('Received commands:', commands);
       let success = 0;
       let failed = 0;
@@ -8988,6 +9055,28 @@ figma.ui.onmessage = async (msg: {
         const finalName = name || (node && node.name);
         if (finalName) {
           createdNodesByName.set(finalName, node);
+        }
+      };
+
+      const stripAutoLayoutDeep = (root: BaseNode, visited = new Set<string>()) => {
+        if (!root || root.removed) return;
+        if ('id' in root) {
+          if (visited.has(root.id)) return;
+          visited.add(root.id);
+        }
+
+        if ((root.type === 'FRAME' || root.type === 'COMPONENT' || root.type === 'COMPONENT_SET') && 'layoutMode' in root) {
+          try {
+            (root as FrameNode | ComponentNode | ComponentSetNode).layoutMode = 'NONE';
+          } catch (error) {
+            // Ignore nodes that do not allow layout mode mutation in this context.
+          }
+        }
+
+        if ('children' in root) {
+          for (const child of root.children) {
+            stripAutoLayoutDeep(child, visited);
+          }
         }
       };
 
@@ -13751,6 +13840,10 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (cmd.action === 'applyAutoLayout') {
+            if (enforceGraphManualLayout) {
+              console.log('[applyAutoLayout] Skipped for Create Graph manual-layout batch');
+              continue;
+            }
             console.log('[applyAutoLayout] Command triggered');
             const nodeIds = cmd.nodeIds || [];
             let nodes: SceneNode[] = [];
@@ -13817,6 +13910,10 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (cmd.action === 'easyWrapper') {
+            if (enforceGraphManualLayout) {
+              console.log('[easyWrapper] Skipped for Create Graph manual-layout batch');
+              continue;
+            }
             try {
               const nodeIds = cmd.nodeIds || [];
               let ewNodes: SceneNode[] = [];
@@ -18424,6 +18521,10 @@ figma.ui.onmessage = async (msg: {
               break;
 
             case 'setAutoLayout':
+              if (enforceGraphManualLayout) {
+                success++;
+                break;
+              }
               if (node.type === 'FRAME' || node.type === 'COMPONENT' || node.type === 'INSTANCE') {
                 const frame = node as FrameNode;
 
@@ -19646,9 +19747,17 @@ figma.ui.onmessage = async (msg: {
         }
       }
 
+      if (!executionCancelled && enforceGraphManualLayout) {
+        const visited = new Set<string>();
+        for (const [, node] of createdNodes) {
+          if (!node || node.removed) continue;
+          stripAutoLayoutDeep(node, visited);
+        }
+      }
+
       // Pass 5: Minimal Safety Enforcement (Linter Pass)
       // Only fix missing auto layout, never override explicit intent.
-      if (!executionCancelled) {
+      if (!executionCancelled && !enforceGraphManualLayout) {
         for (const node of createdNodes.values()) {
           if (executionCancelled) break;
           if (node && !node.removed && typeof node === 'object' && node.type === 'FRAME') {

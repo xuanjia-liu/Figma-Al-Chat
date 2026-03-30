@@ -747,7 +747,7 @@ export const uiLayoutTasks = [
               prompt += `\n- User Description/Data: ${values.description}`;
             }
 
-            prompt += `\n\nGenerate a clean, professional visualization. Use standard Figma frames, rectangles, and text nodes. Ensure proper hierarchy. DO NOT use auto layout for the graphic components of the chart (bars, lines, points, etc.) to allow for precise positioning; use it only for overall containers or legends if needed. Return ONLY JSON commands.`;
+            prompt += `\n\nGenerate a clean, professional visualization. Use only plain Figma frames, rectangles, vectors, and text nodes with manual positioning. DO NOT use auto layout anywhere in this chart, including wrappers, titles, legends, labels, or containers. DO NOT emit setAutoLayout. DO NOT emit applyAutoLayout. DO NOT emit easyWrapper with wrapper "autoLayout" or mode "convert". Do not set auto-layout-only properties such as layoutWrap, counterAxisSpacing, counterAxisAlignContent, primaryAxisAlignItems, counterAxisAlignItems, primaryAxisSizingMode, counterAxisSizingMode, or FILL/HUG sizing that depends on auto layout. Every chart element must be positioned with explicit x/y coordinates inside normal frames so radar charts and other plotted visuals stay precisely aligned. Return ONLY JSON commands.`;
             return prompt;
           }
         }
