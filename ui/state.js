@@ -60,6 +60,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'setImageFillFromSelection',
   'fillFromOnlineImage',
   'listAllComments',
+  'listAllStickies',
   'browseStyles',
   'googleFontPreview'
 ]);
@@ -75,6 +76,7 @@ export const NON_AI_LOCAL_TASKS = new Set([
 ]);
 
 export const COMMENTS_CACHE_TTL = 60000;
+export const STICKIES_CACHE_TTL = 60000;
 export const MAX_CHAT_ARCHIVES = 30;
 
 export const ASK_BACK_GUIDANCE = `\n\nFOLLOW-UP FORMAT:\nIf you need more information or want the user to pick from options, respond with:\n[ASK_USER_BACK]\n\`\`\`json\n{\"question\":\"<your question>\",\"options\":[\"option A\",\"option B\"],\"type\":\"list|grid\"}\n\`\`\`\nUse type:"grid" for icons/visual choices, "list" (default) for text. Omit explanatory text besides the question/options.`;

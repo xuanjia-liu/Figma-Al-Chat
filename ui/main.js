@@ -16,6 +16,7 @@ import {
   NON_AI_DIRECT_ACTIONS,
   NON_AI_LOCAL_TASKS,
   PLUGIN_SYSTEM_PROMPT,
+  STICKIES_CACHE_TTL,
   baseImageDimensions,
 } from './state.js';
 import { chatInlineHandlerNames, isCapabilityQuestion } from './features/chat.js';
@@ -23,6 +24,10 @@ import { createCommentsActionHandlers } from './features/comments/actions.js';
 import { createCommentsApi } from './features/comments/api.js';
 import { createCommentsDrawerHelpers } from './features/comments/drawer.js';
 import { commentsInlineHandlerNames } from './features/comments/index.js';
+import { createStickiesActionHandlers } from './features/stickies/actions.js';
+import { createStickiesApi } from './features/stickies/api.js';
+import { createStickiesDrawerHelpers } from './features/stickies/drawer.js';
+import { stickiesInlineHandlerNames } from './features/stickies/index.js';
 import { historyInlineHandlerNames } from './features/history.js';
 import { createInitialModelMetadata } from './features/models.js';
 import {
@@ -497,6 +502,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         if (expandBtn) {
           expandBtn.title = tu('actions.comments.drawer.moreAiActions');
         }
+      } else if (currentPromptAction?.directAction === 'listAllStickies') {
+        const promptStickiesContainer = document.getElementById('promptStickiesContainer');
+        if (promptStickiesContainer && promptStickiesContainer.offsetParent !== null) {
+          renderStickiesInDrawer(promptStickiesContainer);
+        }
+        updateStickyBatchActionsState();
       }
 
       refreshChatInputPlaceholder();
@@ -884,6 +895,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let commentNodePageMap = new Map(); // nodeId -> pageId mapping for filtering
     let figmaCommentsLastLoaded = 0; // Timestamp of last comments load
     let figmaCommentsLoading = false; // Flag to prevent concurrent loads
+    let figmaStickies = []; // Loaded FigJam stickies from plugin API
+    let currentStickiesScope = 'all'; // 'all' (File), 'page' (This page), 'selection' (Selection)
+    let figmaStickiesLastLoaded = 0; // Timestamp of last sticky load
+    let figmaStickiesLoading = false; // Flag to prevent concurrent loads
     // 1 minute cache TTL
     let showResolvedComments = false; // Toggle for showing resolved comments
     let figmaCurrentUser = null; // Current user info from Figma API (handle, id, etc.)
@@ -6559,10 +6574,12 @@ Rules:
             recordQuickActionUsage(actionName);
             closeCommandsDrawer();
             await handleExtractImagePrompt(actionName, actionIcon);
-          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview')) {
+          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview')) {
             // Handle actions that open in prompt drawer
             if (task.directAction === 'listAllComments') {
               ensureCommentsLoadedCached();
+            } else if (task.directAction === 'listAllStickies') {
+              ensureStickiesLoadedCached();
             }
             await openPromptDrawer({
               ...task,
@@ -7416,6 +7433,16 @@ CRITICAL RULES:
     let commentsWithReplyMatches = new Set();
     let commentsWithPeopleReplyMatches = new Set();
 
+    // Sticky drawer state
+    let stickiesSearchQuery = '';
+    let stickiesSortBy = 'canvas';
+    let selectedStickyIds = new Set();
+    let stickyMultiSelectEnabled = false;
+    let lastStickyFilteredCount = 0;
+    let lastStickyTotalCount = 0;
+    let stickyPeopleFilterExpanded = false;
+    let selectedStickyAuthorFilter = new Set();
+
     function getCommentsFeatureState() {
       return {
         figmaComments,
@@ -7446,10 +7473,33 @@ CRITICAL RULES:
       };
     }
 
+    function getStickiesFeatureState() {
+      return {
+        figmaStickies,
+        figmaStickiesLastLoaded,
+        figmaStickiesLoading,
+        currentStickiesScope,
+        figmaCurrentPageId,
+        lastKnownSelectionItems,
+        selectedStickyAuthorFilter,
+        stickiesSearchQuery,
+        stickiesSortBy,
+        selectedStickyIds,
+        stickyMultiSelectEnabled,
+        stickyPeopleFilterExpanded,
+      };
+    }
+
     function setCommentsFeatureState(partial) {
       if (Object.prototype.hasOwnProperty.call(partial, 'figmaComments')) figmaComments = partial.figmaComments;
       if (Object.prototype.hasOwnProperty.call(partial, 'figmaCommentsLastLoaded')) figmaCommentsLastLoaded = partial.figmaCommentsLastLoaded;
       if (Object.prototype.hasOwnProperty.call(partial, 'figmaCommentsLoading')) figmaCommentsLoading = partial.figmaCommentsLoading;
+    }
+
+    function setStickiesFeatureState(partial) {
+      if (Object.prototype.hasOwnProperty.call(partial, 'figmaStickies')) figmaStickies = partial.figmaStickies;
+      if (Object.prototype.hasOwnProperty.call(partial, 'figmaStickiesLastLoaded')) figmaStickiesLastLoaded = partial.figmaStickiesLastLoaded;
+      if (Object.prototype.hasOwnProperty.call(partial, 'figmaStickiesLoading')) figmaStickiesLoading = partial.figmaStickiesLoading;
     }
 
     const {
@@ -7513,6 +7563,50 @@ CRITICAL RULES:
       addMessage,
       sendToAI,
       cachedNodeNames,
+    });
+
+    const {
+      renderStickiesInDrawer: movedRenderStickiesInDrawer,
+    } = createStickiesDrawerHelpers({
+      getState: getStickiesFeatureState,
+      escapeHtml,
+      highlightSearchMatches,
+      tu,
+      setFilteredCounts: (filteredCount, totalCount) => {
+        lastStickyFilteredCount = filteredCount;
+        lastStickyTotalCount = totalCount;
+      },
+      updateStickyBatchActionsState,
+    });
+
+    const {
+      ensureStickiesLoaded: movedEnsureStickiesLoaded,
+    } = createStickiesApi({
+      STICKIES_CACHE_TTL,
+      requestStickies: () => runLocalActionRequest({
+        requestType: 'get-all-stickies',
+        resultType: 'all-stickies-result',
+        payload: {},
+        timeoutMs: 15000,
+      }),
+      getState: getStickiesFeatureState,
+      setStickiesState: setStickiesFeatureState,
+      showToast,
+      tu,
+    });
+
+    const {
+      summarizeStickiesFromDrawer: movedSummarizeStickiesFromDrawer,
+      handleListAllStickies: movedHandleListAllStickies,
+      handleSummarizeSelectedStickies: movedHandleSummarizeSelectedStickies,
+    } = createStickiesActionHandlers({
+      closePromptDrawer,
+      setMode,
+      chatInput,
+      sendMessage,
+      showToast,
+      addMessage,
+      sendToAI,
     });
 
     // Highlight matching keywords and linkify mentions
@@ -8463,6 +8557,18 @@ Generate a suitable, professional response.
       const mainBtn = document.querySelector('.prompt-action-main-btn');
       if (!mainBtn) return;
 
+      if (currentPromptAction?.directAction === 'listAllStickies') {
+        const { filteredStickies } = getFilteredStickiesForSummarize();
+        const count = filteredStickies.length;
+        const countSpan = mainBtn.querySelector('.summarize-count');
+        if (countSpan) {
+          countSpan.textContent = `(${count})`;
+        }
+        mainBtn.disabled = count === 0;
+        mainBtn.style.opacity = count === 0 ? '0.5' : '1';
+        return;
+      }
+
       const { filteredComments } = getFilteredCommentsForSummarize();
       const count = filteredComments.length;
 
@@ -9167,6 +9273,344 @@ Requirements:
     // Legacy handler - no longer used but kept for compatibility
     async function handleListAllComments(actionName, actionIcon) {
       return movedHandleListAllComments(actionName, actionIcon);
+    }
+
+    async function ensureStickiesLoaded(forceRefresh = false) {
+      return movedEnsureStickiesLoaded(forceRefresh);
+    }
+
+    function ensureStickiesLoadedCached() {
+      ensureStickiesLoaded().catch(() => { });
+    }
+
+    function getVisibleStickies() {
+      let visible = [...figmaStickies];
+
+      if (currentStickiesScope === 'page') {
+        visible = visible.filter((sticky) => sticky.pageId === figmaCurrentPageId);
+      } else if (currentStickiesScope === 'selection') {
+        const selectedIds = new Set();
+        (lastKnownSelectionItems || []).forEach((node) => {
+          selectedIds.add(node.id);
+          if (Array.isArray(node.descendantIds)) {
+            node.descendantIds.forEach((id) => selectedIds.add(id));
+          }
+        });
+        visible = visible.filter((sticky) => selectedIds.has(sticky.id));
+      }
+
+      if (selectedStickyAuthorFilter.size > 0) {
+        visible = visible.filter((sticky) => selectedStickyAuthorFilter.has(sticky.authorName || tu('actions.stickies.unknownAuthor')));
+      }
+
+      const query = stickiesSearchQuery.trim();
+      if (query) {
+        visible = visible.filter((sticky) => {
+          const haystack = [
+            sticky.text || '',
+            sticky.name || '',
+            sticky.authorName || '',
+            sticky.pageName || '',
+          ].join('\n').toLowerCase();
+          return haystack.includes(query);
+        });
+      }
+
+      const sortFns = {
+        viewport: (a, b) => ((a.position?.x || 0) + (a.position?.y || 0)) - ((b.position?.x || 0) + (b.position?.y || 0)),
+        page: (a, b) => (a.pageName || '').localeCompare(b.pageName || '') || (a.position?.y || 0) - (b.position?.y || 0),
+        author: (a, b) => (a.authorName || '').localeCompare(b.authorName || '') || (a.pageName || '').localeCompare(b.pageName || ''),
+        color: (a, b) => (a.color || '').localeCompare(b.color || '') || (a.authorName || '').localeCompare(b.authorName || ''),
+        length: (a, b) => (b.text || '').length - (a.text || '').length,
+        canvas: (a, b) => (a.position?.y || 0) - (b.position?.y || 0) || (a.position?.x || 0) - (b.position?.x || 0),
+      };
+
+      visible.sort(sortFns[stickiesSortBy] || sortFns.canvas);
+      return visible;
+    }
+
+    function getFilteredStickiesForSummarize(options = {}) {
+      const filteredStickies = getVisibleStickies();
+
+      if (options.selectedOnly) {
+        return {
+          filteredStickies: filteredStickies.filter((sticky) => selectedStickyIds.has(sticky.id)),
+        };
+      }
+
+      return { filteredStickies };
+    }
+
+    function renderStickiesInDrawer(container) {
+      movedRenderStickiesInDrawer(container);
+    }
+
+    async function populateStickiesInDrawer(forceRefresh = false) {
+      const container = document.getElementById('promptStickiesContainer');
+      if (!container) return;
+
+      container.innerHTML = `<div class="prompt-comments-loading">${tu('actions.stickies.loading')}</div>`;
+      const loaded = await ensureStickiesLoaded(forceRefresh);
+
+      if (!loaded && figmaStickies.length === 0) {
+        container.innerHTML = `<div class="prompt-comments-empty">${escapeHtml(tu('actions.stickies.empty'))}</div>`;
+        updateStickyBatchActionsState();
+        return;
+      }
+
+      renderStickiesInDrawer(container);
+    }
+
+    async function refreshStickiesInDrawer() {
+      figmaStickiesLastLoaded = 0;
+      await populateStickiesInDrawer(true);
+    }
+
+    function navigateToStickyNode(nodeId) {
+      if (!nodeId) {
+        showToast(tu('actions.stickies.noNodeId'), 'error');
+        return;
+      }
+      showToast(tu('actions.stickies.navigating'), 'info');
+      parent.postMessage({ pluginMessage: { type: 'navigate-to-node', nodeId } }, '*');
+    }
+
+    function copyStickyToChat(stickyId) {
+      const sticky = figmaStickies.find((item) => item.id === stickyId);
+      if (!sticky) return;
+
+      const currentText = chatInput.value;
+      const preview = (sticky.text || '').trim() || tu('actions.stickies.emptySticky');
+      const stickyContext = `[Sticky from ${sticky.authorName || tu('actions.stickies.unknownAuthor')}]: "${preview}"`;
+      chatInput.value = currentText ? `${currentText}\n\n${stickyContext}` : stickyContext;
+      chatInput.focus();
+      settingsModal.classList.remove('show');
+      showToast(tu('actions.stickies.addedToChatToast'), 'success');
+    }
+
+    function toggleStickyMultiSelect() {
+      stickyMultiSelectEnabled = !stickyMultiSelectEnabled;
+      const btn = document.getElementById('stickyMultiSelectToggle');
+      if (btn) {
+        btn.classList.toggle('active', stickyMultiSelectEnabled);
+      }
+      if (!stickyMultiSelectEnabled) {
+        selectedStickyIds.clear();
+      }
+      const container = document.getElementById('promptStickiesContainer');
+      if (container && figmaStickies.length > 0) {
+        renderStickiesInDrawer(container);
+      }
+    }
+
+    function handleStickyItemClick(event, stickyId) {
+      if (!stickyMultiSelectEnabled) return;
+      const target = event.target;
+      if (
+        target.tagName === 'BUTTON' ||
+        target.tagName === 'A' ||
+        target.tagName === 'INPUT' ||
+        target.closest('button') ||
+        target.closest('.comment-actions')
+      ) {
+        return;
+      }
+      const checkbox = event.currentTarget.querySelector('.comment-select-checkbox');
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        toggleStickySelection(stickyId, checkbox);
+      }
+    }
+
+    function toggleStickySelection(stickyId, checkbox) {
+      if (checkbox.checked) {
+        selectedStickyIds.add(stickyId);
+      } else {
+        selectedStickyIds.delete(stickyId);
+      }
+      updateStickyBatchActionsState();
+    }
+
+    function updateStickyBatchActionsState() {
+      const summarizeBtn = document.getElementById('batchSummarizeStickiesBtn');
+      const csvBtn = document.getElementById('batchStickiesCsvBtn');
+      const selectAllBtn = document.getElementById('selectAllStickiesBtn');
+      const count = selectedStickyIds.size;
+      const visible = getVisibleStickies();
+
+      if (summarizeBtn) summarizeBtn.disabled = count === 0;
+      if (csvBtn) csvBtn.disabled = visible.length === 0;
+      if (selectAllBtn) {
+        selectAllBtn.textContent = count > 0 ? tu('actions.stickies.deselectAll') : tu('actions.stickies.selectAll');
+      }
+
+      const countSpan = document.getElementById('stickiesCountDisplay');
+      if (countSpan) {
+        countSpan.textContent = `${stickyMultiSelectEnabled ? `${tu('actions.stickies.selectedCount', { count })} · ` : ''}${lastStickyFilteredCount}/${lastStickyTotalCount}`;
+      }
+
+      const mainBtn = document.querySelector('.prompt-action-main-btn');
+      if (mainBtn && currentPromptAction?.directAction === 'listAllStickies') {
+        const countSpanEl = mainBtn.querySelector('.summarize-count');
+        if (countSpanEl) countSpanEl.textContent = `(${visible.length})`;
+        mainBtn.disabled = visible.length === 0;
+        mainBtn.style.opacity = visible.length === 0 ? '0.5' : '1';
+      }
+    }
+
+    function selectAllVisibleStickies() {
+      const visible = getVisibleStickies();
+      const allVisibleSelected = visible.length > 0 && visible.every((sticky) => selectedStickyIds.has(sticky.id));
+      if (allVisibleSelected) {
+        visible.forEach((sticky) => selectedStickyIds.delete(sticky.id));
+      } else {
+        visible.forEach((sticky) => selectedStickyIds.add(sticky.id));
+      }
+      const container = document.getElementById('promptStickiesContainer');
+      if (container) {
+        renderStickiesInDrawer(container);
+      }
+    }
+
+    function switchStickiesScope(scope, btn) {
+      if (currentStickiesScope === scope) return;
+      currentStickiesScope = scope;
+      const tabs = btn.parentElement;
+      tabs.querySelectorAll('.pill-tab').forEach((tab) => tab.classList.remove('active'));
+      btn.classList.add('active');
+      if (scope === 'page' || scope === 'selection') {
+        parent.postMessage({ pluginMessage: { type: 'get-current-context' } }, '*');
+      }
+      const container = document.getElementById('promptStickiesContainer');
+      if (container) {
+        renderStickiesInDrawer(container);
+      }
+    }
+
+    let stickiesSearchTimer = null;
+    let isComposingStickiesSearch = false;
+
+    function handleStickiesSearchInput(value) {
+      if (isComposingStickiesSearch) return;
+      if (stickiesSearchTimer) clearTimeout(stickiesSearchTimer);
+      stickiesSearchTimer = setTimeout(() => {
+        stickiesSearchQuery = value.toLowerCase().trim();
+        const container = document.getElementById('promptStickiesContainer');
+        if (container) renderStickiesInDrawer(container);
+      }, 300);
+    }
+
+    function handleStickiesSearchCompositionStart() {
+      isComposingStickiesSearch = true;
+    }
+
+    function handleStickiesSearchCompositionEnd(event) {
+      isComposingStickiesSearch = false;
+      if (stickiesSearchTimer) clearTimeout(stickiesSearchTimer);
+      stickiesSearchTimer = setTimeout(() => {
+        stickiesSearchQuery = event.target.value.toLowerCase().trim();
+        const container = document.getElementById('promptStickiesContainer');
+        if (container) renderStickiesInDrawer(container);
+      }, 100);
+    }
+
+    function handleStickiesSort(value) {
+      stickiesSortBy = value;
+      const container = document.getElementById('promptStickiesContainer');
+      if (container) renderStickiesInDrawer(container);
+      const menu = document.getElementById('stickiesDropdownMenu');
+      if (menu) menu.classList.add('hidden');
+    }
+
+    function toggleStickiesDropdown(event) {
+      event.stopPropagation();
+      const menu = document.getElementById('stickiesDropdownMenu');
+      if (!menu) return;
+      menu.classList.toggle('hidden');
+      if (!menu.classList.contains('hidden')) {
+        const closeMenu = (e) => {
+          if (!menu.contains(e.target) && !event.currentTarget.contains(e.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('mousedown', closeMenu);
+          }
+        };
+        document.addEventListener('mousedown', closeMenu);
+      }
+    }
+
+    function toggleStickyPeopleFilter() {
+      stickyPeopleFilterExpanded = !stickyPeopleFilterExpanded;
+      const section = document.getElementById('stickyPeopleFilterSection');
+      const toggle = document.getElementById('stickyPeopleFilterToggle');
+      if (section) section.classList.toggle('expanded', stickyPeopleFilterExpanded);
+      if (toggle) toggle.classList.toggle('expanded', stickyPeopleFilterExpanded);
+    }
+
+    function toggleStickyAuthorChip(name) {
+      if (selectedStickyAuthorFilter.has(name)) {
+        selectedStickyAuthorFilter.delete(name);
+      } else {
+        selectedStickyAuthorFilter.add(name);
+        stickyPeopleFilterExpanded = true;
+      }
+      const container = document.getElementById('promptStickiesContainer');
+      if (container) renderStickiesInDrawer(container);
+    }
+
+    function clearStickyAuthorFilter() {
+      selectedStickyAuthorFilter.clear();
+      const container = document.getElementById('promptStickiesContainer');
+      if (container) renderStickiesInDrawer(container);
+    }
+
+    function toggleStickyMoreMenu(event, stickyId) {
+      event.stopPropagation();
+      document.querySelectorAll('[id^="sticky-more-menu-"]').forEach((menu) => {
+        if (menu.id !== `sticky-more-menu-${stickyId}`) menu.classList.add('hidden');
+      });
+      const menu = document.getElementById(`sticky-more-menu-${stickyId}`);
+      if (!menu) return;
+      menu.classList.toggle('hidden');
+    }
+
+    function downloadStickiesAsCSV() {
+      const { filteredStickies } = getFilteredStickiesForSummarize();
+      if (!filteredStickies.length) {
+        showToast(tu('actions.stickies.noStickiesToExport'), 'info');
+        return;
+      }
+
+      let csvContent = 'Author,Text,Page,Color,Sticky Name,Sticky ID\n';
+      filteredStickies.forEach((sticky) => {
+        const author = String(sticky.authorName || '').replace(/"/g, '""');
+        const text = String(sticky.text || '').replace(/"/g, '""');
+        const page = String(sticky.pageName || '').replace(/"/g, '""');
+        const color = String(sticky.color || '').replace(/"/g, '""');
+        const name = String(sticky.name || '').replace(/"/g, '""');
+        csvContent += `"${author}","${text}","${page}","${color}","${name}","${sticky.id}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `figjam-stickies-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    async function summarizeStickiesFromDrawer() {
+      return movedSummarizeStickiesFromDrawer(getFilteredStickiesForSummarize);
+    }
+
+    async function batchSummarizeSelectedStickies() {
+      return movedHandleSummarizeSelectedStickies(getFilteredStickiesForSummarize);
+    }
+
+    async function handleListAllStickies(actionName, actionIcon) {
+      return movedHandleListAllStickies(actionName, actionIcon);
     }
 
     // Show comments modal with enhanced UI including AI reply
@@ -13211,6 +13655,39 @@ Generate ONLY the reply text, nothing else.`;
           selectedCommentIds.clear();
           // Populate comments asynchronously after drawer opens
           setTimeout(() => populateCommentsInDrawer(), 50);
+        } else if (actionData.directAction === 'listAllStickies') {
+          const submitBtn = document.getElementById('promptDrawerSubmit');
+          if (submitBtn) {
+            submitBtn.style.display = 'none';
+          }
+          const footer = document.querySelector('.prompt-drawer-footer');
+          if (footer) {
+            const existingGroup = footer.querySelector('.ai-action-group');
+            if (existingGroup) existingGroup.remove();
+            const existingBtn = footer.querySelector('.prompt-comments-summarize-btn');
+            if (existingBtn) existingBtn.remove();
+
+            const cancelBtn = footer.querySelector('.prompt-drawer-cancel');
+            const summarizeBtn = document.createElement('button');
+            summarizeBtn.className = 'prompt-comments-summarize-btn prompt-action-main-btn';
+            summarizeBtn.type = 'button';
+            summarizeBtn.title = tu('actions.stickies.summarizeAllTitle');
+            summarizeBtn.innerHTML = `
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>
+              ${tu('actions.stickies.summarizeAll')} <span class="summarize-count">(0)</span>
+            `;
+            summarizeBtn.onclick = () => summarizeStickiesFromDrawer();
+
+            if (cancelBtn) {
+              footer.insertBefore(summarizeBtn, cancelBtn);
+            } else {
+              footer.appendChild(summarizeBtn);
+            }
+          }
+          stickyMultiSelectEnabled = false;
+          selectedStickyIds.clear();
+          selectedStickyAuthorFilter.clear();
+          setTimeout(() => populateStickiesInDrawer(), 50);
         } else if (actionData.directAction === 'browseStyles') {
           // Setup styles container
           const submitBtn = document.getElementById('promptDrawerSubmit');
@@ -14514,6 +14991,36 @@ Generate ONLY the reply text, nothing else.`;
               </div>
               <div class="prompt-comments-container" id="promptCommentsContainer">
                 <div class="prompt-comments-loading">${tu('actions.comments.loading')}</div>
+              </div>
+            </div>
+          `;
+        } else if (field.type === 'stickies') {
+          fieldHtml += `
+            <div class="prompt-field${wrapperClass} prompt-field-comments"${conditionalAttrs}>
+              <div class="prompt-field-header">
+                <div class="pill-tab-container">
+                  <button class="pill-tab ${currentStickiesScope === 'all' ? 'active' : ''}" onclick="switchStickiesScope('all', this)" type="button">${tu('actions.comments.fileTab')}</button>
+                  <button class="pill-tab ${currentStickiesScope === 'page' ? 'active' : ''}" onclick="switchStickiesScope('page', this)" type="button">${tu('actions.comments.pageTab')}</button>
+                  <button class="pill-tab ${currentStickiesScope === 'selection' ? 'active' : ''}" onclick="switchStickiesScope('selection', this)" type="button">${tu('actions.comments.selectionTab')}</button>
+                </div>
+                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                  <button class="prompt-comments-toggle-btn" id="stickyMultiSelectToggle" type="button" onclick="toggleStickyMultiSelect()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                      <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    ${tu('actions.comments.select')}
+                  </button>
+                  <button class="prompt-comments-refresh-btn" type="button" onclick="refreshStickiesInDrawer()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                      <path d="M23 4v6h-6M1 20v-6h6"/>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="prompt-comments-container" id="promptStickiesContainer">
+                <div class="prompt-comments-loading">${tu('actions.stickies.loading')}</div>
               </div>
             </div>
           `;
@@ -33436,6 +33943,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
             const promptContainer = document.getElementById('promptCommentsContainer');
             if (promptContainer) renderCommentsInDrawer(promptContainer);
           }
+          if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'selection') {
+            const promptContainer = document.getElementById('promptStickiesContainer');
+            if (promptContainer) renderStickiesInDrawer(promptContainer);
+          }
           break;
 
         case 'nodes-pages-result':
@@ -33533,6 +34044,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
           if (currentCommentsScope === 'page') {
             const promptContainer = document.getElementById('promptCommentsContainer');
             if (promptContainer) renderCommentsInDrawer(promptContainer);
+          }
+          if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'page') {
+            const promptContainer = document.getElementById('promptStickiesContainer');
+            if (promptContainer) renderStickiesInDrawer(promptContainer);
           }
           break;
 
@@ -34436,6 +34951,7 @@ Update the text content for all selected nodes accordingly.`;
     const inlineHandlerNames = Array.from(new Set([
       ...chatInlineHandlerNames,
       ...commentsInlineHandlerNames,
+      ...stickiesInlineHandlerNames,
       ...historyInlineHandlerNames,
     ]));
 

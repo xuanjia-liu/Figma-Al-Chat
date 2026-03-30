@@ -471,6 +471,72 @@ function normalizeManagedSpacing(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+function normalizePersonNameForMatch(value: string): string {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[\s_\-./]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenizedPersonNameForMatch(value: string): string[] {
+  const normalized = normalizePersonNameForMatch(value);
+  if (!normalized) return [];
+  return normalized.split(' ').filter(Boolean);
+}
+
+function containsCjkCharacters(value: string): boolean {
+  return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(String(value || ''));
+}
+
+function isLikelyOrgToken(token: string): boolean {
+  return /^[a-z]{1,6}\d*$/i.test(token);
+}
+
+function getPersonNameMatchAliases(value: string): string[] {
+  const raw = String(value || '').normalize('NFKC').trim();
+  if (!raw) return [];
+
+  const aliases = new Set<string>();
+  const addAlias = (candidate: string) => {
+    const normalized = normalizePersonNameForMatch(candidate);
+    if (!normalized) return;
+    aliases.add(normalized);
+
+    const compact = normalized.replace(/\s+/g, '');
+    if (compact) aliases.add(compact);
+  };
+
+  addAlias(raw);
+
+  const withoutParens = raw.replace(/\([^)]*\)|（[^）]*）/g, ' ').trim();
+  addAlias(withoutParens);
+
+  const tokens = tokenizedPersonNameForMatch(withoutParens);
+  if (!tokens.length) return Array.from(aliases);
+
+  addAlias(tokens.join(' '));
+  addAlias(tokens.join(''));
+
+  const hasCjk = containsCjkCharacters(withoutParens);
+  if (hasCjk && tokens.length > 1 && isLikelyOrgToken(tokens[0])) {
+    const withoutLeadingOrg = tokens.slice(1);
+    addAlias(withoutLeadingOrg.join(' '));
+    addAlias(withoutLeadingOrg.join(''));
+  }
+
+  if (hasCjk && tokens.length > 1 && isLikelyOrgToken(tokens[tokens.length - 1])) {
+    const withoutTrailingOrg = tokens.slice(0, -1);
+    addAlias(withoutTrailingOrg.join(' '));
+    addAlias(withoutTrailingOrg.join(''));
+  }
+
+  return Array.from(aliases);
+}
+
 function buildAffixedString(
   original: string,
   prefix: string,
@@ -5209,6 +5275,256 @@ figma.ui.onmessage = async (msg: {
             currentPageName: '',
             error: 'Failed to get current context'
           }
+        });
+      }
+      break;
+    }
+
+    case 'get-all-stickies': {
+      try {
+        if (figma.editorType !== 'figjam') {
+          figma.ui.postMessage({
+            type: 'all-stickies-result',
+            editorType: figma.editorType,
+            stickies: [],
+          });
+          break;
+        }
+
+        // This plugin uses dynamic-page access, so load pages before traversing them.
+        await figma.loadAllPagesAsync();
+        const authorPhotoCandidates: Array<{ name: string; photoUrl: string }> = [];
+        try {
+          for (const user of figma.activeUsers) {
+            if (user?.name && user.photoUrl) {
+              authorPhotoCandidates.push({
+                name: user.name,
+                photoUrl: user.photoUrl,
+              });
+            }
+          }
+        } catch (error) {
+          // Ignore active user lookup failures and fall back to initials-only avatars.
+        }
+
+        function buildStickyAuthorPhotoMatcher(candidates: Array<{ name: string; photoUrl: string }>) {
+          const exactByName = new Map<string, string>();
+          const aliasToCandidates = new Map<string, Array<{ name: string; photoUrl: string }>>();
+
+          for (const candidate of candidates) {
+            if (!candidate?.name || !candidate.photoUrl) continue;
+
+            if (!exactByName.has(candidate.name)) {
+              exactByName.set(candidate.name, candidate.photoUrl);
+            }
+
+            for (const alias of getPersonNameMatchAliases(candidate.name)) {
+              const existing = aliasToCandidates.get(alias) || [];
+              existing.push(candidate);
+              aliasToCandidates.set(alias, existing);
+            }
+          }
+
+          return (authorName: string): string | null => {
+            if (!authorName) return null;
+
+            const exact = exactByName.get(authorName);
+            if (exact) return exact;
+
+            const authorAliases = getPersonNameMatchAliases(authorName);
+            if (!authorAliases.length) return null;
+
+            for (const alias of authorAliases) {
+              const aliasMatches = aliasToCandidates.get(alias) || [];
+              const exactAliasMatch = aliasMatches.find((candidate) => candidate.photoUrl);
+              if (exactAliasMatch?.photoUrl) return exactAliasMatch.photoUrl;
+            }
+
+            const authorTokens = Array.from(new Set(
+              authorAliases.reduce<string[]>((tokens, alias) => {
+                tokens.push(...alias.split(/\s+/).filter(Boolean));
+                return tokens;
+              }, []),
+            ));
+            if (!authorTokens.length) return null;
+
+            let bestPhotoUrl: string | null = null;
+            let bestScore = 0;
+
+            for (const candidate of candidates) {
+              if (!candidate?.name || !candidate.photoUrl) continue;
+
+              const candidateAliases = getPersonNameMatchAliases(candidate.name);
+              if (!candidateAliases.length) continue;
+
+              let score = 0;
+
+              for (const authorAlias of authorAliases) {
+                for (const candidateAlias of candidateAliases) {
+                  if (authorAlias === candidateAlias) {
+                    score = Math.max(score, 100 + candidateAlias.length);
+                    continue;
+                  }
+
+                  if (authorAlias.length >= 2 && candidateAlias.length >= 2) {
+                    if (authorAlias.includes(candidateAlias) || candidateAlias.includes(authorAlias)) {
+                      score = Math.max(score, 70 + Math.min(authorAlias.length, candidateAlias.length));
+                    }
+                  }
+                }
+              }
+
+              const candidateTokens = Array.from(new Set(
+                candidateAliases.reduce<string[]>((tokens, alias) => {
+                  tokens.push(...alias.split(/\s+/).filter(Boolean));
+                  return tokens;
+                }, []),
+              ));
+              if (candidateTokens.length) {
+                let tokenScore = 0;
+                let strongTokenHits = 0;
+
+                for (const authorToken of authorTokens) {
+                  if (candidateTokens.includes(authorToken)) {
+                    tokenScore += authorToken.length >= 2 ? 3 : 1;
+                    if (authorToken.length >= 2) strongTokenHits += 1;
+                  } else if (
+                    authorToken.length >= 2 &&
+                    candidateTokens.some((candidateToken) => candidateToken.length >= 2 && (candidateToken.includes(authorToken) || authorToken.includes(candidateToken)))
+                  ) {
+                    tokenScore += 1;
+                  }
+                }
+
+                const coverage = tokenScore / Math.max(authorTokens.length * 3, 1);
+                if (strongTokenHits >= 2 && coverage >= 0.55) {
+                  score = Math.max(score, 40 + Math.round(coverage * 20));
+                } else if (strongTokenHits >= 1 && coverage >= 0.85) {
+                  score = Math.max(score, 35 + Math.round(coverage * 15));
+                }
+              }
+
+              if (score > bestScore) {
+                bestScore = score;
+                bestPhotoUrl = candidate.photoUrl;
+              }
+            }
+
+            return bestScore >= 45 ? bestPhotoUrl : null;
+          };
+        }
+
+        const stickies: Array<{
+          id: string;
+          text: string;
+          name: string;
+          pageId: string;
+          pageName: string;
+          authorName: string;
+          authorPhotoUrl: string | null;
+          authorVisible: boolean;
+          color: string | null;
+          position: { x: number; y: number };
+              width: number;
+              height: number;
+              stamps: Array<{
+                id: string;
+                name: string;
+                preview: string;
+                author: {
+                  id: string | null;
+                  name: string;
+                  photoUrl: string | null;
+                } | null;
+                position: { x: number; y: number };
+                rotation: number;
+              }>;
+            }> = [];
+
+        for (const page of figma.root.children) {
+          const pageStickies = page.findAll((node) => node.type === 'STICKY' && isEffectivelyVisible(node as SceneNode)) as StickyNode[];
+          for (const sticky of pageStickies) {
+            const solidFill = Array.isArray(sticky.fills)
+              ? sticky.fills.find((fill): fill is SolidPaint => fill.type === 'SOLID')
+              : null;
+            const transform = sticky.absoluteTransform;
+            const stamps = await Promise.all(
+              sticky.stuckNodes
+                .filter((node): node is StampNode => node.type === 'STAMP')
+                .map(async (stamp) => {
+                  let author: { id: string | null; name: string; photoUrl: string | null } | null = null;
+                  try {
+                    const authorData = await stamp.getAuthorAsync();
+                    if (authorData) {
+                      author = {
+                        id: authorData.id || null,
+                        name: authorData.name || 'Unknown',
+                        photoUrl: authorData.photoUrl || null,
+                      };
+                      if (author.photoUrl && author.name) {
+                        authorPhotoCandidates.push({
+                          name: author.name,
+                          photoUrl: author.photoUrl,
+                        });
+                      }
+                    }
+                  } catch (error) {
+                    // Ignore individual author lookup failures and keep stamp visible.
+                  }
+
+                  const preview = (stamp.name || '').trim() || 'Stamp';
+                  return {
+                    id: stamp.id,
+                    name: stamp.name || '',
+                    preview,
+                    author,
+                    position: {
+                      x: stamp.absoluteTransform[0][2] + stamp.width / 2,
+                      y: stamp.absoluteTransform[1][2] + stamp.height / 2,
+                    },
+                    rotation: stamp.rotation,
+                  };
+                }),
+            );
+
+            stickies.push({
+              id: sticky.id,
+              text: sticky.text?.characters || '',
+              name: sticky.name || '',
+              pageId: page.id,
+              pageName: page.name,
+              authorName: sticky.authorName || '',
+              authorPhotoUrl: null,
+              authorVisible: sticky.authorVisible,
+              color: solidFill ? rgbToHex(solidFill.color.r, solidFill.color.g, solidFill.color.b).toUpperCase() : null,
+              position: {
+                x: transform[0][2] + sticky.width / 2,
+                y: transform[1][2] + sticky.height / 2,
+              },
+              width: sticky.width,
+              height: sticky.height,
+              stamps,
+            });
+          }
+        }
+
+        const findStickyAuthorPhotoUrl = buildStickyAuthorPhotoMatcher(authorPhotoCandidates);
+        for (const sticky of stickies) {
+          sticky.authorPhotoUrl = findStickyAuthorPhotoUrl(sticky.authorName || '');
+        }
+
+        figma.ui.postMessage({
+          type: 'all-stickies-result',
+          editorType: figma.editorType,
+          stickies,
+        });
+      } catch (error) {
+        console.error('Failed to gather FigJam stickies:', error);
+        figma.ui.postMessage({
+          type: 'all-stickies-result',
+          editorType: figma.editorType,
+          stickies: [],
+          error: error instanceof Error ? error.message : 'Failed to load FigJam stickies',
         });
       }
       break;

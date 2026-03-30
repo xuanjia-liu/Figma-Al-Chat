@@ -7,6 +7,7 @@ import {
   userResearchTasks,
 } from './content.js';
 import { quickCreateImageTasks, stylingImageTasks } from './images.js';
+import { stickiesTasks } from './stickies.js';
 import { createQuickCreateUiTasks, uiLayoutTasks } from './ui-layout.js';
 import { quickCreateStyleTasks, stylingImageInsertIndex, stylingTasks } from './styles.js';
 
@@ -64,7 +65,10 @@ export function createAgentTasks(deps = {}) {
       duplicateWithInstructionsTask,
       randomizeSelectedInstanceTask,
     ],
-    'FigJam': figJamTasks,
+    'FigJam': [
+      ...stickiesTasks,
+      ...figJamTasks,
+    ],
     'User Research': userResearchTasks,
     'Comments': commentsTasks,
   };

@@ -2187,6 +2187,11 @@
       object-fit: cover;
     }
 
+    .sticky-author-avatar {
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
+
     .comment-header-text {
       display: flex;
       flex-direction: column;
@@ -3417,6 +3422,73 @@
 
     .prompt-comment-item.selectable:hover {
       background: var(--bg-hover);
+    }
+
+    .prompt-sticky-item {
+      background: linear-gradient(180deg, var(--sticky-row-bg, var(--bg-secondary)), color-mix(in srgb, var(--sticky-row-bg, var(--bg-secondary)) 82%, transparent));
+      border-left: 3px solid var(--sticky-row-border, var(--border));
+    }
+
+    .prompt-sticky-item.selectable:hover {
+      background: linear-gradient(180deg, color-mix(in srgb, var(--sticky-row-bg, var(--bg-hover)) 92%, var(--bg-hover)), color-mix(in srgb, var(--sticky-row-bg, var(--bg-hover)) 80%, transparent));
+    }
+
+    .prompt-sticky-empty {
+      color: var(--text-tertiary);
+      font-style: italic;
+    }
+
+    .prompt-stamp-replies {
+      margin-top: var(--space-sm);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    .prompt-stamp-item {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 2px 2px 4px;
+      margin-bottom: 0;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--bg-secondary);
+    }
+
+    .prompt-stamp-header {
+      margin-bottom: 0;
+      gap: 8px;
+    }
+
+    .prompt-stamp-item .comment-author {
+      padding-top: 0;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .prompt-stamp-item .comment-avatar {
+      width: 18px;
+      height: 18px;
+      font-size: 9px;
+    }
+
+    .prompt-stamp-preview {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 600;
     }
 
     /* Page badge */
