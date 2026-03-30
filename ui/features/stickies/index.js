@@ -13,6 +13,7 @@ export const stickiesInlineHandlerNames = [
   'selectAllVisibleStickies',
   'summarizeStickiesFromDrawer',
   'switchStickiesScope',
+  'toggleShowEmptyStickies',
   'toggleStickyMoreMenu',
   'toggleStickyMultiSelect',
   'toggleStickyPeopleFilter',

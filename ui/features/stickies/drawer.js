@@ -3,6 +3,10 @@ function getStickyPreviewText(sticky) {
   return text || '';
 }
 
+function isStickyEmpty(sticky) {
+  return !getStickyPreviewText(sticky);
+}
+
 function getInitial(name, tu) {
   const safe = (name || tu('actions.stickies.unknownAuthor')).trim();
   return safe.substring(0, 1).toUpperCase();
@@ -153,6 +157,7 @@ export function createStickiesDrawerHelpers({
       selectedStickyIds,
       stickyMultiSelectEnabled,
       stickyPeopleFilterExpanded,
+      showEmptyStickies,
     } = getState();
 
     let filteredStickies = [...figmaStickies];
@@ -172,6 +177,10 @@ export function createStickiesDrawerHelpers({
 
     if (selectedStickyAuthorFilter.size > 0) {
       filteredStickies = filteredStickies.filter((sticky) => selectedStickyAuthorFilter.has(sticky.authorName || tu('actions.stickies.unknownAuthor')));
+    }
+
+    if (!showEmptyStickies) {
+      filteredStickies = filteredStickies.filter((sticky) => !isStickyEmpty(sticky));
     }
 
     const query = stickiesSearchQuery.trim();

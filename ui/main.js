@@ -7442,6 +7442,7 @@ CRITICAL RULES:
     let lastStickyTotalCount = 0;
     let stickyPeopleFilterExpanded = false;
     let selectedStickyAuthorFilter = new Set();
+    let showEmptyStickies = false;
 
     function getCommentsFeatureState() {
       return {
@@ -7487,6 +7488,7 @@ CRITICAL RULES:
         selectedStickyIds,
         stickyMultiSelectEnabled,
         stickyPeopleFilterExpanded,
+        showEmptyStickies,
       };
     }
 
@@ -9303,6 +9305,10 @@ Requirements:
         visible = visible.filter((sticky) => selectedStickyAuthorFilter.has(sticky.authorName || tu('actions.stickies.unknownAuthor')));
       }
 
+      if (!showEmptyStickies) {
+        visible = visible.filter((sticky) => typeof sticky.text === 'string' && sticky.text.trim().length > 0);
+      }
+
       const query = stickiesSearchQuery.trim();
       if (query) {
         visible = visible.filter((sticky) => {
@@ -9553,6 +9559,12 @@ Requirements:
         selectedStickyAuthorFilter.add(name);
         stickyPeopleFilterExpanded = true;
       }
+      const container = document.getElementById('promptStickiesContainer');
+      if (container) renderStickiesInDrawer(container);
+    }
+
+    function toggleShowEmptyStickies() {
+      showEmptyStickies = !showEmptyStickies;
       const container = document.getElementById('promptStickiesContainer');
       if (container) renderStickiesInDrawer(container);
     }
@@ -13687,6 +13699,7 @@ Generate ONLY the reply text, nothing else.`;
           stickyMultiSelectEnabled = false;
           selectedStickyIds.clear();
           selectedStickyAuthorFilter.clear();
+          showEmptyStickies = false;
           setTimeout(() => populateStickiesInDrawer(), 50);
         } else if (actionData.directAction === 'browseStyles') {
           // Setup styles container
@@ -15010,6 +15023,12 @@ Generate ONLY the reply text, nothing else.`;
                       <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
                     </svg>
                     ${tu('actions.comments.select')}
+                  </button>
+                  <button class="prompt-comments-toggle-btn${showEmptyStickies ? ' active' : ''}" id="showEmptyStickiesToggleHeader" type="button" onclick="toggleShowEmptyStickies()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                      <path d="M3 5h18M6 12h12M10 19h4" />
+                    </svg>
+                    ${showEmptyStickies ? tu('actions.stickies.hideEmpty') : tu('actions.stickies.showAll')}
                   </button>
                   <button class="prompt-comments-refresh-btn" type="button" onclick="refreshStickiesInDrawer()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">

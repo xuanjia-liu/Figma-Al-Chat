@@ -11,6 +11,6 @@ export const stickiesTasks = [
         label: 'FigJam Stickies',
       },
     ],
-    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h5"/></svg>',
+    icon: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" viewBox="0 0 24 24"><path d="M13.875 19.875h-9.75V4.125h15.75v9.75z"/><path d="M13.125 19.875v-6.75h6.75"/></svg>',
   },
 ];
