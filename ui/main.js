@@ -53,6 +53,9 @@ import {
   UX_GUIDELINES,
 } from './config/agent-data.js';
 import lineiconsFreeGlyphsJson from './data/lineicons-free-glyphs.json';
+import materialSymbolsOutlinedGlyphsJson from './data/material-symbols-outlined-glyphs.json';
+import materialSymbolsRoundedGlyphsJson from './data/material-symbols-rounded-glyphs.json';
+import materialSymbolsSharpGlyphsJson from './data/material-symbols-sharp-glyphs.json';
 import {
   DEFAULT_SETTINGS_LOCALE,
   getSettingsTranslation,
@@ -18221,18 +18224,23 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       },
       'Material Symbols Outlined': {
         displayName: 'Material Symbols Outlined',
+        canonicalLoadFamilies: [
+          'Material Symbols Outlined',
+          'Material Symbols Outlined Regular',
+          'MaterialSymbolsOutlined'
+        ],
         familyAliases: [
           'Material Symbols Outlined',
-          'MaterialSymbolsOutlined',
-          'Material Symbols Outlined Regular'
+          'Material Symbols Outlined Regular',
+          'MaterialSymbolsOutlined'
         ],
         defaultStyle: 'Regular',
         requiredStyles: ['Regular'],
         searchMode: 'iconify',
         iconifyPrefixes: ['material-symbols'],
         unicodeSource: {
-          type: 'ligature-css',
-          url: 'https://cdn.jsdelivr.net/npm/material-symbols@0.35.0/outlined.css'
+          type: 'bundled-glyphs',
+          url: 'ui/data/material-symbols-outlined-glyphs.json'
         },
         useLigatureFallback: true,
         ligatureFamily: 'material-symbols-outlined',
@@ -18241,18 +18249,23 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       },
       'Material Symbols Rounded': {
         displayName: 'Material Symbols Rounded',
+        canonicalLoadFamilies: [
+          'Material Symbols Rounded',
+          'Material Symbols Rounded Regular',
+          'MaterialSymbolsRounded'
+        ],
         familyAliases: [
           'Material Symbols Rounded',
-          'MaterialSymbolsRounded',
-          'Material Symbols Rounded Regular'
+          'Material Symbols Rounded Regular',
+          'MaterialSymbolsRounded'
         ],
         defaultStyle: 'Regular',
         requiredStyles: ['Regular'],
         searchMode: 'iconify',
         iconifyPrefixes: ['material-symbols'],
         unicodeSource: {
-          type: 'ligature-css',
-          url: 'https://cdn.jsdelivr.net/npm/material-symbols@0.35.0/rounded.css'
+          type: 'bundled-glyphs',
+          url: 'ui/data/material-symbols-rounded-glyphs.json'
         },
         useLigatureFallback: true,
         ligatureFamily: 'material-symbols-rounded',
@@ -18261,18 +18274,23 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       },
       'Material Symbols Sharp': {
         displayName: 'Material Symbols Sharp',
+        canonicalLoadFamilies: [
+          'Material Symbols Sharp',
+          'Material Symbols Sharp Regular',
+          'MaterialSymbolsSharp'
+        ],
         familyAliases: [
           'Material Symbols Sharp',
-          'MaterialSymbolsSharp',
-          'Material Symbols Sharp Regular'
+          'Material Symbols Sharp Regular',
+          'MaterialSymbolsSharp'
         ],
         defaultStyle: 'Regular',
         requiredStyles: ['Regular'],
         searchMode: 'iconify',
         iconifyPrefixes: ['material-symbols'],
         unicodeSource: {
-          type: 'ligature-css',
-          url: 'https://cdn.jsdelivr.net/npm/material-symbols@0.35.0/sharp.css'
+          type: 'bundled-glyphs',
+          url: 'ui/data/material-symbols-sharp-glyphs.json'
         },
         useLigatureFallback: true,
         ligatureFamily: 'material-symbols-sharp',
@@ -18586,6 +18604,33 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return Array.from(set);
     }
 
+    /** Map Iconify ids (hyphen + -outline/-rounded/-sharp) to Google codepoints file keys (underscore). */
+    function normalizeMaterialSymbolIconifyNameToCodepointKey(iconNameHyphen) {
+      let s = String(iconNameHyphen || '')
+        .toLowerCase()
+        .trim();
+      for (let i = 0; i < 12; i++) {
+        const before = s;
+        s = s
+          .replace(/-outline-rounded$/i, '')
+          .replace(/-outline-sharp$/i, '')
+          .replace(/-rounded-outline$/i, '')
+          .replace(/-sharp-outline$/i, '')
+          .replace(/-rounded$/i, '')
+          .replace(/-sharp$/i, '')
+          .replace(/-outline$/i, '')
+          .replace(/-fill(?:ed)?$/i, '');
+        if (s === before) break;
+      }
+      return s.replace(/-/g, '_');
+    }
+
+    const MATERIAL_SYMBOLS_GLYPHS_BUNDLED = {
+      'Material Symbols Outlined': materialSymbolsOutlinedGlyphsJson,
+      'Material Symbols Rounded': materialSymbolsRoundedGlyphsJson,
+      'Material Symbols Sharp': materialSymbolsSharpGlyphsJson
+    };
+
     function unicodeHexToChar(hexCode) {
       if (typeof hexCode !== 'string') return null;
       const normalized = hexCode.trim().replace(/^U\+/i, '').toLowerCase();
@@ -18647,6 +18692,13 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
             if (char) unicodeMap.set(String(name).toLowerCase(), char);
           });
         }
+        const msBundled = MATERIAL_SYMBOLS_GLYPHS_BUNDLED[fontFamilyName];
+        if (msBundled && msBundled.glyphs) {
+          Object.entries(msBundled.glyphs).forEach(([name, hex]) => {
+            const char = unicodeHexToChar(String(hex));
+            if (char) unicodeMap.set(String(name).toLowerCase(), char);
+          });
+        }
         const unicodeSource = config.unicodeSource;
         if (unicodeMap.size === 0 && unicodeSource?.url) {
           const res = await fetch(unicodeSource.url, { cache: 'no-store' });
@@ -18695,6 +18747,19 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       const candidates = [];
       if (fontFamilyName === 'Material Icons') {
         candidates.push(...buildMaterialIconNameCandidates(normalizedName));
+      } else if (
+        fontFamilyName === 'Material Symbols Outlined' ||
+        fontFamilyName === 'Material Symbols Rounded' ||
+        fontFamilyName === 'Material Symbols Sharp'
+      ) {
+        const codeKey = normalizeMaterialSymbolIconifyNameToCodepointKey(iconName);
+        candidates.push(codeKey);
+        candidates.push(normalizedName.replace(/-/g, '_'));
+        const noTrailNum = normalizedName.replace(/-\d+$/i, '');
+        if (noTrailNum !== normalizedName) {
+          candidates.push(normalizeMaterialSymbolIconifyNameToCodepointKey(noTrailNum));
+          candidates.push(noTrailNum.replace(/-/g, '_'));
+        }
       } else if (fontFamilyName === 'Lineicons Free') {
         candidates.push(normalizedName);
         if (normalizedName.startsWith('lni-')) {
@@ -18711,7 +18776,10 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         candidates.push(normalizedName.replace(/-(rounded|sharp|fill|filled)$/i, '').replace(/-/g, '_'));
       }
 
+      const seen = new Set();
       for (const key of candidates) {
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
         if (unicodeMap.has(key)) return unicodeMap.get(key);
       }
 
@@ -18732,13 +18800,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
 
       if (config.ligatureFamily?.startsWith('material-symbols')) {
-        let ligatureName = normalizedName;
-        if (config.materialSymbolVariant === 'rounded') {
-          ligatureName = ligatureName.replace(/-rounded$/i, '');
-        } else if (config.materialSymbolVariant === 'sharp') {
-          ligatureName = ligatureName.replace(/-sharp$/i, '');
-        }
-        return ligatureName.replace(/-/g, '_');
+        return normalizeMaterialSymbolIconifyNameToCodepointKey(iconName);
       }
 
       return null;
