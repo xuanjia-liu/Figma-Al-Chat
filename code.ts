@@ -810,6 +810,52 @@ async function smartLoadFont(font: FontName): Promise<FontName> {
   return fallback;
 }
 
+/** Single load attempt; updates loadedFontsCache on success (same cache as smartLoadFont). */
+async function tryLoadFontOnceForCache(font: FontName): Promise<boolean> {
+  const key = `${font.family}::${font.style}`;
+  if (loadedFontsCache.has(key)) return true;
+  try {
+    await figma.loadFontAsync(font);
+    loadedFontsCache.add(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Try primary + candidate family names with style fallbacks. Used when listAvailableFontsAsync
+ * omits locally installed fonts but loadFontAsync still succeeds (common for desktop OTF/TTF).
+ */
+async function resolveIconFontLoad(
+  primaryFamily: string,
+  preferredStyle: string,
+  candidateFamilies: string[]
+): Promise<FontName | null> {
+  const ordered = [...new Set([primaryFamily, ...candidateFamilies].filter((f): f is string => typeof f === 'string' && !!f.trim()))];
+  for (const family of ordered) {
+    const styleAttempts: string[] = [];
+    const push = (s: string) => {
+      if (s && !styleAttempts.includes(s)) styleAttempts.push(s);
+    };
+    push(preferredStyle);
+    push('Regular');
+    const s = preferredStyle;
+    if (s && /[a-z][A-Z]/.test(s)) {
+      push(s.replace(/([a-z])([A-Z])/g, '$1 $2'));
+    }
+    if (s && s.includes(' ')) {
+      push(s.replace(/ /g, ''));
+    }
+    for (const st of styleAttempts) {
+      if (await tryLoadFontOnceForCache({ family, style: st })) {
+        return { family, style: st };
+      }
+    }
+  }
+  return null;
+}
+
 // Load every font used in a text node (including mixed font ranges) so that
 // characters can be safely modified.
 async function loadAllFontsForTextNode(textNode: TextNode): Promise<void> {
@@ -12420,7 +12466,31 @@ figma.ui.onmessage = async (msg: {
             const targetStyle = cmd.fontWeight
               ? normalizeFontStyle(cmd.fontWeight)
               : (cmd.fontStyle || 'Regular');
-            const loadedFont = await smartLoadFont({ family: targetFamily, style: targetStyle });
+            const cmdAny = cmd as any;
+            const extraFamilies: string[] = Array.isArray(cmdAny.fontFamilyCandidates)
+              ? cmdAny.fontFamilyCandidates.filter((x: unknown) => typeof x === 'string' && (x as string).trim())
+              : [];
+            const strictIconFont = !!cmdAny.iconFontStrictLoad;
+
+            let loadedFont: FontName;
+            if (strictIconFont) {
+              const resolvedIconFont = await resolveIconFontLoad(targetFamily, targetStyle, extraFamilies);
+              if (!resolvedIconFont) {
+                try {
+                  text.remove();
+                } catch {
+                  /* ignore */
+                }
+                failed++;
+                if (!firstError) {
+                  firstError = { action: cmd.action, message: 'ICON_FONT_LOAD_FAILED' };
+                }
+                continue;
+              }
+              loadedFont = resolvedIconFont;
+            } else {
+              loadedFont = await smartLoadFont({ family: targetFamily, style: targetStyle });
+            }
             text.fontName = loadedFont;
 
             // Apply properties BEFORE inserting into Auto Layout (which happens in Pass 2)

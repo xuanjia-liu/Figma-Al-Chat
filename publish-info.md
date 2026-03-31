@@ -108,7 +108,7 @@ Creates **new images from a text prompt** using configured **image generation mo
 
 #### Create icon
 
-Turns a short **concept or description** into an icon on the canvas. The plugin searches **Iconify** (with optional **AntV Infographic** or **icon font** sources), respects your chosen **size in pixels**, and can **show search results in a drawer** for picking a match. If no suitable asset is found, you can enable **AI-generated SVG fallback** so the model produces a vector icon instead (with configurable stroke weight for that path).
+Turns a short **concept or description** into an icon on the canvas. The plugin searches **Iconify** (with optional **AntV Infographic** or **icon font** sources), respects your chosen **size in pixels**, and can **show search results in a drawer** for picking a match. The **icon font** source supports installed families such as **Font Awesome 5 Free**, **Font Awesome 6 Free**, **Material Icons**, **Material Symbols** (Outlined / Rounded / Sharp), **Bootstrap Icons**, and **Lineicons Free**. If no suitable asset is found, you can enable **AI-generated SVG fallback** so the model produces a vector icon instead (with configurable stroke weight for that path).
 
 #### Import icon sets
 
@@ -148,7 +148,7 @@ Creates **SVG-style vector artwork** from a text description (and optional refer
 
 #### アイコン作成（Create icon）
 
-**コンセプトや説明**からアイコンをキャンバスに配置します。**Iconify** を基本に、**AntV Infographic** や **アイコンフォント** などソースを選べ、**ピクセルサイズ**を指定可能です。**検索結果をドロワーで表示**し、候補から選べます。見つからない場合は **AI による SVG フォールバック**（線の太さ調整可）でベクターアイコンを生成できます。
+**コンセプトや説明**からアイコンをキャンバスに配置します。**Iconify** を基本に、**AntV Infographic** や **アイコンフォント** などソースを選べ、**ピクセルサイズ**を指定可能です。**アイコンフォント** では、インストール済みの **Font Awesome 5 Free**、**Font Awesome 6 Free**、**Material Icons**、**Material Symbols**（Outlined / Rounded / Sharp）、**Bootstrap Icons**、**Lineicons Free** などを利用できます。**検索結果をドロワーで表示**し、候補から選べます。見つからない場合は **AI による SVG フォールバック**（線の太さ調整可）でベクターアイコンを生成できます。
 
 #### アイコンセットのインポート（Import icon sets）
 
@@ -188,7 +188,7 @@ Creates **SVG-style vector artwork** from a text description (and optional refer
 
 #### 创建图标（Create icon）
 
-根据**概念或简短描述**在画布上放置图标。默认检索 **Iconify**，也可选 **AntV 信息图**或**图标字体**等来源，并指定**像素尺寸**。可**在抽屉中展示搜索结果**以便挑选；若无匹配，可开启 **AI 生成 SVG 备用方案**（并可调节描边粗细）。
+根据**概念或简短描述**在画布上放置图标。默认检索 **Iconify**，也可选 **AntV 信息图**或**图标字体**等来源，并指定**像素尺寸**。**图标字体**来源支持已安装的 **Font Awesome 5 Free**、**Font Awesome 6 Free**、**Material Icons**、**Material Symbols**（Outlined / Rounded / Sharp）、**Bootstrap Icons** 与 **Lineicons Free**。可**在抽屉中展示搜索结果**以便挑选；若无匹配，可开启 **AI 生成 SVG 备用方案**（并可调节描边粗细）。
 
 #### 导入图标集（Import icon sets）
 

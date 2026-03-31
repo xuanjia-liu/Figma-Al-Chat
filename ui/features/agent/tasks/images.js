@@ -160,7 +160,7 @@ export const stylingImageTasks = [
 export const quickCreateImageTasks = [
 {
           name: 'Create icon',
-          desc: 'Insert Iconify icon or generate fallback',
+          desc: 'Icon fonts (search all sets via Iconify); glyph if font is active, else SVG',
           promptTemplate: 'Create icon for {iconDescription}',
           noSelection: true,
           directAction: 'createIcon',

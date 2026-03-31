@@ -18178,23 +18178,139 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
     const ICON_FONT_FAMILY_CONFIG = {
       'Font Awesome 5 Free': {
+        displayName: 'Font Awesome 5 Free',
+        familyAliases: ['Font Awesome 5 Free'],
         defaultStyle: 'Solid',
         requiredStyles: ['Solid', 'Regular'],
+        searchMode: 'iconify',
         iconifyPrefixes: ['fa-solid', 'fa-regular'],
-        metadataUrl: 'https://raw.githubusercontent.com/FortAwesome/Font-Awesome/5.x/metadata/icons.json'
+        unicodeSource: {
+          type: 'json-metadata',
+          url: 'https://raw.githubusercontent.com/FortAwesome/Font-Awesome/5.x/metadata/icons.json'
+        },
+        sortOrder: 0
       },
       'Font Awesome 6 Free': {
+        displayName: 'Font Awesome 6 Free',
+        familyAliases: ['Font Awesome 6 Free'],
         defaultStyle: 'Solid',
         requiredStyles: ['Solid', 'Regular'],
+        searchMode: 'iconify',
         iconifyPrefixes: ['fa6-solid', 'fa6-regular'],
-        metadataUrl: 'https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/metadata/icons.json'
+        unicodeSource: {
+          type: 'json-metadata',
+          url: 'https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/metadata/icons.json'
+        },
+        sortOrder: 1
       },
       'Material Icons': {
+        displayName: 'Material Icons',
+        familyAliases: ['Material Icons'],
         defaultStyle: 'Regular',
         requiredStyles: ['Regular'],
+        searchMode: 'codepoints',
         iconifyPrefixes: ['material-symbols'],
-        codepointsUrl: 'https://raw.githubusercontent.com/google/material-design-icons/master/font/MaterialIcons-Regular.codepoints',
-        useLigatureFallback: true
+        unicodeSource: {
+          type: 'plain-codepoints',
+          url: 'https://raw.githubusercontent.com/google/material-design-icons/master/font/MaterialIcons-Regular.codepoints'
+        },
+        useLigatureFallback: true,
+        ligatureFamily: 'material-icons',
+        sortOrder: 2
+      },
+      'Material Symbols Outlined': {
+        displayName: 'Material Symbols Outlined',
+        familyAliases: [
+          'Material Symbols Outlined',
+          'MaterialSymbolsOutlined',
+          'Material Symbols Outlined Regular'
+        ],
+        defaultStyle: 'Regular',
+        requiredStyles: ['Regular'],
+        searchMode: 'iconify',
+        iconifyPrefixes: ['material-symbols'],
+        unicodeSource: {
+          type: 'ligature-css',
+          url: 'https://cdn.jsdelivr.net/npm/material-symbols@0.35.0/outlined.css'
+        },
+        useLigatureFallback: true,
+        ligatureFamily: 'material-symbols-outlined',
+        materialSymbolVariant: 'outlined',
+        sortOrder: 3
+      },
+      'Material Symbols Rounded': {
+        displayName: 'Material Symbols Rounded',
+        familyAliases: [
+          'Material Symbols Rounded',
+          'MaterialSymbolsRounded',
+          'Material Symbols Rounded Regular'
+        ],
+        defaultStyle: 'Regular',
+        requiredStyles: ['Regular'],
+        searchMode: 'iconify',
+        iconifyPrefixes: ['material-symbols'],
+        unicodeSource: {
+          type: 'ligature-css',
+          url: 'https://cdn.jsdelivr.net/npm/material-symbols@0.35.0/rounded.css'
+        },
+        useLigatureFallback: true,
+        ligatureFamily: 'material-symbols-rounded',
+        materialSymbolVariant: 'rounded',
+        sortOrder: 4
+      },
+      'Material Symbols Sharp': {
+        displayName: 'Material Symbols Sharp',
+        familyAliases: [
+          'Material Symbols Sharp',
+          'MaterialSymbolsSharp',
+          'Material Symbols Sharp Regular'
+        ],
+        defaultStyle: 'Regular',
+        requiredStyles: ['Regular'],
+        searchMode: 'iconify',
+        iconifyPrefixes: ['material-symbols'],
+        unicodeSource: {
+          type: 'ligature-css',
+          url: 'https://cdn.jsdelivr.net/npm/material-symbols@0.35.0/sharp.css'
+        },
+        useLigatureFallback: true,
+        ligatureFamily: 'material-symbols-sharp',
+        materialSymbolVariant: 'sharp',
+        sortOrder: 5
+      },
+      'Bootstrap Icons': {
+        displayName: 'Bootstrap Icons',
+        familyAliases: ['Bootstrap Icons', 'bootstrap-icons'],
+        defaultStyle: 'Regular',
+        requiredStyles: ['Regular'],
+        searchMode: 'iconify',
+        iconifyPrefixes: ['bi'],
+        unicodeSource: {
+          type: 'css-map',
+          url: 'https://raw.githubusercontent.com/twbs/icons/main/font/bootstrap-icons.css',
+          classPrefixes: ['bi-']
+        },
+        sortOrder: 6
+      },
+      'Lineicons Free': {
+        displayName: 'Lineicons Free',
+        familyAliases: [
+          'Lineicons Free',
+          'LineIcons Free',
+          'Lineicons',
+          'LineIcons',
+          'lineicons'
+        ],
+        defaultStyle: 'Regular',
+        requiredStyles: ['Regular'],
+        searchMode: 'iconify',
+        iconifyPrefixes: ['lineicons'],
+        unicodeSource: {
+          type: 'css-map',
+          url: 'https://unpkg.com/lineicons@1.3.2/dist/lineicons.css',
+          classPrefixes: ['lni-']
+        },
+        sortOrder: 7
       }
     };
     const iconFontUnicodeCache = new Map();
@@ -18210,21 +18326,109 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         .toLowerCase();
     }
 
+    function getIconFontConfig(fontFamilyName) {
+      return ICON_FONT_FAMILY_CONFIG[fontFamilyName] || null;
+    }
+
+    function getConfiguredIconFontFamilies() {
+      return Object.entries(ICON_FONT_FAMILY_CONFIG)
+        .sort(([, a], [, b]) => (a?.sortOrder ?? 99) - (b?.sortOrder ?? 99))
+        .map(([familyName]) => familyName);
+    }
+
     function buildIconFontAvailabilityMap(families) {
       const map = new Map();
       (Array.isArray(families) ? families : []).forEach(entry => {
         const family = typeof entry?.family === 'string' ? entry.family.trim() : '';
         if (!family) return;
+        const styleOrder = (Array.isArray(entry?.styles) ? entry.styles : [])
+          .map((style) => (typeof style === 'string' ? style.trim() : ''))
+          .filter(Boolean);
         map.set(normalizeFontLookupKey(family), {
           family,
-          styles: new Set(
-            (Array.isArray(entry?.styles) ? entry.styles : [])
-              .map(style => normalizeFontLookupKey(style))
-              .filter(Boolean)
-          )
+          styles: new Set(styleOrder.map((style) => normalizeFontLookupKey(style))),
+          styleOrder
         });
       });
       return map;
+    }
+
+    function fuzzyMatchIconFontFamilyEntry(fontFamilyName, availabilityMap) {
+      if (!(availabilityMap instanceof Map) || availabilityMap.size === 0) return null;
+      const rows = [...availabilityMap.values()];
+      const parts = (...needles) => (family) => {
+        const n = normalizeFontLookupKey(family);
+        return needles.every((k) => n.includes(k));
+      };
+
+      if (fontFamilyName === 'Material Symbols Outlined') {
+        return rows.find((e) => parts('material', 'symbol', 'outlined')(e.family)) || null;
+      }
+      if (fontFamilyName === 'Material Symbols Rounded') {
+        return rows.find((e) => parts('material', 'symbol', 'rounded')(e.family)) || null;
+      }
+      if (fontFamilyName === 'Material Symbols Sharp') {
+        return rows.find((e) => parts('material', 'symbol', 'sharp')(e.family)) || null;
+      }
+      if (fontFamilyName === 'Lineicons Free') {
+        const isLineicons = (e) => {
+          const n = normalizeFontLookupKey(e.family);
+          if (!n.includes('lineicon')) return false;
+          if (n.includes('lineicons-pro') || n.includes('lineicon-pro')) return false;
+          return true;
+        };
+        return rows.find(isLineicons) || rows.find((e) => normalizeFontLookupKey(e.family).includes('lineicon')) || null;
+      }
+      return null;
+    }
+
+    function findAvailableIconFontEntry(fontFamilyName, availabilityMap) {
+      const config = getIconFontConfig(fontFamilyName);
+      if (!config || !(availabilityMap instanceof Map)) return null;
+      const aliases = Array.isArray(config.familyAliases) && config.familyAliases.length
+        ? config.familyAliases
+        : [fontFamilyName];
+      for (const alias of aliases) {
+        const entry = availabilityMap.get(normalizeFontLookupKey(alias));
+        if (entry) return entry;
+      }
+      return fuzzyMatchIconFontFamilyEntry(fontFamilyName, availabilityMap);
+    }
+
+    /** Figma font picker / listAvailableFontsAsync use exact family + style strings; must not use config keys. */
+    function resolveFigmaFontNameForIconFont(configKey, preferredStyle, availabilityMap) {
+      const entry = findAvailableIconFontEntry(configKey, availabilityMap);
+      if (!entry) return null;
+      const styleOrder = Array.isArray(entry.styleOrder) && entry.styleOrder.length
+        ? entry.styleOrder
+        : [...entry.styles];
+      const prefNorm = normalizeFontLookupKey(preferredStyle || 'Regular');
+      const byPref = styleOrder.find((s) => normalizeFontLookupKey(s) === prefNorm);
+      if (byPref) return { family: entry.family, style: byPref };
+      const regular = styleOrder.find((s) => normalizeFontLookupKey(s) === 'regular');
+      if (regular) return { family: entry.family, style: regular };
+      if (styleOrder.length) {
+        const sorted = [...styleOrder].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+        return { family: entry.family, style: sorted[0] };
+      }
+      return { family: entry.family, style: preferredStyle || 'Regular' };
+    }
+
+    function buildOrderedIconFontFamilies(configKey, resolvedFromMapFamily) {
+      const cfg = getIconFontConfig(configKey);
+      const list = [];
+      if (resolvedFromMapFamily) list.push(resolvedFromMapFamily);
+      if (cfg?.familyAliases) list.push(...cfg.familyAliases);
+      if (configKey) list.push(configKey);
+      const seen = new Set();
+      return list.filter((f) => {
+        const t = (f || '').trim();
+        if (!t) return false;
+        const k = normalizeFontLookupKey(t);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
     }
 
     async function ensureIconFontAvailabilityMap() {
@@ -18264,33 +18468,51 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
     function isIconFontFamilyAvailable(fontFamilyName, availabilityMap) {
       if (!fontFamilyName || !(availabilityMap instanceof Map)) return false;
-      const familyEntry = availabilityMap.get(normalizeFontLookupKey(fontFamilyName));
+      const familyEntry = findAvailableIconFontEntry(fontFamilyName, availabilityMap);
       if (!familyEntry) return false;
-      const requiredStyles = ICON_FONT_FAMILY_CONFIG[fontFamilyName]?.requiredStyles || [];
+      const requiredStyles = getIconFontConfig(fontFamilyName)?.requiredStyles || [];
       if (!requiredStyles.length) return true;
-      return requiredStyles.some(style => familyEntry.styles.has(normalizeFontLookupKey(style)));
+      if (requiredStyles.some(style => familyEntry.styles.has(normalizeFontLookupKey(style)))) return true;
+      const onlyRegular =
+        requiredStyles.length === 1 && normalizeFontLookupKey(requiredStyles[0]) === 'regular';
+      if (onlyRegular && familyEntry.styles.size > 0) return true;
+      return false;
     }
 
     function getAvailableIconFontSearchConfigs(availabilityMap) {
-      const configs = [
-        { fontFamily: 'Font Awesome 5 Free', prefixes: ICON_FONT_FAMILY_CONFIG['Font Awesome 5 Free']?.iconifyPrefixes || ['fa-solid', 'fa-regular'] },
-        { fontFamily: 'Font Awesome 6 Free', prefixes: ICON_FONT_FAMILY_CONFIG['Font Awesome 6 Free']?.iconifyPrefixes || ['fa6-solid', 'fa6-regular'] },
-        { fontFamily: 'Material Icons', material: true }
-      ];
-      return configs.filter(config => isIconFontFamilyAvailable(config.fontFamily, availabilityMap));
+      return getConfiguredIconFontFamilies()
+        .filter(fontFamily => isIconFontFamilyAvailable(fontFamily, availabilityMap))
+        .map(fontFamily => {
+          const config = getIconFontConfig(fontFamily) || {};
+          return {
+            fontFamily,
+            searchMode: config.searchMode || 'iconify',
+            prefixes: Array.isArray(config.iconifyPrefixes) ? config.iconifyPrefixes : []
+          };
+        });
     }
 
-    function getConfiguredIconFontFamilies() {
-      return Object.keys(ICON_FONT_FAMILY_CONFIG);
+    /** All configured icon sets (Iconify/API search). Inserts still use a glyph only when the font is active in Figma; otherwise SVG via Iconify. */
+    function getAllIconFontSearchConfigs() {
+      return getConfiguredIconFontFamilies().map(fontFamily => {
+        const config = getIconFontConfig(fontFamily) || {};
+        return {
+          fontFamily,
+          searchMode: config.searchMode || 'iconify',
+          prefixes: Array.isArray(config.iconifyPrefixes) ? config.iconifyPrefixes : []
+        };
+      });
     }
 
     function formatIconFontAvailabilityMessage(availabilityMap) {
       const configuredFamilies = getConfiguredIconFontFamilies();
-      const availableFamilies = configuredFamilies.filter(name => isIconFontFamilyAvailable(name, availabilityMap));
+      const availableFamilies = configuredFamilies
+        .filter(name => isIconFontFamilyAvailable(name, availabilityMap))
+        .map(name => getIconFontConfig(name)?.displayName || name);
       if (availableFamilies.length > 0) {
         return `Available icon fonts in this Figma file: ${availableFamilies.join(', ')}.`;
       }
-      return `None of the configured icon fonts are available in this Figma file. Install or enable one of: ${configuredFamilies.join(', ')}.`;
+      return `None of the configured icon fonts are available in this Figma file. Install or enable one of: ${configuredFamilies.map(name => getIconFontConfig(name)?.displayName || name).join(', ')}.`;
     }
 
     function parseIconNameFromId(iconId) {
@@ -18311,7 +18533,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         if (prefix.includes('regular')) return 'Regular';
         if (prefix.includes('solid')) return 'Solid';
       }
-      return ICON_FONT_FAMILY_CONFIG[fontFamilyName]?.defaultStyle || 'Regular';
+      return getIconFontConfig(fontFamilyName)?.defaultStyle || 'Regular';
     }
 
     function getIconFontCssWeight(fontFamilyName, fontStyle) {
@@ -18363,12 +18585,33 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
     }
 
+    function parseIconFontCssContentMap(text, classPrefixes = []) {
+      const unicodeMap = new Map();
+      const regex = /\.([a-z0-9_-]+)::?before\s*\{\s*content:\s*["']\\([0-9a-f]+)["'];?\s*\}/gi;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const rawClassName = match[1];
+        const hex = match[2];
+        const char = unicodeHexToChar(hex);
+        if (!char) continue;
+        let key = rawClassName;
+        for (const prefix of classPrefixes) {
+          if (key.startsWith(prefix)) {
+            key = key.slice(prefix.length);
+            break;
+          }
+        }
+        if (key) unicodeMap.set(key, char);
+      }
+      return unicodeMap;
+    }
+
     async function loadIconFontUnicodeMap(fontFamilyName) {
       if (iconFontUnicodeCache.has(fontFamilyName)) {
         return iconFontUnicodeCache.get(fontFamilyName);
       }
 
-      const config = ICON_FONT_FAMILY_CONFIG[fontFamilyName];
+      const config = getIconFontConfig(fontFamilyName);
       const unicodeMap = new Map();
       if (!config) {
         iconFontUnicodeCache.set(fontFamilyName, unicodeMap);
@@ -18376,28 +18619,34 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
 
       try {
-        if (config.metadataUrl) {
-          const res = await fetch(config.metadataUrl, { cache: 'no-store' });
+        const unicodeSource = config.unicodeSource;
+        if (unicodeSource?.url) {
+          const res = await fetch(unicodeSource.url, { cache: 'no-store' });
           if (res.ok) {
-            const metadata = await res.json();
-            Object.entries(metadata || {}).forEach(([name, data]) => {
-              const hex = data?.unicode;
-              const char = unicodeHexToChar(hex);
-              if (char) unicodeMap.set(name, char);
-            });
-          }
-        } else if (config.codepointsUrl) {
-          const res = await fetch(config.codepointsUrl, { cache: 'no-store' });
-          if (res.ok) {
-            const text = await res.text();
-            text.split('\n').forEach(line => {
-              const trimmed = line.trim();
-              if (!trimmed) return;
-              const [name, hex] = trimmed.split(/\s+/);
-              if (!name || !hex) return;
-              const char = unicodeHexToChar(hex);
-              if (char) unicodeMap.set(name, char);
-            });
+            if (unicodeSource.type === 'json-metadata') {
+              const metadata = await res.json();
+              Object.entries(metadata || {}).forEach(([name, data]) => {
+                const hex = data?.unicode;
+                const char = unicodeHexToChar(hex);
+                if (char) unicodeMap.set(name, char);
+              });
+            } else {
+              const text = await res.text();
+              if (unicodeSource.type === 'plain-codepoints') {
+                text.split('\n').forEach(line => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return;
+                  const [name, hex] = trimmed.split(/\s+/);
+                  if (!name || !hex) return;
+                  const char = unicodeHexToChar(hex);
+                  if (char) unicodeMap.set(name, char);
+                });
+              } else if (unicodeSource.type === 'css-map') {
+                parseIconFontCssContentMap(text, unicodeSource.classPrefixes || []).forEach((char, name) => {
+                  unicodeMap.set(name, char);
+                });
+              }
+            }
           }
         }
       } catch (err) {
@@ -18435,6 +18684,44 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return null;
     }
 
+    function getIconFontLigatureText(iconId, fontFamilyName) {
+      const iconName = parseIconNameFromId(iconId);
+      if (!iconName) return null;
+
+      const normalizedName = iconName.toLowerCase();
+      const config = getIconFontConfig(fontFamilyName);
+      if (!config?.useLigatureFallback) return null;
+
+      if (config.ligatureFamily === 'material-icons') {
+        const candidates = buildMaterialIconNameCandidates(normalizedName);
+        return candidates[1] || candidates[0] || null;
+      }
+
+      if (config.ligatureFamily?.startsWith('material-symbols')) {
+        let ligatureName = normalizedName;
+        if (config.materialSymbolVariant === 'rounded') {
+          ligatureName = ligatureName.replace(/-rounded$/i, '');
+        } else if (config.materialSymbolVariant === 'sharp') {
+          ligatureName = ligatureName.replace(/-sharp$/i, '');
+        }
+        return ligatureName.replace(/-/g, '_');
+      }
+
+      return null;
+    }
+
+    async function resolveIconFontInsertText(iconId, fontFamilyName) {
+      const glyph = await resolveIconFontGlyph(iconId, fontFamilyName);
+      if (glyph) {
+        return { text: glyph, mode: 'glyph' };
+      }
+      const ligature = getIconFontLigatureText(iconId, fontFamilyName);
+      if (ligature) {
+        return { text: ligature, mode: 'ligature' };
+      }
+      return { text: '?', mode: 'fallback' };
+    }
+
     async function searchIconifyAcrossPrefixes(prefixes, query, limit = 20, fontFamily = null) {
       const allResults = [];
       for (const prefix of prefixes || []) {
@@ -18462,6 +18749,16 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         if (item?.id && !unique.has(`${item.fontFamily || ''}:${item.id}`)) unique.set(`${item.fontFamily || ''}:${item.id}`, item);
       });
       return Array.from(unique.values());
+    }
+
+    function matchesMaterialSymbolVariant(iconId, fontFamilyName) {
+      const iconName = parseIconNameFromId(iconId);
+      if (!iconName) return false;
+      const config = getIconFontConfig(fontFamilyName);
+      const variant = config?.materialSymbolVariant;
+      if (variant === 'rounded') return /-rounded$/i.test(iconName);
+      if (variant === 'sharp') return /-sharp$/i.test(iconName);
+      return !/-rounded$/i.test(iconName) && !/-sharp$/i.test(iconName);
     }
 
     function scoreMaterialIconName(name, query) {
@@ -18604,7 +18901,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     }
 
     async function searchMaterialIconsByCodepoints(query, limit = 20, fontFamily = 'Material Icons') {
-      const unicodeMap = await loadIconFontUnicodeMap('Material Icons');
+      const unicodeMap = await loadIconFontUnicodeMap(fontFamily);
       const queryNormalized = (query || '').toLowerCase().trim();
       if (!queryNormalized) return [];
 
@@ -18625,6 +18922,29 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return results.slice(0, Math.max(1, limit));
     }
 
+    async function searchMaterialSymbolsByVariant(query, limit = 20, fontFamily = 'Material Symbols Outlined') {
+      const queryNormalized = (query || '').toLowerCase().trim();
+      if (!queryNormalized) return [];
+
+      const rawResults = await searchIconifyAcrossPrefixes(['material-symbols'], queryNormalized, Math.max(limit * 4, 40), fontFamily);
+      const results = [];
+      rawResults.forEach(result => {
+        if (!matchesMaterialSymbolVariant(result.id, fontFamily)) return;
+        const iconName = parseIconNameFromId(result.id);
+        const score = scoreMaterialIconName(iconName, queryNormalized);
+        if (score <= 0) return;
+        results.push({
+          ...result,
+          label: `${normalizeFontLookupKey(fontFamily).replace(/\s+/g, '-')}:${iconName}`,
+          fontFamily,
+          score
+        });
+      });
+
+      results.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+      return results.slice(0, Math.max(1, limit));
+    }
+
     async function createIconFontFromId(iconId, { size, fallbackHint, actionMeta, fontFamily }) {
       const selectedFont = fontFamily || 'Font Awesome 6 Free';
       const fontStyle = getIconFontStyleForIconId(iconId, selectedFont);
@@ -18632,34 +18952,42 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       showThinkingIndicator('Inserting icon font glyph...');
       try {
         const availabilityMap = await ensureIconFontAvailabilityMap();
-        if (!isIconFontFamilyAvailable(selectedFont, availabilityMap)) {
-          const unavailableText = `${selectedFont} is not available in this Figma environment. ${formatIconFontAvailabilityMessage(availabilityMap)}`;
-          showToast(unavailableText, 'error');
-          addMessage('bot', unavailableText);
-          chatHistory.push({ role: 'model', parts: [{ text: unavailableText }] });
-          await autoSaveAfterResponse();
-          return;
-        }
+        const figmaFromList = isIconFontFamilyAvailable(selectedFont, availabilityMap)
+          ? resolveFigmaFontNameForIconFont(selectedFont, fontStyle, availabilityMap)
+          : null;
+        const orderedFamilies = buildOrderedIconFontFamilies(selectedFont, figmaFromList?.family);
+        const primaryFamily = orderedFamilies[0] || selectedFont;
+        const primaryStyle = figmaFromList?.style || fontStyle;
+        const fontFamilyCandidates = orderedFamilies.slice(1);
 
-        const resolvedGlyph = await resolveIconFontGlyph(iconId, selectedFont);
-        const iconName = parseIconNameFromId(iconId);
-        const fallbackText = '?';
-        const textToInsert = resolvedGlyph || fallbackText || '?';
+        const resolvedInsert = await resolveIconFontInsertText(iconId, selectedFont);
+        const textToInsert = resolvedInsert?.text || '?';
 
-        await executeCommands([{
+        const execResult = await executeCommands([{
           action: 'createText',
           text: textToInsert,
           name: `icon-font:${iconId}`,
-          fontFamily: selectedFont,
-          fontStyle,
+          fontFamily: primaryFamily,
+          fontStyle: primaryStyle,
+          fontFamilyCandidates,
+          iconFontStrictLoad: true,
           fontSize: size,
           x: 0,
           y: 0
         }]);
 
-        const successText = resolvedGlyph
+        if (execResult && execResult.failed > 0 && execResult.error && execResult.error.message === 'ICON_FONT_LOAD_FAILED') {
+          removeThinkingIndicator();
+          showToast(`Could not load "${selectedFont}" in Figma (try activating the font in this file). Inserting ${iconId} as SVG.`, 'info');
+          await createIconFromId(iconId, { size, useAiFallback: false, fallbackHint, actionMeta });
+          return;
+        }
+
+        const successText = resolvedInsert?.mode === 'glyph'
           ? `Inserted icon font glyph "${iconId}" using ${selectedFont}.`
-          : `Inserted icon font text "${textToInsert}" using ${selectedFont} (unicode mapping unavailable).`;
+          : resolvedInsert?.mode === 'ligature'
+            ? `Inserted icon font ligature "${textToInsert}" using ${selectedFont}.`
+            : `Inserted icon font text "${textToInsert}" using ${selectedFont} (unicode mapping unavailable).`;
         addMessage('bot', successText);
         chatHistory.push({ role: 'model', parts: [{ text: successText }] });
         await autoSaveAfterResponse();
@@ -19061,16 +19389,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         }
         matches = allResults;
       } else if (iconApiSource === 'iconfont') {
-        const availabilityMap = await ensureIconFontAvailabilityMap();
-        const iconFontSearchConfigs = getAvailableIconFontSearchConfigs(availabilityMap);
-        if (!iconFontSearchConfigs.length) {
-          const noFontsText = `Icon Font search is unavailable because none of the configured icon fonts are available here. ${formatIconFontAvailabilityMessage(availabilityMap)}`;
-          addMessage('bot', noFontsText);
-          chatHistory.push({ role: 'model', parts: [{ text: noFontsText }] });
-          await autoSaveAfterResponse();
-          showToast(noFontsText, 'error');
-          return;
-        }
+        const iconFontSearchConfigs = getAllIconFontSearchConfigs();
 
         const queries = iconFontSearchTerms.length
           ? iconFontSearchTerms
@@ -19082,9 +19401,11 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         const allResults = [];
         for (const q of queries) {
           for (const config of iconFontSearchConfigs) {
-            const res = config.material
+            const res = config.searchMode === 'codepoints'
               ? await searchMaterialIconsByCodepoints(q, 20, config.fontFamily)
-              : await searchIconifyAcrossPrefixes(config.prefixes, q, 20, config.fontFamily);
+              : config.fontFamily.startsWith('Material Symbols')
+                ? await searchMaterialSymbolsByVariant(q, 20, config.fontFamily)
+                : await searchIconifyAcrossPrefixes(config.prefixes, q, 20, config.fontFamily);
             if (res && res.length) allResults.push(...res);
           }
         }
@@ -19125,23 +19446,16 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           const newMatches = (loosened || []).filter(m => !existingIds.has(m.id));
           matches = [...matches, ...newMatches];
         } else if (iconApiSource === 'iconfont') {
-          const availabilityMap = await ensureIconFontAvailabilityMap();
-          const availableFontConfigs = getAvailableIconFontSearchConfigs(availabilityMap);
-          if (!availableFontConfigs.length) {
-            const noFontsText = `Icon Font search is unavailable because none of the configured icon fonts are available here. ${formatIconFontAvailabilityMessage(availabilityMap)}`;
-            addMessage('bot', noFontsText);
-            chatHistory.push({ role: 'model', parts: [{ text: noFontsText }] });
-            await autoSaveAfterResponse();
-            showToast(noFontsText, 'error');
-            return;
-          }
+          const allFontConfigs = getAllIconFontSearchConfigs();
 
           const broadenedQuery = iconFontSearchTerms[0] || description || slug || 'icon';
           const broadenedTerms = expandIconFontSynonymTerms(broadenedQuery).slice(0, 6);
-          const loosenedGroups = await Promise.all(availableFontConfigs.flatMap(config => (
+          const loosenedGroups = await Promise.all(allFontConfigs.flatMap(config => (
             broadenedTerms.map(term => (
-              config.material
+              config.searchMode === 'codepoints'
                 ? searchMaterialIconsByCodepoints(term, 30, config.fontFamily)
+                : config.fontFamily.startsWith('Material Symbols')
+                  ? searchMaterialSymbolsByVariant(term, 30, config.fontFamily)
                 : searchIconifyAcrossPrefixes(config.prefixes, term, 30, config.fontFamily)
             ))
           )));
@@ -19174,13 +19488,8 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       if (descLower) {
         matches.sort((a, b) => {
           if (iconApiSource === 'iconfont') {
-            const fontOrder = {
-              'Font Awesome 5 Free': 0,
-              'Font Awesome 6 Free': 1,
-              'Material Icons': 2
-            };
-            const aFont = fontOrder[a.fontFamily] ?? 99;
-            const bFont = fontOrder[b.fontFamily] ?? 99;
+            const aFont = getIconFontConfig(a.fontFamily)?.sortOrder ?? 99;
+            const bFont = getIconFontConfig(b.fontFamily)?.sortOrder ?? 99;
             if (aFont !== bFont) return aFont - bFont;
           }
 
@@ -19214,14 +19523,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
         });
       } else if (iconApiSource === 'iconfont') {
-        const fontOrder = {
-          'Font Awesome 5 Free': 0,
-          'Font Awesome 6 Free': 1,
-          'Material Icons': 2
-        };
         matches.sort((a, b) => {
-          const aFont = fontOrder[a.fontFamily] ?? 99;
-          const bFont = fontOrder[b.fontFamily] ?? 99;
+          const aFont = getIconFontConfig(a.fontFamily)?.sortOrder ?? 99;
+          const bFont = getIconFontConfig(b.fontFamily)?.sortOrder ?? 99;
           if (aFont !== bFont) return aFont - bFont;
           return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
         });
@@ -30269,8 +30573,9 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       }
 
       // If there are regular commands, execute them first to build the layout
+      let commandsExecutionResult = null;
       if (regularCommands.length > 0) {
-        await new Promise((resolve, reject) => {
+        commandsExecutionResult = await new Promise((resolve, reject) => {
           pendingCommandsResolve = resolve;
           parent.postMessage({
             pluginMessage: {
@@ -30317,7 +30622,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
         }
       }
 
-      return Promise.resolve();
+      return Promise.resolve(commandsExecutionResult);
     }
 
     // Handle generateImage command from agent mode
