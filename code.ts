@@ -65,6 +65,29 @@ const FONT_PREVIEW_BOOKMARKS_LIMITS = {
   MAX_FAMILIES_PER_LIST: 500
 };
 
+/** Vertical text: caps & helpers avoid unbounded nodes / O(n²) wrap that freeze or crash Figma. */
+const VERTICAL_TEXT_MAX_COLUMNS = 100;
+const VERTICAL_TEXT_MAX_FLAT_CODEPOINTS = 120_000;
+const VERTICAL_TEXT_WRAP_SIMULATION_MAX_LENGTH = 12_000;
+
+function countCodePoints(s: string): number {
+  let n = 0;
+  for (const _ of s) n++;
+  return n;
+}
+
+function sliceCodePoints(s: string, start: number, length: number): string {
+  if (length <= 0) return '';
+  let i = 0;
+  let out = '';
+  for (const ch of s) {
+    if (i >= start && i < start + length) out += ch;
+    i++;
+    if (i >= start + length) break;
+  }
+  return out;
+}
+
 function normalizeFontPreviewBookmarks(raw: unknown): { lists: { id: string; name: string; families: string[] }[]; lastSelectedListId: string | null } {
   const empty = { lists: [] as { id: string; name: string; families: string[] }[], lastSelectedListId: null as string | null };
   if (!raw || typeof raw !== 'object') return empty;
@@ -6518,9 +6541,9 @@ figma.ui.onmessage = async (msg: {
               lineHeightPx: parseFloat(textNode.getPluginData('fgVerticalTextLineHeightPx') || '0'),
               nativeLineHeightPx,
               sourceRowCount: parseInt(textNode.getPluginData('fgVerticalTextSourceRowCount') || '0', 10),
-              sourceCharCount: Array.from(
+              sourceCharCount: countCodePoints(
                 (textNode.getPluginData('fgVerticalTextOriginalContent') || textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')
-              ).length,
+              ),
               fontSize,
             });
           } else {
@@ -6533,7 +6556,7 @@ figma.ui.onmessage = async (msg: {
               lineHeightPx: 0,
               nativeLineHeightPx,
               sourceRowCount: 0,
-              sourceCharCount: Array.from((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')).length,
+              sourceCharCount: countCodePoints((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')),
               fontSize
             });
           }
@@ -6641,20 +6664,14 @@ figma.ui.onmessage = async (msg: {
               sourceText = textNode.characters;
             }
 
-            // --- Measure source rows using the ruby/wrapping measurement approach ---
-            await smartLoadFont(baseFontName);
-            const measurementNode = figma.createText();
-            measurementNode.visible = false;
-            measurementNode.fontName = baseFontName;
-            measurementNode.fontSize = baseFontSize;
-            if (typeof textNode.letterSpacing !== 'symbol') {
-              measurementNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+            const normalizedSourceText = sourceText.replace(/\r/g, '');
+            const flatNoNewline = normalizedSourceText.replace(/\n/g, '');
+            const totalCharCount = countCodePoints(flatNoNewline);
+            if (totalCharCount > VERTICAL_TEXT_MAX_FLAT_CODEPOINTS) {
+              console.warn('local-verticalize-text: source text too long, skipping', textNode.id);
+              failed++;
+              continue;
             }
-            figma.currentPage.appendChild(measurementNode);
-            const measureWidth = (text: string): number => {
-              measurementNode.characters = text || '';
-              return measurementNode.width;
-            };
 
             // Determine wrapping width from the *original* text layout (before verticalization)
             let maxLineWidth = Infinity;
@@ -6665,43 +6682,64 @@ figma.ui.onmessage = async (msg: {
               }
             }
 
-            const lineTexts: string[] = [''];
-            let lineIdx = 0;
-            const wrapTolerance = 0.5;
+            const useFastLineSplit =
+              maxLineWidth !== Infinity && sourceText.length > VERTICAL_TEXT_WRAP_SIMULATION_MAX_LENGTH;
 
-            for (let i = 0; i < sourceText.length; i++) {
-              const ch = sourceText[i];
-              if (ch === '\n') {
-                lineIdx++;
-                lineTexts[lineIdx] = '';
-                continue;
+            let lineTexts: string[];
+            if (useFastLineSplit) {
+              const parts = sourceText.replace(/\r/g, '').split('\n');
+              lineTexts = parts.length > 0 ? parts : [''];
+            } else {
+              await smartLoadFont(baseFontName);
+              const measurementNode = figma.createText();
+              measurementNode.visible = false;
+              measurementNode.fontName = baseFontName;
+              measurementNode.fontSize = baseFontSize;
+              if (typeof textNode.letterSpacing !== 'symbol') {
+                measurementNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
               }
-              if (maxLineWidth !== Infinity) {
-                const prospectiveText = lineTexts[lineIdx] + ch;
-                const prospectiveWidth = measureWidth(prospectiveText);
-                if (prospectiveWidth > maxLineWidth + wrapTolerance && lineTexts[lineIdx].length > 0) {
-                  lineIdx++;
-                  lineTexts[lineIdx] = ch;
-                } else {
-                  lineTexts[lineIdx] = prospectiveText;
+              try {
+                figma.currentPage.appendChild(measurementNode);
+                const measureWidth = (text: string): number => {
+                  measurementNode.characters = text || '';
+                  return measurementNode.width;
+                };
+
+                lineTexts = [''];
+                let lineIdx = 0;
+                const wrapTolerance = 0.5;
+
+                for (const ch of sourceText) {
+                  if (ch === '\n') {
+                    lineIdx++;
+                    lineTexts[lineIdx] = '';
+                    continue;
+                  }
+                  if (ch === '\r') continue;
+                  if (maxLineWidth !== Infinity) {
+                    const prospectiveText = lineTexts[lineIdx] + ch;
+                    const prospectiveWidth = measureWidth(prospectiveText);
+                    if (prospectiveWidth > maxLineWidth + wrapTolerance && lineTexts[lineIdx].length > 0) {
+                      lineIdx++;
+                      lineTexts[lineIdx] = ch;
+                    } else {
+                      lineTexts[lineIdx] = prospectiveText;
+                    }
+                  } else {
+                    lineTexts[lineIdx] = (lineTexts[lineIdx] || '') + ch;
+                  }
                 }
-              } else {
-                lineTexts[lineIdx] = (lineTexts[lineIdx] || '') + ch;
+              } finally {
+                if (!measurementNode.removed) measurementNode.remove();
               }
             }
 
-            measurementNode.remove();
-
             const sourceRowCount = lineTexts.length;
-            const sourceRowLengths = lineTexts.map(line => Array.from(line || '').length);
+            const sourceRowLengths = lineTexts.map(line => countCodePoints(line || ''));
             const sourceMaxRowLength = sourceRowLengths.length > 0 ? Math.max(...sourceRowLengths, 1) : 1;
 
             // --- Resolve effective parameters ---
             const effectiveLineHeight = reqLineHeightPx > 0 ? reqLineHeightPx : Math.round(baseFontSize * 1.1 * 100) / 100;
-
-            const normalizedSourceText = sourceText.replace(/\r/g, '');
-            const rawChars = Array.from(normalizedSourceText.replace(/\n/g, ''));
-            const totalCharCount = rawChars.length;
 
             let effectiveColumnTextCount = 0;
             let effectiveVerticalColumns = 0;
@@ -6734,6 +6772,16 @@ figma.ui.onmessage = async (msg: {
               effectiveVerticalColumns = Math.max(effectiveVerticalColumns, neededColumns);
             }
 
+            if (effectiveVerticalColumns > VERTICAL_TEXT_MAX_COLUMNS) {
+              effectiveVerticalColumns = VERTICAL_TEXT_MAX_COLUMNS;
+              if (totalCharCount > 0) {
+                effectiveColumnTextCount = Math.max(
+                  effectiveColumnTextCount,
+                  Math.ceil(totalCharCount / VERTICAL_TEXT_MAX_COLUMNS)
+                );
+              }
+            }
+
             const effectiveHeight = effectiveColumnTextCount * effectiveLineHeight;
 
             const splitTextIntoColumns = (text: string, maxCharsPerColumn: number, verticalColumns: number): string[] => {
@@ -6742,21 +6790,22 @@ figma.ui.onmessage = async (msg: {
                 .split('\n')
                 .map(segment => segment || '');
 
-              if (manualSegments.length === verticalColumns && manualSegments.every(segment => Array.from(segment).length <= maxCharsPerColumn)) {
+              if (manualSegments.length === verticalColumns && manualSegments.every(segment => countCodePoints(segment) <= maxCharsPerColumn)) {
                 return manualSegments;
               }
 
+              const flat = normalizedText.replace(/\n/g, '');
               const charChunks: string[] = [];
               let charCursor = 0;
 
               for (let c = 0; c < verticalColumns; c++) {
-                const remainingChars = rawChars.length - charCursor;
+                const remainingChars = totalCharCount - charCursor;
                 if (remainingChars <= 0) {
                   charChunks.push('');
                   continue;
                 }
                 const chunkSize = Math.min(maxCharsPerColumn, remainingChars);
-                charChunks.push(rawChars.slice(charCursor, charCursor + chunkSize).join(''));
+                charChunks.push(sliceCodePoints(flat, charCursor, chunkSize));
                 charCursor += chunkSize;
               }
 
@@ -6784,10 +6833,7 @@ figma.ui.onmessage = async (msg: {
             }
 
             // Convert each column into vertical text (characters joined by \n)
-            const verticalColumnTexts: string[] = columns.map(col => {
-              const chars = Array.from(col);
-              return chars.join('\n');
-            });
+            const verticalColumnTexts: string[] = columns.map(col => [...col].join('\n'));
 
             // --- Helper to apply vertical style to a text node ---
             const applyVerticalStyle = (tn: TextNode, content: string) => {
