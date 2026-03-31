@@ -168,7 +168,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       };
     }
 
-    function createCodeAttachment(type, content) {
+    function createCodeAttachment(type, content, meta = {}) {
       const normalized = String(type || 'TEXT').toUpperCase();
       const lang = normalized === 'CSS' ? 'css' : normalized === 'SVG' ? 'svg' : 'text';
       const name = normalized === 'CSS' ? 'CSS export' : normalized === 'SVG' ? 'SVG export' : 'Text export';
@@ -178,7 +178,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         exportType: normalized,
         lang,
         name,
-        content: String(content || '')
+        content: String(content || ''),
+        ...meta
       };
     }
 
@@ -204,6 +205,21 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const text = String(input || '').trim();
       if (!text) return text;
 
+      const svgOptimizationConfig = {
+        multipass: true,
+        js2svg: { pretty: false },
+        plugins: [
+          {
+            name: 'preset-default',
+            params: {
+              overrides: {
+                cleanupIds: false
+              }
+            }
+          }
+        ]
+      };
+
       const svgBlockRegex = /(?:<!--[\s\S]*?-->\s*)?<svg[\s\S]*?<\/svg>/gi;
       const matches = text.match(svgBlockRegex);
 
@@ -213,10 +229,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const svg = blockMatch?.[2] || block;
 
         try {
-          const optimized = optimizeSvg(svg, {
-            multipass: true,
-            js2svg: { pretty: false }
-          });
+          const optimized = optimizeSvg(svg, svgOptimizationConfig);
           const optimizedSvg = 'data' in optimized ? optimized.data : svg;
           return comment ? `${comment}\n${optimizedSvg}` : optimizedSvg;
         } catch (error) {
@@ -230,15 +243,37 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       }
 
       try {
-        const optimized = optimizeSvg(text, {
-          multipass: true,
-          js2svg: { pretty: false }
-        });
+        const optimized = optimizeSvg(text, svgOptimizationConfig);
         return 'data' in optimized ? optimized.data : text;
       } catch (error) {
         console.warn('SVGO optimization failed, using original SVG text:', error);
         return text;
       }
+    }
+
+    function normalizeSvgExportPayload(input) {
+      if (Array.isArray(input)) {
+        const blocks = input.filter(Boolean).map((item) => {
+          const name = item?.name ? String(item.name) : '';
+          const svg = item?.svg ? String(item.svg) : '';
+          const layerNames = Array.isArray(item?.layerNames) ? item.layerNames.map((entry) => String(entry || '')).filter(Boolean) : [];
+          const content = name ? `<!-- ${name} -->\n${svg}` : svg;
+          return {
+            content: optimizeExportedSvgMarkup(content),
+            layerNames
+          };
+        }).filter((block) => block.content);
+
+        return {
+          content: blocks.map((block) => block.content).join('\n\n'),
+          svgLayerNameHints: blocks.length === 1 ? blocks[0].layerNames : []
+        };
+      }
+
+      return {
+        content: optimizeExportedSvgMarkup(input),
+        svgLayerNameHints: []
+      };
     }
 
     function buildUserTextWithCodeAttachments(message, codeTexts = []) {
@@ -6917,7 +6952,7 @@ CRITICAL RULES:
       'assistant': {
         labelKey: 'actions.comments.ai.assistant',
         titleKey: 'actions.comments.ai.assistantTitle',
-        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        icon: '<svg width="24" height="24" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4l3 3 3-3h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2m0 16h-4.83l-.59.59L12 20.17l-1.59-1.59-.58-.58H5V4h14zm-7-1 1.88-4.12L18 11l-4.12-1.88L12 5l-1.88 4.12L6 11l4.12 1.88z"/></svg>',
         fn: 'showAiAssistantDrawerPopup'
       }
     };
@@ -6945,7 +6980,7 @@ CRITICAL RULES:
       'assistant': {
         label: 'AI Assistant',
         title: 'Ask AI about these styles',
-        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+        icon: '<svg width="24" height="24" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4l3 3 3-3h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2m0 16h-4.83l-.59.59L12 20.17l-1.59-1.59-.58-.58H5V4h14zm-7-1 1.88-4.12L18 11l-4.12-1.88L12 5l-1.88 4.12L6 11l4.12 1.88z"/></svg>',
         fn: 'showStyleAiAssistantPopup'
       }
     };
@@ -8104,7 +8139,7 @@ ${commentsList}`;
       popup.className = 'ai-assistant-popup ai-assistant-popup--centered';
       popup.innerHTML = `
         <div class="ai-assistant-popup-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h4l3 3 3-3h4c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2m0 16h-4.83l-.59.59L12 20.17l-1.59-1.59-.58-.58H5V4h14zm-7-1 1.88-4.12L18 11l-4.12-1.88L12 5l-1.88 4.12L6 11l4.12 1.88z"/></svg>
           <span>${escapeHtml(tu('actions.comments.ai.assistantPopupTitle', { count: selectedComments.length }))}</span>
           ${createModelSelectDropdownHTML('drawerAssistant')}
         </div>
@@ -27165,6 +27200,17 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     // Code Editor Modal logic
     let _codeEditorTarget = null;
+    let _codeEditorSourceCode = '';
+    let _codeEditorSvgLayerNameHints = [];
+    let _isApplyingCodeEditorProgrammatically = false;
+    const DEFAULT_CODE_EDITOR_OPTIONS = {
+      prettyPrint: false,
+      layerNamesAsClasses: false,
+      useCurrentColor: false,
+      removeXmlns: false,
+      nonScalingStroke: false
+    };
+    const _codeEditorOptions = { ...DEFAULT_CODE_EDITOR_OPTIONS };
 
     // Undo/Redo history
     const _codeEditorHistory = [];
@@ -27198,6 +27244,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     function applyHistoryState(code) {
       const textarea = document.getElementById('codeEditorTextarea');
+      _codeEditorSourceCode = code;
       textarea.value = code;
       syncCodeEditorHighlight(code, getCodeEditorLang());
     }
@@ -27239,31 +27286,369 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
           type: 'staged-attachment',
           code: attachment.content || '',
           lang: attachment.lang || 'text',
-          attachment
+          attachment,
+          svgLayerNameHints: Array.isArray(attachment.svgLayerNameHints) ? attachment.svgLayerNameHints : []
         };
       }
 
       return null;
     }
 
+    function isSvgCode(code, lang) {
+      const normalizedLang = String(lang || '').toLowerCase();
+      return normalizedLang === 'svg' || /<svg\b[\s\S]*?>/i.test(code || '');
+    }
+
+    function sanitizeSvgClassName(value) {
+      return String(value || '')
+        .trim()
+        .replace(/[\s/\\]+/g, '-')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/[^a-zA-Z0-9_-]+/g, '-')
+        .replace(/-{2,}/g, '-')
+        .replace(/^[-_]+|[-_]+$/g, '')
+        .toLowerCase();
+    }
+
+    function parseSvgDocument(code) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(code, 'image/svg+xml');
+        if (doc.querySelector('parsererror')) return null;
+        const svg = doc.documentElement;
+        if (!svg || svg.nodeName.toLowerCase() !== 'svg') return null;
+        return { doc, svg };
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function serializeSvgDocument(svg) {
+      return new XMLSerializer().serializeToString(svg);
+    }
+
+    function removeSvgXmlnsFromMarkup(markup) {
+      return String(markup || '')
+        .replace(/\sxmlns="http:\/\/www\.w3\.org\/2000\/svg"/i, '')
+        .replace(/\sxmlns:xlink="http:\/\/www\.w3\.org\/1999\/xlink"/i, '');
+    }
+
+    function prettyPrintXmlString(markup) {
+      const parsed = parseSvgDocument(markup);
+      if (!parsed) return markup;
+      const { svg } = parsed;
+
+      const formatNode = (node, depth) => {
+        const indent = '  '.repeat(depth);
+        const childNodes = Array.from(node.childNodes).filter((child) => {
+          if (child.nodeType === Node.TEXT_NODE) return child.textContent.trim().length > 0;
+          return true;
+        });
+        const attrs = Array.from(node.attributes).map((attr) => `${attr.name}="${attr.value}"`).join(' ');
+        const openTag = attrs ? `<${node.tagName} ${attrs}>` : `<${node.tagName}>`;
+
+        if (childNodes.length === 0) {
+          return `${indent}${attrs ? `<${node.tagName} ${attrs} />` : `<${node.tagName} />`}`;
+        }
+
+        const closeTag = `</${node.tagName}>`;
+        const lines = [`${indent}${openTag}`];
+
+        childNodes.forEach((child) => {
+          if (child.nodeType === Node.ELEMENT_NODE) {
+            lines.push(formatNode(child, depth + 1));
+          } else if (child.nodeType === Node.CDATA_SECTION_NODE) {
+            lines.push(`${'  '.repeat(depth + 1)}<![CDATA[${child.textContent}]]>`);
+          } else if (child.nodeType === Node.TEXT_NODE) {
+            const text = child.textContent.trim();
+            if (text) lines.push(`${'  '.repeat(depth + 1)}${text}`);
+          } else if (child.nodeType === Node.COMMENT_NODE) {
+            lines.push(`${'  '.repeat(depth + 1)}<!--${child.textContent || ''}-->`);
+          }
+        });
+
+        lines.push(`${indent}${closeTag}`);
+        return lines.join('\n');
+      };
+
+      return formatNode(svg, 0);
+    }
+
+    function prettyPrintJsonString(code) {
+      try {
+        return JSON.stringify(JSON.parse(code), null, 2);
+      } catch (_error) {
+        return code;
+      }
+    }
+
+    function prettyPrintCssString(code) {
+      const input = String(code || '').replace(/\r\n/g, '\n');
+      const lines = [];
+      let current = '';
+      let depth = 0;
+      let inString = false;
+      let stringQuote = '';
+
+      const pushCurrent = () => {
+        const trimmed = current.trim();
+        if (trimmed) {
+          lines.push(`${'  '.repeat(Math.max(depth, 0))}${trimmed}`);
+        }
+        current = '';
+      };
+
+      for (let i = 0; i < input.length; i++) {
+        const char = input[i];
+        const prev = input[i - 1];
+
+        if (inString) {
+          current += char;
+          if (char === stringQuote && prev !== '\\') {
+            inString = false;
+            stringQuote = '';
+          }
+          continue;
+        }
+
+        if (char === '"' || char === '\'') {
+          inString = true;
+          stringQuote = char;
+          current += char;
+          continue;
+        }
+
+        if (char === '{') {
+          current += ' {';
+          pushCurrent();
+          depth++;
+          continue;
+        }
+
+        if (char === '}') {
+          pushCurrent();
+          depth = Math.max(0, depth - 1);
+          lines.push(`${'  '.repeat(depth)}}`);
+          continue;
+        }
+
+        if (char === ';') {
+          current += ';';
+          pushCurrent();
+          continue;
+        }
+
+        if (char === '\n') {
+          pushCurrent();
+          continue;
+        }
+
+        current += char;
+      }
+
+      pushCurrent();
+      return lines.join('\n');
+    }
+
+    function shouldConvertPaintValueToCurrentColor(value) {
+      if (!value) return false;
+      const normalized = String(value).trim().toLowerCase();
+      if (!normalized) return false;
+      if (normalized === 'none' || normalized === 'currentcolor' || normalized === 'transparent' || normalized === 'inherit') return false;
+      if (normalized.startsWith('url(') || normalized.startsWith('var(')) return false;
+      return true;
+    }
+
+    function applySvgEditorOptions(code, options, layerNameHints = []) {
+      const parsed = parseSvgDocument(code);
+      if (!parsed) return code;
+
+      const { svg } = parsed;
+      const allElements = Array.from(svg.querySelectorAll('*'));
+      const referencedIds = new Set();
+      const hintQueue = Array.isArray(layerNameHints) ? [...layerNameHints] : [];
+      const nonRenderableTags = new Set(['defs', 'clipPath', 'mask', 'linearGradient', 'radialGradient', 'stop', 'filter', 'pattern', 'marker', 'style', 'title', 'desc', 'symbol']);
+
+      allElements.forEach((el) => {
+        Array.from(el.attributes).forEach((attr) => {
+          const value = attr.value || '';
+          value.replace(/url\(#([^)]+)\)/g, (_match, id) => {
+            referencedIds.add(id);
+            return _match;
+          });
+          if ((attr.name === 'href' || attr.name === 'xlink:href') && value.startsWith('#')) {
+            referencedIds.add(value.slice(1));
+          }
+        });
+      });
+
+      if (options.removeXmlns) {
+        svg.removeAttribute('xmlns');
+      }
+
+      allElements.forEach((el) => {
+        if (options.layerNamesAsClasses) {
+          const tagName = el.tagName.toLowerCase();
+          const id = el.getAttribute('id');
+          const hasUsableId = Boolean(id && !/^[a-z](?:\d+)?$/i.test(id));
+          const existingLabel = el.getAttribute('data-name') || el.getAttribute('inkscape:label') || el.getAttribute('aria-label') || (hasUsableId ? id : '');
+          const fallbackHint = (!existingLabel && !nonRenderableTags.has(tagName) && hintQueue.length > 0) ? hintQueue.shift() : '';
+          const label = existingLabel || fallbackHint || '';
+          const className = sanitizeSvgClassName(label);
+          if (className) {
+            const existing = (el.getAttribute('class') || '').split(/\s+/).filter(Boolean);
+            if (!existing.includes(className)) {
+              existing.push(className);
+              el.setAttribute('class', existing.join(' '));
+            }
+            if (id && !referencedIds.has(id)) {
+              el.removeAttribute('id');
+            }
+          }
+        }
+
+        if (options.useCurrentColor) {
+          ['fill', 'stroke'].forEach((attrName) => {
+            const currentValue = el.getAttribute(attrName);
+            if (shouldConvertPaintValueToCurrentColor(currentValue)) {
+              el.setAttribute(attrName, 'currentColor');
+            }
+          });
+
+          const style = el.getAttribute('style');
+          if (style) {
+            const updatedStyle = style
+              .replace(/(fill\s*:\s*)([^;]+)/ig, (match, prefix, value) => (
+                shouldConvertPaintValueToCurrentColor(value) ? `${prefix}currentColor` : match
+              ))
+              .replace(/(stroke\s*:\s*)([^;]+)/ig, (match, prefix, value) => (
+                shouldConvertPaintValueToCurrentColor(value) ? `${prefix}currentColor` : match
+              ));
+            el.setAttribute('style', updatedStyle);
+          }
+        }
+
+        if (options.nonScalingStroke) {
+          const stroke = el.getAttribute('stroke');
+          const strokeWidth = el.getAttribute('stroke-width');
+          const style = el.getAttribute('style') || '';
+          const hasStroke = (
+            (stroke && stroke !== 'none') ||
+            Boolean(strokeWidth) ||
+            /stroke\s*:\s*(?!none\b)[^;]+/i.test(style) ||
+            /stroke-width\s*:\s*[^;]+/i.test(style)
+          );
+          if (hasStroke) {
+            el.setAttribute('vector-effect', 'non-scaling-stroke');
+          }
+        }
+      });
+
+      let updated = serializeSvgDocument(svg);
+      if (options.removeXmlns) {
+        updated = removeSvgXmlnsFromMarkup(updated);
+      }
+      if (options.prettyPrint) {
+        updated = prettyPrintXmlString(updated);
+        if (options.removeXmlns) {
+          updated = removeSvgXmlnsFromMarkup(updated);
+        }
+      }
+      return updated;
+    }
+
+    function applyPrettyPrintByLanguage(code, lang) {
+      const normalizedLang = String(lang || '').toLowerCase();
+      if (normalizedLang === 'json') return prettyPrintJsonString(code);
+      if (normalizedLang === 'css') return prettyPrintCssString(code);
+      if (normalizedLang === 'svg' || normalizedLang === 'xml' || normalizedLang === 'html' || /<[^>]+>/.test(code || '')) {
+        return prettyPrintXmlString(code);
+      }
+      return code;
+    }
+
+    function applyCodeEditorOptions(code, lang) {
+      if (isSvgCode(code, lang)) {
+        return applySvgEditorOptions(code, _codeEditorOptions, _codeEditorSvgLayerNameHints);
+      }
+
+      if (_codeEditorOptions.prettyPrint) {
+        return applyPrettyPrintByLanguage(code, lang);
+      }
+
+      return code;
+    }
+
+    function setCodeEditorValue(code, lang, { pushHistory = false, preserveSelection = false } = {}) {
+      const textarea = document.getElementById('codeEditorTextarea');
+      if (!textarea) return;
+
+      const selectionStart = textarea.selectionStart || 0;
+      const selectionEnd = textarea.selectionEnd || 0;
+
+      _isApplyingCodeEditorProgrammatically = true;
+      textarea.value = code;
+      syncCodeEditorHighlight(code, lang);
+      if (pushHistory && _codeEditorHistory[_codeEditorHistoryIdx] !== code) {
+        codeEditorPushState(code);
+      }
+      if (preserveSelection) {
+        const clampedStart = Math.min(selectionStart, code.length);
+        const clampedEnd = Math.min(selectionEnd, code.length);
+        textarea.setSelectionRange(clampedStart, clampedEnd);
+      }
+      _isApplyingCodeEditorProgrammatically = false;
+    }
+
+    function refreshCodeEditorFromSource({ pushHistory = false, preserveSelection = false } = {}) {
+      const details = getCodeEditorTargetDetails(_codeEditorTarget);
+      const lang = details ? details.lang : 'text';
+      const output = applyCodeEditorOptions(_codeEditorSourceCode, lang);
+      setCodeEditorValue(output, lang, { pushHistory, preserveSelection });
+      updateCodeEditorOptionsUi();
+    }
+
+    function closeCodeEditorOptionsMenu() {
+      const anchor = document.querySelector('.code-editor-options-anchor');
+      const btn = document.getElementById('codeEditorOptionsBtn');
+      anchor?.classList.remove('open');
+      btn?.setAttribute('aria-expanded', 'false');
+    }
+
+    function updateCodeEditorOptionsUi() {
+      const details = getCodeEditorTargetDetails(_codeEditorTarget);
+      const lang = details ? details.lang : 'text';
+      const langBadge = document.getElementById('codeEditorLangBadge');
+      const isSvg = String(langBadge?.textContent || lang || '').trim().toLowerCase() === 'svg';
+
+      Object.entries(DEFAULT_CODE_EDITOR_OPTIONS).forEach(([key]) => {
+        const input = document.querySelector(`#codeEditorOptionsMenu input[data-option-key="${key}"]`);
+        if (!input) return;
+        const row = input.closest('.code-editor-option-row');
+        const svgOnly = row?.classList.contains('svg-only');
+        input.checked = Boolean(_codeEditorOptions[key]);
+        row?.classList.toggle('hidden', Boolean(svgOnly && !isSvg));
+      });
+    }
+
     function openCodeEditor(target) {
       const modal = document.getElementById('codeEditorModal');
-      const textarea = document.getElementById('codeEditorTextarea');
       const langBadge = document.getElementById('codeEditorLangBadge');
       const details = getCodeEditorTargetDetails(target);
       if (!details) return;
 
       _codeEditorTarget = target;
+      _codeEditorSourceCode = details.code;
+      _codeEditorSvgLayerNameHints = Array.isArray(details.svgLayerNameHints) ? [...details.svgLayerNameHints] : [];
 
       langBadge.textContent = details.lang;
-      textarea.value = details.code;
-      syncCodeEditorHighlight(details.code, details.lang);
 
       resetCodeEditorHistory();
-      codeEditorPushState(details.code);
+      refreshCodeEditorFromSource();
+      codeEditorPushState(document.getElementById('codeEditorTextarea').value);
 
       modal.classList.add('show');
-      requestAnimationFrame(() => textarea.focus());
+      requestAnimationFrame(() => document.getElementById('codeEditorTextarea').focus());
     }
 
     function syncCodeEditorHighlight(code, lang) {
@@ -27285,7 +27670,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       document.getElementById('codeEditorSelectionToolbar')?.classList.remove('visible');
       document.getElementById('aiAssistantPopup')?.classList.remove('visible');
       document.getElementById('codeEditorAIPopup')?.classList.remove('visible');
+      closeCodeEditorOptionsMenu();
       _codeEditorTarget = null;
+      _codeEditorSourceCode = '';
+      _codeEditorSvgLayerNameHints = [];
     }
 
     function saveCodeEditor() {
@@ -27338,6 +27726,24 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     document.getElementById('closeCodeEditorBtn').addEventListener('click', closeCodeEditor);
     document.getElementById('codeEditorCancelBtn').addEventListener('click', closeCodeEditor);
     document.getElementById('codeEditorSaveBtn').addEventListener('click', saveCodeEditor);
+    document.getElementById('codeEditorOptionsBtn').addEventListener('click', (event) => {
+      event.stopPropagation();
+      const anchor = document.querySelector('.code-editor-options-anchor');
+      const btn = document.getElementById('codeEditorOptionsBtn');
+      const nextState = !anchor?.classList.contains('open');
+      anchor?.classList.toggle('open', nextState);
+      btn?.setAttribute('aria-expanded', nextState ? 'true' : 'false');
+      if (nextState) updateCodeEditorOptionsUi();
+    });
+    document.querySelectorAll('#codeEditorOptionsMenu input[data-option-key]').forEach((input) => {
+      input.addEventListener('change', (event) => {
+        const target = event.currentTarget;
+        const key = target.dataset.optionKey;
+        if (!key || !(key in _codeEditorOptions)) return;
+        _codeEditorOptions[key] = target.checked;
+        refreshCodeEditorFromSource({ pushHistory: true, preserveSelection: true });
+      });
+    });
     document.getElementById('copyCodeEditorBtn').addEventListener('click', async function () {
       const textarea = document.getElementById('codeEditorTextarea');
       const textToCopy = textarea.value;
@@ -27364,6 +27770,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     // Track manual edits for undo (debounced to avoid flooding history on every keystroke)
     let _codeEditorInputTimer = null;
     document.getElementById('codeEditorTextarea').addEventListener('input', () => {
+      if (_isApplyingCodeEditorProgrammatically) return;
+      _codeEditorSourceCode = document.getElementById('codeEditorTextarea').value;
       clearTimeout(_codeEditorInputTimer);
       _codeEditorInputTimer = setTimeout(() => {
         const code = document.getElementById('codeEditorTextarea').value;
@@ -27389,6 +27797,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     // Sync highlight as user types
     document.getElementById('codeEditorTextarea').addEventListener('input', (e) => {
+      if (_isApplyingCodeEditorProgrammatically) return;
       if (!_codeEditorTarget) return;
       const details = getCodeEditorTargetDetails(_codeEditorTarget);
       const lang = details ? details.lang : 'text';
@@ -27406,6 +27815,9 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     // Close on backdrop click
     document.getElementById('codeEditorModal').addEventListener('click', (e) => {
+      if (!e.target.closest('.code-editor-options-anchor')) {
+        closeCodeEditorOptionsMenu();
+      }
       if (e.target === e.currentTarget) closeCodeEditor();
     });
 
@@ -27550,6 +27962,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const textarea = document.getElementById('codeEditorTextarea');
       const fullText = textarea.value;
       const updated = fullText.substring(0, _codeEditorSelStart) + newCode + fullText.substring(_codeEditorSelEnd);
+      _codeEditorSourceCode = updated;
       textarea.value = updated;
       const lang = getCodeEditorLang();
       syncCodeEditorHighlight(updated, lang);
@@ -27563,6 +27976,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     function replaceFullCode(newCode) {
       const textarea = document.getElementById('codeEditorTextarea');
+      _codeEditorSourceCode = newCode;
       textarea.value = newCode;
       const lang = getCodeEditorLang();
       syncCodeEditorHighlight(newCode, lang);
@@ -30250,8 +30664,8 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       stageAttachments(images.map(createImageAttachment));
     }
 
-    function stageCodeAttachment(type, content) {
-      stageAttachments([createCodeAttachment(type, content)]);
+    function stageCodeAttachment(type, content, meta = {}) {
+      stageAttachments([createCodeAttachment(type, content, meta)]);
     }
 
     function renderStagedAttachments() {
@@ -30347,7 +30761,12 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       }
 
       if (['CSS', 'SVG', 'TEXT'].includes(type)) {
-        stageCodeAttachment(type, data);
+        if (type === 'SVG') {
+          const normalized = normalizeSvgExportPayload(data);
+          stageCodeAttachment(type, normalized.content, { svgLayerNameHints: normalized.svgLayerNameHints });
+        } else {
+          stageCodeAttachment(type, data);
+        }
         chatInput.focus();
         showToast(`${type} staged - add text and send`);
         return;
@@ -33908,7 +34327,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           break;
 
         case 'svg-result':
-          addExportToInput('SVG', optimizeExportedSvgMarkup(msg.data));
+          addExportToInput('SVG', msg.data);
           break;
 
         case 'png-result':

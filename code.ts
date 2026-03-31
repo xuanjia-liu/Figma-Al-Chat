@@ -574,6 +574,49 @@ function cleanUpLayerName(name: string): string {
   return cleanUpNameSegment(name);
 }
 
+function nodeHasSceneChildren(node: SceneNode): node is SceneNode & ChildrenMixin {
+  return 'children' in node && Array.isArray((node as any).children);
+}
+
+function isSvgLayerNameTarget(node: SceneNode): boolean {
+  const leafLikeTypes = new Set([
+    'BOOLEAN_OPERATION',
+    'ELLIPSE',
+    'LINE',
+    'POLYGON',
+    'RECTANGLE',
+    'STAR',
+    'TEXT',
+    'VECTOR'
+  ]);
+
+  if (leafLikeTypes.has(node.type)) return true;
+
+  if (!nodeHasSceneChildren(node)) return true;
+  return node.children.filter((child): child is SceneNode => 'type' in child).length === 0;
+}
+
+function collectSvgLayerNames(node: SceneNode): string[] {
+  const names: string[] = [];
+
+  const visit = (current: SceneNode) => {
+    if ('visible' in current && current.visible === false) return;
+
+    if (isSvgLayerNameTarget(current)) {
+      const cleaned = cleanUpLayerName(current.name || '');
+      if (cleaned) names.push(cleaned);
+    }
+
+    if (!nodeHasSceneChildren(current)) return;
+    current.children.forEach((child) => {
+      if ('type' in child) visit(child as SceneNode);
+    });
+  };
+
+  visit(node);
+  return names;
+}
+
 async function resolveEditableTextTarget(node: SceneNode): Promise<EditableTextTarget | null> {
   if (node.type === 'INSTANCE') {
     const instance = node as InstanceNode;
@@ -5760,12 +5803,16 @@ figma.ui.onmessage = async (msg: {
         const svgPromises = selection.map(async (node) => {
           if ('exportAsync' in node) {
             const svg = await node.exportAsync({ format: 'SVG_STRING' });
-            return `<!-- ${node.name} -->\n${svg}`;
+            return {
+              name: node.name,
+              svg,
+              layerNames: collectSvgLayerNames(node)
+            };
           }
-          return '';
+          return null;
         });
         const svgs = await Promise.all(svgPromises);
-        figma.ui.postMessage({ type: 'svg-result', data: svgs.filter(s => s).join('\n\n') });
+        figma.ui.postMessage({ type: 'svg-result', data: svgs.filter(Boolean) });
       } catch (error) {
         figma.ui.postMessage({ type: 'error', message: 'Failed to export SVG' });
       }
