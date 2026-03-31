@@ -5913,9 +5913,6 @@ Rules:
 
     function resolveVerticalTextReloadLineHeightPx(first) {
       if (!first || typeof first.fontSize !== 'number' || first.fontSize <= 0) return null;
-      if (first.isVertical === true && first.lineHeightPx > 0) return first.lineHeightPx;
-      const native = first.nativeLineHeightPx;
-      if (typeof native === 'number' && native > 0) return native;
       return Math.round(first.fontSize * 1.1 * 100) / 100;
     }
 
@@ -6042,11 +6039,12 @@ Rules:
             useVerticalColumns: first.useVerticalColumns === true
           };
           if (first.isVertical) {
+            const lhDefault = resolveVerticalTextReloadLineHeightPx(first);
             return fields.map(field => {
               if (field.key === 'heightPx' && first.heightPx > 0) return { ...field, default: first.heightPx };
               if (field.key === 'columnTextCount' && first.columnTextCount > 0) return { ...field, default: first.columnTextCount };
               if (field.key === 'verticalColumns' && first.verticalColumns > 0) return { ...field, default: first.verticalColumns };
-              if (field.key === 'lineHeightPx' && first.lineHeightPx > 0) return { ...field, default: first.lineHeightPx };
+              if (field.key === 'lineHeightPx' && lhDefault != null) return { ...field, default: lhDefault };
               if (field.key === 'useVerticalColumns') return { ...field, default: first.useVerticalColumns === true };
               return field;
             });
@@ -21666,7 +21664,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Add prefix/suffix failed', 'Please select at least one text layer.']
           });
-        case 'Vertical text':
+        case 'Vertical text': {
+          const lhRaw = values.lineHeightPx;
+          const lineHeightPx = typeof lhRaw === 'number' && Number.isFinite(lhRaw) && lhRaw > 0
+            ? lhRaw
+            : (() => {
+                const p = parseFloat(String(lhRaw ?? '').trim());
+                return Number.isFinite(p) && p > 0 ? p : 0;
+              })();
           return runLocalActionRequest({
             requestType: 'local-verticalize-text',
             resultType: 'local-verticalize-text-result',
@@ -21675,10 +21680,11 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               columnTextCount: parseInt(values.columnTextCount) || 0,
               useVerticalColumns: values.useVerticalColumns === true,
               verticalColumns: parseInt(values.verticalColumns) || 0,
-              lineHeightPx: parseFloat(values.lineHeightPx) || 0
+              lineHeightPx
             },
             errorPrefixes: ['Verticalize text failed', 'Please select at least one text layer.']
           });
+        }
         default:
           throw new Error(`Unsupported local action: ${actionName}`);
       }

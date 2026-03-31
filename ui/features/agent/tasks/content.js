@@ -282,7 +282,6 @@ export const smartTextTasks = [
               max: 100,
               step: 1,
               numberWithSlider: true,
-              hint: 'How many vertical columns to create',
               disabledWhen: { field: 'useVerticalColumns', equals: false }
             },
             {
@@ -295,7 +294,6 @@ export const smartTextTasks = [
               step: 0.01,
               sliderStep: 0.5,
               numberWithSlider: true,
-              hint: 'Empty = 1.1 × font size',
               reloadLineHeightFromSelection: true
             }
           ]

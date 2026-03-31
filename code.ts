@@ -69,6 +69,7 @@ const FONT_PREVIEW_BOOKMARKS_LIMITS = {
 const VERTICAL_TEXT_MAX_COLUMNS = 100;
 const VERTICAL_TEXT_MAX_FLAT_CODEPOINTS = 120_000;
 const VERTICAL_TEXT_WRAP_SIMULATION_MAX_LENGTH = 12_000;
+const VERTICAL_TEXT_DEFAULT_LINE_HEIGHT_FACTOR = 1.1;
 
 function countCodePoints(s: string): number {
   let n = 0;
@@ -6581,7 +6582,14 @@ figma.ui.onmessage = async (msg: {
         const reqColumnTextCount = typeof (msg as any).columnTextCount === 'number' ? (msg as any).columnTextCount : 0;
         const reqUseVerticalColumns = (msg as any).useVerticalColumns === true;
         const reqVerticalColumns = typeof (msg as any).verticalColumns === 'number' ? (msg as any).verticalColumns : 0;
-        const reqLineHeightPx = typeof (msg as any).lineHeightPx === 'number' ? (msg as any).lineHeightPx : 0;
+        const rawLh = (msg as any).lineHeightPx;
+        let parsedReqLineHeightPx = 0;
+        if (typeof rawLh === 'number' && Number.isFinite(rawLh) && rawLh > 0) {
+          parsedReqLineHeightPx = rawLh;
+        } else if (rawLh != null && String(rawLh).trim() !== '') {
+          const p = parseFloat(String(rawLh));
+          if (Number.isFinite(p) && p > 0) parsedReqLineHeightPx = p;
+        }
 
         let updated = 0;
         let skipped = 0;
@@ -6646,12 +6654,14 @@ figma.ui.onmessage = async (msg: {
             let baseFills = textNode.fills;
             if (typeof baseFills === 'symbol') baseFills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
 
-            // Determine the original line height before conversion (for wrapper padding)
+            // Horizontal line metrics for column side padding (only before first conversion — rerun already has vertical lh on node)
             let originalLineHeight = baseFontSize * 1.2;
-            if (typeof textNode.lineHeight !== 'symbol' && textNode.lineHeight.unit === 'PIXELS') {
-              originalLineHeight = textNode.lineHeight.value;
-            } else if (typeof textNode.lineHeight !== 'symbol' && textNode.lineHeight.unit === 'PERCENT') {
-              originalLineHeight = baseFontSize * (textNode.lineHeight.value / 100);
+            if (!isRerun) {
+              if (typeof textNode.lineHeight !== 'symbol' && textNode.lineHeight.unit === 'PIXELS') {
+                originalLineHeight = textNode.lineHeight.value;
+              } else if (typeof textNode.lineHeight !== 'symbol' && textNode.lineHeight.unit === 'PERCENT') {
+                originalLineHeight = baseFontSize * (textNode.lineHeight.value / 100);
+              }
             }
 
             // --- Get source text ---
@@ -6738,8 +6748,10 @@ figma.ui.onmessage = async (msg: {
             const sourceRowLengths = lineTexts.map(line => countCodePoints(line || ''));
             const sourceMaxRowLength = sourceRowLengths.length > 0 ? Math.max(...sourceRowLengths, 1) : 1;
 
-            // --- Resolve effective parameters ---
-            const effectiveLineHeight = reqLineHeightPx > 0 ? reqLineHeightPx : Math.round(baseFontSize * 1.1 * 100) / 100;
+            // --- Resolve effective line height: explicit UI px, else font-size default (not Figma/stored leading) ---
+            const effectiveLineHeight = parsedReqLineHeightPx > 0
+              ? parsedReqLineHeightPx
+              : Math.round(baseFontSize * VERTICAL_TEXT_DEFAULT_LINE_HEIGHT_FACTOR * 100) / 100;
 
             let effectiveColumnTextCount = 0;
             let effectiveVerticalColumns = 0;
@@ -6837,10 +6849,12 @@ figma.ui.onmessage = async (msg: {
 
             // --- Helper to apply vertical style to a text node ---
             const applyVerticalStyle = (tn: TextNode, content: string) => {
+              tn.textAutoResize = 'HEIGHT';
               tn.characters = content;
               tn.textAlignHorizontal = 'CENTER';
               tn.lineHeight = { value: effectiveLineHeight, unit: 'PIXELS' };
-              tn.textAutoResize = 'HEIGHT';
+              // Newlines separate glyphs; paragraph spacing would stack on every line and swamp line height.
+              tn.paragraphSpacing = 0;
               tn.resize(0.01, tn.height);
             };
 

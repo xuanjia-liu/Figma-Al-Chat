@@ -54,7 +54,6 @@ function collectTaskFieldStrings() {
 const EXACT = {
   ' (done)': ['（完了）', '（完成）'],
   ' - draft': [' - 下書き', ' - 草稿'],
-  'Empty = 1.1 × font size': ['未入力 = フォントサイズの 1.1 倍', '留空 = 1.1 × 字号'],
   '0 = auto based on count; 2 forces 01, 02, ...': [
     '0 = 件数に応じて自動、2 なら 01, 02… を強制',
     '0 = 按数量自动；2 则强制 01、02…',
@@ -483,7 +482,6 @@ const WORDS_JA = {
     '1 行に 1 指示。置換対象は {text}。各行が 1 コピーになります',
   'Replace {text} with New Text 1\\nReplace {text} with New Text 2\\nReplace {text} with New Text 3':
     'Replace {text} with 新テキスト1\\nReplace {text} with 新テキスト2\\nReplace {text} with 新テキスト3',
-  'How many vertical columns to create': '作成する縦列の数',
   'Maximum characters per vertical column': '各縦列の最大文字数',
   'Limit to': '上限',
   'Fit to': '合わせる',
@@ -789,7 +787,6 @@ const WORDS_ZH_FULL = {
     '每行一条说明。用 {text} 作为待替换文本占位。每行生成一个副本。',
   'Replace {text} with New Text 1\\nReplace {text} with New Text 2\\nReplace {text} with New Text 3':
     '将 {text} 替换为新文本1\\n将 {text} 替换为新文本2\\n将 {text} 替换为新文本3',
-  'How many vertical columns to create': '要创建的纵列数',
   'Maximum characters per vertical column': '每列最大字符数',
   'Limit to': '限制为',
   'Fit to': '适配为',
