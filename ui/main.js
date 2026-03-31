@@ -52,6 +52,7 @@ import {
   STYLE_DEFAULT_TOKENS,
   UX_GUIDELINES,
 } from './config/agent-data.js';
+import lineiconsFreeGlyphsJson from './data/lineicons-free-glyphs.json';
 import {
   DEFAULT_SETTINGS_LOCALE,
   getSettingsTranslation,
@@ -18294,12 +18295,21 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       },
       'Lineicons Free': {
         displayName: 'Lineicons Free',
-        familyAliases: [
+        /** Lineicons 5.1+ free webfont uses this exact name in @font-face (matches Figma when installed). */
+        canonicalLoadFamilies: [
+          'lineicons-free',
           'Lineicons Free',
-          'LineIcons Free',
+          'Lineicons',
+          'lineicons'
+        ],
+        familyAliases: [
+          'lineicons-free',
+          'Lineicons Free',
+          'Lineicons-Free',
           'Lineicons',
           'LineIcons',
-          'lineicons'
+          'lineicons',
+          'LineIcons Free'
         ],
         defaultStyle: 'Regular',
         requiredStyles: ['Regular'],
@@ -18307,7 +18317,8 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         iconifyPrefixes: ['lineicons'],
         unicodeSource: {
           type: 'css-map',
-          url: 'https://unpkg.com/lineicons@1.3.2/dist/lineicons.css',
+          /** 5.1 free font codepoints match font-family "lineicons-free"; 5.0 "Lineicons" map differs (wrong glyphs). */
+          url: 'https://cdn.lineicons.com/5.1/line/lineicons.css',
           classPrefixes: ['lni-']
         },
         sortOrder: 7
@@ -18417,6 +18428,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     function buildOrderedIconFontFamilies(configKey, resolvedFromMapFamily) {
       const cfg = getIconFontConfig(configKey);
       const list = [];
+      if (Array.isArray(cfg?.canonicalLoadFamilies)) {
+        list.push(...cfg.canonicalLoadFamilies);
+      }
       if (resolvedFromMapFamily) list.push(resolvedFromMapFamily);
       if (cfg?.familyAliases) list.push(...cfg.familyAliases);
       if (configKey) list.push(configKey);
@@ -18587,7 +18601,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
     function parseIconFontCssContentMap(text, classPrefixes = []) {
       const unicodeMap = new Map();
-      const regex = /\.([a-z0-9_-]+)::?before\s*\{\s*content:\s*["']\\([0-9a-f]+)["'];?\s*\}/gi;
+      const regex = /\.([a-z0-9_-]+)::?before\s*\{\s*content:\s*["']\\([0-9a-fA-F]+)["'];?\s*\}/gi;
       let match;
       while ((match = regex.exec(text)) !== null) {
         const rawClassName = match[1];
@@ -18601,26 +18615,40 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
             break;
           }
         }
+        key = (key || '').toLowerCase();
         if (key) unicodeMap.set(key, char);
       }
       return unicodeMap;
     }
 
+    function iconFontUnicodeCacheKey(fontFamilyName) {
+      const config = getIconFontConfig(fontFamilyName);
+      const url = config?.unicodeSource?.url;
+      return url ? `${fontFamilyName}::${url}` : fontFamilyName;
+    }
+
     async function loadIconFontUnicodeMap(fontFamilyName) {
-      if (iconFontUnicodeCache.has(fontFamilyName)) {
-        return iconFontUnicodeCache.get(fontFamilyName);
+      const cacheKey = iconFontUnicodeCacheKey(fontFamilyName);
+      if (iconFontUnicodeCache.has(cacheKey)) {
+        return iconFontUnicodeCache.get(cacheKey);
       }
 
       const config = getIconFontConfig(fontFamilyName);
       const unicodeMap = new Map();
       if (!config) {
-        iconFontUnicodeCache.set(fontFamilyName, unicodeMap);
+        iconFontUnicodeCache.set(cacheKey, unicodeMap);
         return unicodeMap;
       }
 
       try {
+        if (fontFamilyName === 'Lineicons Free' && lineiconsFreeGlyphsJson && lineiconsFreeGlyphsJson.glyphs) {
+          Object.entries(lineiconsFreeGlyphsJson.glyphs).forEach(([name, hex]) => {
+            const char = unicodeHexToChar(String(hex));
+            if (char) unicodeMap.set(String(name).toLowerCase(), char);
+          });
+        }
         const unicodeSource = config.unicodeSource;
-        if (unicodeSource?.url) {
+        if (unicodeMap.size === 0 && unicodeSource?.url) {
           const res = await fetch(unicodeSource.url, { cache: 'no-store' });
           if (res.ok) {
             if (unicodeSource.type === 'json-metadata') {
@@ -18653,7 +18681,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         console.warn('Failed to load icon font unicode map:', fontFamilyName, err);
       }
 
-      iconFontUnicodeCache.set(fontFamilyName, unicodeMap);
+      iconFontUnicodeCache.set(cacheKey, unicodeMap);
       return unicodeMap;
     }
 
@@ -18667,6 +18695,12 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       const candidates = [];
       if (fontFamilyName === 'Material Icons') {
         candidates.push(...buildMaterialIconNameCandidates(normalizedName));
+      } else if (fontFamilyName === 'Lineicons Free') {
+        candidates.push(normalizedName);
+        if (normalizedName.startsWith('lni-')) {
+          candidates.push(normalizedName.replace(/^lni-/, ''));
+        }
+        candidates.push(normalizedName.replace(/-/g, '_'));
       } else {
         candidates.push(normalizedName);
         if (normalizedName.startsWith('fa-')) {
