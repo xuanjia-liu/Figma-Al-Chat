@@ -490,6 +490,7 @@ const WORDS_JA = {
   'Vertical Padding': '垂直パディング',
   'Horizontal (Side-by-side)': '横並び（左右）',
   'Vertical (Stacked)': '縦積み',
+  'Keep manual line breaks': '手動の改行を保持',
   'Linked with Column text count using line height': '行の高さに連動した列ごとの文字数',
   'Change text data based on current text or layer name to realistic data':
     '現在のテキストまたはレイヤー名に基づきリアルなデータに変更',
@@ -795,6 +796,7 @@ const WORDS_ZH_FULL = {
   'Vertical Padding': '垂直内边距',
   'Horizontal (Side-by-side)': '横向（并排）',
   'Vertical (Stacked)': '纵向（堆叠）',
+  'Keep manual line breaks': '保留手动换行',
   'Linked with Column text count using line height': '列字数与行高联动',
   'Change text data based on current text or layer name to realistic data': '根据当前文本或图层名替换为更真实的数据',
   'Sequential Full': '完整顺序',

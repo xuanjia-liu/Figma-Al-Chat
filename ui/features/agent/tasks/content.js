@@ -295,7 +295,8 @@ export const smartTextTasks = [
               sliderStep: 0.5,
               numberWithSlider: true,
               reloadLineHeightFromSelection: true
-            }
+            },
+            { key: 'keepManualLineBreaks', type: 'checkbox', label: 'Keep manual line breaks', default: true }
           ]
         }
 ];

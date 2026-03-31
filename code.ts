@@ -89,6 +89,73 @@ function sliceCodePoints(s: string, start: number, length: number): string {
   return out;
 }
 
+/**
+ * Split into vertical column strings using maxCharsPerColumn (drawer settings), but never merge
+ * two manual (Enter) lines into the same column without flushing first — same behavior as
+ * flattening splitTextIntoColumns for char budget, without stripping manual boundaries first.
+ *
+ * When manual breaks need more strips than `minColumnCount`, returns **more** columns (each still
+ * respects maxChars) instead of jamming overflow into the last column.
+ */
+function buildVerticalColumnsRespectingManualLineBreaks(
+  normalizedText: string,
+  maxCharsPerColumn: number,
+  minColumnCount: number
+): string[] {
+  const maxChars = Math.max(1, maxCharsPerColumn);
+  const minCols = Math.max(1, minColumnCount);
+  const paragraphs = normalizedText.split('\n');
+  const chunks: string[] = [];
+  let current = '';
+  let currentCount = 0;
+
+  const flush = () => {
+    chunks.push(current);
+    current = '';
+    currentCount = 0;
+  };
+
+  for (const para of paragraphs) {
+    const paraLen = countCodePoints(para);
+    if (paraLen === 0) {
+      if (currentCount > 0) flush();
+      chunks.push('');
+      continue;
+    }
+
+    let offset = 0;
+    while (offset < paraLen) {
+      if (currentCount >= maxChars) {
+        flush();
+      }
+      if (offset === 0 && currentCount > 0) {
+        flush();
+      }
+
+      const room = maxChars - currentCount;
+      if (room <= 0) {
+        flush();
+        continue;
+      }
+
+      const take = Math.min(room, paraLen - offset);
+      current += sliceCodePoints(para, offset, take);
+      currentCount += take;
+      offset += take;
+    }
+
+    if (currentCount > 0) {
+      flush();
+    }
+  }
+
+  while (chunks.length < minCols) {
+    chunks.push('');
+  }
+
+  return chunks;
+}
+
 function normalizeFontPreviewBookmarks(raw: unknown): { lists: { id: string; name: string; families: string[] }[]; lastSelectedListId: string | null } {
   const empty = { lists: [] as { id: string; name: string; families: string[] }[], lastSelectedListId: null as string | null };
   if (!raw || typeof raw !== 'object') return empty;
@@ -6466,6 +6533,7 @@ figma.ui.onmessage = async (msg: {
           sourceRowCount: number;
           sourceCharCount: number;
           fontSize: number;
+          keepManualLineBreaks: boolean;
         }> = [];
 
         const readNativeLineHeightPx = (tn: TextNode, fs: number): number => {
@@ -6514,7 +6582,7 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (!textNode) {
-            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0 });
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0, keepManualLineBreaks: true });
             continue;
           }
 
@@ -6546,6 +6614,7 @@ figma.ui.onmessage = async (msg: {
                 (textNode.getPluginData('fgVerticalTextOriginalContent') || textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')
               ),
               fontSize,
+              keepManualLineBreaks: textNode.getPluginData('fgVerticalTextKeepManualBreaks') !== 'false',
             });
           } else {
             results.push({
@@ -6558,7 +6627,8 @@ figma.ui.onmessage = async (msg: {
               nativeLineHeightPx,
               sourceRowCount: 0,
               sourceCharCount: countCodePoints((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')),
-              fontSize
+              fontSize,
+              keepManualLineBreaks: true,
             });
           }
         }
@@ -6590,6 +6660,7 @@ figma.ui.onmessage = async (msg: {
           const p = parseFloat(String(rawLh));
           if (Number.isFinite(p) && p > 0) parsedReqLineHeightPx = p;
         }
+        const reqKeepManualLineBreaks = (msg as any).keepManualLineBreaks !== false;
 
         let updated = 0;
         let skipped = 0;
@@ -6696,7 +6767,53 @@ figma.ui.onmessage = async (msg: {
               maxLineWidth !== Infinity && sourceText.length > VERTICAL_TEXT_WRAP_SIMULATION_MAX_LENGTH;
 
             let lineTexts: string[];
-            if (useFastLineSplit) {
+            if (reqKeepManualLineBreaks && useFastLineSplit) {
+              const parts = normalizedSourceText.split('\n');
+              lineTexts = parts.length > 0 ? parts : [''];
+            } else if (reqKeepManualLineBreaks && !useFastLineSplit) {
+              await smartLoadFont(baseFontName);
+              const measurementNode = figma.createText();
+              measurementNode.visible = false;
+              measurementNode.fontName = baseFontName;
+              measurementNode.fontSize = baseFontSize;
+              if (typeof textNode.letterSpacing !== 'symbol') {
+                measurementNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+              }
+              try {
+                figma.currentPage.appendChild(measurementNode);
+                const measureWidth = (text: string): number => {
+                  measurementNode.characters = text || '';
+                  return measurementNode.width;
+                };
+                const wrapTolerance = 0.5;
+                lineTexts = [];
+                const paragraphs = normalizedSourceText.split('\n');
+                for (const para of paragraphs) {
+                  const segLines: string[] = [''];
+                  let lineIdx = 0;
+                  for (const ch of para) {
+                    if (maxLineWidth !== Infinity) {
+                      const prospectiveText = segLines[lineIdx] + ch;
+                      const prospectiveWidth = measureWidth(prospectiveText);
+                      if (prospectiveWidth > maxLineWidth + wrapTolerance && segLines[lineIdx].length > 0) {
+                        lineIdx++;
+                        segLines[lineIdx] = ch;
+                      } else {
+                        segLines[lineIdx] = prospectiveText;
+                      }
+                    } else {
+                      segLines[0] = (segLines[0] || '') + ch;
+                    }
+                  }
+                  for (const sl of segLines) {
+                    lineTexts.push(sl);
+                  }
+                }
+                if (lineTexts.length === 0) lineTexts = [''];
+              } finally {
+                if (!measurementNode.removed) measurementNode.remove();
+              }
+            } else if (useFastLineSplit) {
               const parts = sourceText.replace(/\r/g, '').split('\n');
               lineTexts = parts.length > 0 ? parts : [''];
             } else {
@@ -6825,15 +6942,37 @@ figma.ui.onmessage = async (msg: {
             };
 
             // --- Build columns from source rows ---
+            const useExplicitDrawerLimits =
+              reqUseVerticalColumns || reqColumnTextCount > 0 || reqHeightPx > 0 || reqVerticalColumns > 0;
+            const useFlatteningColumnSplit = useExplicitDrawerLimits && !reqKeepManualLineBreaks;
+            const useManualBreakWithExplicitLimits = useExplicitDrawerLimits && reqKeepManualLineBreaks;
+
             let columns: string[] = [];
-            if (reqUseVerticalColumns || reqColumnTextCount > 0 || reqHeightPx > 0 || reqVerticalColumns > 0) {
-              // Explicit settings override the detected row structure, so we can
-              // generate columns based on max chars per column and requested count.
+            if (useFlatteningColumnSplit) {
               columns = splitTextIntoColumns(sourceText, effectiveColumnTextCount, effectiveVerticalColumns);
+            } else if (useManualBreakWithExplicitLimits) {
+              columns = buildVerticalColumnsRespectingManualLineBreaks(
+                normalizedSourceText,
+                effectiveColumnTextCount,
+                effectiveVerticalColumns
+              );
+              if (columns.length > VERTICAL_TEXT_MAX_COLUMNS) {
+                const overflow = columns.slice(VERTICAL_TEXT_MAX_COLUMNS - 1).join('');
+                columns = columns.slice(0, VERTICAL_TEXT_MAX_COLUMNS - 1);
+                columns.push(overflow);
+              }
+              effectiveVerticalColumns = columns.length;
             } else {
-              for (let c = 0; c < effectiveVerticalColumns; c++) {
+              let rowLoopColumnCount = effectiveVerticalColumns;
+              if (reqKeepManualLineBreaks && sourceRowCount > rowLoopColumnCount) {
+                rowLoopColumnCount = Math.min(
+                  Math.max(rowLoopColumnCount, sourceRowCount),
+                  VERTICAL_TEXT_MAX_COLUMNS
+                );
+              }
+              for (let c = 0; c < rowLoopColumnCount; c++) {
                 if (c < sourceRowCount) {
-                  if (c === effectiveVerticalColumns - 1 && effectiveVerticalColumns < sourceRowCount) {
+                  if (c === rowLoopColumnCount - 1 && rowLoopColumnCount < sourceRowCount) {
                     columns.push(lineTexts.slice(c).join(''));
                   } else {
                     columns.push(lineTexts[c] || '');
@@ -6842,6 +6981,7 @@ figma.ui.onmessage = async (msg: {
                   columns.push('');
                 }
               }
+              effectiveVerticalColumns = rowLoopColumnCount;
             }
 
             // Convert each column into vertical text (characters joined by \n)
@@ -6971,6 +7111,7 @@ figma.ui.onmessage = async (msg: {
               'fgVerticalTextVerticalColumns': String(effectiveVerticalColumns),
               'fgVerticalTextLineHeightPx': String(effectiveLineHeight),
               'fgVerticalTextHeightPx': String(effectiveHeight),
+              'fgVerticalTextKeepManualBreaks': reqKeepManualLineBreaks ? 'true' : 'false',
             };
 
             for (const [key, val] of Object.entries(pluginData)) {
