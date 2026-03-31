@@ -6047,6 +6047,7 @@ Rules:
               if (field.key === 'lineHeightPx' && lhDefault != null) return { ...field, default: lhDefault };
               if (field.key === 'useVerticalColumns') return { ...field, default: first.useVerticalColumns === true };
               if (field.key === 'keepManualLineBreaks') return { ...field, default: first.keepManualLineBreaks !== false };
+              if (field.key === 'unicodeVerticalPunctuation') return { ...field, default: first.unicodeVerticalPunctuation === true };
               return field;
             });
           } else if (first.fontSize > 0) {
@@ -21682,7 +21683,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               useVerticalColumns: values.useVerticalColumns === true,
               verticalColumns: parseInt(values.verticalColumns) || 0,
               lineHeightPx,
-              keepManualLineBreaks: values.keepManualLineBreaks !== false
+              keepManualLineBreaks: values.keepManualLineBreaks !== false,
+              unicodeVerticalPunctuation: values.unicodeVerticalPunctuation === true
             },
             errorPrefixes: ['Verticalize text failed', 'Please select at least one text layer.']
           });

@@ -491,6 +491,9 @@ const WORDS_JA = {
   'Horizontal (Side-by-side)': '横並び（左右）',
   'Vertical (Stacked)': '縦積み',
   'Keep manual line breaks': '手動の改行を保持',
+  'Use Unicode vertical punctuation': 'Unicode 縦書き約物を使う',
+  'Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.':
+    '、。と「」『』【】〔〕《》（）を縦組み用字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）に置き換え。全角の ，．—：； は変えません。',
   'Linked with Column text count using line height': '行の高さに連動した列ごとの文字数',
   'Change text data based on current text or layer name to realistic data':
     '現在のテキストまたはレイヤー名に基づきリアルなデータに変更',
@@ -797,6 +800,9 @@ const WORDS_ZH_FULL = {
   'Horizontal (Side-by-side)': '横向（并排）',
   'Vertical (Stacked)': '纵向（堆叠）',
   'Keep manual line breaks': '保留手动换行',
+  'Use Unicode vertical punctuation': '使用 Unicode 竖排标点',
+  'Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.':
+    '将 、。与 「」『』【】〔〕《》（）映射为竖排字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）。全角 ，．—：； 保持不变。',
   'Linked with Column text count using line height': '列字数与行高联动',
   'Change text data based on current text or layer name to realistic data': '根据当前文本或图层名替换为更真实的数据',
   'Sequential Full': '完整顺序',

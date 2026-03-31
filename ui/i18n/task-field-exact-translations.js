@@ -197,6 +197,9 @@ export const TASK_FIELD_EXACT = {
     "JSON (Design Tokens)": "JSON（デザイントークン）",
     "Japanese": "日本語",
     "Keep manual line breaks": "手動の改行を保持",
+    "Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.":
+      "、。と「」『』【】〔〕《》（）を縦組み用字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）に置き換え。全角の ，．—：； は変えません。",
+    "Use Unicode vertical punctuation": "Unicode 縦書き約物を使う",
     "Keep original name in parentheses": "元の名前を括弧内に保持",
     "Korean": "韓国語",
     "Large (≥18pt or ≥14pt bold)": "大きい文字（≥18pt または ≥14pt 太字）",
@@ -641,6 +644,9 @@ export const TASK_FIELD_EXACT = {
     "JSON (Design Tokens)": "JSON（token）",
     "Japanese": "日语",
     "Keep manual line breaks": "保留手动换行",
+    "Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.":
+      "将 、。与 「」『』【】〔〕《》（）映射为竖排字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）。全角 ，．—：； 保持不变。",
+    "Use Unicode vertical punctuation": "使用 Unicode 竖排标点",
     "Keep original name in parentheses": "保留原名在括号中",
     "Korean": "韩语",
     "Large (≥18pt or ≥14pt bold)": "大字（≥18pt 或 ≥14pt 粗体）",

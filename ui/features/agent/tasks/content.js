@@ -296,7 +296,14 @@ export const smartTextTasks = [
               numberWithSlider: true,
               reloadLineHeightFromSelection: true
             },
-            { key: 'keepManualLineBreaks', type: 'checkbox', label: 'Keep manual line breaks', default: true }
+            { key: 'keepManualLineBreaks', type: 'checkbox', label: 'Keep manual line breaks', default: true },
+            {
+              key: 'unicodeVerticalPunctuation',
+              type: 'checkbox',
+              label: 'Use Unicode vertical punctuation',
+              default: false,
+              hint: 'Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.'
+            }
           ]
         }
 ];

@@ -89,6 +89,34 @@ function sliceCodePoints(s: string, start: number, length: number): string {
   return out;
 }
 
+/** Horizontal CJK punctuation / brackets → Unicode vertical presentation forms (CJK Compatibility block). */
+/** Vertical presentation forms (CJK Compatibility); pairs match Unicode names / typical vertical glyphs (︻︼ vs ︹︺). */
+const UNICODE_VERTICAL_PRESENTATION_MAP: Record<string, string> = {
+  '\u3001': '\uFE11', // 、 → ︑
+  '\u3002': '\uFE12', // 。 → ︒
+  // ，．—：； left unmapped — use standard fullwidth / dash / colon / semicolon in vertical
+  '\u300C': '\uFE41', // 「 → ﹁
+  '\u300D': '\uFE42', // 」 → ﹂
+  '\u300E': '\uFE43', // 『 → ﹃
+  '\u300F': '\uFE44', // 』 → ﹄
+  '\u3010': '\uFE3B', // 【 → ︻
+  '\u3011': '\uFE3C', // 】 → ︼
+  '\u3014': '\uFE39', // 〔 → ︹
+  '\u3015': '\uFE3A', // 〕 → ︺
+  '\u300A': '\uFE3D', // 《 → ︽
+  '\u300B': '\uFE3E', // 》 → ︾
+  '\uFF08': '\uFE35', // （ → ︵
+  '\uFF09': '\uFE36', // ） → ︶
+};
+
+function applyUnicodeVerticalPresentationForms(s: string): string {
+  let out = '';
+  for (const ch of s) {
+    out += UNICODE_VERTICAL_PRESENTATION_MAP[ch] ?? ch;
+  }
+  return out;
+}
+
 /**
  * Split into vertical column strings using maxCharsPerColumn (drawer settings), but never merge
  * two manual (Enter) lines into the same column without flushing first — same behavior as
@@ -6534,6 +6562,7 @@ figma.ui.onmessage = async (msg: {
           sourceCharCount: number;
           fontSize: number;
           keepManualLineBreaks: boolean;
+          unicodeVerticalPunctuation: boolean;
         }> = [];
 
         const readNativeLineHeightPx = (tn: TextNode, fs: number): number => {
@@ -6582,7 +6611,7 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (!textNode) {
-            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0, keepManualLineBreaks: true });
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0, keepManualLineBreaks: true, unicodeVerticalPunctuation: false });
             continue;
           }
 
@@ -6615,6 +6644,7 @@ figma.ui.onmessage = async (msg: {
               ),
               fontSize,
               keepManualLineBreaks: textNode.getPluginData('fgVerticalTextKeepManualBreaks') !== 'false',
+              unicodeVerticalPunctuation: textNode.getPluginData('fgVerticalTextUnicodeVerticalPunctuation') === 'true',
             });
           } else {
             results.push({
@@ -6629,6 +6659,7 @@ figma.ui.onmessage = async (msg: {
               sourceCharCount: countCodePoints((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')),
               fontSize,
               keepManualLineBreaks: true,
+              unicodeVerticalPunctuation: false,
             });
           }
         }
@@ -6661,6 +6692,7 @@ figma.ui.onmessage = async (msg: {
           if (Number.isFinite(p) && p > 0) parsedReqLineHeightPx = p;
         }
         const reqKeepManualLineBreaks = (msg as any).keepManualLineBreaks !== false;
+        const reqUnicodeVerticalPunctuation = (msg as any).unicodeVerticalPunctuation === true;
 
         let updated = 0;
         let skipped = 0;
@@ -6743,6 +6775,10 @@ figma.ui.onmessage = async (msg: {
               sourceText = stored || textNode.characters;
             } else {
               sourceText = textNode.characters;
+            }
+
+            if (reqUnicodeVerticalPunctuation) {
+              sourceText = applyUnicodeVerticalPresentationForms(sourceText);
             }
 
             const normalizedSourceText = sourceText.replace(/\r/g, '');
@@ -7112,6 +7148,7 @@ figma.ui.onmessage = async (msg: {
               'fgVerticalTextLineHeightPx': String(effectiveLineHeight),
               'fgVerticalTextHeightPx': String(effectiveHeight),
               'fgVerticalTextKeepManualBreaks': reqKeepManualLineBreaks ? 'true' : 'false',
+              'fgVerticalTextUnicodeVerticalPunctuation': reqUnicodeVerticalPunctuation ? 'true' : 'false',
             };
 
             for (const [key, val] of Object.entries(pluginData)) {
