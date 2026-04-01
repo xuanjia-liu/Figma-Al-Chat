@@ -97,6 +97,16 @@ function hasSubset(f, key) {
   return Array.isArray(f.subsets) && f.subsets.includes(key);
 }
 
+/** Language/subset filter (same rules as font list). */
+function fontMatchesLangSubset(f, langSubset) {
+  if (!langSubset) return true;
+  const isLocal = f && f.source === 'local';
+  if (isLocal) {
+    return localFontMatchesLangSubset(familyLower(f), langSubset);
+  }
+  return hasSubset(f, langSubset);
+}
+
 /**
  * Approximate language/script filter for local fonts (Figma does not expose Google-style subsets).
  * Uses family-name heuristics; results are imperfect for ambiguous or short names.
@@ -561,6 +571,23 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   container.innerHTML = `
     <div class="gfp-root">
       <aside class="gfp-sidebar" aria-label="${escapeAttr(tu('actions.fontPreview.filtersAria'))}">
+        <section class="gfp-filter-block gfp-bookmarks-block">
+          <div class="gfp-filter-heading">
+            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
+            ${escapeAttr(tu('actions.fontPreview.bookmarksHeading'))}
+          </div>
+          <div class="gfp-bookmark-bar">
+            <select class="gfp-select gfp-bookmark-list-select" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkListSelectAria'))}"></select>
+            <button type="button" class="gfp-bookmark-more-btn" aria-haspopup="true" aria-expanded="false" title="${escapeAttr(tu('actions.fontPreview.bookmarkMoreMenuTitle'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkMoreMenuAria'))}">
+              <svg class="gfp-bookmark-more-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+            </button>
+            <div class="gfp-bookmark-more-menu" hidden role="menu" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkMoreMenuAria'))}">
+              <button type="button" role="menuitem" class="gfp-bookmark-menu-item gfp-bookmark-rename-btn">${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}</button>
+              <button type="button" role="menuitem" class="gfp-bookmark-menu-item gfp-bookmark-delete-btn">${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}</button>
+              <button type="button" role="menuitem" class="gfp-bookmark-menu-item gfp-bookmark-new-btn">${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}</button>
+            </div>
+          </div>
+        </section>
         <div class="gfp-sidebar-lang-font-pair">
           <section class="gfp-filter-block">
             <div class="gfp-filter-heading">
@@ -568,7 +595,20 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
               ${escapeAttr(tu('actions.fontPreview.language'))}
             </div>
             <div class="gfp-lang-row">
-              <select class="gfp-select gfp-lang-primary" aria-label="${escapeAttr(tu('actions.fontPreview.languagePrimaryAria'))}"></select>
+              <div class="gfp-lang-select-row">
+                <select class="gfp-select gfp-lang-primary" aria-label="${escapeAttr(tu('actions.fontPreview.languagePrimaryAria'))}"></select>
+                <button
+                  type="button"
+                  class="gfp-lang-filter-info-btn"
+                  hidden
+                  aria-expanded="false"
+                  aria-label="${escapeAttr(tu('actions.fontPreview.langFilterInfoBtnAria'))}"
+                  title="${escapeAttr(tu('actions.fontPreview.langFilterInfoBtnTitle'))}"
+                >
+                  <svg class="gfp-lang-filter-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 16v-4m0-4h.01"/></svg>
+                </button>
+              </div>
+              <div class="gfp-lang-filter-tooltip-panel" hidden role="tooltip">${escapeAttr(tu('actions.fontPreview.langFilteredBySavedList'))}</div>
             </div>
           </section>
           <section class="gfp-filter-block">
@@ -581,41 +621,24 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
                 <option value="google">${escapeAttr(tu('actions.fontPreview.fontSourceGoogle'))}</option>
                 <option value="local">${escapeAttr(tu('actions.fontPreview.fontSourceLocal'))}</option>
               </select>
+              <p class="gfp-font-source-disabled-hint" hidden data-i18n-action="actions.fontPreview.fontSourceDisabledForList"></p>
             </div>
           </section>
         </div>
-        <section class="gfp-filter-block">
-          <div class="gfp-filter-heading">
-            <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/></svg>
-            ${escapeAttr(tu('actions.fontPreview.bookmarksHeading'))}
-          </div>
-          <div class="gfp-bookmark-bar">
-            <select class="gfp-select gfp-bookmark-list-select" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkListSelectAria'))}"></select>
-            <div class="gfp-bookmark-manage-row" role="toolbar" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkToolbarAria'))}">
-              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-rename-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkRename'))}">
-                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-              </button>
-              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-delete-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkDeleteList'))}">
-                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-              </button>
-              <button type="button" class="gfp-bookmark-icon-btn gfp-bookmark-new-btn" title="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}" aria-label="${escapeAttr(tu('actions.fontPreview.bookmarkNewList'))}">
-                <svg class="gfp-bookmark-icon-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-              </button>
-            </div>
-          </div>
-        </section>
-        <section class="gfp-filter-block">
+        <section class="gfp-filter-block gfp-feeling-block">
           <div class="gfp-filter-heading">
             <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h.008v.008H9.75V9.75zm4.5 0h.008v.008h-.008V9.75z"/></svg>
             <span data-i18n-action="actions.fontPreview.feeling">${escapeAttr(tu('actions.fontPreview.feeling'))}</span>
           </div>
+          <p class="gfp-tags-empty-msg" hidden data-i18n-action="actions.fontPreview.feelingAppearanceTagsUnavailable"></p>
           <div class="gfp-tag-grid" data-group="feeling"></div>
         </section>
-        <section class="gfp-filter-block">
+        <section class="gfp-filter-block gfp-appearance-block">
           <div class="gfp-filter-heading">
             <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm-4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0z"/></svg>
             <span data-i18n-action="actions.fontPreview.appearance">${escapeAttr(tu('actions.fontPreview.appearance'))}</span>
           </div>
+          <p class="gfp-tags-empty-msg" hidden data-i18n-action="actions.fontPreview.feelingAppearanceTagsUnavailable"></p>
           <div class="gfp-tag-grid" data-group="appearance"></div>
         </section>
       </aside>
@@ -686,11 +709,21 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   const weightSelect = container.querySelector('.gfp-weight-select');
   const weightRange = container.querySelector('.gfp-weight-range');
   const langPrimary = container.querySelector('.gfp-lang-primary');
+  const langFilterInfoBtn = container.querySelector('.gfp-lang-filter-info-btn');
+  const langFilterTooltip = container.querySelector('.gfp-lang-filter-tooltip-panel');
+  const fontSourceRow = container.querySelector('.gfp-font-source-row');
   const fontSourceSelect = container.querySelector('.gfp-font-source-select');
+  const fontSourceDisabledHint = container.querySelector('.gfp-font-source-disabled-hint');
   const bookmarkListSelect = container.querySelector('.gfp-bookmark-list-select');
   const bookmarkRenameBtn = container.querySelector('.gfp-bookmark-rename-btn');
   const bookmarkDeleteBtn = container.querySelector('.gfp-bookmark-delete-btn');
   const bookmarkNewBtn = container.querySelector('.gfp-bookmark-new-btn');
+  const bookmarkMoreBtn = container.querySelector('.gfp-bookmark-more-btn');
+  const bookmarkMoreMenu = container.querySelector('.gfp-bookmark-more-menu');
+  const feelingBlock = container.querySelector('.gfp-feeling-block');
+  const appearanceBlock = container.querySelector('.gfp-appearance-block');
+  const feelingEmptyMsg = container.querySelector('.gfp-feeling-block .gfp-tags-empty-msg');
+  const appearanceEmptyMsg = container.querySelector('.gfp-appearance-block .gfp-tags-empty-msg');
   const feelingGrid = container.querySelector('.gfp-tag-grid[data-group="feeling"]');
   const appearanceGrid = container.querySelector('.gfp-tag-grid[data-group="appearance"]');
   const searchInput = container.querySelector('.gfp-search');
@@ -1049,13 +1082,14 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
       .join('');
   }
 
-  fillLangSelect(langPrimary, LANGUAGE_OPTIONS);
-
-  function renderTagGrid(grid, pairs, group) {
+  /** @param {Set<string> | null | undefined} allowedTags */
+  function renderTagGrid(grid, pairs, group, allowedTags) {
+    if (!grid) return;
     const parts = [];
     for (const [a, b] of pairs) {
       for (const tag of [a, b]) {
         if (!tag || tag === '—') continue;
+        if (allowedTags && !allowedTags.has(tag)) continue;
         const test = group === 'feeling' ? FEELING_TEST[tag] : APPEARANCE_TEST[tag];
         if (!test) continue;
         const actionKey = gfpFontPreviewTagI18nKey(tag);
@@ -1069,8 +1103,25 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     grid.innerHTML = parts.join('');
   }
 
-  renderTagGrid(feelingGrid, FEELING_TAGS, 'feeling');
-  renderTagGrid(appearanceGrid, APPEARANCE_TAGS, 'appearance');
+  function syncTagButtonActiveStates() {
+    container.querySelectorAll('.gfp-tag').forEach(btn => {
+      const group = btn.dataset.group;
+      const tag = btn.dataset.tag;
+      if (!group || !tag) return;
+      const set = group === 'feeling' ? state.feeling : state.appearance;
+      btn.classList.toggle('gfp-tag--on', set.has(tag));
+    });
+  }
+
+  function allTagsFromPairs(pairs) {
+    const s = new Set();
+    for (const [a, b] of pairs) {
+      for (const tag of [a, b]) {
+        if (tag && tag !== '—') s.add(tag);
+      }
+    }
+    return s;
+  }
 
   function getActiveBookmarkList() {
     if (!activeListId) return null;
@@ -1113,13 +1164,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     const needAppearance = state.appearance.size > 0;
     const isLocal = f && f.source === 'local';
     if (q && !familyLower(f).includes(q)) return false;
-    if (state.langSubset) {
-      if (isLocal) {
-        if (!localFontMatchesLangSubset(familyLower(f), state.langSubset)) return false;
-      } else if (!hasSubset(f, state.langSubset)) {
-        return false;
-      }
-    }
+    if (!fontMatchesLangSubset(f, state.langSubset)) return false;
     if (needFeeling && !isLocal) {
       const ok = [...state.feeling].some(tag => FEELING_TEST[tag]?.(f));
       if (!ok) return false;
@@ -1352,6 +1397,8 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   function showRenameListPopover() {
     const list = getActiveBookmarkList();
     if (!list || !bookmarkRenameBtn) return;
+    hideLangFilterTooltip();
+    hideBookmarkMoreMenu();
     hideBookmarkPopover();
     renameListPopover.replaceChildren();
     const inner = document.createElement('div');
@@ -1413,6 +1460,8 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
 
   function showNewBookmarkListPopover() {
     if (!bookmarkNewBtn) return;
+    hideLangFilterTooltip();
+    hideBookmarkMoreMenu();
     hideBookmarkPopover();
     hideRenameListPopover();
     renameListPopover.replaceChildren();
@@ -1605,6 +1654,8 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   }
 
   function showBookmarkPopoverForFamily(row, family) {
+    hideLangFilterTooltip();
+    hideBookmarkMoreMenu();
     hidePairPopover();
     hideRenameListPopover();
     const src = row.dataset.fontSource === 'local' ? 'local' : 'google';
@@ -1631,6 +1682,16 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   function onDocMousedownBookmark(ev) {
     const t = ev.target;
     if (!(t instanceof Node)) return;
+    if (langFilterTooltip && !langFilterTooltip.hidden) {
+      if (!langFilterTooltip.contains(t) && !(langFilterInfoBtn && langFilterInfoBtn.contains(t))) {
+        hideLangFilterTooltip();
+      }
+    }
+    if (bookmarkMoreMenu && !bookmarkMoreMenu.hidden) {
+      if (!bookmarkMoreMenu.contains(t) && !(bookmarkMoreBtn && bookmarkMoreBtn.contains(t))) {
+        hideBookmarkMoreMenu();
+      }
+    }
     if (!bookmarkPopover.hidden) {
       if (!bookmarkPopover.contains(t) && !(bookmarkAnchorRow && bookmarkAnchorRow.contains(t))) {
         hideBookmarkPopover();
@@ -1768,6 +1829,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
 
   function refreshVisibleResults({ invalidateAi = false } = {}) {
     if (invalidateAi) invalidateAiResults();
+    syncSidebarChrome();
     applyFilters();
     setupListObserver();
   }
@@ -1806,6 +1868,277 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     if (!raw || catalogLowerToCanonical.size === 0) return null;
     if (familyByName.has(raw)) return raw;
     return catalogLowerToCanonical.get(raw.toLowerCase()) ?? null;
+  }
+
+  /** Catalog-shaped meta for Feeling/Appearance heuristics; null if unavailable (e.g. local without catalog match). */
+  function metaForFeelingAppearanceTests(f) {
+    if (!f) return null;
+    if (f.source === 'local') {
+      const catalogKey = resolveGoogleCatalogFamilyName(f.family);
+      const cat = catalogKey ? familyByName.get(catalogKey) : null;
+      if (!cat) return null;
+      return { ...cat, family: f.family, source: 'local', styles: f.styles, gfpCatalogMatch: true };
+    }
+    return f;
+  }
+
+  function getFamiliesFilteredByLangOnly() {
+    const lang = state.langSubset;
+    const base = getBaseFamilies();
+    if (!lang) return base;
+    return base.filter(f => fontMatchesLangSubset(f, lang));
+  }
+
+  function collectAllowedTags(universe, pairs, testMap) {
+    const allowed = new Set();
+    for (const f of universe) {
+      const meta = metaForFeelingAppearanceTests(f);
+      if (!meta) continue;
+      for (const [a, b] of pairs) {
+        for (const tag of [a, b]) {
+          if (!tag || tag === '—') continue;
+          if (testMap[tag]?.(meta)) allowed.add(tag);
+        }
+      }
+    }
+    return allowed;
+  }
+
+  function activeBookmarkListIsOnlyLocalFonts() {
+    if (!activeListId) return false;
+    const list = getActiveBookmarkList();
+    if (!list || list.families.length === 0) return false;
+    return list.families.every(k => parseBookmarkFamilyKey(k).source === 'local');
+  }
+
+  function getLanguageOptionsForSavedList() {
+    if (!activeListId) return LANGUAGE_OPTIONS;
+    const list = getActiveBookmarkList();
+    if (!list || list.families.length === 0) {
+      return [LANGUAGE_OPTIONS[0]];
+    }
+    const out = [LANGUAGE_OPTIONS[0]];
+    for (let i = 1; i < LANGUAGE_OPTIONS.length; i++) {
+      const opt = LANGUAGE_OPTIONS[i];
+      const sub = opt.subset || '';
+      if (!sub) continue;
+      let hit = false;
+      for (const key of list.families) {
+        const f = getFamilyMeta(key);
+        if (fontMatchesLangSubset(f, sub)) {
+          hit = true;
+          break;
+        }
+      }
+      if (hit) out.push(opt);
+    }
+    return out;
+  }
+
+  function positionBookmarkMoreMenu() {
+    if (!bookmarkMoreBtn || !bookmarkMoreMenu || bookmarkMoreMenu.hidden) return;
+    const margin = 8;
+    const pad = 6;
+    const rect = bookmarkMoreBtn.getBoundingClientRect();
+    const mr = bookmarkMoreMenu.getBoundingClientRect();
+    let left = rect.right - mr.width;
+    let top = rect.bottom + margin;
+    if (left < pad) left = pad;
+    if (left + mr.width > window.innerWidth - pad) {
+      left = window.innerWidth - mr.width - pad;
+    }
+    if (top + mr.height > window.innerHeight - pad) {
+      top = rect.top - mr.height - margin;
+    }
+    if (top < pad) top = pad;
+    bookmarkMoreMenu.style.position = 'fixed';
+    bookmarkMoreMenu.style.left = `${Math.round(left)}px`;
+    bookmarkMoreMenu.style.top = `${Math.round(top)}px`;
+    bookmarkMoreMenu.style.zIndex = '33';
+  }
+
+  function hideBookmarkMoreMenu() {
+    if (bookmarkMoreMenu) {
+      bookmarkMoreMenu.hidden = true;
+      bookmarkMoreMenu.removeAttribute('style');
+    }
+    if (bookmarkMoreBtn) {
+      bookmarkMoreBtn.setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  function toggleBookmarkMoreMenu() {
+    if (!bookmarkMoreMenu || !bookmarkMoreBtn) return;
+    const open = bookmarkMoreMenu.hidden;
+    hideLangFilterTooltip();
+    hideBookmarkPopover();
+    hideRenameListPopover();
+    bookmarkMoreMenu.hidden = !open;
+    bookmarkMoreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!bookmarkMoreMenu.hidden) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (disposed || bookmarkMoreMenu.hidden) return;
+          positionBookmarkMoreMenu();
+        });
+      });
+    }
+  }
+
+  function onBookmarkMoreMenuKeydown(ev) {
+    if (ev.key !== 'Escape' || !bookmarkMoreMenu || bookmarkMoreMenu.hidden) return;
+    ev.stopPropagation();
+    hideBookmarkMoreMenu();
+  }
+
+  function hideLangFilterTooltip() {
+    if (langFilterTooltip) {
+      langFilterTooltip.hidden = true;
+      langFilterTooltip.removeAttribute('style');
+    }
+    if (langFilterInfoBtn) langFilterInfoBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function positionLangFilterTooltip() {
+    if (!langFilterInfoBtn || !langFilterTooltip || langFilterTooltip.hidden) return;
+    const margin = 8;
+    const pad = 6;
+    const rect = langFilterInfoBtn.getBoundingClientRect();
+    const tr = langFilterTooltip.getBoundingClientRect();
+    let left = rect.right - tr.width;
+    let top = rect.bottom + margin;
+    if (left < pad) left = pad;
+    if (left + tr.width > window.innerWidth - pad) {
+      left = window.innerWidth - tr.width - pad;
+    }
+    if (top + tr.height > window.innerHeight - pad) {
+      top = rect.top - tr.height - margin;
+    }
+    if (top < pad) top = pad;
+    langFilterTooltip.style.position = 'fixed';
+    langFilterTooltip.style.left = `${Math.round(left)}px`;
+    langFilterTooltip.style.top = `${Math.round(top)}px`;
+    langFilterTooltip.style.zIndex = '34';
+  }
+
+  function toggleLangFilterTooltip() {
+    if (!langFilterTooltip || !langFilterInfoBtn) return;
+    const open = langFilterTooltip.hidden;
+    hideBookmarkMoreMenu();
+    langFilterTooltip.hidden = !open;
+    langFilterInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!langFilterTooltip.hidden) {
+      langFilterTooltip.textContent = tu('actions.fontPreview.langFilteredBySavedList');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!langFilterTooltip || langFilterTooltip.hidden) return;
+          positionLangFilterTooltip();
+        });
+      });
+    }
+  }
+
+  function syncLangAndListFilterUi() {
+    const opts = getLanguageOptionsForSavedList();
+    const allowedValues = new Set(opts.map(o => o.subset || ''));
+    if (!allowedValues.has(state.langSubset)) {
+      state.langSubset = '';
+      if (langPrimary) langPrimary.value = '';
+    }
+    fillLangSelect(langPrimary, opts);
+    if (langPrimary) langPrimary.value = state.langSubset;
+
+    if (langFilterInfoBtn) {
+      const showForSavedList = !!activeListId;
+      langFilterInfoBtn.hidden = !showForSavedList;
+      if (!showForSavedList) hideLangFilterTooltip();
+    }
+  }
+
+  function syncFontSourceDisabledUi() {
+    if (!fontSourceSelect) return;
+    if (activeListId) {
+      fontSourceSelect.disabled = true;
+      if (fontSourceRow) fontSourceRow.classList.add('gfp-font-source-row--disabled');
+      if (fontSourceDisabledHint) {
+        fontSourceDisabledHint.hidden = false;
+        fontSourceDisabledHint.textContent = tu('actions.fontPreview.fontSourceDisabledForList');
+      }
+      fontSourceSelect.removeAttribute('title');
+    } else {
+      fontSourceSelect.disabled = false;
+      if (fontSourceRow) fontSourceRow.classList.remove('gfp-font-source-row--disabled');
+      if (fontSourceDisabledHint) fontSourceDisabledHint.hidden = true;
+      fontSourceSelect.removeAttribute('title');
+    }
+  }
+
+  function syncFeelingAppearanceUi() {
+    const hideForLocalBrowse = !activeListId && fontSource === 'local';
+    const hideForLocalOnlyList = activeBookmarkListIsOnlyLocalFonts();
+    const hideEntirely = hideForLocalBrowse || hideForLocalOnlyList;
+
+    if (hideEntirely) {
+      state.feeling.clear();
+      state.appearance.clear();
+      const brief = tu('actions.fontPreview.feelingAppearanceTagsUnavailable');
+      if (feelingBlock) feelingBlock.hidden = false;
+      if (appearanceBlock) appearanceBlock.hidden = false;
+      if (feelingEmptyMsg) {
+        feelingEmptyMsg.hidden = false;
+        feelingEmptyMsg.textContent = brief;
+      }
+      if (appearanceEmptyMsg) {
+        appearanceEmptyMsg.hidden = false;
+        appearanceEmptyMsg.textContent = brief;
+      }
+      if (feelingGrid) {
+        feelingGrid.hidden = true;
+        feelingGrid.innerHTML = '';
+      }
+      if (appearanceGrid) {
+        appearanceGrid.hidden = true;
+        appearanceGrid.innerHTML = '';
+      }
+      return;
+    }
+
+    if (feelingEmptyMsg) feelingEmptyMsg.hidden = true;
+    if (appearanceEmptyMsg) appearanceEmptyMsg.hidden = true;
+    if (feelingGrid) feelingGrid.hidden = false;
+    if (appearanceGrid) appearanceGrid.hidden = false;
+
+    const universe = getFamiliesFilteredByLangOnly();
+    const catalogNotReady = !activeListId && fontSource === 'google' && allFamilies.length === 0;
+    let feelingAllowed;
+    let appearanceAllowed;
+    if (universe.length === 0 && catalogNotReady) {
+      feelingAllowed = allTagsFromPairs(FEELING_TAGS);
+      appearanceAllowed = allTagsFromPairs(APPEARANCE_TAGS);
+    } else {
+      feelingAllowed = collectAllowedTags(universe, FEELING_TAGS, FEELING_TEST);
+      appearanceAllowed = collectAllowedTags(universe, APPEARANCE_TAGS, APPEARANCE_TEST);
+    }
+
+    for (const t of [...state.feeling]) {
+      if (!feelingAllowed.has(t)) state.feeling.delete(t);
+    }
+    for (const t of [...state.appearance]) {
+      if (!appearanceAllowed.has(t)) state.appearance.delete(t);
+    }
+
+    renderTagGrid(feelingGrid, FEELING_TAGS, 'feeling', feelingAllowed);
+    renderTagGrid(appearanceGrid, APPEARANCE_TAGS, 'appearance', appearanceAllowed);
+    syncTagButtonActiveStates();
+
+    if (feelingBlock) feelingBlock.hidden = feelingAllowed.size === 0;
+    if (appearanceBlock) appearanceBlock.hidden = appearanceAllowed.size === 0;
+  }
+
+  function syncSidebarChrome() {
+    syncLangAndListFilterUi();
+    syncFontSourceDisabledUi();
+    syncFeelingAppearanceUi();
   }
 
   function primeLocalRowFontCss(row) {
@@ -2212,13 +2545,30 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   weightRange.addEventListener('input', () => syncWeight(true));
 
   langPrimary.addEventListener('change', () => {
+    hideLangFilterTooltip();
     state.langSubset = langPrimary.value;
     refreshVisibleResults({ invalidateAi: true });
   });
 
+  if (langFilterInfoBtn) {
+    langFilterInfoBtn.addEventListener('click', ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleLangFilterTooltip();
+    });
+  }
+
+  function onGfpDocumentKeydown(ev) {
+    if (ev.key !== 'Escape') return;
+    if (langFilterTooltip && !langFilterTooltip.hidden) hideLangFilterTooltip();
+  }
+  document.addEventListener('keydown', onGfpDocumentKeydown);
+
   if (fontSourceSelect) {
     fontSourceSelect.value = fontSource;
     fontSourceSelect.addEventListener('change', () => {
+      hideLangFilterTooltip();
+      hideBookmarkMoreMenu();
       hideBookmarkPopover();
       hideRenameListPopover();
       hidePairPopover();
@@ -2232,6 +2582,8 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
 
   if (bookmarkListSelect) {
     bookmarkListSelect.addEventListener('change', () => {
+      hideLangFilterTooltip();
+      hideBookmarkMoreMenu();
       hideRenameListPopover();
       activeListId = bookmarkListSelect.value || '';
       syncBookmarkManageRowDisabled();
@@ -2251,6 +2603,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     bookmarkDeleteBtn.addEventListener('click', () => {
       const list = getActiveBookmarkList();
       if (!list) return;
+      hideBookmarkMoreMenu();
       hideRenameListPopover();
       if (!window.confirm(tu('actions.fontPreview.bookmarkDeleteConfirm', { name: list.name }))) return;
       const removedId = list.id;
@@ -2271,8 +2624,18 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
         showToast(tu('actions.fontPreview.bookmarkMaxLists'), 'error');
         return;
       }
+      hideBookmarkMoreMenu();
       showNewBookmarkListPopover();
     });
+  }
+
+  if (bookmarkMoreBtn && bookmarkMoreMenu) {
+    bookmarkMoreBtn.addEventListener('click', ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleBookmarkMoreMenu();
+    });
+    bookmarkMoreMenu.addEventListener('keydown', onBookmarkMoreMenuKeydown);
   }
 
   searchInput.addEventListener('input', () => {
@@ -2363,6 +2726,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   syncWeight(false);
   parent.postMessage({ pluginMessage: { type: 'get-font-preview-bookmarks' } }, '*');
   parent.postMessage({ pluginMessage: { type: 'list-font-preview-local-fonts' } }, '*');
+  syncSidebarChrome();
   loadCatalog();
 
   return () => {
@@ -2372,8 +2736,12 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     clearTimeout(pairHideTimer);
     hideBookmarkPopover();
     hideRenameListPopover();
+    hideBookmarkMoreMenu();
+    hideLangFilterTooltip();
+    document.removeEventListener('keydown', onGfpDocumentKeydown);
     document.removeEventListener('mousedown', onDocMousedownBookmark);
     bookmarkPopover.removeEventListener('keydown', onBookmarkPopoverKeydown);
+    if (bookmarkMoreMenu) bookmarkMoreMenu.removeEventListener('keydown', onBookmarkMoreMenuKeydown);
     renameListPopover.removeEventListener('keydown', onRenameListPopoverKeydown);
     listEl.removeEventListener('mouseover', onListMouseOver);
     listEl.removeEventListener('mouseout', onListMouseOut);
