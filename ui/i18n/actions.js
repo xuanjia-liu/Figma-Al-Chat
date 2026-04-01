@@ -388,6 +388,8 @@ const uiTranslations = {
     'actions.fontPreview.fontSourceLocal': 'Local fonts',
     'actions.fontPreview.fontSourceDisabledForList':
       'Font library applies only when “All fonts” is selected. Choose All fonts in Saved lists to switch between Google and local.',
+    'actions.fontPreview.fontSourceLockedInfoAria': 'Why is font library locked?',
+    'actions.fontPreview.fontSourceLockedInfoTitle': 'Explain font library',
     'actions.fontPreview.langFilteredBySavedList': 'Only languages used by fonts in this list are shown.',
     'actions.fontPreview.langFilterInfoBtnAria': 'Why are fewer languages listed?',
     'actions.fontPreview.langFilterInfoBtnTitle': 'Explain language list',
@@ -895,6 +897,8 @@ const uiTranslations = {
     'actions.fontPreview.fontSourceLocal': 'ローカルフォント',
     'actions.fontPreview.fontSourceDisabledForList':
       'フォントライブラリは「すべてのフォント」のときのみ有効です。保存リストで「すべてのフォント」を選ぶと Google / ローカルを切り替えられます。',
+    'actions.fontPreview.fontSourceLockedInfoAria': 'フォントライブラリがロックされている理由',
+    'actions.fontPreview.fontSourceLockedInfoTitle': '説明を表示',
     'actions.fontPreview.langFilteredBySavedList': 'このリストのフォントに含まれる言語（スクリプト）のみ表示しています。',
     'actions.fontPreview.langFilterInfoBtnAria': '表示される言語が少ない理由',
     'actions.fontPreview.langFilterInfoBtnTitle': '説明を表示',
@@ -1402,6 +1406,8 @@ const uiTranslations = {
     'actions.fontPreview.fontSourceLocal': '本地字体',
     'actions.fontPreview.fontSourceDisabledForList':
       '仅在「全部字体」选中时可切换字体库。请在保存列表中选择「全部字体」后再切换 Google / 本地。',
+    'actions.fontPreview.fontSourceLockedInfoAria': '为何字体库被锁定',
+    'actions.fontPreview.fontSourceLockedInfoTitle': '查看说明',
     'actions.fontPreview.langFilteredBySavedList': '语言列表已按此保存列表中字体实际包含的文字体系筛选。',
     'actions.fontPreview.langFilterInfoBtnAria': '为何语言选项更少',
     'actions.fontPreview.langFilterInfoBtnTitle': '查看说明',

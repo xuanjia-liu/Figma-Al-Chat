@@ -546,15 +546,16 @@
       background: var(--bg-tertiary);
     }
 
-    .gfp-font-source-disabled-hint {
-      margin: 0;
-      padding: 6px 8px;
-      border-radius: var(--radius-md);
-      border: 1px dashed var(--border-intense, var(--border));
-      font-size: 10px;
-      line-height: 1.4;
-      color: var(--text-secondary);
-      background: var(--bg-tertiary);
+    .gfp-font-source-select-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .gfp-font-source-select-row .gfp-font-source-select {
+      flex: 1 1 auto;
+      min-width: 0;
     }
 
     .gfp-lang-select-row {
@@ -569,7 +570,8 @@
       min-width: 0;
     }
 
-    .gfp-lang-filter-info-btn {
+    .gfp-lang-filter-info-btn,
+    .gfp-font-source-info-btn {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -587,15 +589,24 @@
       cursor: pointer;
     }
 
-    .gfp-lang-filter-info-btn:hover {
+    .gfp-lang-filter-info-btn[hidden],
+    .gfp-font-source-info-btn[hidden] {
+      display: none !important;
+      pointer-events: none;
+    }
+
+    .gfp-lang-filter-info-btn:hover,
+    .gfp-font-source-info-btn:hover {
       color: var(--text-primary);
     }
 
-    .gfp-lang-filter-info-btn[aria-expanded='true'] {
+    .gfp-lang-filter-info-btn[aria-expanded='true'],
+    .gfp-font-source-info-btn[aria-expanded='true'] {
       color: var(--accent-agent, #3b82f6);
     }
 
-    .gfp-lang-filter-info-btn:focus-visible {
+    .gfp-lang-filter-info-btn:focus-visible,
+    .gfp-font-source-info-btn:focus-visible {
       outline: 2px solid var(--accent-agent, #3b82f6);
       outline-offset: 1px;
     }
@@ -606,7 +617,8 @@
       flex-shrink: 0;
     }
 
-    .gfp-lang-filter-tooltip-panel {
+    .gfp-lang-filter-tooltip-panel,
+    .gfp-font-source-tooltip-panel {
       position: fixed;
       z-index: 34;
       max-width: min(280px, calc(100vw - 20px));

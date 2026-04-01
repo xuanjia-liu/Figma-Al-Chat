@@ -617,11 +617,23 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
               ${escapeAttr(tu('actions.fontPreview.fontLibraryHeading'))}
             </div>
             <div class="gfp-font-source-row">
-              <select class="gfp-select gfp-font-source-select" aria-label="${escapeAttr(tu('actions.fontPreview.fontSourceSelectAria'))}">
-                <option value="google">${escapeAttr(tu('actions.fontPreview.fontSourceGoogle'))}</option>
-                <option value="local">${escapeAttr(tu('actions.fontPreview.fontSourceLocal'))}</option>
-              </select>
-              <p class="gfp-font-source-disabled-hint" hidden data-i18n-action="actions.fontPreview.fontSourceDisabledForList"></p>
+              <div class="gfp-font-source-select-row">
+                <select class="gfp-select gfp-font-source-select" aria-label="${escapeAttr(tu('actions.fontPreview.fontSourceSelectAria'))}">
+                  <option value="google">${escapeAttr(tu('actions.fontPreview.fontSourceGoogle'))}</option>
+                  <option value="local">${escapeAttr(tu('actions.fontPreview.fontSourceLocal'))}</option>
+                </select>
+                <button
+                  type="button"
+                  class="gfp-font-source-info-btn"
+                  hidden
+                  aria-expanded="false"
+                  aria-label="${escapeAttr(tu('actions.fontPreview.fontSourceLockedInfoAria'))}"
+                  title="${escapeAttr(tu('actions.fontPreview.fontSourceLockedInfoTitle'))}"
+                >
+                  <svg class="gfp-lang-filter-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" d="M12 16v-4m0-4h.01"/></svg>
+                </button>
+              </div>
+              <div class="gfp-font-source-tooltip-panel" hidden role="tooltip"></div>
             </div>
           </section>
         </div>
@@ -713,7 +725,8 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   const langFilterTooltip = container.querySelector('.gfp-lang-filter-tooltip-panel');
   const fontSourceRow = container.querySelector('.gfp-font-source-row');
   const fontSourceSelect = container.querySelector('.gfp-font-source-select');
-  const fontSourceDisabledHint = container.querySelector('.gfp-font-source-disabled-hint');
+  const fontSourceInfoBtn = container.querySelector('.gfp-font-source-info-btn');
+  const fontSourceTooltip = container.querySelector('.gfp-font-source-tooltip-panel');
   const bookmarkListSelect = container.querySelector('.gfp-bookmark-list-select');
   const bookmarkRenameBtn = container.querySelector('.gfp-bookmark-rename-btn');
   const bookmarkDeleteBtn = container.querySelector('.gfp-bookmark-delete-btn');
@@ -1398,6 +1411,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     const list = getActiveBookmarkList();
     if (!list || !bookmarkRenameBtn) return;
     hideLangFilterTooltip();
+    hideFontSourceTooltip();
     hideBookmarkMoreMenu();
     hideBookmarkPopover();
     renameListPopover.replaceChildren();
@@ -1461,6 +1475,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   function showNewBookmarkListPopover() {
     if (!bookmarkNewBtn) return;
     hideLangFilterTooltip();
+    hideFontSourceTooltip();
     hideBookmarkMoreMenu();
     hideBookmarkPopover();
     hideRenameListPopover();
@@ -1655,6 +1670,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
 
   function showBookmarkPopoverForFamily(row, family) {
     hideLangFilterTooltip();
+    hideFontSourceTooltip();
     hideBookmarkMoreMenu();
     hidePairPopover();
     hideRenameListPopover();
@@ -1685,6 +1701,11 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     if (langFilterTooltip && !langFilterTooltip.hidden) {
       if (!langFilterTooltip.contains(t) && !(langFilterInfoBtn && langFilterInfoBtn.contains(t))) {
         hideLangFilterTooltip();
+      }
+    }
+    if (fontSourceTooltip && !fontSourceTooltip.hidden) {
+      if (!fontSourceTooltip.contains(t) && !(fontSourceInfoBtn && fontSourceInfoBtn.contains(t))) {
+        hideFontSourceTooltip();
       }
     }
     if (bookmarkMoreMenu && !bookmarkMoreMenu.hidden) {
@@ -1971,6 +1992,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     if (!bookmarkMoreMenu || !bookmarkMoreBtn) return;
     const open = bookmarkMoreMenu.hidden;
     hideLangFilterTooltip();
+    hideFontSourceTooltip();
     hideBookmarkPopover();
     hideRenameListPopover();
     bookmarkMoreMenu.hidden = !open;
@@ -1999,6 +2021,14 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     if (langFilterInfoBtn) langFilterInfoBtn.setAttribute('aria-expanded', 'false');
   }
 
+  function hideFontSourceTooltip() {
+    if (fontSourceTooltip) {
+      fontSourceTooltip.hidden = true;
+      fontSourceTooltip.removeAttribute('style');
+    }
+    if (fontSourceInfoBtn) fontSourceInfoBtn.setAttribute('aria-expanded', 'false');
+  }
+
   function positionLangFilterTooltip() {
     if (!langFilterInfoBtn || !langFilterTooltip || langFilterTooltip.hidden) return;
     const margin = 8;
@@ -2021,9 +2051,50 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     langFilterTooltip.style.zIndex = '34';
   }
 
+  function positionFontSourceTooltip() {
+    if (!fontSourceInfoBtn || !fontSourceTooltip || fontSourceTooltip.hidden) return;
+    const margin = 8;
+    const pad = 6;
+    const rect = fontSourceInfoBtn.getBoundingClientRect();
+    const tr = fontSourceTooltip.getBoundingClientRect();
+    let left = rect.right - tr.width;
+    let top = rect.bottom + margin;
+    if (left < pad) left = pad;
+    if (left + tr.width > window.innerWidth - pad) {
+      left = window.innerWidth - tr.width - pad;
+    }
+    if (top + tr.height > window.innerHeight - pad) {
+      top = rect.top - tr.height - margin;
+    }
+    if (top < pad) top = pad;
+    fontSourceTooltip.style.position = 'fixed';
+    fontSourceTooltip.style.left = `${Math.round(left)}px`;
+    fontSourceTooltip.style.top = `${Math.round(top)}px`;
+    fontSourceTooltip.style.zIndex = '34';
+  }
+
+  function toggleFontSourceTooltip() {
+    if (!fontSourceTooltip || !fontSourceInfoBtn) return;
+    const open = fontSourceTooltip.hidden;
+    hideLangFilterTooltip();
+    hideBookmarkMoreMenu();
+    fontSourceTooltip.hidden = !open;
+    fontSourceInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!fontSourceTooltip.hidden) {
+      fontSourceTooltip.textContent = tu('actions.fontPreview.fontSourceDisabledForList');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!fontSourceTooltip || fontSourceTooltip.hidden) return;
+          positionFontSourceTooltip();
+        });
+      });
+    }
+  }
+
   function toggleLangFilterTooltip() {
     if (!langFilterTooltip || !langFilterInfoBtn) return;
     const open = langFilterTooltip.hidden;
+    hideFontSourceTooltip();
     hideBookmarkMoreMenu();
     langFilterTooltip.hidden = !open;
     langFilterInfoBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -2048,8 +2119,9 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     fillLangSelect(langPrimary, opts);
     if (langPrimary) langPrimary.value = state.langSubset;
 
-    if (langFilterInfoBtn) {
-      const showForSavedList = !!activeListId;
+    if (langFilterInfoBtn && bookmarkListSelect) {
+      /** Match bookmark control: only show when a saved list is selected, not “All fonts” (`value=""`). */
+      const showForSavedList = Boolean((bookmarkListSelect.value || '').trim());
       langFilterInfoBtn.hidden = !showForSavedList;
       if (!showForSavedList) hideLangFilterTooltip();
     }
@@ -2060,15 +2132,13 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     if (activeListId) {
       fontSourceSelect.disabled = true;
       if (fontSourceRow) fontSourceRow.classList.add('gfp-font-source-row--disabled');
-      if (fontSourceDisabledHint) {
-        fontSourceDisabledHint.hidden = false;
-        fontSourceDisabledHint.textContent = tu('actions.fontPreview.fontSourceDisabledForList');
-      }
+      if (fontSourceInfoBtn) fontSourceInfoBtn.hidden = false;
       fontSourceSelect.removeAttribute('title');
     } else {
       fontSourceSelect.disabled = false;
       if (fontSourceRow) fontSourceRow.classList.remove('gfp-font-source-row--disabled');
-      if (fontSourceDisabledHint) fontSourceDisabledHint.hidden = true;
+      if (fontSourceInfoBtn) fontSourceInfoBtn.hidden = true;
+      hideFontSourceTooltip();
       fontSourceSelect.removeAttribute('title');
     }
   }
@@ -2546,6 +2616,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
 
   langPrimary.addEventListener('change', () => {
     hideLangFilterTooltip();
+    hideFontSourceTooltip();
     state.langSubset = langPrimary.value;
     refreshVisibleResults({ invalidateAi: true });
   });
@@ -2558,9 +2629,18 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     });
   }
 
+  if (fontSourceInfoBtn) {
+    fontSourceInfoBtn.addEventListener('click', ev => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleFontSourceTooltip();
+    });
+  }
+
   function onGfpDocumentKeydown(ev) {
     if (ev.key !== 'Escape') return;
     if (langFilterTooltip && !langFilterTooltip.hidden) hideLangFilterTooltip();
+    if (fontSourceTooltip && !fontSourceTooltip.hidden) hideFontSourceTooltip();
   }
   document.addEventListener('keydown', onGfpDocumentKeydown);
 
@@ -2568,6 +2648,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     fontSourceSelect.value = fontSource;
     fontSourceSelect.addEventListener('change', () => {
       hideLangFilterTooltip();
+      hideFontSourceTooltip();
       hideBookmarkMoreMenu();
       hideBookmarkPopover();
       hideRenameListPopover();
@@ -2583,6 +2664,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   if (bookmarkListSelect) {
     bookmarkListSelect.addEventListener('change', () => {
       hideLangFilterTooltip();
+      hideFontSourceTooltip();
       hideBookmarkMoreMenu();
       hideRenameListPopover();
       activeListId = bookmarkListSelect.value || '';
@@ -2738,6 +2820,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
     hideRenameListPopover();
     hideBookmarkMoreMenu();
     hideLangFilterTooltip();
+    hideFontSourceTooltip();
     document.removeEventListener('keydown', onGfpDocumentKeydown);
     document.removeEventListener('mousedown', onDocMousedownBookmark);
     bookmarkPopover.removeEventListener('keydown', onBookmarkPopoverKeydown);
