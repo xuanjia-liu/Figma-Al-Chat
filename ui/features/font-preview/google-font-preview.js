@@ -44,6 +44,51 @@ const APPEARANCE_TAGS = [
   ['Inline', '—'],
 ];
 
+/** Maps filter pill labels (English keys in data-tag) to `actions.fontPreview.tag.*` suffixes. */
+const FONT_PREVIEW_TAG_I18N_SUFFIX = {
+  Business: 'business',
+  Fancy: 'fancy',
+  Calm: 'calm',
+  Playful: 'playful',
+  Cute: 'cute',
+  Artistic: 'artistic',
+  Vintage: 'vintage',
+  Loud: 'loud',
+  Sophisticated: 'sophisticated',
+  Futuristic: 'futuristic',
+  Active: 'active',
+  Stiff: 'stiff',
+  Innovative: 'innovative',
+  Happy: 'happy',
+  Childlike: 'childlike',
+  Rugged: 'rugged',
+  Awkward: 'awkward',
+  EXCITED: 'excited',
+  Techno: 'techno',
+  Monospaced: 'monospaced',
+  Blobby: 'blobby',
+  Marker: 'marker',
+  'Art Deco': 'artDeco',
+  'Art Nouveau': 'artNouveau',
+  Distressed: 'distressed',
+  Stencil: 'stencil',
+  'Wood type': 'woodType',
+  Medieval: 'medieval',
+  Blackletter: 'blackletter',
+  Pixel: 'pixel',
+  'Not text': 'notText',
+  Tuscan: 'tuscan',
+  WACKY: 'wacky',
+  Shaded: 'shaded',
+  Inline: 'inline',
+};
+
+/** @param {string} tag */
+function gfpFontPreviewTagI18nKey(tag) {
+  const suffix = FONT_PREVIEW_TAG_I18N_SUFFIX[tag];
+  return suffix ? `actions.fontPreview.tag.${suffix}` : '';
+}
+
 function familyLower(f) {
   return String(f.family || '').toLowerCase();
 }
@@ -562,14 +607,14 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
         <section class="gfp-filter-block">
           <div class="gfp-filter-heading">
             <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75h.008v.008H9.75V9.75zm4.5 0h.008v.008h-.008V9.75z"/></svg>
-            ${escapeAttr(tu('actions.fontPreview.feeling'))}
+            <span data-i18n-action="actions.fontPreview.feeling">${escapeAttr(tu('actions.fontPreview.feeling'))}</span>
           </div>
           <div class="gfp-tag-grid" data-group="feeling"></div>
         </section>
         <section class="gfp-filter-block">
           <div class="gfp-filter-heading">
             <svg class="gfp-filter-heading-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0zm-4.125 8.25h9.75m-9.75 0a1.125 1.125 0 11-2.25 0 1.125 1.125 0 012.25 0z"/></svg>
-            ${escapeAttr(tu('actions.fontPreview.appearance'))}
+            <span data-i18n-action="actions.fontPreview.appearance">${escapeAttr(tu('actions.fontPreview.appearance'))}</span>
           </div>
           <div class="gfp-tag-grid" data-group="appearance"></div>
         </section>
@@ -1013,8 +1058,11 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
         if (!tag || tag === '—') continue;
         const test = group === 'feeling' ? FEELING_TEST[tag] : APPEARANCE_TEST[tag];
         if (!test) continue;
+        const actionKey = gfpFontPreviewTagI18nKey(tag);
+        const label = actionKey ? tu(actionKey) : tag;
+        const dataI18n = actionKey ? ` data-i18n-action="${escapeAttr(actionKey)}"` : '';
         parts.push(
-          `<button type="button" class="gfp-tag" data-group="${group}" data-tag="${escapeAttr(tag)}">${escapeAttr(tag)}</button>`
+          `<button type="button" class="gfp-tag" data-group="${group}" data-tag="${escapeAttr(tag)}"${dataI18n}>${escapeAttr(label)}</button>`
         );
       }
     }
