@@ -27729,6 +27729,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     let _codeEditorSourceCode = '';
     let _codeEditorSvgLayerNameHints = [];
     let _isApplyingCodeEditorProgrammatically = false;
+    let _codeEditorCssFilterQuery = '';
+    let _codeEditorCssFilterOpen = false;
+    let _codeEditorCssAvailableProperties = [];
+    const _codeEditorCssSelectedProperties = new Set();
     const DEFAULT_CODE_EDITOR_OPTIONS = {
       prettyPrint: false,
       layerNamesAsClasses: false,
@@ -27769,10 +27773,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     }
 
     function applyHistoryState(code) {
-      const textarea = document.getElementById('codeEditorTextarea');
       _codeEditorSourceCode = code;
-      textarea.value = code;
-      syncCodeEditorHighlight(code, getCodeEditorLang());
+      refreshCodeEditorFromSource({ preserveSelection: true });
     }
 
     function updateUndoRedoBtns() {
@@ -27976,6 +27978,374 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       return lines.join('\n');
     }
 
+    function isCssCodeLanguage(lang) {
+      return String(lang || '').trim().toLowerCase() === 'css';
+    }
+
+    function isCodeEditorCssFilterActive() {
+      return _codeEditorCssSelectedProperties.size > 0;
+    }
+
+    function findCssDeclarationColon(text) {
+      let inString = false;
+      let stringQuote = '';
+      let inComment = false;
+      let parenDepth = 0;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const next = text[i + 1];
+        const prev = text[i - 1];
+
+        if (inComment) {
+          if (char === '*' && next === '/') {
+            inComment = false;
+            i++;
+          }
+          continue;
+        }
+
+        if (inString) {
+          if (char === stringQuote && prev !== '\\') {
+            inString = false;
+            stringQuote = '';
+          }
+          continue;
+        }
+
+        if (char === '/' && next === '*') {
+          inComment = true;
+          i++;
+          continue;
+        }
+
+        if (char === '"' || char === '\'') {
+          inString = true;
+          stringQuote = char;
+          continue;
+        }
+
+        if (char === '(') {
+          parenDepth++;
+          continue;
+        }
+
+        if (char === ')' && parenDepth > 0) {
+          parenDepth--;
+          continue;
+        }
+
+        if (char === ':' && parenDepth === 0) {
+          return i;
+        }
+      }
+
+      return -1;
+    }
+
+    function getCssDeclarationPropertyName(statement) {
+      const normalized = String(statement || '').trim();
+      if (!normalized || normalized.startsWith('@')) return null;
+      const colonIdx = findCssDeclarationColon(normalized);
+      if (colonIdx <= 0) return null;
+      const property = normalized.slice(0, colonIdx).trim().toLowerCase();
+      if (!property || /\s/.test(property)) return null;
+      return property;
+    }
+
+    function parseCssItems(input, startIndex = 0) {
+      const items = [];
+      let buffer = '';
+      let inString = false;
+      let stringQuote = '';
+      let inComment = false;
+      let parenDepth = 0;
+      let i = startIndex;
+
+      const pushStatement = () => {
+        const text = buffer.trim();
+        if (text) items.push({ type: 'statement', text });
+        buffer = '';
+      };
+
+      while (i < input.length) {
+        const char = input[i];
+        const next = input[i + 1];
+        const prev = input[i - 1];
+
+        if (inComment) {
+          buffer += char;
+          if (char === '*' && next === '/') {
+            buffer += '/';
+            inComment = false;
+            i += 2;
+            continue;
+          }
+          i++;
+          continue;
+        }
+
+        if (inString) {
+          buffer += char;
+          if (char === stringQuote && prev !== '\\') {
+            inString = false;
+            stringQuote = '';
+          }
+          i++;
+          continue;
+        }
+
+        if (char === '/' && next === '*') {
+          buffer += '/*';
+          inComment = true;
+          i += 2;
+          continue;
+        }
+
+        if (char === '"' || char === '\'') {
+          inString = true;
+          stringQuote = char;
+          buffer += char;
+          i++;
+          continue;
+        }
+
+        if (char === '(') {
+          parenDepth++;
+          buffer += char;
+          i++;
+          continue;
+        }
+
+        if (char === ')' && parenDepth > 0) {
+          parenDepth--;
+          buffer += char;
+          i++;
+          continue;
+        }
+
+        if (parenDepth === 0 && char === '{') {
+          const selector = buffer.trim();
+          buffer = '';
+          const nested = parseCssItems(input, i + 1);
+          if (selector) {
+            items.push({
+              type: 'rule',
+              selector,
+              children: nested.items
+            });
+          }
+          i = nested.nextIndex;
+          continue;
+        }
+
+        if (parenDepth === 0 && char === ';') {
+          pushStatement();
+          i++;
+          continue;
+        }
+
+        if (parenDepth === 0 && char === '}') {
+          pushStatement();
+          return { items, nextIndex: i + 1 };
+        }
+
+        buffer += char;
+        i++;
+      }
+
+      pushStatement();
+      return { items, nextIndex: i };
+    }
+
+    function extractCssPropertiesFromItems(items, output = []) {
+      items.forEach((item) => {
+        if (item.type === 'statement') {
+          const propertyName = getCssDeclarationPropertyName(item.text);
+          if (propertyName && !output.includes(propertyName)) {
+            output.push(propertyName);
+          }
+          return;
+        }
+        if (Array.isArray(item.children)) {
+          extractCssPropertiesFromItems(item.children, output);
+        }
+      });
+      return output;
+    }
+
+    function filterCssItemsByProperties(items, selectedProperties) {
+      const filtered = [];
+      items.forEach((item) => {
+        if (item.type === 'statement') {
+          const propertyName = getCssDeclarationPropertyName(item.text);
+          if (propertyName && selectedProperties.has(propertyName)) {
+            filtered.push(item);
+          }
+          return;
+        }
+
+        const filteredChildren = filterCssItemsByProperties(item.children || [], selectedProperties);
+        if (filteredChildren.length > 0) {
+          filtered.push({
+            type: 'rule',
+            selector: item.selector,
+            children: filteredChildren
+          });
+        }
+      });
+      return filtered;
+    }
+
+    function serializeCssItems(items, depth = 0) {
+      const indent = '  '.repeat(depth);
+      const lines = [];
+
+      items.forEach((item) => {
+        if (item.type === 'statement') {
+          lines.push(`${indent}${item.text.replace(/;?\s*$/, '')};`);
+          return;
+        }
+
+        lines.push(`${indent}${item.selector} {`);
+        const childText = serializeCssItems(item.children || [], depth + 1);
+        if (childText) {
+          lines.push(childText);
+        }
+        lines.push(`${indent}}`);
+      });
+
+      return lines.join('\n');
+    }
+
+    function getCssFilterProperties(code) {
+      const parsed = parseCssItems(String(code || ''));
+      return extractCssPropertiesFromItems(parsed.items, []);
+    }
+
+    function applyCssPropertyFilter(code) {
+      if (!isCodeEditorCssFilterActive()) return code;
+      const parsed = parseCssItems(String(code || ''));
+      const filteredItems = filterCssItemsByProperties(parsed.items, _codeEditorCssSelectedProperties);
+      return filteredItems.length > 0 ? serializeCssItems(filteredItems) : '/* No matching CSS properties found. */';
+    }
+
+    function resetCodeEditorCssFilterState() {
+      _codeEditorCssFilterQuery = '';
+      _codeEditorCssFilterOpen = false;
+      _codeEditorCssAvailableProperties = [];
+      _codeEditorCssSelectedProperties.clear();
+    }
+
+    function closeCodeEditorCssFilterPopover() {
+      _codeEditorCssFilterOpen = false;
+      const section = document.getElementById('codeEditorCssFilterSection');
+      const toggle = document.getElementById('codeEditorCssFilterToggle');
+      section?.classList.remove('open');
+      toggle?.setAttribute('aria-expanded', 'false');
+    }
+
+    function closeCodeEditorFilterTooltip() {
+      const btn = document.getElementById('codeEditorFilterTooltipBtn');
+      const panel = document.getElementById('codeEditorFilterTooltipPanel');
+      btn?.setAttribute('aria-expanded', 'false');
+      panel?.classList.add('hidden');
+    }
+
+    function positionCodeEditorFilterTooltip() {
+      const btn = document.getElementById('codeEditorFilterTooltipBtn');
+      const panel = document.getElementById('codeEditorFilterTooltipPanel');
+      if (!btn || !panel || panel.classList.contains('hidden')) return;
+
+      const btnRect = btn.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      let left = btnRect.left;
+      let top = btnRect.top - panelRect.height - 8;
+
+      if (left + panelRect.width > window.innerWidth - 10) {
+        left = window.innerWidth - panelRect.width - 10;
+      }
+      if (left < 10) left = 10;
+      if (top < 10) {
+        top = btnRect.bottom + 8;
+      }
+
+      panel.style.left = `${left}px`;
+      panel.style.top = `${top}px`;
+    }
+
+    function updateCodeEditorCssFilterList() {
+      const list = document.getElementById('codeEditorCssFilterList');
+      const empty = document.getElementById('codeEditorCssFilterEmpty');
+      if (!list || !empty) return;
+
+      const query = _codeEditorCssFilterQuery.trim().toLowerCase();
+      const visibleProperties = _codeEditorCssAvailableProperties.filter((propertyName) => (
+        !query || propertyName.includes(query)
+      ));
+
+      list.innerHTML = visibleProperties.map((propertyName) => {
+        const checked = _codeEditorCssSelectedProperties.has(propertyName) ? 'checked' : '';
+        return `<label class="code-editor-css-filter-item"><input type="checkbox" data-css-filter-property="${escapeHtml(propertyName)}" ${checked} /><span>${escapeHtml(propertyName)}</span></label>`;
+      }).join('');
+
+      empty.classList.toggle('hidden', visibleProperties.length > 0);
+    }
+
+    function updateCodeEditorFilteredStateUi(lang) {
+      const textarea = document.getElementById('codeEditorTextarea');
+      const wrapper = document.getElementById('codeEditorWrapper');
+      const tooltipWrap = document.getElementById('codeEditorFilterTooltipWrap');
+      const saveBtn = document.getElementById('codeEditorSaveBtn');
+      const isFilteredCss = isCssCodeLanguage(lang) && isCodeEditorCssFilterActive();
+
+      if (textarea) textarea.readOnly = isFilteredCss;
+      wrapper?.classList.toggle('is-readonly-filter', isFilteredCss);
+      tooltipWrap?.classList.toggle('hidden', !isFilteredCss);
+      if (!isFilteredCss) {
+        closeCodeEditorFilterTooltip();
+      }
+      if (saveBtn) saveBtn.disabled = isFilteredCss;
+    }
+
+    function updateCodeEditorCssFilterUi(lang) {
+      const isCss = isCssCodeLanguage(lang);
+      const section = document.getElementById('codeEditorCssFilterSection');
+      const summary = document.getElementById('codeEditorCssFilterSummary');
+      const count = document.getElementById('codeEditorCssFilterCount');
+      const meta = document.getElementById('codeEditorCssFilterMeta');
+      const search = document.getElementById('codeEditorCssFilterSearch');
+
+      section?.classList.toggle('hidden', !isCss);
+      if (!isCss) {
+        closeCodeEditorCssFilterPopover();
+        updateCodeEditorFilteredStateUi(lang);
+        return;
+      }
+
+      const selectedCount = _codeEditorCssSelectedProperties.size;
+      if (summary) {
+        summary.textContent = selectedCount > 0 ? `${selectedCount} selected` : 'All properties';
+      }
+      if (count) {
+        count.textContent = String(selectedCount);
+        count.classList.toggle('hidden', selectedCount === 0);
+      }
+      if (meta) {
+        meta.textContent = selectedCount > 0 ? `${selectedCount} selected` : `${_codeEditorCssAvailableProperties.length} available`;
+      }
+      if (search && search.value !== _codeEditorCssFilterQuery) {
+        search.value = _codeEditorCssFilterQuery;
+      }
+
+      const filterToggle = document.getElementById('codeEditorCssFilterToggle');
+      section?.classList.toggle('open', _codeEditorCssFilterOpen);
+      filterToggle?.setAttribute('aria-expanded', _codeEditorCssFilterOpen ? 'true' : 'false');
+
+      updateCodeEditorCssFilterList();
+      updateCodeEditorFilteredStateUi(lang);
+    }
+
     function shouldConvertPaintValueToCurrentColor(value) {
       if (!value) return false;
       const normalized = String(value).trim().toLowerCase();
@@ -28098,11 +28468,17 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         return applySvgEditorOptions(code, _codeEditorOptions, _codeEditorSvgLayerNameHints);
       }
 
+      let output = code;
+
       if (_codeEditorOptions.prettyPrint) {
-        return applyPrettyPrintByLanguage(code, lang);
+        output = applyPrettyPrintByLanguage(output, lang);
       }
 
-      return code;
+      if (isCssCodeLanguage(lang)) {
+        output = applyCssPropertyFilter(output);
+      }
+
+      return output;
     }
 
     function setCodeEditorValue(code, lang, { pushHistory = false, preserveSelection = false } = {}) {
@@ -28115,9 +28491,6 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       _isApplyingCodeEditorProgrammatically = true;
       textarea.value = code;
       syncCodeEditorHighlight(code, lang);
-      if (pushHistory && _codeEditorHistory[_codeEditorHistoryIdx] !== code) {
-        codeEditorPushState(code);
-      }
       if (preserveSelection) {
         const clampedStart = Math.min(selectionStart, code.length);
         const clampedEnd = Math.min(selectionEnd, code.length);
@@ -28129,8 +28502,22 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     function refreshCodeEditorFromSource({ pushHistory = false, preserveSelection = false } = {}) {
       const details = getCodeEditorTargetDetails(_codeEditorTarget);
       const lang = details ? details.lang : 'text';
+      _codeEditorCssAvailableProperties = isCssCodeLanguage(lang) ? getCssFilterProperties(_codeEditorSourceCode) : [];
+      if (!isCssCodeLanguage(lang)) {
+        _codeEditorCssFilterQuery = '';
+        _codeEditorCssSelectedProperties.clear();
+      } else {
+        Array.from(_codeEditorCssSelectedProperties).forEach((propertyName) => {
+          if (!_codeEditorCssAvailableProperties.includes(propertyName)) {
+            _codeEditorCssSelectedProperties.delete(propertyName);
+          }
+        });
+      }
       const output = applyCodeEditorOptions(_codeEditorSourceCode, lang);
       setCodeEditorValue(output, lang, { pushHistory, preserveSelection });
+      if (pushHistory && _codeEditorHistory[_codeEditorHistoryIdx] !== _codeEditorSourceCode) {
+        codeEditorPushState(_codeEditorSourceCode);
+      }
       updateCodeEditorOptionsUi();
     }
 
@@ -28139,13 +28526,16 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const btn = document.getElementById('codeEditorOptionsBtn');
       anchor?.classList.remove('open');
       btn?.setAttribute('aria-expanded', 'false');
+      closeCodeEditorCssFilterPopover();
     }
 
     function updateCodeEditorOptionsUi() {
       const details = getCodeEditorTargetDetails(_codeEditorTarget);
       const lang = details ? details.lang : 'text';
       const langBadge = document.getElementById('codeEditorLangBadge');
-      const isSvg = String(langBadge?.textContent || lang || '').trim().toLowerCase() === 'svg';
+      const normalizedLang = String(langBadge?.textContent || lang || '').trim().toLowerCase();
+      const isSvg = normalizedLang === 'svg';
+      const isCss = normalizedLang === 'css';
 
       Object.entries(DEFAULT_CODE_EDITOR_OPTIONS).forEach(([key]) => {
         const input = document.querySelector(`#codeEditorOptionsMenu input[data-option-key="${key}"]`);
@@ -28155,6 +28545,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         input.checked = Boolean(_codeEditorOptions[key]);
         row?.classList.toggle('hidden', Boolean(svgOnly && !isSvg));
       });
+
+      updateCodeEditorCssFilterUi(isCss ? 'css' : normalizedLang);
     }
 
     function openCodeEditor(target) {
@@ -28166,12 +28558,13 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       _codeEditorTarget = target;
       _codeEditorSourceCode = details.code;
       _codeEditorSvgLayerNameHints = Array.isArray(details.svgLayerNameHints) ? [...details.svgLayerNameHints] : [];
+      resetCodeEditorCssFilterState();
 
       langBadge.textContent = details.lang;
 
       resetCodeEditorHistory();
       refreshCodeEditorFromSource();
-      codeEditorPushState(document.getElementById('codeEditorTextarea').value);
+      codeEditorPushState(_codeEditorSourceCode);
 
       modal.classList.add('show');
       requestAnimationFrame(() => document.getElementById('codeEditorTextarea').focus());
@@ -28200,6 +28593,9 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       _codeEditorTarget = null;
       _codeEditorSourceCode = '';
       _codeEditorSvgLayerNameHints = [];
+      resetCodeEditorCssFilterState();
+      closeCodeEditorFilterTooltip();
+      updateCodeEditorFilteredStateUi('text');
     }
 
     function saveCodeEditor() {
@@ -28207,6 +28603,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const textarea = document.getElementById('codeEditorTextarea');
       const details = getCodeEditorTargetDetails(_codeEditorTarget);
       if (!details) return;
+      if (isCssCodeLanguage(details.lang) && isCodeEditorCssFilterActive()) {
+        showToast('Clear CSS filters before saving changes.', 'warning');
+        return;
+      }
 
       const newCode = textarea.value;
       const lang = details.lang;
@@ -28259,7 +28659,11 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const nextState = !anchor?.classList.contains('open');
       anchor?.classList.toggle('open', nextState);
       btn?.setAttribute('aria-expanded', nextState ? 'true' : 'false');
-      if (nextState) updateCodeEditorOptionsUi();
+      if (nextState) {
+        updateCodeEditorOptionsUi();
+      } else {
+        closeCodeEditorCssFilterPopover();
+      }
     });
     document.querySelectorAll('#codeEditorOptionsMenu input[data-option-key]').forEach((input) => {
       input.addEventListener('change', (event) => {
@@ -28269,6 +28673,54 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         _codeEditorOptions[key] = target.checked;
         refreshCodeEditorFromSource({ pushHistory: true, preserveSelection: true });
       });
+    });
+    document.getElementById('codeEditorCssFilterToggle').addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (!_codeEditorTarget || !isCssCodeLanguage(getCodeEditorLang())) return;
+      _codeEditorCssFilterOpen = !_codeEditorCssFilterOpen;
+      updateCodeEditorCssFilterUi('css');
+      if (_codeEditorCssFilterOpen) {
+        requestAnimationFrame(() => document.getElementById('codeEditorCssFilterSearch')?.focus());
+      }
+    });
+    document.getElementById('codeEditorCssFilterSearch').addEventListener('input', (event) => {
+      _codeEditorCssFilterQuery = event.currentTarget.value || '';
+      updateCodeEditorCssFilterUi('css');
+    });
+    document.getElementById('codeEditorCssFilterSelectAll').addEventListener('click', (event) => {
+      event.stopPropagation();
+      _codeEditorCssAvailableProperties.forEach((propertyName) => _codeEditorCssSelectedProperties.add(propertyName));
+      refreshCodeEditorFromSource({ preserveSelection: true });
+    });
+    document.getElementById('codeEditorCssFilterClear').addEventListener('click', (event) => {
+      event.stopPropagation();
+      _codeEditorCssSelectedProperties.clear();
+      _codeEditorCssFilterQuery = '';
+      refreshCodeEditorFromSource({ preserveSelection: true });
+    });
+    document.getElementById('codeEditorCssFilterList').addEventListener('change', (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      const propertyName = target.dataset.cssFilterProperty;
+      if (!propertyName) return;
+      if (target.checked) {
+        _codeEditorCssSelectedProperties.add(propertyName);
+      } else {
+        _codeEditorCssSelectedProperties.delete(propertyName);
+      }
+      refreshCodeEditorFromSource({ preserveSelection: true });
+    });
+    document.getElementById('codeEditorFilterTooltipBtn').addEventListener('click', (event) => {
+      event.stopPropagation();
+      const btn = event.currentTarget;
+      const panel = document.getElementById('codeEditorFilterTooltipPanel');
+      if (!panel) return;
+      const nextState = panel.classList.contains('hidden');
+      btn.setAttribute('aria-expanded', nextState ? 'true' : 'false');
+      panel.classList.toggle('hidden', !nextState);
+      if (nextState) {
+        positionCodeEditorFilterTooltip();
+      }
     });
     document.getElementById('copyCodeEditorBtn').addEventListener('click', async function () {
       const textarea = document.getElementById('codeEditorTextarea');
@@ -28309,6 +28761,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     // Keyboard shortcuts for undo/redo inside the code editor
     document.getElementById('codeEditorTextarea').addEventListener('keydown', (e) => {
+      if (document.getElementById('codeEditorTextarea').readOnly) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         codeEditorUndo();
@@ -28344,7 +28797,14 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       if (!e.target.closest('.code-editor-options-anchor')) {
         closeCodeEditorOptionsMenu();
       }
+      if (!e.target.closest('#codeEditorFilterTooltipWrap')) {
+        closeCodeEditorFilterTooltip();
+      }
       if (e.target === e.currentTarget) closeCodeEditor();
+    });
+
+    window.addEventListener('resize', () => {
+      positionCodeEditorFilterTooltip();
     });
 
     // Close on Escape key

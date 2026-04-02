@@ -1414,6 +1414,33 @@
               <input class="code-editor-option-toggle-input" type="checkbox" id="codeEditorOptionPrettyPrint" data-option-key="prettyPrint" />
               <span class="code-editor-option-toggle" aria-hidden="true"><span class="code-editor-option-toggle-knob"></span></span>
             </label>
+            <div class="code-editor-css-filter-section css-only hidden" id="codeEditorCssFilterSection">
+              <button class="code-editor-option-row code-editor-css-filter-trigger" id="codeEditorCssFilterToggle" type="button" aria-haspopup="true" aria-expanded="false">
+                <span class="code-editor-option-text-wrap">
+                  <span class="code-editor-option-text">Filter properties</span>
+                  <span class="code-editor-option-meta" id="codeEditorCssFilterSummary">All properties</span>
+                </span>
+                <span class="code-editor-css-filter-trigger-right">
+                  <span class="code-editor-option-count-badge hidden" id="codeEditorCssFilterCount">0</span>
+                  <svg class="code-editor-css-filter-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true">
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </span>
+              </button>
+              <div class="code-editor-css-filter-popover" id="codeEditorCssFilterPopover">
+                <div class="code-editor-css-filter-header">
+                  <span class="code-editor-css-filter-title">Filter CSS properties</span>
+                  <span class="code-editor-css-filter-meta" id="codeEditorCssFilterMeta">0 selected</span>
+                </div>
+                <input class="code-editor-css-filter-search" id="codeEditorCssFilterSearch" type="text" placeholder="Search properties..." spellcheck="false" />
+                <div class="code-editor-css-filter-actions">
+                  <button class="code-editor-css-filter-action" id="codeEditorCssFilterSelectAll" type="button">Select all</button>
+                  <button class="code-editor-css-filter-action" id="codeEditorCssFilterClear" type="button">Clear</button>
+                </div>
+                <div class="code-editor-css-filter-list" id="codeEditorCssFilterList"></div>
+                <div class="code-editor-css-filter-empty hidden" id="codeEditorCssFilterEmpty">No properties found.</div>
+              </div>
+            </div>
             <label class="code-editor-option-row svg-only" for="codeEditorOptionLayerNamesAsClasses">
               <span class="code-editor-option-text">Layer names as classes</span>
               <input class="code-editor-option-toggle-input" type="checkbox" id="codeEditorOptionLayerNamesAsClasses" data-option-key="layerNamesAsClasses" />
@@ -1434,6 +1461,18 @@
               <input class="code-editor-option-toggle-input" type="checkbox" id="codeEditorOptionNonScalingStroke" data-option-key="nonScalingStroke" />
               <span class="code-editor-option-toggle" aria-hidden="true"><span class="code-editor-option-toggle-knob"></span></span>
             </label>
+          </div>
+        </div>
+        <div class="code-editor-filter-tooltip-wrap hidden" id="codeEditorFilterTooltipWrap">
+          <button class="code-editor-filter-tooltip-btn" id="codeEditorFilterTooltipBtn" type="button" aria-haspopup="dialog" aria-expanded="false" title="Why is editing disabled?">
+            <svg class="code-editor-filter-tooltip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 17h.01"></path>
+              <path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"></path>
+            </svg>
+          </button>
+          <div class="code-editor-filter-tooltip-panel hidden" id="codeEditorFilterTooltipPanel" role="tooltip">
+            CSS filter preview is read-only. Clear filters to edit or save the full stylesheet.
           </div>
         </div>
         <div class="code-editor-footer-spacer"></div>

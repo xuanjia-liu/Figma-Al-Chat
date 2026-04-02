@@ -5620,6 +5620,21 @@
       min-width: 0;
     }
 
+    .code-editor-option-text-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .code-editor-option-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      line-height: 1.2;
+    }
+
     .code-editor-option-row.hidden {
       display: none;
     }
@@ -5664,6 +5679,245 @@
 
     .code-editor-option-row.disabled .code-editor-option-toggle {
       opacity: 0.45;
+    }
+
+    .code-editor-css-filter-section {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .code-editor-css-filter-trigger {
+      width: 100%;
+      border: none;
+      background: transparent;
+      text-align: left;
+      font: inherit;
+    }
+
+    .code-editor-css-filter-trigger-right {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .code-editor-css-filter-chevron {
+      opacity: 0.72;
+      transition: transform 0.15s ease;
+    }
+
+    .code-editor-css-filter-section.open .code-editor-css-filter-chevron {
+      transform: rotate(90deg);
+    }
+
+    .code-editor-option-count-badge {
+      min-width: 18px;
+      height: 18px;
+      padding: 0 6px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(109, 180, 255, 0.16);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1;
+    }
+
+    .code-editor-option-count-badge.hidden {
+      display: none;
+    }
+
+    .code-editor-css-filter-popover {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 2px;
+      padding: 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .code-editor-css-filter-section.open .code-editor-css-filter-popover {
+      display: flex;
+    }
+
+    .code-editor-css-filter-header,
+    .code-editor-css-filter-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .code-editor-css-filter-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .code-editor-css-filter-meta {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      white-space: nowrap;
+    }
+
+    .code-editor-css-filter-search {
+      width: 100%;
+      height: 30px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 12px;
+      padding: 0 10px;
+      outline: none;
+    }
+
+    .code-editor-css-filter-search:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(109, 180, 255, 0.2);
+    }
+
+    .code-editor-css-filter-action {
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 0;
+      font: inherit;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .code-editor-css-filter-action:hover {
+      text-decoration: underline;
+    }
+
+    .code-editor-css-filter-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 220px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .code-editor-css-filter-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+
+    .code-editor-css-filter-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .code-editor-css-filter-item input {
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    .code-editor-css-filter-item span {
+      min-width: 0;
+      color: var(--text-primary);
+      font-family: 'Space Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      word-break: break-word;
+    }
+
+    .code-editor-css-filter-empty {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      padding: 2px 0 0;
+    }
+
+    .code-editor-css-filter-empty.hidden {
+      display: none;
+    }
+
+    .code-editor-filter-tooltip-wrap.hidden {
+      display: none;
+    }
+
+    .code-editor-filter-tooltip-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+
+    .code-editor-filter-tooltip-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 24px;
+      min-width: 24px;
+      height: 24px;
+      box-sizing: border-box;
+      padding: 0;
+      margin: 0;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .code-editor-filter-tooltip-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .code-editor-filter-tooltip-btn[aria-expanded='true'] {
+      color: var(--accent-agent, #3b82f6);
+    }
+
+    .code-editor-filter-tooltip-btn:focus-visible {
+      outline: 2px solid var(--accent-agent, #3b82f6);
+      outline-offset: 1px;
+    }
+
+    .code-editor-filter-tooltip-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .code-editor-filter-tooltip-panel {
+      position: fixed;
+      z-index: 34;
+      max-width: min(280px, calc(100vw - 20px));
+      padding: 8px 10px;
+      margin: 0;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+      font-size: 10px;
+      line-height: 1.45;
+      color: var(--text-primary);
+    }
+
+    .code-editor-filter-tooltip-panel.hidden {
+      display: none;
+    }
+
+    .code-editor-wrapper.is-readonly-filter .code-editor-highlight {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)), var(--bg-tertiary);
+    }
+
+    .code-editor-wrapper.is-readonly-filter .code-editor-textarea {
+      cursor: not-allowed;
     }
 
     /* Selection context toolbar */
