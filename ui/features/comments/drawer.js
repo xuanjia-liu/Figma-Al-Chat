@@ -52,11 +52,13 @@ export function createCommentsDrawerHelpers({
       figmaCurrentUser,
       commentsWithReplyMatches,
       commentsWithPeopleReplyMatches,
+      isPromptCommentHidden,
     } = getState();
 
     const replies = threads.get(comment.id) || [];
     replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const isResolved = !!comment.resolved_at;
+    const isHidden = typeof isPromptCommentHidden === 'function' ? isPromptCommentHidden(comment.id) : false;
     const replyCount = replies.length;
     const isSelected = selectedCommentIds.has(comment.id);
     const replyCountLabel = escapeHtml(getReplyCountLabel(replyCount));
@@ -66,6 +68,46 @@ export function createCommentsDrawerHelpers({
     if (multiSelectEnabled) itemClasses.push('selectable');
     if (isResolved) itemClasses.push('resolved');
     else itemClasses.push('unresolved');
+    if (isHidden) itemClasses.push('is-hidden');
+
+    const visibilityButton = `
+      <button
+        class="comment-action-btn icon-only comment-visibility-toggle"
+        onclick="event.stopPropagation(); togglePromptCommentHidden('${comment.id}')"
+        title="${escapeHtml(isHidden ? 'Show comment' : 'Hide comment')}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          ${isHidden
+        ? '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4l16 16"/>'
+        : '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/>'
+      }
+        </svg>
+      </button>
+    `;
+
+    if (isHidden) {
+      return `
+        <div class="${itemClasses.join(' ')}" data-comment-id="${comment.id}" onclick="handleCommentItemClick(event, '${comment.id}')">
+          ${multiSelectEnabled ? `
+            <input type="checkbox" class="comment-select-checkbox" 
+              ${isSelected ? 'checked' : ''} 
+              onchange="toggleCommentSelection('${comment.id}', this)" />
+          ` : ''}
+          <div class="comment-header">
+            <div class="comment-avatar">
+              ${comment.user.img_url
+          ? `<img src="${comment.user.img_url}" alt="${comment.user.handle}" onerror="this.style.display='none';this.parentNode.textContent='${comment.user.handle.substring(0, 1).toUpperCase()}'" />`
+          : comment.user.handle.substring(0, 1).toUpperCase()
+        }
+            </div>
+            <div class="comment-header-text">
+              <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(comment.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(comment.user.handle, commentsSearchQuery)}</span>
+            </div>
+            ${isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : ''}
+            <span class="comment-header-trailing comment-header-trailing--toggle">${visibilityButton}</span>
+          </div>
+        </div>
+      `;
+    }
 
     return `
         <div class="${itemClasses.join(' ')}" data-comment-id="${comment.id}" onclick="handleCommentItemClick(event, '${comment.id}')">
@@ -83,7 +125,7 @@ export function createCommentsDrawerHelpers({
             </div>
             <div class="comment-header-text">
               <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(comment.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(comment.user.handle, commentsSearchQuery)}</span>
-              ${comment.client_meta?.node_id ? `<span class="comment-attached-layer">${escapeHtml(getAttachedLayerLabel(cachedNodeNames[comment.client_meta.node_id] || '…'))}</span>` : ''}
+            ${comment.client_meta?.node_id ? `<span class="comment-attached-layer">${escapeHtml(getAttachedLayerLabel(cachedNodeNames[comment.client_meta.node_id] || '…'))}</span>` : ''}
             </div>
             ${isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : ''}
             <span class="comment-date">${formatCommentDate(comment.created_at)}</span>
@@ -133,6 +175,7 @@ export function createCommentsDrawerHelpers({
                 ` : ''}
               </div>
             </div>
+            ${visibilityButton}
           </div>
       <div class="comment-reply-input" id="drawer-reply-input-${comment.id}" style="display: none;">
         <div class="comment-reply-input-wrapper">

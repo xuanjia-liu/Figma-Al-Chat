@@ -38,6 +38,7 @@ const SETTINGS_KEYS = {
   // Saved inputs for each action (the "drawer inputs")
   PROMPT_HISTORY: 'figma-prompt-history',
   REPLY_TEMPLATES: 'figma-reply-templates',
+  HIDDEN_PROMPT_COMMENTS: 'figma-hidden-prompt-comments',
   // Plugin window size
   PLUGIN_WIDTH: 'figma-plugin-width',
   PLUGIN_HEIGHT: 'figma-plugin-height',
@@ -5009,6 +5010,7 @@ figma.ui.onmessage = async (msg: {
         const language = await figma.clientStorage.getAsync(SETTINGS_KEYS.UI_LANGUAGE) || 'en';
         const lightMode = await figma.clientStorage.getAsync(SETTINGS_KEYS.LIGHT_MODE) === true;
         const replyTemplates = await figma.clientStorage.getAsync(SETTINGS_KEYS.REPLY_TEMPLATES) || [];
+        const hiddenPromptCommentsByFile = await figma.clientStorage.getAsync(SETTINGS_KEYS.HIDDEN_PROMPT_COMMENTS) || {};
         const lastChatId = await figma.clientStorage.getAsync(SETTINGS_KEYS.LAST_CHAT_ID) || null;
         const lastCommandsCategory = await figma.clientStorage.getAsync(SETTINGS_KEYS.LAST_COMMANDS_CATEGORY) || null;
         const maximizedPromptDrawerData = await figma.clientStorage.getAsync(SETTINGS_KEYS.MAXIMIZED_PROMPT_DRAWER_DATA) || null;
@@ -5017,7 +5019,7 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, hiddenPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
@@ -5186,6 +5188,20 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('Failed to save reply templates:', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to save reply templates' });
+      }
+      break;
+    }
+
+    case 'save-hidden-prompt-comments': {
+      try {
+        const rawValue = (msg as any).hiddenPromptCommentsByFile;
+        const normalized = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
+          ? rawValue
+          : {};
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.HIDDEN_PROMPT_COMMENTS, normalized);
+      } catch (error) {
+        console.error('Failed to save hidden prompt comments:', error);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to save hidden prompt comments' });
       }
       break;
     }

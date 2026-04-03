@@ -6142,6 +6142,7 @@ Rules:
     // Quick action usage + flattened list for slash menu
     const QUICK_ACTION_USAGE_KEY = 'quickActionUsage';
     const LAST_USED_ACTION_KEY = 'lastUsedQuickAction';
+    const HIDDEN_PROMPT_COMMENTS_KEY = 'hiddenPromptCommentsByFile';
     const MAX_LAST_USED_ACTIONS = 3;
     let quickActionUsage = sanitizeQuickActionUsageMap(loadQuickActionUsageFromLocal());
     let lastUsedQuickActions = loadLastUsedQuickActionsFromLocal();
@@ -6184,6 +6185,91 @@ Rules:
         }
       } catch (e) {
         // ignore
+      }
+    }
+
+    function loadHiddenPromptCommentsByFileFromLocal() {
+      try {
+        const stored = localStorage.getItem(HIDDEN_PROMPT_COMMENTS_KEY);
+        if (!stored) return {};
+        const parsed = JSON.parse(stored);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+        const sanitized = {};
+        Object.entries(parsed).forEach(([fileKey, commentMap]) => {
+          if (!fileKey || !commentMap || typeof commentMap !== 'object' || Array.isArray(commentMap)) return;
+          const sanitizedComments = {};
+          Object.entries(commentMap).forEach(([commentId, hidden]) => {
+            if (commentId && hidden === true) {
+              sanitizedComments[commentId] = true;
+            }
+          });
+          if (Object.keys(sanitizedComments).length > 0) {
+            sanitized[fileKey] = sanitizedComments;
+          }
+        });
+
+        return sanitized;
+      } catch (e) {
+        return {};
+      }
+    }
+
+    let hiddenPromptCommentsByFile = loadHiddenPromptCommentsByFileFromLocal();
+
+    function saveHiddenPromptCommentsByFileToLocal() {
+      try {
+        localStorage.setItem(HIDDEN_PROMPT_COMMENTS_KEY, JSON.stringify(hiddenPromptCommentsByFile));
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    function syncHiddenPromptCommentsToPluginStorage() {
+      parent.postMessage({
+        pluginMessage: {
+          type: 'save-hidden-prompt-comments',
+          hiddenPromptCommentsByFile,
+        }
+      }, '*');
+    }
+
+    function getPromptCommentsStorageFileKey() {
+      return figmaFileKey || 'unknown-file';
+    }
+
+    function isPromptCommentHidden(commentId) {
+      const fileKey = getPromptCommentsStorageFileKey();
+      return !!hiddenPromptCommentsByFile[fileKey]?.[commentId];
+    }
+
+    function togglePromptCommentHidden(commentId) {
+      const fileKey = getPromptCommentsStorageFileKey();
+      const currentMap = { ...(hiddenPromptCommentsByFile[fileKey] || {}) };
+
+      if (currentMap[commentId]) {
+        delete currentMap[commentId];
+      } else {
+        currentMap[commentId] = true;
+      }
+
+      if (Object.keys(currentMap).length > 0) {
+        hiddenPromptCommentsByFile = {
+          ...hiddenPromptCommentsByFile,
+          [fileKey]: currentMap,
+        };
+      } else {
+        const nextState = { ...hiddenPromptCommentsByFile };
+        delete nextState[fileKey];
+        hiddenPromptCommentsByFile = nextState;
+      }
+
+      saveHiddenPromptCommentsByFileToLocal();
+      syncHiddenPromptCommentsToPluginStorage();
+
+      const container = document.getElementById('promptCommentsContainer');
+      if (container && container.offsetParent !== null) {
+        renderCommentsInDrawer(container);
       }
     }
 
@@ -7510,6 +7596,7 @@ CRITICAL RULES:
         peopleFilterActiveTab,
         peopleFilterIncludeRepliesFrom,
         peopleFilterIncludeRepliesMentions,
+        isPromptCommentHidden,
       };
     }
 
@@ -8507,8 +8594,15 @@ Generate a suitable, professional response.
       const repliesEl = document.getElementById(`replies-${commentId}`);
       const toggleBtn = document.getElementById(`replies-toggle-${commentId}`);
       if (repliesEl && toggleBtn) {
-        repliesEl.classList.toggle('collapsed');
-        toggleBtn.classList.toggle('expanded');
+        const isCollapsed = repliesEl.classList.contains('collapsed') || repliesEl.style.display === 'none';
+        if (isCollapsed) {
+          repliesEl.classList.remove('collapsed');
+          animateCollapsibleOpen(repliesEl, 'block');
+          toggleBtn.classList.add('expanded');
+        } else {
+          animateCollapsibleClose(repliesEl);
+          toggleBtn.classList.remove('expanded');
+        }
       }
     }
 
@@ -8726,7 +8820,8 @@ Generate a suitable, professional response.
       const replyInput = document.getElementById(`drawer-reply-input-${commentId}`);
       if (replyInput) {
         const isOpening = forceOpen ? true : replyInput.style.display === 'none';
-        replyInput.style.display = isOpening ? 'flex' : 'none';
+        if (isOpening) animateCollapsibleOpen(replyInput, 'flex');
+        else animateCollapsibleClose(replyInput);
         if (isOpening) {
           const textarea = replyInput.querySelector('textarea');
           if (textarea) {
@@ -9877,8 +9972,9 @@ Requirements:
       const replyInput = document.getElementById(`quick-reply-input-${commentId}`);
       if (replyInput) {
         const isOpening = forceOpen ? true : replyInput.style.display === 'none';
-        replyInput.style.display = isOpening ? 'flex' : 'none';
-        if (replyInput.style.display === 'flex') {
+        if (isOpening) animateCollapsibleOpen(replyInput, 'flex');
+        else animateCollapsibleClose(replyInput);
+        if (isOpening) {
           const textarea = replyInput.querySelector('textarea');
           if (textarea) {
             textarea.focus();
@@ -9899,7 +9995,7 @@ Requirements:
       const inputPrefix = `${prefix}-input-${commentId}-`;
       document.querySelectorAll(`[id^="${inputPrefix}"]`).forEach(el => {
         if (exceptReplyId && el.id === `${prefix}-input-${commentId}-${exceptReplyId}`) return;
-        el.style.display = 'none';
+        animateCollapsibleClose(el);
       });
     }
 
@@ -9915,12 +10011,12 @@ Requirements:
 
       const isOpen = replyInput.style.display !== 'none';
       if (isOpen) {
-        replyInput.style.display = 'none';
+        animateCollapsibleClose(replyInput);
         return;
       }
 
       closeReplyItemInputsForThread(mode, commentId, replyId);
-      replyInput.style.display = 'flex';
+      animateCollapsibleOpen(replyInput, 'flex');
       const input = getReplyItemTextInputByMode(mode, commentId, replyId) || replyInput.querySelector('textarea, input');
       if (!input) return;
 
@@ -24470,12 +24566,15 @@ Example structure:
       pexelsApiKey = settings?.pexelsApiKey || '';
       agentMaxTokens = settings?.agentMaxTokens || 65536;
       auditMaxTokens = settings?.auditMaxTokens || 16384;
-      chatMaxTokens = settings?.chatMaxTokens || 16384;
-      promptHistory = settings?.promptHistory || {};
-      replyTemplates = settings?.replyTemplates || [];
-      if (settings?.lastCommandsCategory && agentTasks[settings.lastCommandsCategory]) {
-        selectedCategory = settings.lastCommandsCategory;
-      }
+        chatMaxTokens = settings?.chatMaxTokens || 16384;
+        promptHistory = settings?.promptHistory || {};
+        replyTemplates = settings?.replyTemplates || [];
+        hiddenPromptCommentsByFile = settings?.hiddenPromptCommentsByFile && typeof settings.hiddenPromptCommentsByFile === 'object'
+          ? settings.hiddenPromptCommentsByFile
+          : loadHiddenPromptCommentsByFileFromLocal();
+        if (settings?.lastCommandsCategory && agentTasks[settings.lastCommandsCategory]) {
+          selectedCategory = settings.lastCommandsCategory;
+        }
 
       // Load enabled models and normalize/deduplicate them
       if (settings?.enabledModels) {
@@ -25117,12 +25216,71 @@ Example structure:
       showToast('Comment added to chat input', 'success');
     }
 
+    function animateCollapsibleOpen(element, displayMode = 'flex') {
+      if (!element) return;
+      element.style.display = displayMode;
+      element.classList.remove('is-collapsed');
+
+      const targetHeight = element.scrollHeight;
+      element.style.overflow = 'hidden';
+      element.style.opacity = '0';
+      element.style.maxHeight = '0px';
+      element.style.transform = 'translateY(-4px)';
+
+      requestAnimationFrame(() => {
+        element.classList.add('is-opening');
+        element.style.opacity = '1';
+        element.style.maxHeight = `${targetHeight}px`;
+        element.style.transform = 'translateY(0)';
+      });
+
+      const onEnd = (event) => {
+        if (event.target !== element) return;
+        element.classList.remove('is-opening');
+        element.style.maxHeight = 'none';
+        element.style.overflow = '';
+        element.style.transform = '';
+        element.removeEventListener('transitionend', onEnd);
+      };
+      element.addEventListener('transitionend', onEnd);
+    }
+
+    function animateCollapsibleClose(element) {
+      if (!element || element.style.display === 'none') return;
+
+      element.style.overflow = 'hidden';
+      element.style.maxHeight = `${element.scrollHeight}px`;
+      element.style.opacity = '1';
+      element.style.transform = 'translateY(0)';
+
+      requestAnimationFrame(() => {
+        element.classList.remove('is-opening');
+        element.classList.add('is-collapsed');
+        element.style.maxHeight = '0px';
+        element.style.opacity = '0';
+        element.style.transform = 'translateY(-4px)';
+      });
+
+      const onEnd = (event) => {
+        if (event.target !== element) return;
+        element.style.display = 'none';
+        element.classList.remove('is-collapsed');
+        element.style.maxHeight = '';
+        element.style.opacity = '';
+        element.style.transform = '';
+        element.style.overflow = '';
+        element.removeEventListener('transitionend', onEnd);
+      };
+      element.addEventListener('transitionend', onEnd);
+    }
+
     // Toggle reply input visibility
     function toggleReplyInput(commentId, forceOpen = false) {
       const replyInput = document.getElementById(`reply-input-${commentId}`);
       if (replyInput) {
         const isOpening = forceOpen ? true : replyInput.style.display === 'none';
-        replyInput.style.display = isOpening ? 'flex' : 'none';
+        if (isOpening) animateCollapsibleOpen(replyInput, 'flex');
+        else animateCollapsibleClose(replyInput);
         if (isOpening) {
           const input = replyInput.querySelector('input');
           if (input) input.focus();
