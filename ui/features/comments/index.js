@@ -1,6 +1,7 @@
 export const commentsInlineHandlerNames = [
   'addTemplate',
   'autoExpandTextarea',
+  'batchTogglePromptCommentHidden',
   'batchSummarizeSelected',
   'cancelMentionBlur',
   'clearPeopleFilter',

@@ -8044,12 +8044,16 @@ CRITICAL RULES:
       const replyBtn = document.getElementById('batchReplyBtn');
       const replyChevronBtn = document.getElementById('batchReplyChevronBtn');
       const aiReplyBtn = document.getElementById('batchAiReplyBtn');
+      const visibilityBtn = document.getElementById('batchVisibilityBtn');
+      const visibilityBtnLabel = document.getElementById('batchVisibilityBtnLabel');
+      const visibilityBtnIcon = document.getElementById('batchVisibilityBtnIcon');
       const selectAllBtn = document.getElementById('selectAllBtn');
       const count = selectedCommentIds.size;
 
       if (summarizeBtn) summarizeBtn.disabled = count === 0;
       if (replyBtn) replyBtn.disabled = count === 0;
       if (replyChevronBtn) replyChevronBtn.disabled = count === 0;
+      if (visibilityBtn) visibilityBtn.disabled = count === 0;
 
       const csvBtn = document.getElementById('batchCsvBtn');
       if (csvBtn) {
@@ -8063,6 +8067,16 @@ CRITICAL RULES:
 
       if (selectAllBtn) {
         selectAllBtn.textContent = count > 0 ? tu('actions.comments.drawer.deselectAll') : tu('actions.comments.drawer.selectAll');
+      }
+
+      if (visibilityBtn && visibilityBtnLabel && visibilityBtnIcon) {
+        const selectedIds = Array.from(selectedCommentIds);
+        const allHidden = selectedIds.length > 0 && selectedIds.every(id => isPromptCommentHidden(id));
+        visibilityBtnLabel.textContent = allHidden ? 'Show' : 'Hide';
+        visibilityBtn.title = allHidden ? 'Show selected comments' : 'Hide selected comments';
+        visibilityBtnIcon.innerHTML = allHidden
+          ? '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path><circle cx="12" cy="12" r="3"></circle><path d="M4 4l16 16"></path>'
+          : '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path><circle cx="12" cy="12" r="3"></circle>';
       }
 
       // Update count labels in input areas
@@ -8296,6 +8310,39 @@ ${commentsList}`;
 
     function batchSummarizeSelected() {
       summarizeCommentsFromDrawer();
+    }
+
+    function batchTogglePromptCommentHidden() {
+      const ids = Array.from(selectedCommentIds);
+      if (ids.length === 0) return;
+
+      const shouldShow = ids.every(id => isPromptCommentHidden(id));
+      const fileKey = getPromptCommentsStorageFileKey();
+      const currentMap = { ...(hiddenPromptCommentsByFile[fileKey] || {}) };
+
+      ids.forEach((commentId) => {
+        if (shouldShow) delete currentMap[commentId];
+        else currentMap[commentId] = true;
+      });
+
+      if (Object.keys(currentMap).length > 0) {
+        hiddenPromptCommentsByFile = {
+          ...hiddenPromptCommentsByFile,
+          [fileKey]: currentMap,
+        };
+      } else {
+        const nextState = { ...hiddenPromptCommentsByFile };
+        delete nextState[fileKey];
+        hiddenPromptCommentsByFile = nextState;
+      }
+
+      saveHiddenPromptCommentsByFileToLocal();
+      syncHiddenPromptCommentsToPluginStorage();
+
+      const container = document.getElementById('promptCommentsContainer');
+      if (container && container.offsetParent !== null) {
+        renderCommentsInDrawer(container);
+      }
     }
 
 

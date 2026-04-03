@@ -496,6 +496,13 @@ export function createCommentsDrawerHelpers({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Z"/></svg>
               ${escapeHtml(tu('actions.comments.drawer.summarize'))}
             </button>
+            <button class="prompt-comments-batch-btn" id="batchVisibilityBtn" onclick="batchTogglePromptCommentHidden()" disabled title="Hide selected comments">
+              <svg id="batchVisibilityBtnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+              <span id="batchVisibilityBtnLabel">Hide</span>
+            </button>
             <button class="prompt-comments-batch-btn" id="batchCsvBtn" onclick="downloadCommentsAsCSV()" title="${escapeHtml(tu('actions.comments.drawer.downloadCsvTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
               ${escapeHtml(tu('actions.comments.drawer.csv'))}
