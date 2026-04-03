@@ -20722,18 +20722,6 @@ figma.ui.onmessage = async (msg: {
 // Listen for selection changes
 figma.on('selectionchange', () => {
   const selection = figma.currentPage.selection;
-  const info = selection.map(node => {
-    let hasImageFill = false;
-    if ('fills' in node && Array.isArray(node.fills)) {
-      hasImageFill = node.fills.some((fill: any) => fill.type === 'IMAGE');
-    }
-    return {
-      name: node.name,
-      type: node.type,
-      id: node.id,
-      description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
-      hasImageFill
-    };
-  });
+  const info = buildSelectionInfoPayload(selection);
   figma.ui.postMessage({ type: 'selection-changed', data: info });
 });
