@@ -84,6 +84,17 @@ export function createCommentsDrawerHelpers({
       </button>
     `;
 
+    const hiddenNavigateButton = comment.client_meta?.node_id ? `
+      <button
+        class="comment-action-btn icon-only"
+        onclick="event.stopPropagation(); navigateToCommentNode('${comment.client_meta.node_id}', ${comment.client_meta.node_offset ? `{x: ${comment.client_meta.node_offset.x}, y: ${comment.client_meta.node_offset.y}}` : 'null'})"
+        title="${escapeHtml(tu('actions.comments.drawer.goTo'))}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+      </button>
+    ` : '';
+
     if (isHidden) {
       return `
         <div class="${itemClasses.join(' ')}" data-comment-id="${comment.id}" onclick="handleCommentItemClick(event, '${comment.id}')">
@@ -103,7 +114,7 @@ export function createCommentsDrawerHelpers({
               <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(comment.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(comment.user.handle, commentsSearchQuery)}</span>
             </div>
             ${isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : ''}
-            <span class="comment-header-trailing comment-header-trailing--toggle">${visibilityButton}</span>
+            <span class="comment-header-trailing comment-header-trailing--toggle">${hiddenNavigateButton}${visibilityButton}</span>
           </div>
         </div>
       `;

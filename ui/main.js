@@ -6243,6 +6243,22 @@ Rules:
       return !!hiddenPromptCommentsByFile[fileKey]?.[commentId];
     }
 
+    function renderCommentsInDrawerPreservingScroll(container) {
+      if (!container || container.offsetParent === null) {
+        return;
+      }
+
+      const previousListContainer = document.getElementById('promptCommentsListContainer');
+      const previousScrollTop = previousListContainer ? previousListContainer.scrollTop : 0;
+
+      renderCommentsInDrawer(container);
+
+      const nextListContainer = document.getElementById('promptCommentsListContainer');
+      if (nextListContainer) {
+        nextListContainer.scrollTop = previousScrollTop;
+      }
+    }
+
     function togglePromptCommentHidden(commentId) {
       const fileKey = getPromptCommentsStorageFileKey();
       const currentMap = { ...(hiddenPromptCommentsByFile[fileKey] || {}) };
@@ -6269,7 +6285,7 @@ Rules:
 
       const container = document.getElementById('promptCommentsContainer');
       if (container && container.offsetParent !== null) {
-        renderCommentsInDrawer(container);
+        renderCommentsInDrawerPreservingScroll(container);
       }
     }
 
@@ -8341,7 +8357,7 @@ ${commentsList}`;
 
       const container = document.getElementById('promptCommentsContainer');
       if (container && container.offsetParent !== null) {
-        renderCommentsInDrawer(container);
+        renderCommentsInDrawerPreservingScroll(container);
       }
     }
 
