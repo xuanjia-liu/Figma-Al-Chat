@@ -3602,7 +3602,7 @@
     }
 
     .prompt-comment-item.is-hidden {
-      background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-tertiary));
+      background: color-mix(in srgb, var(--bg-secondary) 90%, var(--text-primary));
       color: var(--text-muted);
       opacity: 0.82;
       filter: saturate(0.82);
@@ -3626,6 +3626,7 @@
       display: inline-flex;
       align-items: center;
       flex-shrink: 0;
+      gap: var(--space-sm);
     }
 
     .comment-header-trailing--toggle .comment-action-btn {
@@ -7178,10 +7179,9 @@
     }
 
     .chat-send-btn.loading {
-      background: var(--bg-tertiary);
+      background: var(--accent-gradient);
       border-radius: var(--radius-full);
-      color: var(--text-primary);
-      border: 1px solid var(--border);
+      color: var(--text-on-accent);
     }
 
     .chat-send-btn.loading svg {
@@ -7190,7 +7190,8 @@
     }
 
     .chat-send-btn.loading:hover {
-      background: var(--border);
+      background: var(--text-primary);
+      color: var(--bg-primary);
     }
 
     /* Context Mode Menu */
@@ -7950,7 +7951,7 @@
     }
 
     .mode-btn.active {
-      background: var(--text-primary);
+      background: var(--accent);
       color: var(--bg-primary);
     }
 
