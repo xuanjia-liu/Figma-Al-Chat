@@ -96,11 +96,14 @@ export function createCommentsDrawerHelpers({
       </button>
     ` : '';
 
-    const repliesSectionHTML = replyCount > 0 ? `
+    const repliesToggleHTML = replyCount > 0 ? `
       <button class="comment-replies-toggle${hasReplyMatch ? ' has-match' : ''}" id="replies-toggle-${comment.id}" onclick="event.stopPropagation(); toggleReplies('${comment.id}')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
         ${replyCountLabel}${hasReplyMatch ? ` <span class="reply-match-indicator">${replyMatchLabel}</span>` : ''}
       </button>
+    ` : '';
+
+    const repliesListHTML = replyCount > 0 ? `
       <div class="comment-replies collapsed" id="replies-${comment.id}">
         ${replies.map(reply => `
           <div class="comment-reply-item" data-comment-id="${reply.id}">
@@ -186,7 +189,7 @@ export function createCommentsDrawerHelpers({
             ` : ''}
             <span class="comment-header-trailing comment-header-trailing--toggle">${hiddenNavigateButton}${visibilityButton}</span>
           </div>
-          ${repliesSectionHTML}
+          ${repliesListHTML}
         </div>
       `;
     }
@@ -270,7 +273,8 @@ export function createCommentsDrawerHelpers({
         </div>
         <button class="comment-action-btn" onclick="postDrawerReply('${comment.id}')">${escapeHtml(tu('actions.comments.drawer.send'))}</button>
       </div>
-          ${repliesSectionHTML}
+          ${repliesToggleHTML}
+          ${repliesListHTML}
         </div>
       `;
   }

@@ -3608,10 +3608,9 @@
     }
 
     .prompt-comment-item.is-hidden {
-      background: color-mix(in srgb, var(--bg-secondary) 90%, var(--text-primary));
+      background: color-mix(in srgb, var(--bg-secondary) 95%, var(--text-primary));
       color: var(--text-muted);
-      opacity: 0.82;
-      filter: saturate(0.82);
+      filter: saturate(0.7);
     }
 
     .prompt-comment-item.is-hidden .comment-header {
