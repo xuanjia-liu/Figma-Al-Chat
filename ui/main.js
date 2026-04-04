@@ -3136,7 +3136,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
     function showInitialChatMessages() {
       chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
-      updateInChatTitle('');
+      updateInChatTitle('New Chat');
       applySettingsLocale(currentSettingsLocale);
     }
 
