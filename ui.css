@@ -7166,9 +7166,27 @@
       height: 16px;
     }
 
+    @keyframes chat-send-loading-pulse {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 0.9;
+      }
+      50% {
+        transform: scale(0.88);
+        opacity: 0.68;
+      }
+    }
+
     .chat-send-btn.loading {
       background: var(--bg-tertiary);
       border-radius: var(--radius-full);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .chat-send-btn.loading svg {
+      animation: chat-send-loading-pulse 1.1s ease-in-out infinite;
+      transform-origin: center;
     }
 
     .chat-send-btn.loading:hover {
@@ -9179,7 +9197,7 @@
       bottom: 8px;
       left: 8px;
       right: 8px;
-      height: 50vh;
+      height: 75vh;
       min-height: 300px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
