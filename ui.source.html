@@ -77,21 +77,26 @@
             <path d="M1 10a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L1 6m0 0V1m0 5h5m4-1v5l4 2" />
           </svg>
         </button>
-        <div class="header-info">
-          <div class="chat-status-header" id="chatStatusHeader">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Zm0-16v7m0 2v2" />
-            </svg>
+        <div class="header-copy">
+          <div class="chat-title-header hidden" id="chatTitleHeader"></div>
+          <div class="header-info">
+            <div class="chat-status-header" id="chatStatusHeader">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Zm0-16v7m0 2v2" />
+              </svg>
 
-            <span data-i18n="settings.header.configureApiKeyPrompt">Configure API key in Settings to start</span>
-            <span id="chatStatusLoadingSuffix" class="chat-status-loading-suffix hidden"
-              data-i18n="settings.header.loadingSuffix"> (Loading...)</span>
+              <span data-i18n="settings.header.configureApiKeyPrompt">Configure API key in Settings to start</span>
+              <span id="chatStatusLoadingSuffix" class="chat-status-loading-suffix hidden"
+                data-i18n="settings.header.loadingSuffix"> (Loading...)</span>
+            </div>
+            <div class="selection-info hidden" id="selectionInfo">
+              <span class="selection-count" id="selectionCount">0</span>
+              <span data-i18n="settings.header.selectionLabel">selected:</span>
+              <span class="selection-names" id="selectionNames">Nothing selected</span>
+            </div>
           </div>
-          <div class="selection-info hidden" id="selectionInfo">
-            <span class="selection-count" id="selectionCount">0</span>
-            <span data-i18n="settings.header.selectionLabel">selected:</span>
-            <span class="selection-names" id="selectionNames">Nothing selected</span>
-          </div>
+        </div>
+        <div class="header-actions">
           <div class="token-counter paused" id="tokenCounter"
             data-i18n-title="settings.header.tokenCounterResume"
             title="Estimated input tokens (selection + prompt) - Click to resume realtime updates">
@@ -103,8 +108,6 @@
             <span id="tokenCountLabel"><span id="tokenCountValue">0</span> <span class="token-count-unit"
                 data-i18n="settings.header.tokensUnit">tokens</span></span>
           </div>
-        </div>
-        <div class="header-actions">
           <div class="header-settings-dropdown">
             <button class="settings-btn" type="button" id="openSettingsBtn" title="Settings"
               data-i18n-title="settings.openButtonTitle" aria-haspopup="menu" aria-expanded="false"

@@ -3119,6 +3119,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     }
     const chatStatusHeader = document.getElementById('chatStatusHeader');
     const chatStatusLoadingSuffix = document.getElementById('chatStatusLoadingSuffix');
+    const chatTitleHeader = document.getElementById('chatTitleHeader');
     const settingsCheckBadge = document.getElementById('settingsCheckBadge');
     const chatMessages = document.getElementById('chatMessages');
     let lastLocalStylesPayload = null;
@@ -3135,7 +3136,15 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
     function showInitialChatMessages() {
       chatMessages.innerHTML = INITIAL_BOT_MESSAGE_HTML;
+      updateInChatTitle('');
       applySettingsLocale(currentSettingsLocale);
+    }
+
+    function removeLegacyInChatTitleHeader() {
+      const legacyTitleHeader = chatMessages.querySelector('.chat-title-header');
+      if (legacyTitleHeader) {
+        legacyTitleHeader.remove();
+      }
     }
     const tokenCounter = document.getElementById('tokenCounter');
     const tokenCounterIcon = document.getElementById('tokenCounterIcon');
@@ -25857,15 +25866,12 @@ Example structure:
       return 'New Chat';
     }
 
-    // Update or insert the in-chat title header
+    // Update or clear the chat title shown in the fixed header
     function updateInChatTitle(title) {
-      let titleHeader = chatMessages.querySelector('.chat-title-header');
-      if (!titleHeader) {
-        titleHeader = document.createElement('div');
-        titleHeader.className = 'chat-title-header';
-        chatMessages.insertBefore(titleHeader, chatMessages.firstChild);
-      }
-      titleHeader.textContent = title;
+      if (!chatTitleHeader) return;
+      const nextTitle = (title || '').trim();
+      chatTitleHeader.textContent = nextTitle;
+      chatTitleHeader.classList.toggle('hidden', nextTitle.length === 0);
     }
 
     // Get current chat title (from archive or generate from first message)
@@ -26204,6 +26210,7 @@ Example structure:
       currentChatId = chat.id;
       chatHistory = [...chat.chatHistory];
       chatMessages.innerHTML = chat.messagesHtml;
+      removeLegacyInChatTitleHeader();
 
       // Remove any initial-message from archived HTML (legacy archives may have it)
       const initialMessage = chatMessages.querySelector('.initial-message');
@@ -26292,6 +26299,9 @@ Example structure:
 
         // Update UI
         renderChatHistoryList();
+        if (chatId === currentChatId) {
+          updateInChatTitle(chat.title);
+        }
       }
     }
 
@@ -34758,29 +34768,6 @@ Based on the user's instruction, generate the appropriate commands to modify the
           document.body.removeChild(textArea);
         }
         return;
-      }
-    });
-
-    // Hide chat title header only while scrolling
-    let scrollTimeout = null;
-    let isScrolling = false;
-    chatMessages.addEventListener('scroll', () => {
-      const titleHeader = chatMessages.querySelector('.chat-title-header');
-      if (titleHeader) {
-        // Only add fade-out class once when scrolling starts
-        if (!isScrolling) {
-          isScrolling = true;
-          titleHeader.classList.add('fade-out');
-        }
-
-        // Clear previous timeout
-        if (scrollTimeout) clearTimeout(scrollTimeout);
-
-        // Show again after scrolling stops (wait for hide animation to complete + buffer)
-        scrollTimeout = setTimeout(() => {
-          titleHeader.classList.remove('fade-out');
-          isScrolling = false;
-        }, 400);
       }
     });
 
