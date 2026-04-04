@@ -63,6 +63,7 @@ export function createCommentsDrawerHelpers({
     const isSelected = selectedCommentIds.has(comment.id);
     const replyCountLabel = escapeHtml(getReplyCountLabel(replyCount));
     const replyMatchLabel = escapeHtml(tu('actions.comments.drawer.replyMatch'));
+    const hasReplyMatch = commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id);
 
     const itemClasses = ['prompt-comment-item'];
     if (multiSelectEnabled) itemClasses.push('selectable');
@@ -95,6 +96,68 @@ export function createCommentsDrawerHelpers({
       </button>
     ` : '';
 
+    const repliesSectionHTML = replyCount > 0 ? `
+      <button class="comment-replies-toggle${hasReplyMatch ? ' has-match' : ''}" id="replies-toggle-${comment.id}" onclick="event.stopPropagation(); toggleReplies('${comment.id}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+        ${replyCountLabel}${hasReplyMatch ? ` <span class="reply-match-indicator">${replyMatchLabel}</span>` : ''}
+      </button>
+      <div class="comment-replies collapsed" id="replies-${comment.id}">
+        ${replies.map(reply => `
+          <div class="comment-reply-item" data-comment-id="${reply.id}">
+            <div class="comment-header">
+              <div class="comment-avatar">
+                ${reply.user.img_url
+          ? `<img src="${reply.user.img_url}" alt="${reply.user.handle}" onerror="this.style.display='none';this.parentNode.textContent='${reply.user.handle.substring(0, 1).toUpperCase()}'" />`
+          : reply.user.handle.substring(0, 1).toUpperCase()
+        }
+              </div>
+              <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(reply.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(reply.user.handle, commentsSearchQuery)}</span>
+              <span class="comment-date">${formatCommentDate(reply.created_at)}</span>
+            </div>
+            <div class="comment-body">${highlightAndLinkify(reply.message, commentsSearchQuery)}</div>
+            <div class="comment-reply-actions">
+              <div class="comment-action-btn-group">
+                <button class="comment-action-btn" onclick="toggleDrawerReplyItemInput('${comment.id}', '${reply.id}', '${escapeHtml(reply.user.handle).replace(/'/g, "\\'")}')">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>
+                  </svg>
+                  ${escapeHtml(tu('actions.comments.drawer.reply'))}
+                </button>
+                <button class="comment-reply-chevron-btn" onclick="toggleReplyItemTemplatesDropdown(event, 'drawer', '${comment.id}', '${reply.id}')" title="${escapeHtml(tu('actions.comments.drawer.replyTemplates'))}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+                </button>
+                <div class="comment-more-menu hidden" id="reply-dropdown-drawer-${comment.id}-${reply.id}" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
+              </div>
+              ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
+                <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${reply.id}', 'drawer')" title="${escapeHtml(tu('actions.comments.drawer.rewriteWithAi'))}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
+                  </svg>
+                </button>
+              ` : ''}
+              <div class="comment-more-container">
+                <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="${escapeHtml(tu('actions.comments.drawer.moreOptions'))}">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                </button>
+                <div class="comment-more-menu hidden" id="comment-more-menu-${reply.id}">
+                  <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${reply.id}'); closePromptDrawer();">${escapeHtml(tu('actions.comments.drawer.addToChat'))}</button>
+                  ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
+                    <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${reply.id}', 'drawer')">${escapeHtml(tu('actions.comments.drawer.delete'))}</button>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+            <div class="comment-reply-input" id="drawer-reply-item-input-${comment.id}-${reply.id}" style="display: none;">
+              <div class="comment-reply-input-wrapper">
+                <textarea placeholder="${escapeHtml(tu('actions.comments.drawer.replyPlaceholder'))}" onkeydown="handleReplyItemKeydown(event, 'drawer', '${comment.id}', '${reply.id}')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-${comment.id}-${reply.id}" rows="1"></textarea>
+              </div>
+              <button class="comment-action-btn" onclick="postDrawerReplyItem('${comment.id}', '${reply.id}')">${escapeHtml(tu('actions.comments.drawer.send'))}</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
+
     if (isHidden) {
       return `
         <div class="${itemClasses.join(' ')}" data-comment-id="${comment.id}" onclick="handleCommentItemClick(event, '${comment.id}')">
@@ -114,8 +177,16 @@ export function createCommentsDrawerHelpers({
               <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(comment.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(comment.user.handle, commentsSearchQuery)}</span>
             </div>
             ${isResolved ? '<span style="font-size: 10px; color: var(--success); margin-left: 4px;">✓</span>' : ''}
+            ${replyCount > 0 ? `
+              <button class="comment-replies-toggle comment-replies-toggle--hidden${hasReplyMatch ? ' has-match' : ''}" id="replies-toggle-${comment.id}" onclick="event.stopPropagation(); toggleReplies('${comment.id}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                <span class="comment-thread-count comment-thread-count--hidden">${replyCountLabel}</span>
+                ${hasReplyMatch ? `<span class="reply-match-indicator">${replyMatchLabel}</span>` : ''}
+              </button>
+            ` : ''}
             <span class="comment-header-trailing comment-header-trailing--toggle">${hiddenNavigateButton}${visibilityButton}</span>
           </div>
+          ${repliesSectionHTML}
         </div>
       `;
     }
@@ -199,68 +270,7 @@ export function createCommentsDrawerHelpers({
         </div>
         <button class="comment-action-btn" onclick="postDrawerReply('${comment.id}')">${escapeHtml(tu('actions.comments.drawer.send'))}</button>
       </div>
-          ${replyCount > 0 ? `
-            <button class="comment-replies-toggle${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ' has-match' : ''}" id="replies-toggle-${comment.id}" onclick="toggleReplies('${comment.id}')">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
-              ${replyCountLabel}${(commentsWithReplyMatches.has(comment.id) || commentsWithPeopleReplyMatches.has(comment.id)) ? ` <span class="reply-match-indicator">${replyMatchLabel}</span>` : ''}
-            </button>
-            <div class="comment-replies collapsed" id="replies-${comment.id}">
-              ${replies.map(reply => `
-                <div class="comment-reply-item" data-comment-id="${reply.id}">
-                  <div class="comment-header">
-                    <div class="comment-avatar">
-                      ${reply.user.img_url
-            ? `<img src="${reply.user.img_url}" alt="${reply.user.handle}" onerror="this.style.display='none';this.parentNode.textContent='${reply.user.handle.substring(0, 1).toUpperCase()}'" />`
-            : reply.user.handle.substring(0, 1).toUpperCase()
-          }
-                    </div>
-                    <span class="comment-author person-link" onclick="event.stopPropagation(); togglePersonChip('${escapeHtml(reply.user.handle).replace(/'/g, "\\'")}', 'from')">${highlightSearchMatches(reply.user.handle, commentsSearchQuery)}</span>
-                    <span class="comment-date">${formatCommentDate(reply.created_at)}</span>
-                  </div>
-                  <div class="comment-body">${highlightAndLinkify(reply.message, commentsSearchQuery)}</div>
-                  <div class="comment-reply-actions">
-                    <div class="comment-action-btn-group">
-                      <button class="comment-action-btn" onclick="toggleDrawerReplyItemInput('${comment.id}', '${reply.id}', '${escapeHtml(reply.user.handle).replace(/'/g, "\\'")}')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                          <path d="M3 10h10a8 8 0 0 1 8 8v4M3 10l6 6M3 10l6-6"/>
-                        </svg>
-                        ${escapeHtml(tu('actions.comments.drawer.reply'))}
-                      </button>
-                      <button class="comment-reply-chevron-btn" onclick="toggleReplyItemTemplatesDropdown(event, 'drawer', '${comment.id}', '${reply.id}')" title="${escapeHtml(tu('actions.comments.drawer.replyTemplates'))}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-                      </button>
-                      <div class="comment-more-menu hidden" id="reply-dropdown-drawer-${comment.id}-${reply.id}" style="bottom:auto;top:100%;margin-top:4px;margin-bottom:0;min-width:120px;max-width:220px;"></div>
-                    </div>
-                    ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
-                      <button class="comment-rewrite-btn" onclick="rewriteCommentWithAI('${reply.id}', 'drawer')" title="${escapeHtml(tu('actions.comments.drawer.rewriteWithAi'))}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                          <path d="m18.364 9.273 1.136-2.5L22 5.636 19.5 4.5 18.364 2l-1.137 2.5-2.5 1.136 2.5 1.137 1.137 2.5Zm-6.819.454-2.272-5-2.273 5L2 12l5 2.273 2.273 5 2.273-5 5-2.273-5-2.273Zm6.819 5-1.137 2.5-2.5 1.137 2.5 1.136 1.137 2.5 1.136-2.5 2.5-1.136-2.5-1.137-1.136-2.5Z"/>
-                        </svg>
-                      </button>
-                    ` : ''}
-                    <div class="comment-more-container">
-                      <button class="comment-action-btn icon-only" onclick="toggleCommentMoreMenu(event, '${reply.id}')" title="${escapeHtml(tu('actions.comments.drawer.moreOptions'))}">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-                      </button>
-                      <div class="comment-more-menu hidden" id="comment-more-menu-${reply.id}">
-                        <button class="dropdown-item" style="color: var(--text-secondary); white-space: nowrap;" onclick="copyCommentToChat('${reply.id}'); closePromptDrawer();">${escapeHtml(tu('actions.comments.drawer.addToChat'))}</button>
-                        ${(figmaCurrentUser && (reply.user.id === figmaCurrentUser.id || reply.user.handle === figmaCurrentUser.handle)) ? `
-                          <button class="dropdown-item dropdown-item-danger" onclick="deleteComment('${reply.id}', 'drawer')">${escapeHtml(tu('actions.comments.drawer.delete'))}</button>
-                        ` : ''}
-                      </div>
-                    </div>
-                  </div>
-                  <div class="comment-reply-input" id="drawer-reply-item-input-${comment.id}-${reply.id}" style="display: none;">
-                    <div class="comment-reply-input-wrapper">
-                      <textarea placeholder="${escapeHtml(tu('actions.comments.drawer.replyPlaceholder'))}" onkeydown="handleReplyItemKeydown(event, 'drawer', '${comment.id}', '${reply.id}')" oninput="autoExpandTextarea(this)" id="drawer-reply-item-text-${comment.id}-${reply.id}" rows="1"></textarea>
-                    </div>
-                    <button class="comment-action-btn" onclick="postDrawerReplyItem('${comment.id}', '${reply.id}')">${escapeHtml(tu('actions.comments.drawer.send'))}</button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''
-      }
+          ${repliesSectionHTML}
         </div>
       `;
   }
