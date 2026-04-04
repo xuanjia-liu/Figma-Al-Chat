@@ -6686,6 +6686,73 @@
       flex-shrink: 0;
     }
 
+    .audit-input-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .audit-input-actions.hidden {
+      display: none;
+    }
+
+    .audit-input-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+      min-height: 24px;
+      padding: 0 var(--space-md);
+      border-radius: var(--radius-xl);
+      border: 1px solid transparent;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease-in-out;
+      white-space: nowrap;
+    }
+
+    .audit-input-action-btn svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .audit-input-action-btn.primary {
+      background: var(--accent-gradient-audit);
+      color: var(--text-on-accent);
+      box-shadow: 0 1px 8px rgba(0, 149, 57, 0.16);
+    }
+
+    .audit-input-action-btn.primary:hover {
+      box-shadow: 0 2px 10px var(--accent-glow-audit);
+      transform: translateY(-1px);
+    }
+
+    .audit-input-action-btn.secondary {
+      background:transparent;
+      border-color: var(--border);
+      color: var(--text-primary);
+    }
+
+    .audit-input-action-btn.secondary:hover {
+      border-color: var(--border-intense);
+      color: var(--accent-audit);
+      transform: translateY(-1px);
+    }
+
+    .audit-input-action-btn:disabled {
+      opacity: var(--disabled-opacity);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .audit-input-action-btn:focus-visible {
+      outline: 2px solid var(--accent-audit);
+      outline-offset: 2px;
+    }
+
     .chat-input-container {
       position: relative;
       display: flex;
@@ -8722,11 +8789,17 @@
     }
 
     /* Audit FAB */
-    .node-action-btn.pulsing {
+    .node-action-btn.pulsing,
+    .audit-input-action-btn.pulsing {
       animation: auditPulse 1.5s ease-in-out infinite;
       background: var(--bg-tertiary);
       border-color: var(--accent-audit);
       overflow: visible !important;
+    }
+
+    .audit-input-action-btn.primary.pulsing {
+      background: var(--accent-gradient-audit);
+      color: var(--text-on-accent);
     }
 
     @keyframes auditPulse {

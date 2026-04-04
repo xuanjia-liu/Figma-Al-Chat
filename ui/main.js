@@ -2779,6 +2779,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const selectionNames = byId('selectionNames');
     const nodeActionsContainer = byId('nodeActionsContainer');
     const nodeActionsContent = query('.node-actions-content');
+    const auditInputActions = byId('auditInputActions');
 
     // Update node actions content based on available actions
     function updateNodeActionsContent(items) {
@@ -2901,24 +2902,6 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             </button>
           `;
         }
-      } else if (currentMode === 'audit') {
-        html += `
-          <button class="node-action-btn" id="auditSelectionBtn" data-action="audit-selection">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <path d="M9 12l2 2 4-4"/>
-              <path d="M8 16h8"/>
-            </svg>
-            <span>Audit selection</span>
-          </button>
-          <button class="node-action-btn" id="auditSettingsBtn" data-action="audit-settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-            </svg>
-            <span>Audit settings</span>
-          </button>
-        `;
       }
 
       nodeActionsContent.innerHTML = html;
@@ -2998,23 +2981,35 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         });
       }
 
-      const auditSelectionBtn = document.getElementById('auditSelectionBtn');
-      if (auditSelectionBtn) {
-        auditSelectionBtn.addEventListener('click', () => {
-          chatInput.value = 'Run audit on current selection';
-          sendMessage();
-        });
+    }
+
+    function refreshAuditInputActions() {
+      if (!auditInputActions) return;
+      const isAuditMode = currentMode === 'audit';
+      auditInputActions.classList.toggle('hidden', !isAuditMode);
+    }
+
+    function openAuditSettingsModal() {
+      if (auditModal) {
+        auditModal.classList.add('show');
+      }
+    }
+
+    function triggerAuditSelection() {
+      if (isAIThinking) {
+        showToast('Please wait for the current response to finish.', 'warning');
+        return;
       }
 
-      const auditSettingsBtn = document.getElementById('auditSettingsBtn');
-      if (auditSettingsBtn) {
-        auditSettingsBtn.addEventListener('click', () => {
-          const auditModal = document.getElementById('auditModal');
-          if (auditModal) {
-            auditModal.classList.add('show');
-          }
-        });
+      if (!lastKnownSelectionItems || lastKnownSelectionItems.length === 0) {
+        showToast('Please select an element first', 'error');
+        return;
       }
+
+      setMode('audit');
+      chatInput.value = 'Run audit on current selection';
+      chatInput.style.height = 'auto';
+      sendMessage();
     }
 
     function handleSelectionChange(items) {
@@ -3910,6 +3905,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const modeAskBtn = document.getElementById('modeAskBtn');
     const modeAgentBtn = document.getElementById('modeAgentBtn');
     const modeAuditBtn = document.getElementById('modeAuditBtn');
+    const auditSelectionBtn = document.getElementById('auditSelectionBtn');
+    const auditSettingsBtn = document.getElementById('auditSettingsBtn');
     const commandsDrawerBtn = document.getElementById('commandsDrawerBtn');
     const commandsDrawer = document.getElementById('commandsDrawer');
     const commandsDrawerOverlay = document.getElementById('commandsDrawerOverlay');
@@ -4096,11 +4093,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (lastKnownSelectionItems) {
         handleSelectionChange(lastKnownSelectionItems);
       }
+      refreshAuditInputActions();
 
       // Realistic data based on mode
       if (mode === 'audit') {
-        // Pulse audit settings button if it exists
-        const auditSettingsBtn = document.getElementById('auditSettingsBtn');
         if (auditSettingsBtn) {
           auditSettingsBtn.classList.add('pulsing');
           // Remove pulsing after a few seconds
@@ -4115,6 +4111,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     modeAskBtn.addEventListener('click', () => setMode('ask'));
     modeAgentBtn.addEventListener('click', () => setMode('agent'));
     modeAuditBtn.addEventListener('click', () => setMode('audit'));
+    if (auditSelectionBtn) {
+      auditSelectionBtn.addEventListener('click', triggerAuditSelection);
+    }
+    if (auditSettingsBtn) {
+      auditSettingsBtn.addEventListener('click', openAuditSettingsModal);
+    }
 
     // Model dropdown handlers
     const modelSelectBtn = document.getElementById('modelSelectBtn');
