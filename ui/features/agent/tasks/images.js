@@ -210,6 +210,84 @@ export const quickCreateImageTasks = [
           ]
         },
 {
+          name: 'Image to ASCII',
+          desc: 'Convert an image to ASCII text or an ASCII bitmap result',
+          noSelection: true,
+          directAction: 'imageToAscii',
+          fields: [
+            {
+              key: 'imageInput',
+              type: 'image',
+              label: 'Source Image (Optional)',
+              hint: 'Upload an image or import the current Figma selection. If left empty, the current selection will be used.'
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  key: 'width',
+                  type: 'number',
+                  label: 'Width',
+                  default: 80,
+                  min: 16,
+                  max: 200,
+                  step: 1
+                },
+                {
+                  key: 'density',
+                  type: 'slider',
+                  label: 'Density',
+                  default: 70,
+                  min: 0,
+                  max: 100,
+                  step: 1
+                }
+              ]
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  key: 'charsetPreset',
+                  type: 'select',
+                  label: 'Charset',
+                  labelRowCheckbox: {
+                    key: 'invert',
+                    label: 'Invert',
+                    default: false
+                  },
+                  default: 'standard',
+                  options: [
+                    { value: 'standard', label: 'Standard' },
+                    { value: 'blocks', label: 'Blocks' },
+                    { value: 'minimal', label: 'Minimal' },
+                    { value: 'dense', label: 'Dense' },
+                    { value: 'custom', label: 'Custom' }
+                  ]
+                }
+              ]
+            },
+            {
+              key: 'customCharset',
+              type: 'text',
+              label: 'Custom Charset',
+              placeholder: 'Light to dark, e.g. .:-=+*#%@',
+              showWhen: { field: 'charsetPreset', equals: 'custom' }
+            },
+            {
+              key: 'targetMode',
+              type: 'select',
+              label: 'Apply Result',
+              default: 'text',
+              options: [
+                { value: 'text', label: 'Text' },
+                { value: 'createNew', label: 'Create new result node' },
+                { value: 'replaceSelection', label: 'Replace selected fill' }
+              ]
+            }
+          ]
+        },
+{
           name: 'Re-style',
           desc: 'Transform / restyle an image into a new style using AI',
           promptTemplate: 'Re-style image: {imageStyle}{aspectRatio ? \" [Aspect Ratio: {aspectRatio}]\" : \"\"}{imageResolution ? \" [Resolution: {imageResolution}]\" : \"\"}{imageVariations ? \" [Variations: {imageVariations}]\" : \"\"}',

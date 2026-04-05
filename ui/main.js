@@ -5175,6 +5175,309 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return images.map(img => typeof img === 'object' && img.data ? img.data : img).filter(Boolean);
     }
 
+    const ASCII_CHARSET_PRESETS = {
+      standard: ' .:-=+*#%@',
+      blocks: ' ░▒▓█',
+      minimal: ' .oO#',
+      dense: ' `^",:;Il!i~+_-?][}{1)(|\\\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
+    };
+    const ASCII_MIN_WIDTH = 16;
+    const ASCII_MAX_WIDTH = 200;
+    const ASCII_TEXT_FONT_STACK = '"Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+
+    function clampAsciiWidth(value) {
+      const parsed = parseInt(String(value ?? ''), 10);
+      if (!Number.isFinite(parsed)) return 80;
+      return Math.max(ASCII_MIN_WIDTH, Math.min(ASCII_MAX_WIDTH, parsed));
+    }
+
+    function normalizeAsciiDensity(value) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return 0.7;
+      return Math.max(0, Math.min(1, parsed / 100));
+    }
+
+    function resolveAsciiCharset(values) {
+      const preset = String(values.charsetPreset || 'standard').toLowerCase();
+      if (preset === 'custom') {
+        const custom = String(values.customCharset || '');
+        if ([...custom].length <= 1) {
+          throw new Error('Custom charset must contain at least 2 characters.');
+        }
+        return custom;
+      }
+      return ASCII_CHARSET_PRESETS[preset] || ASCII_CHARSET_PRESETS.standard;
+    }
+
+    function bytesToDataUrl(data, mimeType = 'image/png') {
+      return `data:${mimeType};base64,${arrayBufferToBase64(new Uint8Array(data))}`;
+    }
+
+    function loadImageFromDataUrl(dataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load source image.'));
+        img.src = dataUrl;
+      });
+    }
+
+    function runPluginMessageRequest(requestMessage, resultType, { timeoutMs = 30000, errorMatcher = null } = {}) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timed out while running local quick action.'));
+        }, timeoutMs);
+
+        const handler = (event) => {
+          const msg = event.data?.pluginMessage;
+          if (!msg) return;
+
+          if (msg.type === resultType) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(msg);
+            return;
+          }
+
+          if (msg.type === 'error' && (!errorMatcher || errorMatcher(msg))) {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            reject(new Error(msg.message || 'Local quick action failed.'));
+          }
+        };
+
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: requestMessage }, '*');
+      });
+    }
+
+    async function requestAsciiSourceImages() {
+      const response = await runPluginMessageRequest(
+        { type: 'get-ascii-source-images' },
+        'ascii-source-images-result',
+        {
+          timeoutMs: 45000,
+          errorMatcher: (msg) => typeof msg.message === 'string' && (
+            msg.message.includes('Please select at least one exportable element') ||
+            msg.message.includes('Failed to export ASCII source images')
+          )
+        }
+      );
+
+      return Array.isArray(response.images) ? response.images : [];
+    }
+
+    async function createAsciiTextNodes(items, options = {}) {
+      return runPluginMessageRequest(
+        { type: 'create-ascii-text-nodes', items, ...options },
+        'ascii-text-nodes-created',
+        {
+          timeoutMs: 45000,
+          errorMatcher: (msg) => typeof msg.message === 'string' && msg.message.includes('ASCII text')
+        }
+      );
+    }
+
+    async function createAsciiFillNodes(items, options = {}) {
+      return runPluginMessageRequest(
+        { type: 'create-ascii-fill-nodes', items, ...options },
+        'ascii-fill-nodes-created',
+        {
+          timeoutMs: 45000,
+          errorMatcher: (msg) => typeof msg.message === 'string' && msg.message.includes('ASCII fill')
+        }
+      );
+    }
+
+    async function resolveAsciiSourceInputs(values) {
+      const uploadedImages = extractImageDataUrls(values.imageInput);
+      if (uploadedImages.length > 0) {
+        return uploadedImages.map((dataUrl, index) => ({
+          id: `upload-${index + 1}`,
+          name: `Upload ${index + 1}`,
+          dataUrl,
+          width: null,
+          height: null,
+          x: null,
+          y: null
+        }));
+      }
+
+      const exportedImages = await requestAsciiSourceImages();
+      return exportedImages.map((item, index) => ({
+        id: item.id || `selection-${index + 1}`,
+        name: item.name || `Selection ${index + 1}`,
+        dataUrl: bytesToDataUrl(item.data || []),
+        width: Number.isFinite(item.width) ? item.width : null,
+        height: Number.isFinite(item.height) ? item.height : null,
+        x: Number.isFinite(item.x) ? item.x : null,
+        y: Number.isFinite(item.y) ? item.y : null
+      }));
+    }
+
+    async function convertImageToAscii(source, values) {
+      const charset = resolveAsciiCharset(values);
+      const width = clampAsciiWidth(values.width);
+      const density = normalizeAsciiDensity(values.density);
+      const invert = values.invert === true || values.invert === 'true';
+      const image = await loadImageFromDataUrl(source.dataUrl);
+      const charAspect = 0.55;
+      const outputHeight = Math.max(1, Math.round((image.naturalHeight / Math.max(1, image.naturalWidth)) * width * charAspect));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = outputHeight;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        throw new Error('Canvas is unavailable for ASCII conversion.');
+      }
+
+      ctx.imageSmoothingEnabled = density < 0.7;
+      ctx.imageSmoothingQuality = density < 0.35 ? 'high' : (density < 0.7 ? 'medium' : 'low');
+      ctx.drawImage(image, 0, 0, width, outputHeight);
+
+      const pixels = ctx.getImageData(0, 0, width, outputHeight).data;
+      const lines = [];
+      const gamma = 1.25 - density * 0.55;
+
+      for (let y = 0; y < outputHeight; y++) {
+        let line = '';
+        for (let x = 0; x < width; x++) {
+          const offset = (y * width + x) * 4;
+          const alpha = pixels[offset + 3] / 255;
+          if (alpha <= 0.05) {
+            line += charset[0];
+            continue;
+          }
+
+          const luminance = (
+            pixels[offset] * 0.2126 +
+            pixels[offset + 1] * 0.7152 +
+            pixels[offset + 2] * 0.0722
+          ) / 255;
+          let normalized = invert ? luminance : (1 - luminance);
+          normalized = Math.max(0, Math.min(1, Math.pow(normalized, gamma)));
+          const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
+          line += charset[index];
+        }
+        lines.push(line);
+      }
+
+      return {
+        name: source.name,
+        sourceNodeId: source.id && !String(source.id).startsWith('upload-') ? source.id : null,
+        x: source.x,
+        y: source.y,
+        width: source.width,
+        height: source.height,
+        asciiText: lines.join('\n'),
+        columns: width,
+        rows: outputHeight,
+        invert
+      };
+    }
+
+    function renderAsciiToBitmap(asciiResult) {
+      const lines = String(asciiResult.asciiText || '').split('\n');
+      const columns = lines.reduce((max, line) => Math.max(max, line.length), 1);
+      const fontSize = 12;
+      const padding = 12;
+      const lineHeight = Math.ceil(fontSize * 1.2);
+
+      const measureCanvas = document.createElement('canvas');
+      const measureCtx = measureCanvas.getContext('2d');
+      if (!measureCtx) {
+        throw new Error('Canvas is unavailable for ASCII rendering.');
+      }
+      measureCtx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+      const charWidth = Math.max(7, Math.ceil(measureCtx.measureText('M').width));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, padding * 2 + charWidth * columns);
+      canvas.height = Math.max(1, padding * 2 + lineHeight * lines.length);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Canvas is unavailable for ASCII rendering.');
+      }
+
+      const background = asciiResult.invert ? '#111111' : '#ffffff';
+      const foreground = asciiResult.invert ? '#ffffff' : '#111111';
+
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = foreground;
+
+      lines.forEach((line, index) => {
+        ctx.fillText(line, padding, padding + index * lineHeight);
+      });
+
+      return {
+        base64: canvas.toDataURL('image/png').split(',')[1],
+        width: canvas.width,
+        height: canvas.height
+      };
+    }
+
+    async function applyAsciiBitmapToSelection(renderedItems) {
+      const targets = await getSelectionForFill();
+      if (!targets || targets.length === 0) {
+        throw new Error('Please select at least one node first.');
+      }
+
+      let commands;
+      if (renderedItems.length === 1) {
+        commands = targets.map(node => ({
+          action: 'setImageFill',
+          nodeId: node.id,
+          imageData: base64ToBytes(renderedItems[0].base64),
+          scaleMode: 'FILL',
+          addAsNewLayer: false
+        }));
+      } else if (renderedItems.length === targets.length) {
+        commands = targets.map((node, index) => ({
+          action: 'setImageFill',
+          nodeId: node.id,
+          imageData: base64ToBytes(renderedItems[index].base64),
+          scaleMode: 'FILL',
+          addAsNewLayer: false
+        }));
+      } else {
+        throw new Error('Replace selected fill supports either one source image or exactly one source per selected node.');
+      }
+
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timeout applying ASCII fill.'));
+        }, 30000);
+
+        const handler = (event) => {
+          const msg = event.data?.pluginMessage;
+          if (!msg) return;
+          if (msg.type === 'commands-executed') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            if (msg.success > 0) {
+              resolve(msg);
+            } else {
+              reject(new Error(msg.error || msg.message || 'Failed to apply ASCII fill.'));
+            }
+          }
+        };
+
+        window.addEventListener('message', handler);
+        parent.postMessage({
+          pluginMessage: {
+            type: 'execute-commands',
+            commands
+          }
+        }, '*');
+      });
+    }
+
     // Helper function to generate content using AI (thin wrapper around callAISimple)
     async function generateAuditContent(systemPrompt, userContent, apiKey) {
       const result = await callAISimple({ systemPrompt, userContent, temperature: 0.7, maxTokens: 4096 });
@@ -14809,15 +15112,38 @@ Generate ONLY the reply text, nothing else.`;
               <span>${tu('actions.prompt.add')}</span>
             </button>
           ` : '';
-          const fieldHeaderHtml = (canAddOption || field.actionButton) ? `
-            <div class="prompt-field-header">
-              <label class="prompt-field-label">${field.label}</label>
-              <div class="prompt-ai-actions">
-                ${actionButtonHtml}
-                ${addOptionButtonHtml}
+          const labelRowCb = field.labelRowCheckbox;
+          let fieldHeaderHtml;
+          if (labelRowCb && labelRowCb.key) {
+            const cbKey = escapeHtml(String(labelRowCb.key));
+            const cbId = `${fieldId}-label-cb-${cbKey}`;
+            let cbChecked = !!labelRowCb.default;
+            if (preservedValues && preservedValues[labelRowCb.key] !== undefined) {
+              cbChecked = !!preservedValues[labelRowCb.key];
+            }
+            const cbLabel = escapeHtml(String(labelRowCb.label || ''));
+            fieldHeaderHtml = `
+              <div class="prompt-field-label-row">
+                <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                <label class="prompt-field-inline-checkbox" for="${cbId}">
+                  <input type="checkbox" id="${cbId}" data-field-key="${cbKey}" ${cbChecked ? 'checked' : ''}${disabledAttr}>
+                  <span class="prompt-field-inline-checkbox-label">${cbLabel}</span>
+                </label>
               </div>
-            </div>
-          ` : `<label class="prompt-field-label">${field.label}</label>`;
+            `;
+          } else if (canAddOption || field.actionButton) {
+            fieldHeaderHtml = `
+              <div class="prompt-field-header">
+                <label class="prompt-field-label">${field.label}</label>
+                <div class="prompt-ai-actions">
+                  ${actionButtonHtml}
+                  ${addOptionButtonHtml}
+                </div>
+              </div>
+            `;
+          } else {
+            fieldHeaderHtml = `<label class="prompt-field-label">${field.label}</label>`;
+          }
 
           fieldHtml += `
             <div class="prompt-field${wrapperClass}"${conditionalAttrs}>
@@ -21621,6 +21947,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         case 'fillFromOnlineImage':
           await runFillFromOnlineImageAction(values, actionMeta);
           break;
+        case 'imageToAscii':
+          await runImageToAsciiAction(values, actionMeta);
+          break;
         default:
           showToast('Unknown action', 'error');
       }
@@ -21707,6 +22036,52 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       } catch (error) {
         console.error('Set image fill failed:', error);
         showToast(error.message || `Failed to run ${actionMeta?.name || 'Set image fill'}`, 'error');
+      }
+    }
+
+    async function runImageToAsciiAction(values, actionMeta) {
+      try {
+        const sources = await resolveAsciiSourceInputs(values);
+        if (!sources.length) {
+          showToast('Upload an image or select at least one exportable layer first.', 'error');
+          return;
+        }
+
+        const asciiResults = [];
+        for (const source of sources) {
+          asciiResults.push(await convertImageToAscii(source, values));
+        }
+
+        if (values.targetMode === 'text' || !values.targetMode) {
+          await createAsciiTextNodes(asciiResults, {
+            invert: values.invert === true || values.invert === 'true'
+          });
+          showToast(`Created ${asciiResults.length} ASCII text result${asciiResults.length === 1 ? '' : 's'}.`, 'success');
+          return;
+        }
+
+        const renderedItems = asciiResults.map((result) => {
+          const rendered = renderAsciiToBitmap(result);
+          return {
+            ...rendered,
+            name: `ASCII Fill - ${result.name || 'Result'}`,
+            sourceNodeId: result.sourceNodeId,
+            x: result.x,
+            y: result.y
+          };
+        });
+
+        if (values.targetMode === 'replaceSelection') {
+          await applyAsciiBitmapToSelection(renderedItems);
+          showToast(`Applied ASCII fill to ${renderedItems.length === 1 ? 'the selected node' : 'selected nodes'}.`, 'success');
+          return;
+        }
+
+        await createAsciiFillNodes(renderedItems);
+        showToast(`Created ${renderedItems.length} ASCII fill result${renderedItems.length === 1 ? '' : 's'}.`, 'success');
+      } catch (error) {
+        console.error('Image to ASCII failed:', error);
+        showToast(error?.message || `Failed to run ${actionMeta?.name || 'Image to ASCII'}`, 'error');
       }
     }
 

@@ -29,6 +29,7 @@ export function createAgentTasks(deps = {}) {
   const [
     createIconTask,
     importIconSetsTask,
+    imageToAsciiTask,
     reStyleTask,
     generateImageTask,
     generateVectorTask,
@@ -54,6 +55,7 @@ export function createAgentTasks(deps = {}) {
       modalDialogTask,
       createIconTask,
       importIconSetsTask,
+      imageToAsciiTask,
       svgUiPatternTask,
       buttonTask,
       colorPaletteTask,

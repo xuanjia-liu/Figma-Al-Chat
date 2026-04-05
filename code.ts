@@ -930,6 +930,98 @@ async function smartLoadFont(font: FontName): Promise<FontName> {
   return fallback;
 }
 
+function decodeBase64ToBytes(base64: string): Uint8Array {
+  const cleaned = String(base64 || '').replace(/^data:[^,]+,/, '');
+  const normalized = cleaned.replace(/\s+/g, '');
+  const fromBase64 = (Uint8Array as unknown as { fromBase64?: (input: string) => Uint8Array }).fromBase64;
+  if (typeof fromBase64 === 'function') {
+    return fromBase64(normalized);
+  }
+
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Uint8Array(256);
+  lookup.fill(255);
+  for (let i = 0; i < alphabet.length; i++) {
+    lookup[alphabet.charCodeAt(i)] = i;
+  }
+
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  const outputLength = Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
+  const out = new Uint8Array(outputLength);
+  let outIndex = 0;
+
+  for (let i = 0; i < normalized.length; i += 4) {
+    const c1 = normalized.charCodeAt(i);
+    const c2 = normalized.charCodeAt(i + 1);
+    const c3Char = normalized.charAt(i + 2);
+    const c4Char = normalized.charAt(i + 3);
+    const v1 = lookup[c1];
+    const v2 = lookup[c2];
+    const v3 = c3Char === '=' ? 0 : lookup[normalized.charCodeAt(i + 2)];
+    const v4 = c4Char === '=' ? 0 : lookup[normalized.charCodeAt(i + 3)];
+
+    if (v1 === 255 || v2 === 255 || (c3Char !== '=' && v3 === 255) || (c4Char !== '=' && v4 === 255)) {
+      throw new Error('Invalid base64 data');
+    }
+
+    const chunk = (v1 << 18) | (v2 << 12) | (v3 << 6) | v4;
+    if (outIndex < outputLength) out[outIndex++] = (chunk >> 16) & 255;
+    if (c3Char !== '=' && outIndex < outputLength) out[outIndex++] = (chunk >> 8) & 255;
+    if (c4Char !== '=' && outIndex < outputLength) out[outIndex++] = chunk & 255;
+  }
+
+  return out;
+}
+
+async function loadAsciiMonospaceFont(): Promise<FontName> {
+  const candidates: FontName[] = [
+    { family: 'Roboto Mono', style: 'Regular' },
+    { family: 'SF Mono', style: 'Regular' },
+    { family: 'Menlo', style: 'Regular' },
+    { family: 'Monaco', style: 'Regular' },
+    { family: 'Consolas', style: 'Regular' },
+    { family: 'Courier New', style: 'Regular' },
+    { family: 'DejaVu Sans Mono', style: 'Book' },
+    { family: 'DejaVu Sans Mono', style: 'Regular' },
+  ];
+
+  for (const candidate of candidates) {
+    if (await tryLoadFontOnceForCache(candidate)) {
+      return candidate;
+    }
+  }
+
+  return smartLoadFont({ family: 'Inter', style: 'Regular' });
+}
+
+async function getAsciiPlacement(
+  sourceNodeId: string | null | undefined,
+  width: number,
+  height: number,
+  index: number
+): Promise<{ x: number; y: number }> {
+  if (sourceNodeId) {
+    try {
+      const sourceNode = await figma.getNodeByIdAsync(sourceNodeId);
+      if (sourceNode && sourceNode.type !== 'PAGE' && sourceNode.type !== 'DOCUMENT' && 'x' in sourceNode && 'y' in sourceNode) {
+        const sourceWidth = 'width' in sourceNode ? Number((sourceNode as LayoutMixin).width) || 0 : 0;
+        return {
+          x: Math.round((sourceNode as LayoutMixin).x + sourceWidth + 40),
+          y: Math.round((sourceNode as LayoutMixin).y),
+        };
+      }
+    } catch {
+      // Fall through to viewport placement.
+    }
+  }
+
+  const viewportCenter = figma.viewport.center;
+  return {
+    x: Math.round(viewportCenter.x - width / 2),
+    y: Math.round(viewportCenter.y - height / 2 + index * (height + 32)),
+  };
+}
+
 /** Single load attempt; updates loadedFontsCache on success (same cache as smartLoadFont). */
 async function tryLoadFontOnceForCache(font: FontName): Promise<boolean> {
   const key = `${font.family}::${font.style}`;
@@ -6131,6 +6223,132 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('Error exporting Figma images:', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to export Figma images' });
+      }
+      break;
+    }
+
+    case 'get-ascii-source-images': {
+      if (selection.length === 0) {
+        figma.ui.postMessage({ type: 'error', message: 'Please select at least one exportable element' });
+        return;
+      }
+
+      try {
+        const topLevelSelection = getTopLevelSelection(selection);
+        const images = await Promise.all(topLevelSelection.map(async (node) => {
+          if (!('exportAsync' in node)) return null;
+          const png = await node.exportAsync({ format: 'PNG', constraint: { type: 'SCALE', value: 2 } });
+          const width = 'width' in node ? Math.round((node as LayoutMixin).width) : 0;
+          const height = 'height' in node ? Math.round((node as LayoutMixin).height) : 0;
+          const x = 'x' in node ? Math.round((node as LayoutMixin).x) : 0;
+          const y = 'y' in node ? Math.round((node as LayoutMixin).y) : 0;
+          return {
+            id: node.id,
+            name: node.name,
+            data: Array.from(png),
+            width,
+            height,
+            x,
+            y,
+          };
+        }));
+
+        const exported = images.filter((item): item is NonNullable<typeof item> => item !== null);
+        if (exported.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'Please select at least one exportable element' });
+          return;
+        }
+
+        figma.ui.postMessage({ type: 'ascii-source-images-result', images: exported });
+      } catch (error) {
+        console.error('Failed to export ASCII source images:', error);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to export ASCII source images' });
+      }
+      break;
+    }
+
+    case 'create-ascii-text-nodes': {
+      const anyMsg = msg as any;
+      const items = Array.isArray(anyMsg.items) ? anyMsg.items : [];
+      if (items.length === 0) {
+        figma.ui.postMessage({ type: 'error', message: 'ASCII text creation failed: No items provided.' });
+        return;
+      }
+
+      try {
+        const font = await loadAsciiMonospaceFont();
+        const created: SceneNode[] = [];
+
+        for (let index = 0; index < items.length; index++) {
+          const item = items[index] || {};
+          const textNode = figma.createText();
+          textNode.fontName = font;
+          textNode.fontSize = 8;
+          textNode.lineHeight = { unit: 'PERCENT', value: 110 };
+          textNode.characters = String(item.asciiText || item.text || '');
+          textNode.name = `ASCII Text - ${String(item.name || 'Result')}`;
+
+          const placement = await getAsciiPlacement(item.sourceNodeId, textNode.width, textNode.height, index);
+          textNode.x = placement.x;
+          textNode.y = placement.y;
+
+          created.push(textNode);
+        }
+
+        if (created.length > 0) {
+          figma.currentPage.selection = created;
+          figma.viewport.scrollAndZoomIntoView(created);
+        }
+
+        figma.ui.postMessage({ type: 'ascii-text-nodes-created', count: created.length });
+      } catch (error) {
+        console.error('ASCII text creation failed:', error);
+        figma.ui.postMessage({ type: 'error', message: `ASCII text creation failed: ${(error as Error)?.message || 'Unknown error'}` });
+      }
+      break;
+    }
+
+    case 'create-ascii-fill-nodes': {
+      const anyMsg = msg as any;
+      const items = Array.isArray(anyMsg.items) ? anyMsg.items : [];
+      if (items.length === 0) {
+        figma.ui.postMessage({ type: 'error', message: 'ASCII fill creation failed: No items provided.' });
+        return;
+      }
+
+      try {
+        const created: SceneNode[] = [];
+
+        for (let index = 0; index < items.length; index++) {
+          const item = items[index] || {};
+          const rect = figma.createRectangle();
+          const width = Math.max(1, Math.round(Number(item.width) || 1));
+          const height = Math.max(1, Math.round(Number(item.height) || 1));
+          rect.resize(width, height);
+          rect.name = String(item.name || 'ASCII Fill');
+
+          const image = figma.createImage(decodeBase64ToBytes(String(item.base64 || '')));
+          rect.fills = [{
+            type: 'IMAGE',
+            imageHash: image.hash,
+            scaleMode: 'FILL',
+          }];
+
+          const placement = await getAsciiPlacement(item.sourceNodeId, width, height, index);
+          rect.x = placement.x;
+          rect.y = placement.y;
+          created.push(rect);
+        }
+
+        if (created.length > 0) {
+          figma.currentPage.selection = created;
+          figma.viewport.scrollAndZoomIntoView(created);
+        }
+
+        figma.ui.postMessage({ type: 'ascii-fill-nodes-created', count: created.length });
+      } catch (error) {
+        console.error('ASCII fill creation failed:', error);
+        figma.ui.postMessage({ type: 'error', message: `ASCII fill creation failed: ${(error as Error)?.message || 'Unknown error'}` });
       }
       break;
     }
