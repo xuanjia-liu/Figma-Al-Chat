@@ -41,6 +41,17 @@ export function createPromptDrawerHelpers({
       }
     }
 
+    const fieldKey = selectEl.dataset.fieldKey;
+    if (fieldKey) {
+      const hintEl = promptDrawerFields.querySelector(`[data-dynamic-hint-for="${fieldKey}"]`);
+      if (hintEl && !isMulti) {
+        const opt = selectedNodes[0];
+        if (opt?.dataset.hintText) {
+          hintEl.textContent = opt.dataset.hintText;
+        }
+      }
+    }
+
     const pillsContainer = document.getElementById(`${selectEl.id}-pills`);
     if (pillsContainer) {
       pillsContainer.innerHTML = selectedNodes.map(opt => {

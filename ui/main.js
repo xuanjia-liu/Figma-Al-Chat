@@ -5179,7 +5179,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       standard: ' .:-=+*#%@',
       blocks: ' ░▒▓█',
       minimal: ' .oO#',
-      dense: ' `^",:;Il!i~+_-?][}{1)(|\\\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
+      dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };
     const ASCII_MIN_WIDTH = 16;
     const ASCII_MAX_WIDTH = 200;
@@ -15056,8 +15056,9 @@ Generate ONLY the reply text, nothing else.`;
 
             const optionTabIndex = isDisabledInAiOffMode ? '-1' : '0';
             const ariaDisabledAttr = isDisabledInAiOffMode ? ' aria-disabled="true"' : '';
+            const hintTextAttr = opt.hintText ? ` data-hint-text="${escapeHtml(String(opt.hintText))}"` : '';
             return `
-              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${providerAttr}${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr} tabindex="${optionTabIndex}">
+              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${hintTextAttr}${providerAttr}${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr} tabindex="${optionTabIndex}">
                 ${hasRichLayout ? bodyHtml : escapeHtml(labelRaw)}
                 ${moreBtnHtml}
               </div>
@@ -15148,7 +15149,7 @@ Generate ONLY the reply text, nothing else.`;
           fieldHtml += `
             <div class="prompt-field${wrapperClass}"${conditionalAttrs}>
               ${fieldHeaderHtml}
-              ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
+              ${field.hint ? `<span class="prompt-field-hint" data-dynamic-hint-for="${escapeHtml(field.key || '')}">${field.hint}</span>` : ''}
               <div class="prompt-custom-select${field.searchable ? ' collapsible collapsed' : ''}${field.disabled || forceDisabled ? ' disabled' : ''}" id="${fieldId}" data-field-key="${field.key}" data-selected="${selectedAttr}" data-multi="${isMulti ? 'true' : 'false'}" data-searchable="${field.searchable ? 'true' : 'false'}"${selectDisabledAttr}>
                 ${searchHtml}
                 <div class="prompt-custom-select-options">

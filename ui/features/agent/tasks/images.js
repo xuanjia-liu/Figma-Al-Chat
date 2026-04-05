@@ -256,13 +256,14 @@ export const quickCreateImageTasks = [
                     label: 'Invert',
                     default: false
                   },
+                  hint: ' .:-=+*#%@',
                   default: 'standard',
                   options: [
-                    { value: 'standard', label: 'Standard' },
-                    { value: 'blocks', label: 'Blocks' },
-                    { value: 'minimal', label: 'Minimal' },
-                    { value: 'dense', label: 'Dense' },
-                    { value: 'custom', label: 'Custom' }
+                    { value: 'standard', label: 'Standard', hintText: ' .:-=+*#%@' },
+                    { value: 'blocks', label: 'Blocks', hintText: ' ░▒▓█' },
+                    { value: 'minimal', label: 'Minimal', hintText: ' .oO#' },
+                    { value: 'dense', label: 'Dense', hintText: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$' },
+                    { value: 'custom', label: 'Custom', hintText: 'Use Custom Charset below' }
                   ]
                 }
               ]
