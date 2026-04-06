@@ -5502,7 +5502,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         invert,
         colorOutput,
         colorRows,
-        charsetPreset: String(values.charsetPreset || 'standard').toLowerCase()
+        charsetPreset: String(values.charsetPreset || 'standard').toLowerCase(),
+        sourceNaturalWidth: image.naturalWidth,
+        sourceNaturalHeight: image.naturalHeight
       };
     }
 
@@ -5632,6 +5634,94 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       });
 
       pre.appendChild(fragment);
+    }
+
+    let asciiPreviewResizeObserver = null;
+    /** Latest Image→ASCII preview result for layout (source aspect ratio). */
+    let lastAsciiPreviewLayoutResult = null;
+
+    function resetAsciiPreviewViewport(panel) {
+      const viewport = panel && panel.querySelector('.ascii-preview-viewport');
+      const wrap = panel && panel.querySelector('.ascii-preview-scale-wrap');
+      if (wrap) {
+        wrap.style.transform = '';
+        wrap.style.transformOrigin = '';
+      }
+      if (viewport) {
+        viewport.style.height = '';
+        viewport.style.width = '';
+        viewport.style.margin = '';
+        viewport.style.maxWidth = '';
+      }
+    }
+
+    const ASCII_PREVIEW_MAX_HEIGHT_PX = 240;
+
+    function layoutAsciiPreviewInViewport(panel, asciiResult) {
+      if (!panel) return;
+      const viewport = panel.querySelector('.ascii-preview-viewport');
+      const wrap = panel.querySelector('.ascii-preview-scale-wrap');
+      const pre = panel.querySelector('.ascii-preview-pre');
+      if (!viewport || !wrap || !pre) return;
+
+      wrap.style.transform = '';
+      wrap.style.transformOrigin = '';
+
+      const contentW = pre.scrollWidth;
+      const contentH = pre.scrollHeight;
+      if (contentW < 1 || contentH < 1) {
+        viewport.style.height = '';
+        viewport.style.width = '';
+        viewport.style.margin = '';
+        viewport.style.maxWidth = '';
+        return;
+      }
+
+      const cs = getComputedStyle(viewport);
+      const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) || 0;
+      const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) || 0;
+
+      const sw = asciiResult && Number(asciiResult.sourceNaturalWidth);
+      const sh = asciiResult && Number(asciiResult.sourceNaturalHeight);
+      const ratio = Number.isFinite(sw) && Number.isFinite(sh) && sh > 0 ? sw / sh : null;
+
+      const panelW = Math.max(1, panel.clientWidth || 0);
+      const maxOuterH = ASCII_PREVIEW_MAX_HEIGHT_PX;
+      const maxInnerW = Math.max(1, panelW - padX);
+      const maxInnerH = Math.max(1, maxOuterH - padY);
+
+      let innerW;
+      let innerH;
+      if (ratio && ratio > 0) {
+        innerW = maxInnerW;
+        innerH = innerW / ratio;
+        if (innerH > maxInnerH) {
+          innerH = maxInnerH;
+          innerW = innerH * ratio;
+        }
+        viewport.style.width = `${Math.ceil(innerW + padX)}px`;
+        viewport.style.maxWidth = '100%';
+        viewport.style.margin = '0 auto';
+        viewport.style.height = `${Math.ceil(innerH + padY)}px`;
+      } else {
+        viewport.style.width = '';
+        viewport.style.maxWidth = '';
+        viewport.style.margin = '';
+        viewport.style.height = '';
+        innerW = Math.max(1, viewport.clientWidth - padX);
+        const maxH = parseFloat(cs.maxHeight);
+        innerH = Math.max(1, (Number.isFinite(maxH) ? maxH : viewport.clientHeight) - padY);
+      }
+
+      const vpW = Math.max(1, innerW);
+      const vpH = Math.max(1, innerH);
+
+      const scale = Math.min(1, vpW / contentW, vpH / contentH);
+      wrap.style.transformOrigin = '0 0';
+      wrap.style.transform = `scale(${scale})`;
+      if (!ratio) {
+        viewport.style.height = `${Math.max(1, Math.ceil(contentH * scale + padY))}px`;
+      }
     }
 
     function renderAsciiToBitmap(asciiResult) {
@@ -15031,12 +15121,22 @@ Generate ONLY the reply text, nothing else.`;
 
     let imageToAsciiPreviewSeq = 0;
     let imageToAsciiPreviewTimer = null;
+    let imageToAsciiPreviewRaf = null;
     let imageToAsciiPreviewCleanup = null;
 
     function teardownImageToAsciiPreview() {
+      lastAsciiPreviewLayoutResult = null;
+      if (asciiPreviewResizeObserver) {
+        asciiPreviewResizeObserver.disconnect();
+        asciiPreviewResizeObserver = null;
+      }
       if (imageToAsciiPreviewTimer != null) {
         clearTimeout(imageToAsciiPreviewTimer);
         imageToAsciiPreviewTimer = null;
+      }
+      if (imageToAsciiPreviewRaf != null) {
+        cancelAnimationFrame(imageToAsciiPreviewRaf);
+        imageToAsciiPreviewRaf = null;
       }
       if (typeof imageToAsciiPreviewCleanup === 'function') {
         imageToAsciiPreviewCleanup();
@@ -15044,8 +15144,26 @@ Generate ONLY the reply text, nothing else.`;
       }
     }
 
+    /** Throttled to one run per animation frame so Width/Density sliders feel live while dragging. */
+    function scheduleImageToAsciiPreviewRefreshLive() {
+      if (currentPromptAction?.directAction !== 'imageToAscii') return;
+      if (imageToAsciiPreviewTimer != null) {
+        clearTimeout(imageToAsciiPreviewTimer);
+        imageToAsciiPreviewTimer = null;
+      }
+      if (imageToAsciiPreviewRaf != null) cancelAnimationFrame(imageToAsciiPreviewRaf);
+      imageToAsciiPreviewRaf = requestAnimationFrame(() => {
+        imageToAsciiPreviewRaf = null;
+        void runImageToAsciiPreviewUpdate();
+      });
+    }
+
     function scheduleImageToAsciiPreviewRefresh() {
       if (currentPromptAction?.directAction !== 'imageToAscii') return;
+      if (imageToAsciiPreviewRaf != null) {
+        cancelAnimationFrame(imageToAsciiPreviewRaf);
+        imageToAsciiPreviewRaf = null;
+      }
       if (imageToAsciiPreviewTimer != null) clearTimeout(imageToAsciiPreviewTimer);
       imageToAsciiPreviewTimer = setTimeout(() => {
         imageToAsciiPreviewTimer = null;
@@ -15062,9 +15180,8 @@ Generate ONLY the reply text, nothing else.`;
       const foot = panel.querySelector('.ascii-preview-foot');
       if (!pre || !foot) return;
 
-      const PREVIEW_MAX_COLS = 52;
       const values = getPromptFieldValues();
-      const previewValues = { ...values, width: Math.min(clampAsciiWidth(values.width), PREVIEW_MAX_COLS) };
+      const previewValues = { ...values };
 
       const urls = extractImageDataUrls(values.imageInput);
       let source = null;
@@ -15082,31 +15199,41 @@ Generate ONLY the reply text, nothing else.`;
           }
         } catch (err) {
           if (seq !== imageToAsciiPreviewSeq) return;
-          pre.textContent = '';
+          pre.replaceChildren();
           const msg = String(err?.message || '');
           foot.textContent = /exportable|export|Upload an image|selection/i.test(msg)
             ? 'Add an image or select exportable layers to preview.'
             : msg;
+          lastAsciiPreviewLayoutResult = null;
+          resetAsciiPreviewViewport(panel);
           return;
         }
       }
 
       if (!source) {
         if (seq !== imageToAsciiPreviewSeq) return;
-        pre.textContent = '';
+        pre.replaceChildren();
         foot.textContent = 'Add an image or select exportable layers to preview.';
+        lastAsciiPreviewLayoutResult = null;
+        resetAsciiPreviewViewport(panel);
         return;
       }
 
       try {
         const result = await convertImageToAscii(source, previewValues);
         if (seq !== imageToAsciiPreviewSeq) return;
+        lastAsciiPreviewLayoutResult = result;
         renderAsciiPreview(pre, result);
-        foot.textContent = `Preview · ${result.columns}×${result.rows} characters (run uses up to ${clampAsciiWidth(values.width)} columns)`;
+        foot.textContent = `Preview · ${result.columns}×${result.rows} characters`;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => layoutAsciiPreviewInViewport(panel, lastAsciiPreviewLayoutResult));
+        });
       } catch (err) {
         if (seq !== imageToAsciiPreviewSeq) return;
-        pre.textContent = '';
+        pre.replaceChildren();
         foot.textContent = err?.message || 'Preview failed.';
+        lastAsciiPreviewLayoutResult = null;
+        resetAsciiPreviewViewport(panel);
       }
     }
 
@@ -15117,6 +15244,18 @@ Generate ONLY the reply text, nothing else.`;
 
       const delegated = (ev) => {
         if (panel.contains(ev.target)) return;
+        const t = ev.target;
+        const key = t && t.dataset ? t.dataset.fieldKey : '';
+        const isWidthOrDensity =
+          key === 'width' || key === 'density';
+        const isLiveSliderInput =
+          ev.type === 'input' &&
+          isWidthOrDensity &&
+          (t.type === 'range' || (t.type === 'number' && t.classList && t.classList.contains('prompt-slider-number')));
+        if (isLiveSliderInput) {
+          scheduleImageToAsciiPreviewRefreshLive();
+          return;
+        }
         scheduleImageToAsciiPreviewRefresh();
       };
 
@@ -15134,7 +15273,20 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawerFields.removeEventListener('input', delegated);
         promptDrawerFields.removeEventListener('change', delegated);
         observer.disconnect();
+        if (asciiPreviewResizeObserver) {
+          asciiPreviewResizeObserver.disconnect();
+          asciiPreviewResizeObserver = null;
+        }
       };
+
+      const previewViewport = panel.querySelector('.ascii-preview-viewport');
+      if (previewViewport && typeof ResizeObserver !== 'undefined') {
+        asciiPreviewResizeObserver = new ResizeObserver(() => {
+          if (currentPromptAction?.directAction !== 'imageToAscii') return;
+          layoutAsciiPreviewInViewport(panel, lastAsciiPreviewLayoutResult);
+        });
+        asciiPreviewResizeObserver.observe(previewViewport);
+      }
 
       scheduleImageToAsciiPreviewRefresh();
     }
@@ -15929,8 +16081,10 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field prompt-field-ascii-preview${wrapperClass}"${conditionalAttrs}>
               <label class="prompt-field-label">${escapeHtml(field.label || 'Preview')}</label>
               ${field.hint ? `<span class="prompt-field-hint">${escapeHtml(field.hint)}</span>` : ''}
-              <div class="ascii-preview-scroll">
-                <pre class="ascii-preview-pre" aria-live="polite"></pre>
+              <div class="ascii-preview-viewport">
+                <div class="ascii-preview-scale-wrap">
+                  <pre class="ascii-preview-pre" aria-live="polite"></pre>
+                </div>
               </div>
               <div class="ascii-preview-foot" aria-live="polite"></div>
             </div>

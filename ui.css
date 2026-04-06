@@ -10336,13 +10336,20 @@
       color: var(--text-muted);
     }
 
-    .prompt-field-ascii-preview .ascii-preview-scroll {
+    .prompt-field-ascii-preview .ascii-preview-viewport {
+      width: 100%;
       max-height: 240px;
-      overflow: auto;
+      overflow: hidden;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       background: var(--bg-secondary);
       padding: var(--space-sm);
+      box-sizing: border-box;
+    }
+
+    .prompt-field-ascii-preview .ascii-preview-scale-wrap {
+      display: inline-block;
+      vertical-align: top;
     }
 
     .prompt-field-ascii-preview .ascii-preview-pre {
