@@ -5184,6 +5184,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     const ASCII_MIN_WIDTH = 16;
     const ASCII_MAX_WIDTH = 200;
     const ASCII_TEXT_FONT_STACK = '"Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+    /** advance/lineHeight (~0.55) for Latin mono at Figma 110% leading — tall cells. */
+    const ASCII_CELL_ASPECT_MONOSPACE = 0.55;
+    /** Block shades (░▒▓█) map to ~square terminal cells; using 0.55 undersamples rows → squat output. */
+    const ASCII_CELL_ASPECT_BLOCK_ELEMENTS = 1;
 
     function clampAsciiWidth(value) {
       const parsed = parseInt(String(value ?? ''), 10);
@@ -5207,6 +5211,14 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         return custom;
       }
       return ASCII_CHARSET_PRESETS[preset] || ASCII_CHARSET_PRESETS.standard;
+    }
+
+    function resolveAsciiCharAspect(values) {
+      const preset = String(values.charsetPreset || 'standard').toLowerCase();
+      if (preset === 'blocks') {
+        return ASCII_CELL_ASPECT_BLOCK_ELEMENTS;
+      }
+      return ASCII_CELL_ASPECT_MONOSPACE;
     }
 
     function bytesToDataUrl(data, mimeType = 'image/png') {
@@ -5322,7 +5334,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const density = normalizeAsciiDensity(values.density);
       const invert = values.invert === true || values.invert === 'true';
       const image = await loadImageFromDataUrl(source.dataUrl);
-      const charAspect = 0.55;
+      const charAspect = resolveAsciiCharAspect(values);
       const outputHeight = Math.max(1, Math.round((image.naturalHeight / Math.max(1, image.naturalWidth)) * width * charAspect));
 
       const canvas = document.createElement('canvas');
@@ -5374,16 +5386,19 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         asciiText: lines.join('\n'),
         columns: width,
         rows: outputHeight,
-        invert
+        invert,
+        charsetPreset: String(values.charsetPreset || 'standard').toLowerCase()
       };
     }
 
     function renderAsciiToBitmap(asciiResult) {
       const lines = String(asciiResult.asciiText || '').split('\n');
-      const columns = lines.reduce((max, line) => Math.max(max, line.length), 1);
+      const columns = lines.reduce((max, line) => Math.max(max, [...line].length), 1);
       const fontSize = 12;
       const padding = 12;
       const lineHeight = Math.ceil(fontSize * 1.2);
+      const preset = String(asciiResult.charsetPreset || 'standard').toLowerCase();
+      const useSquareCells = preset === 'blocks';
 
       const measureCanvas = document.createElement('canvas');
       const measureCtx = measureCanvas.getContext('2d');
@@ -5394,8 +5409,6 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const charWidth = Math.max(7, Math.ceil(measureCtx.measureText('M').width));
 
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, padding * 2 + charWidth * columns);
-      canvas.height = Math.max(1, padding * 2 + lineHeight * lines.length);
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         throw new Error('Canvas is unavailable for ASCII rendering.');
@@ -5404,15 +5417,35 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const background = asciiResult.invert ? '#111111' : '#ffffff';
       const foreground = asciiResult.invert ? '#ffffff' : '#111111';
 
-      ctx.fillStyle = background;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = foreground;
-
-      lines.forEach((line, index) => {
-        ctx.fillText(line, padding, padding + index * lineHeight);
-      });
+      if (useSquareCells) {
+        const cell = lineHeight;
+        canvas.width = Math.max(1, padding * 2 + columns * cell);
+        canvas.height = Math.max(1, padding * 2 + lines.length * cell);
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = foreground;
+        lines.forEach((line, row) => {
+          [...line].forEach((ch, col) => {
+            const w = ctx.measureText(ch).width;
+            const x = padding + col * cell + Math.max(0, (cell - w) / 2);
+            const y = padding + row * cell + cell / 2;
+            ctx.fillText(ch, x, y);
+          });
+        });
+      } else {
+        canvas.width = Math.max(1, padding * 2 + charWidth * columns);
+        canvas.height = Math.max(1, padding * 2 + lineHeight * lines.length);
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = foreground;
+        lines.forEach((line, index) => {
+          ctx.fillText(line, padding, padding + index * lineHeight);
+        });
+      }
 
       return {
         base64: canvas.toDataURL('image/png').split(',')[1],
@@ -15052,13 +15085,13 @@ Generate ONLY the reply text, nothing else.`;
             const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${hasThumbnail || (hasRichLayout && !previewIcons.length) ? ' with-thumbnail' : ''}${isDisabledInAiOffMode ? ' option-disabled' : ''}`;
 
             // Include provider data attribute if present (for image model selection)
-            const providerAttr = opt.provider ? ` data-provider="${escapeHtml(opt.provider)}"` : '';
+            const providerAttr = opt.provider ? ` data-provider="${escapeHtmlAttr(opt.provider)}"` : '';
 
             const optionTabIndex = isDisabledInAiOffMode ? '-1' : '0';
             const ariaDisabledAttr = isDisabledInAiOffMode ? ' aria-disabled="true"' : '';
-            const hintTextAttr = opt.hintText ? ` data-hint-text="${escapeHtml(String(opt.hintText))}"` : '';
+            const hintTextAttr = opt.hintText ? ` data-hint-text="${escapeHtmlAttr(String(opt.hintText))}"` : '';
             return `
-              <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}"${hintTextAttr}${providerAttr}${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr} tabindex="${optionTabIndex}">
+              <div class="${classes}" data-value="${escapeHtmlAttr(valueRaw)}" data-label="${escapeHtmlAttr(String(labelRaw).toLowerCase())}" data-text="${escapeHtmlAttr(String(labelRaw))}"${hintTextAttr}${providerAttr}${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr} tabindex="${optionTabIndex}">
                 ${hasRichLayout ? bodyHtml : escapeHtml(labelRaw)}
                 ${moreBtnHtml}
               </div>
@@ -25589,6 +25622,15 @@ Example structure:
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    /** Escape for double-quoted HTML attributes (textContent/innerHTML does not quote "). */
+    function escapeHtmlAttr(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;');
     }
 
     function getIntentContextListItemInnerHtml(info) {
