@@ -10389,6 +10389,14 @@
       margin-top: var(--space-2xs);
     }
 
+    .prompt-field-ascii-preview .ascii-preview-foot.ascii-preview-foot--warn {
+      color: var(--fg-warning, #ca8a04);
+      background: color-mix(in srgb, var(--fg-warning, #ca8a04) 14%, transparent);
+      padding: var(--space-2xs) var(--space-xs);
+      border-radius: var(--radius-sm);
+      border: 1px solid color-mix(in srgb, var(--fg-warning, #ca8a04) 35%, transparent);
+    }
+
     .prompt-field-image-max-1 .prompt-field-label-row .prompt-ai-actions {
       display: none;
     }

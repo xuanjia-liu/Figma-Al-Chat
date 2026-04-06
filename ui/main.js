@@ -5428,6 +5428,20 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       }));
     }
 
+    /** Match `convertImageToAscii` geometry: columns × rows for the current source and width. */
+    async function estimateImageToAsciiOutputCellCount(values) {
+      const sources = await resolveAsciiSourceInputs(values);
+      if (!sources.length) return 0;
+      const width = clampAsciiWidth(values.width);
+      const charAspect = resolveAsciiCharAspect(values);
+      const image = await loadImageFromDataUrl(sources[0].dataUrl);
+      const outputHeight = Math.max(
+        1,
+        Math.round((image.naturalHeight / Math.max(1, image.naturalWidth)) * width * charAspect)
+      );
+      return width * outputHeight;
+    }
+
     async function convertImageToAscii(source, values) {
       const charset = resolveAsciiCharset(values);
       const width = clampAsciiWidth(values.width);
@@ -5517,6 +5531,12 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       let cursor = 0;
       let activeRun = null;
 
+      const cellCount =
+        Math.max(0, Number(asciiResult.columns) || 0) * Math.max(0, Number(asciiResult.rows) || 0);
+      /** Merge similar RGBs on large grids so Figma gets fewer setRangeFills calls (mild posterization). */
+      const qRgb = cellCount >= 20000 ? 12 : cellCount >= 8000 ? 8 : 0;
+      const roundRgb = (v) => (qRgb <= 0 ? v : Math.min(255, Math.round(v / qRgb) * qRgb));
+
       const flushRun = () => {
         if (!activeRun) return;
         runs.push(activeRun);
@@ -5524,12 +5544,19 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       };
 
       for (let row = 0; row < lines.length; row++) {
-        const chars = [...lines[row]];
+        const line = lines[row];
         const rowColors = Array.isArray(colorRows[row]) ? colorRows[row] : [];
-        for (let col = 0; col < chars.length; col++) {
-          const color = rowColors[col];
+        let col = 0;
+        for (const _ of line) {
+          const color = col < rowColors.length ? rowColors[col] : undefined;
+          col += 1;
           const nextColor = color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)
-            ? { r: color.r, g: color.g, b: color.b, a: Number.isFinite(color.a) ? color.a : 1 }
+            ? {
+                r: roundRgb(color.r),
+                g: roundRgb(color.g),
+                b: roundRgb(color.b),
+                a: Number.isFinite(color.a) ? color.a : 1,
+              }
             : null;
 
           if (!nextColor) {
@@ -5656,6 +5683,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     }
 
     const ASCII_PREVIEW_MAX_HEIGHT_PX = 240;
+    /** Warn / confirm before colored ASCII as Text when the grid is this large (columns × rows). */
+    const ASCII_COLOR_TEXT_SLOW_CELL_THRESHOLD = 3000;
 
     function layoutAsciiPreviewInViewport(panel, asciiResult) {
       if (!panel) return;
@@ -15204,6 +15233,7 @@ Generate ONLY the reply text, nothing else.`;
           foot.textContent = /exportable|export|Upload an image|selection/i.test(msg)
             ? 'Add an image or select exportable layers to preview.'
             : msg;
+          foot.classList.remove('ascii-preview-foot--warn');
           lastAsciiPreviewLayoutResult = null;
           resetAsciiPreviewViewport(panel);
           return;
@@ -15214,6 +15244,7 @@ Generate ONLY the reply text, nothing else.`;
         if (seq !== imageToAsciiPreviewSeq) return;
         pre.replaceChildren();
         foot.textContent = 'Add an image or select exportable layers to preview.';
+        foot.classList.remove('ascii-preview-foot--warn');
         lastAsciiPreviewLayoutResult = null;
         resetAsciiPreviewViewport(panel);
         return;
@@ -15224,7 +15255,17 @@ Generate ONLY the reply text, nothing else.`;
         if (seq !== imageToAsciiPreviewSeq) return;
         lastAsciiPreviewLayoutResult = result;
         renderAsciiPreview(pre, result);
-        foot.textContent = `Preview · ${result.columns}×${result.rows} characters`;
+        const textTarget =
+          !previewValues.targetMode || String(previewValues.targetMode) === 'text';
+        const cells = result.columns * result.rows;
+        const slowColorText =
+          isAsciiColorOutputEnabled(previewValues) &&
+          textTarget &&
+          cells > ASCII_COLOR_TEXT_SLOW_CELL_THRESHOLD;
+        foot.classList.toggle('ascii-preview-foot--warn', slowColorText);
+        foot.textContent = slowColorText
+          ? `Preview · ${result.columns}×${result.rows} characters (${cells.toLocaleString()} total). Colored text at this size may take a long time in Figma—you will be asked to confirm before Run.`
+          : `Preview · ${result.columns}×${result.rows} characters`;
         requestAnimationFrame(() => {
           requestAnimationFrame(() => layoutAsciiPreviewInViewport(panel, lastAsciiPreviewLayoutResult));
         });
@@ -15232,6 +15273,7 @@ Generate ONLY the reply text, nothing else.`;
         if (seq !== imageToAsciiPreviewSeq) return;
         pre.replaceChildren();
         foot.textContent = err?.message || 'Preview failed.';
+        foot.classList.remove('ascii-preview-foot--warn');
         lastAsciiPreviewLayoutResult = null;
         resetAsciiPreviewViewport(panel);
       }
@@ -22644,8 +22686,11 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
         if (values.targetMode === 'text' || !values.targetMode) {
           const asciiTextItems = asciiResults.map((result) => ({
-            ...result,
-            colorRuns: buildAsciiColorRuns(result)
+            asciiText: result.asciiText,
+            name: result.name,
+            sourceNodeId: result.sourceNodeId,
+            charsetPreset: result.charsetPreset,
+            colorRuns: buildAsciiColorRuns(result),
           }));
           await createAsciiTextNodes(asciiTextItems, {
             invert: values.invert === true || values.invert === 'true'
@@ -24102,6 +24147,27 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           closeCommandsDrawer();
           await runLocalDeterministicQuickAction(action.name, values);
           return;
+        }
+
+        if (action.directAction === 'imageToAscii') {
+          const colorOn = isAsciiColorOutputEnabled(values);
+          const textTarget = !values.targetMode || String(values.targetMode) === 'text';
+          if (colorOn && textTarget) {
+            try {
+              const cellCount = await estimateImageToAsciiOutputCellCount(values);
+              if (cellCount > ASCII_COLOR_TEXT_SLOW_CELL_THRESHOLD) {
+                const msg =
+                  'Colored ASCII as Text applies many color ranges in Figma and can be very slow.\n\n' +
+                  `This output is about ${cellCount.toLocaleString()} characters (more than ${ASCII_COLOR_TEXT_SLOW_CELL_THRESHOLD.toLocaleString()}).\n\n` +
+                  'Do you want to continue?';
+                if (!window.confirm(msg)) {
+                  return;
+                }
+              }
+            } catch (estimateErr) {
+              console.warn('Image to ASCII size estimate failed:', estimateErr);
+            }
+          }
         }
 
         if (action.directAction) {

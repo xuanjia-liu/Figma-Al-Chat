@@ -6332,10 +6332,11 @@ figma.ui.onmessage = async (msg: {
             const color = run?.color;
             if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !color) continue;
             const paints: Paint[] = [asciiRgbToFigmaPaint(color)];
-            if ('setRangeFillsAsync' in textNode && typeof (textNode as any).setRangeFillsAsync === 'function') {
-              await (textNode as any).setRangeFillsAsync(start, end, paints);
-            } else {
+            // Sync setRangeFills is far faster than awaiting setRangeFillsAsync per run (large grids).
+            if (typeof textNode.setRangeFills === 'function') {
               textNode.setRangeFills(start, end, paints);
+            } else if ('setRangeFillsAsync' in textNode && typeof (textNode as any).setRangeFillsAsync === 'function') {
+              await (textNode as any).setRangeFillsAsync(start, end, paints);
             }
           }
 
