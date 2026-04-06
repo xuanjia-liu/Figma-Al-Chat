@@ -301,6 +301,16 @@ export const quickCreateImageTasks = [
               showWhen: { field: 'edgesOnly', equals: true },
             },
             {
+              key: 'colorMaxColors',
+              type: 'slider',
+              label: 'Number of colors',
+              default: 120,
+              min: 8,
+              max: 512,
+              step: 1,
+              showWhen: { field: 'colorOutput', equals: true },
+            },
+            {
               key: 'asciiPreview',
               type: 'asciiPreview',
               label: 'Preview'

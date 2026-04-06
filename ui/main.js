@@ -5543,6 +5543,13 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     }
 
     /** Expand strong edge responses by taking max magnitude in a square neighborhood (Chebyshev radius). */
+    /** RGB quantization step from target palette size (~L³ colors, L levels per channel). */
+    function asciiQuantStepFromMaxColors(raw) {
+      const capped = Math.max(8, Math.min(512, Number(raw) || 120));
+      const levels = Math.max(2, Math.min(32, Math.round(Math.cbrt(capped))));
+      return Math.max(1, Math.floor(256 / levels));
+    }
+
     function dilateAsciiEdgeMagBoxMax(mag, width, height, radius) {
       if (radius <= 0) return mag;
       const out = new Float32Array(mag.length);
@@ -5593,6 +5600,12 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const lines = [];
       const colorRows = colorOutput ? [] : null;
       const gamma = 1.25 - density * 0.55;
+      const colorQuantStep = colorOutput ? asciiQuantStepFromMaxColors(values.colorMaxColors) : 0;
+      const quantRgb = (v) => {
+        const q = colorQuantStep;
+        if (q <= 0) return v;
+        return Math.min(255, Math.round(v / q) * q);
+      };
       const edgeData = edgesOnly ? buildAsciiSobelEdgeMap(pixels, width, outputHeight) : null;
       let edgeMag = edgeData
         ? nonMaxSuppressAsciiEdges(edgeData.mag, edgeData.gx, edgeData.gy, width, outputHeight)
@@ -5637,9 +5650,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           line += charset[index];
           if (rowColors) {
             rowColors.push({
-              r: pixels[offset],
-              g: pixels[offset + 1],
-              b: pixels[offset + 2],
+              r: quantRgb(pixels[offset]),
+              g: quantRgb(pixels[offset + 1]),
+              b: quantRgb(pixels[offset + 2]),
               a: alpha
             });
           }
@@ -5661,6 +5674,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         invert,
         colorOutput,
         colorRows,
+        colorQuantStep,
         charsetPreset: String(values.charsetPreset || 'standard').toLowerCase(),
         sourceNaturalWidth: image.naturalWidth,
         sourceNaturalHeight: image.naturalHeight
@@ -5676,10 +5690,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       let cursor = 0;
       let activeRun = null;
 
-      const cellCount =
-        Math.max(0, Number(asciiResult.columns) || 0) * Math.max(0, Number(asciiResult.rows) || 0);
-      /** Merge similar RGBs on large grids so Figma gets fewer setRangeFills calls (mild posterization). */
-      const qRgb = cellCount >= 20000 ? 12 : cellCount >= 8000 ? 8 : 0;
+      /** Colors are quantized in convertImageToAscii via colorQuantStep; optionally re-round for safety. */
+      const qRgb = Number(asciiResult.colorQuantStep) || 0;
       const roundRgb = (v) => (qRgb <= 0 ? v : Math.min(255, Math.round(v / qRgb) * qRgb));
 
       const flushRun = () => {
@@ -15434,7 +15446,7 @@ Generate ONLY the reply text, nothing else.`;
         const t = ev.target;
         const key = t && t.dataset ? t.dataset.fieldKey : '';
         const isWidthOrDensity =
-          key === 'width' || key === 'density' || key === 'edgeThickness';
+          key === 'width' || key === 'density' || key === 'edgeThickness' || key === 'colorMaxColors';
         const isLiveSliderInput =
           ev.type === 'input' &&
           isWidthOrDensity &&
