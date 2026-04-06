@@ -10356,6 +10356,20 @@
       tab-size: 1;
     }
 
+    .prompt-field-ascii-preview .ascii-preview-pre.ascii-preview-pre--blocks {
+      line-height: 1;
+    }
+
+    .prompt-field-ascii-preview .ascii-preview-cell {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      line-height: 1;
+      overflow: hidden;
+      text-align: center;
+      vertical-align: top;
+    }
+
     .prompt-field-ascii-preview .ascii-preview-foot {
       font-size: var(--text-xs);
       color: var(--text-muted);

@@ -5178,6 +5178,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     const ASCII_CHARSET_PRESETS = {
       standard: ' .:-=+*#%@',
       blocks: '　░▒▓█',
+      codeStyle: ' *2/e+=',
+      airy: '  .·°*+',
+      symbols: ' ·○◇□◆■',
       minimal: ' .oO#',
       dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };
@@ -5298,7 +5301,11 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         }
         return sortAsciiCharsetByBrightness(custom);
       }
-      return sortAsciiCharsetByBrightness(ASCII_CHARSET_PRESETS[preset] || ASCII_CHARSET_PRESETS.standard);
+      const configured = ASCII_CHARSET_PRESETS[preset] || ASCII_CHARSET_PRESETS.standard;
+      if (preset === 'blocks' || preset === 'codestyle' || preset === 'airy' || preset === 'symbols') {
+        return configured;
+      }
+      return sortAsciiCharsetByBrightness(configured);
     }
 
     function resolveAsciiCharAspect(values) {
@@ -5551,6 +5558,41 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     function renderAsciiPreview(pre, asciiResult) {
       if (!pre) return;
+
+      const preset = String(asciiResult?.charsetPreset || 'standard').toLowerCase();
+      if (preset === 'blocks') {
+        pre.classList.add('ascii-preview-pre--blocks');
+        pre.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        const lines = String(asciiResult.asciiText || '').split('\n');
+        const colorRows = Array.isArray(asciiResult?.colorRows) ? asciiResult.colorRows : null;
+
+        lines.forEach((line, rowIndex) => {
+          const chars = [...line];
+          const rowColors = colorRows?.[rowIndex];
+          chars.forEach((ch, colIndex) => {
+            const span = document.createElement('span');
+            span.className = 'ascii-preview-cell';
+            span.textContent = ch === ' ' ? '\u00A0' : ch;
+
+            const color = rowColors?.[colIndex];
+            if (color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) {
+              span.style.color = `rgba(${color.r}, ${color.g}, ${color.b}, ${Number.isFinite(color.a) ? color.a : 1})`;
+            }
+
+            fragment.appendChild(span);
+          });
+
+          if (rowIndex < lines.length - 1) {
+            fragment.appendChild(document.createTextNode('\n'));
+          }
+        });
+
+        pre.appendChild(fragment);
+        return;
+      }
+
+      pre.classList.remove('ascii-preview-pre--blocks');
 
       if (!asciiResult?.colorOutput || !Array.isArray(asciiResult?.colorRows)) {
         pre.textContent = asciiResult?.asciiText || '';
