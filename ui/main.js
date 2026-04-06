@@ -5202,6 +5202,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return Math.max(0, Math.min(1, parsed / 100));
     }
 
+    function isAsciiColorOutputEnabled(values) {
+      return values?.colorOutput === true || values?.colorOutput === 'true';
+    }
+
     function sortAsciiCharsetByBrightness(charset) {
       const chars = [...String(charset || '')];
       const uniqueChars = [];
@@ -5417,6 +5421,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const width = clampAsciiWidth(values.width);
       const density = normalizeAsciiDensity(values.density);
       const invert = values.invert === true || values.invert === 'true';
+      const colorOutput = isAsciiColorOutputEnabled(values);
       const image = await loadImageFromDataUrl(source.dataUrl);
       const charAspect = resolveAsciiCharAspect(values);
       const outputHeight = Math.max(1, Math.round((image.naturalHeight / Math.max(1, image.naturalWidth)) * width * charAspect));
@@ -5435,15 +5440,18 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
       const pixels = ctx.getImageData(0, 0, width, outputHeight).data;
       const lines = [];
+      const colorRows = colorOutput ? [] : null;
       const gamma = 1.25 - density * 0.55;
 
       for (let y = 0; y < outputHeight; y++) {
         let line = '';
+        const rowColors = colorOutput ? [] : null;
         for (let x = 0; x < width; x++) {
           const offset = (y * width + x) * 4;
           const alpha = pixels[offset + 3] / 255;
           if (alpha <= 0.05) {
             line += charset[0];
+            if (rowColors) rowColors.push(null);
             continue;
           }
 
@@ -5456,8 +5464,17 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           normalized = Math.max(0, Math.min(1, Math.pow(normalized, gamma)));
           const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
           line += charset[index];
+          if (rowColors) {
+            rowColors.push({
+              r: pixels[offset],
+              g: pixels[offset + 1],
+              b: pixels[offset + 2],
+              a: alpha
+            });
+          }
         }
         lines.push(line);
+        if (colorRows && rowColors) colorRows.push(rowColors);
       }
 
       return {
@@ -5471,8 +5488,101 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         columns: width,
         rows: outputHeight,
         invert,
+        colorOutput,
+        colorRows,
         charsetPreset: String(values.charsetPreset || 'standard').toLowerCase()
       };
+    }
+
+    function buildAsciiColorRuns(asciiResult) {
+      if (!asciiResult?.colorOutput || !Array.isArray(asciiResult?.colorRows)) return [];
+
+      const lines = String(asciiResult.asciiText || '').split('\n');
+      const colorRows = asciiResult.colorRows;
+      const runs = [];
+      let cursor = 0;
+      let activeRun = null;
+
+      const flushRun = () => {
+        if (!activeRun) return;
+        runs.push(activeRun);
+        activeRun = null;
+      };
+
+      for (let row = 0; row < lines.length; row++) {
+        const chars = [...lines[row]];
+        const rowColors = Array.isArray(colorRows[row]) ? colorRows[row] : [];
+        for (let col = 0; col < chars.length; col++) {
+          const color = rowColors[col];
+          const nextColor = color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)
+            ? { r: color.r, g: color.g, b: color.b, a: Number.isFinite(color.a) ? color.a : 1 }
+            : null;
+
+          if (!nextColor) {
+            flushRun();
+            cursor += 1;
+            continue;
+          }
+
+          const sameAsActive = activeRun &&
+            activeRun.color.r === nextColor.r &&
+            activeRun.color.g === nextColor.g &&
+            activeRun.color.b === nextColor.b &&
+            activeRun.color.a === nextColor.a &&
+            activeRun.end === cursor;
+
+          if (sameAsActive) {
+            activeRun.end += 1;
+          } else {
+            flushRun();
+            activeRun = { start: cursor, end: cursor + 1, color: nextColor };
+          }
+          cursor += 1;
+        }
+
+        flushRun();
+        if (row < lines.length - 1) {
+          cursor += 1;
+        }
+      }
+
+      return runs;
+    }
+
+    function renderAsciiPreview(pre, asciiResult) {
+      if (!pre) return;
+
+      if (!asciiResult?.colorOutput || !Array.isArray(asciiResult?.colorRows)) {
+        pre.textContent = asciiResult?.asciiText || '';
+        return;
+      }
+
+      pre.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      const lines = String(asciiResult.asciiText || '').split('\n');
+      const colorRows = asciiResult.colorRows;
+
+      lines.forEach((line, rowIndex) => {
+        const chars = [...line];
+        const rowColors = Array.isArray(colorRows[rowIndex]) ? colorRows[rowIndex] : [];
+        chars.forEach((ch, colIndex) => {
+          const color = rowColors[colIndex];
+          if (color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) {
+            const span = document.createElement('span');
+            span.textContent = ch === ' ' ? '\u00A0' : ch;
+            span.style.color = `rgba(${color.r}, ${color.g}, ${color.b}, ${Number.isFinite(color.a) ? color.a : 1})`;
+            fragment.appendChild(span);
+          } else {
+            fragment.appendChild(document.createTextNode(ch === ' ' ? '\u00A0' : ch));
+          }
+        });
+
+        if (rowIndex < lines.length - 1) {
+          fragment.appendChild(document.createTextNode('\n'));
+        }
+      });
+
+      pre.appendChild(fragment);
     }
 
     function renderAsciiToBitmap(asciiResult) {
@@ -5500,6 +5610,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
       const background = asciiResult.invert ? '#111111' : '#ffffff';
       const foreground = asciiResult.invert ? '#ffffff' : '#111111';
+      const colorRows = Array.isArray(asciiResult.colorRows) ? asciiResult.colorRows : null;
 
       if (useSquareCells) {
         const cell = lineHeight;
@@ -5509,12 +5620,16 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = foreground;
         lines.forEach((line, row) => {
+          const rowColors = colorRows?.[row];
           [...line].forEach((ch, col) => {
             const w = ctx.measureText(ch).width;
             const x = padding + col * cell + Math.max(0, (cell - w) / 2);
             const y = padding + row * cell + cell / 2;
+            const color = rowColors?.[col];
+            ctx.fillStyle = color
+              ? `rgba(${color.r}, ${color.g}, ${color.b}, ${Number.isFinite(color.a) ? color.a : 1})`
+              : foreground;
             ctx.fillText(ch, x, y);
           });
         });
@@ -5525,9 +5640,16 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
         ctx.textBaseline = 'top';
-        ctx.fillStyle = foreground;
         lines.forEach((line, index) => {
-          ctx.fillText(line, padding, padding + index * lineHeight);
+          const chars = [...line];
+          const rowColors = colorRows?.[index];
+          chars.forEach((ch, col) => {
+            const color = rowColors?.[col];
+            ctx.fillStyle = color
+              ? `rgba(${color.r}, ${color.g}, ${color.b}, ${Number.isFinite(color.a) ? color.a : 1})`
+              : foreground;
+            ctx.fillText(ch, padding + col * charWidth, padding + index * lineHeight);
+          });
         });
       }
 
@@ -14929,7 +15051,7 @@ Generate ONLY the reply text, nothing else.`;
       try {
         const result = await convertImageToAscii(source, previewValues);
         if (seq !== imageToAsciiPreviewSeq) return;
-        pre.textContent = result.asciiText;
+        renderAsciiPreview(pre, result);
         foot.textContent = `Preview · ${result.columns}×${result.rows} characters (run uses up to ${clampAsciiWidth(values.width)} columns)`;
       } catch (err) {
         if (seq !== imageToAsciiPreviewSeq) return;
@@ -14968,6 +15090,31 @@ Generate ONLY the reply text, nothing else.`;
     }
 
     function renderPromptFields(fields, preservedValues = null) {
+      const renderLabelRowCheckboxes = (fieldId, checkboxDefs, disabledAttr = '') => {
+        const defs = Array.isArray(checkboxDefs) ? checkboxDefs.filter(def => def && def.key) : [];
+        if (defs.length === 0) return '';
+
+        return `
+          <div class="prompt-field-inline-checkbox-group">
+            ${defs.map((def, index) => {
+              const cbKey = escapeHtml(String(def.key));
+              const cbId = `${fieldId}-label-cb-${cbKey}-${index}`;
+              let cbChecked = !!def.default;
+              if (preservedValues && preservedValues[def.key] !== undefined) {
+                cbChecked = !!preservedValues[def.key];
+              }
+              const cbLabel = escapeHtml(String(def.label || ''));
+              return `
+                <label class="prompt-field-inline-checkbox" for="${cbId}">
+                  <input type="checkbox" id="${cbId}" data-field-key="${cbKey}" ${cbChecked ? 'checked' : ''}${disabledAttr}>
+                  <span class="prompt-field-inline-checkbox-label">${cbLabel}</span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        `;
+      };
+
       const isFieldDisabledInAiOffMode = (fieldKey) => {
         if (!isAiOffModeEnabled()) return false;
 
@@ -15342,22 +15489,15 @@ Generate ONLY the reply text, nothing else.`;
             </button>
           ` : '';
           const labelRowCb = field.labelRowCheckbox;
+          const labelRowCbs = Array.isArray(field.labelRowCheckboxes)
+            ? field.labelRowCheckboxes
+            : (labelRowCb && labelRowCb.key ? [labelRowCb] : []);
           let fieldHeaderHtml;
-          if (labelRowCb && labelRowCb.key) {
-            const cbKey = escapeHtml(String(labelRowCb.key));
-            const cbId = `${fieldId}-label-cb-${cbKey}`;
-            let cbChecked = !!labelRowCb.default;
-            if (preservedValues && preservedValues[labelRowCb.key] !== undefined) {
-              cbChecked = !!preservedValues[labelRowCb.key];
-            }
-            const cbLabel = escapeHtml(String(labelRowCb.label || ''));
+          if (labelRowCbs.length > 0) {
             fieldHeaderHtml = `
               <div class="prompt-field-label-row">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
-                <label class="prompt-field-inline-checkbox" for="${cbId}">
-                  <input type="checkbox" id="${cbId}" data-field-key="${cbKey}" ${cbChecked ? 'checked' : ''}${disabledAttr}>
-                  <span class="prompt-field-inline-checkbox-label">${cbLabel}</span>
-                </label>
+                ${renderLabelRowCheckboxes(fieldId, labelRowCbs, disabledAttr)}
               </div>
             `;
           } else if (canAddOption || field.actionButton) {
@@ -15524,27 +15664,20 @@ Generate ONLY the reply text, nothing else.`;
           ` : '';
           let numberLabelHtml;
           const labelRowCb = field.labelRowCheckbox;
+          const labelRowCbs = Array.isArray(field.labelRowCheckboxes)
+            ? field.labelRowCheckboxes
+            : (labelRowCb && labelRowCb.key ? [labelRowCb] : []);
           if (reloadLh) {
             numberLabelHtml = `
             <div class="prompt-field-label-row">
               <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
               ${reloadBtnHtml}
             </div>`;
-          } else if (labelRowCb && labelRowCb.key) {
-            const cbKey = escapeHtml(String(labelRowCb.key));
-            const cbId = `${fieldId}-label-cb-${cbKey}`;
-            let cbChecked = !!labelRowCb.default;
-            if (preservedValues && preservedValues[labelRowCb.key] !== undefined) {
-              cbChecked = !!preservedValues[labelRowCb.key];
-            }
-            const cbLabel = escapeHtml(String(labelRowCb.label || ''));
+          } else if (labelRowCbs.length > 0) {
             numberLabelHtml = `
             <div class="prompt-field-label-row">
               <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
-              <label class="prompt-field-inline-checkbox" for="${cbId}">
-                <input type="checkbox" id="${cbId}" data-field-key="${cbKey}" ${cbChecked ? 'checked' : ''}>
-                <span class="prompt-field-inline-checkbox-label">${cbLabel}</span>
-              </label>
+              ${renderLabelRowCheckboxes(fieldId, labelRowCbs)}
             </div>`;
           } else if (field.alignHeader) {
             numberLabelHtml = `<div class="prompt-field-header${headerClass}"><label class="prompt-field-label" for="${fieldId}">${field.label}</label></div>`;
@@ -15597,7 +15730,7 @@ Generate ONLY the reply text, nothing else.`;
                 ${numberInputAttrs}>
           `;
 
-          const disableControlsWrap = !!(labelRowCb && labelRowCb.key);
+          const disableControlsWrap = labelRowCbs.length > 0;
           const wrappedControls = disableControlsWrap
             ? `<div class="prompt-field-controls-wrap" data-prompt-disable-wrap="true">${controlsHtml}</div>`
             : controlsHtml;
@@ -22306,7 +22439,11 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         }
 
         if (values.targetMode === 'text' || !values.targetMode) {
-          await createAsciiTextNodes(asciiResults, {
+          const asciiTextItems = asciiResults.map((result) => ({
+            ...result,
+            colorRuns: buildAsciiColorRuns(result)
+          }));
+          await createAsciiTextNodes(asciiTextItems, {
             invert: values.invert === true || values.invert === 'true'
           });
           showToast(`Created ${asciiResults.length} ASCII text result${asciiResults.length === 1 ? '' : 's'}.`, 'success');

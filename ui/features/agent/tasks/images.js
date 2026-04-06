@@ -251,11 +251,18 @@ export const quickCreateImageTasks = [
                   key: 'charsetPreset',
                   type: 'select',
                   label: 'Charset',
-                  labelRowCheckbox: {
-                    key: 'invert',
-                    label: 'Invert',
-                    default: false
-                  },
+                  labelRowCheckboxes: [
+                    {
+                      key: 'invert',
+                      label: 'Invert',
+                      default: false
+                    },
+                    {
+                      key: 'colorOutput',
+                      label: 'Color output',
+                      default: false
+                    }
+                  ],
                   hint: ' .:-=+*#%@',
                   default: 'standard',
                   options: [

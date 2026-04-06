@@ -1001,6 +1001,18 @@ function normalizeAsciiTextForFigma(value: string): string {
   return String(value || '').replace(/ /g, '\u00A0');
 }
 
+function asciiRgbToFigmaPaint(color: { r: number; g: number; b: number; a?: number }): SolidPaint {
+  return {
+    type: 'SOLID',
+    color: {
+      r: Math.max(0, Math.min(1, color.r / 255)),
+      g: Math.max(0, Math.min(1, color.g / 255)),
+      b: Math.max(0, Math.min(1, color.b / 255)),
+    },
+    opacity: Math.max(0, Math.min(1, Number.isFinite(color.a) ? color.a! : 1)),
+  };
+}
+
 async function getAsciiPlacement(
   sourceNodeId: string | null | undefined,
   width: number,
@@ -6294,6 +6306,20 @@ figma.ui.onmessage = async (msg: {
           textNode.lineHeight = { unit: 'PERCENT', value: 110 };
           textNode.characters = normalizeAsciiTextForFigma(String(item.asciiText || item.text || ''));
           textNode.name = `ASCII Text - ${String(item.name || 'Result')}`;
+
+          const colorRuns = Array.isArray(item.colorRuns) ? item.colorRuns : [];
+          for (const run of colorRuns) {
+            const start = Number(run?.start);
+            const end = Number(run?.end);
+            const color = run?.color;
+            if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !color) continue;
+            const paints: Paint[] = [asciiRgbToFigmaPaint(color)];
+            if ('setRangeFillsAsync' in textNode && typeof (textNode as any).setRangeFillsAsync === 'function') {
+              await (textNode as any).setRangeFillsAsync(start, end, paints);
+            } else {
+              textNode.setRangeFills(start, end, paints);
+            }
+          }
 
           const placement = await getAsciiPlacement(item.sourceNodeId, textNode.width, textNode.height, index);
           textNode.x = placement.x;
