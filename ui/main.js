@@ -5180,7 +5180,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       blocks: '　░▒▓█',
       codeStyle: ' *2/e+=',
       airy: '  .·°*+',
-      symbols: ' ・○◇□◆■',
+      symbols: '　・○◇□◆■',
       minimal: ' .oO#',
       dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };
@@ -5565,6 +5565,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       if (!pre) return;
 
       const preset = String(asciiResult?.charsetPreset || 'standard').toLowerCase();
+      pre.classList.toggle('ascii-preview-pre--symbols', preset === 'symbols');
       if (preset === 'blocks' || preset === 'symbols') {
         pre.classList.add('ascii-preview-pre--grid');
         pre.innerHTML = '';
@@ -5598,6 +5599,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       }
 
       pre.classList.remove('ascii-preview-pre--grid');
+      pre.classList.remove('ascii-preview-pre--symbols');
 
       if (!asciiResult?.colorOutput || !Array.isArray(asciiResult?.colorRows)) {
         pre.textContent = asciiResult?.asciiText || '';

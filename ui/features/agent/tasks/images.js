@@ -226,7 +226,7 @@ export const quickCreateImageTasks = [
               fields: [
                 {
                   key: 'width',
-                  type: 'number',
+                  type: 'slider',
                   label: 'Width',
                   default: 80,
                   min: 16,
@@ -270,7 +270,7 @@ export const quickCreateImageTasks = [
                     { value: 'blocks', label: 'Blocks', hintText: '　░▒▓█' },
                     { value: 'codeStyle', label: 'Code Style', hintText: ' *2/e+=' },
                     { value: 'airy', label: 'Airy', hintText: '  .·°*+' },
-                    { value: 'symbols', label: 'Symbols', hintText: ' ・○◇□◆■' },
+                    { value: 'symbols', label: 'Symbols', hintText: '　・○◇□◆■' },
                     { value: 'minimal', label: 'Minimal', hintText: ' .oO#' },
                     { value: 'dense', label: 'Dense', hintText: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$' },
                     { value: 'custom', label: 'Custom', hintText: 'Use Custom Charset below' }

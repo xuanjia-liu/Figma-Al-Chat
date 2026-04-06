@@ -1,4 +1,4 @@
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Roboto+Mono:wght@400&family=Space+Mono:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Noto+Sans+Mono:wght@400&family=Roboto+Mono:wght@400&family=Space+Mono:wght@400;700&display=swap');
 
     :root {
       /* Colors */
@@ -58,6 +58,8 @@
 
       /* Monospace stack aligned with Image → ASCII canvas + Figma text (Roboto Mono first in plugin) */
       --font-ascii-mono: "Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      /* Symbols charset: full-width (全角) cells — match plugin create-ascii-text CJK mono stack after web font */
+      --font-ascii-symbols: "Noto Sans Mono", "Noto Sans Mono CJK JP", "Noto Sans Mono CJK SC", "Sarasa Mono J", "MS Gothic", "Osaka-Mono", "Hiragino Sans", ui-monospace, monospace;
 
       /* Font Sizes */
       --text-2xs: 8px;
@@ -10358,6 +10360,10 @@
 
     .prompt-field-ascii-preview .ascii-preview-pre.ascii-preview-pre--grid {
       line-height: 1;
+    }
+
+    .prompt-field-ascii-preview .ascii-preview-pre.ascii-preview-pre--symbols {
+      font-family: var(--font-ascii-symbols);
     }
 
     .prompt-field-ascii-preview .ascii-preview-cell {
