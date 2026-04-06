@@ -973,7 +973,25 @@ function decodeBase64ToBytes(base64: string): Uint8Array {
   return out;
 }
 
-async function loadAsciiMonospaceFont(): Promise<FontName> {
+async function loadAsciiMonospaceFont(preset?: string | null): Promise<FontName> {
+  const normalizedPreset = String(preset || '').toLowerCase();
+  if (normalizedPreset === 'symbols') {
+    const symbolCandidates: FontName[] = [
+      { family: 'Noto Sans Mono CJK JP', style: 'Regular' },
+      { family: 'Noto Sans Mono CJK SC', style: 'Regular' },
+      { family: 'Sarasa Mono J', style: 'Regular' },
+      { family: 'MS Gothic', style: 'Regular' },
+      { family: 'Osaka-Mono', style: 'Regular' },
+      { family: 'Hiragino Sans', style: 'Regular' },
+    ];
+
+    for (const candidate of symbolCandidates) {
+      if (await tryLoadFontOnceForCache(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
   const candidates: FontName[] = [
     { family: 'Roboto Mono', style: 'Regular' },
     { family: 'SF Mono', style: 'Regular' },
@@ -6295,12 +6313,12 @@ figma.ui.onmessage = async (msg: {
       }
 
       try {
-        const font = await loadAsciiMonospaceFont();
         const created: SceneNode[] = [];
 
         for (let index = 0; index < items.length; index++) {
           const item = items[index] || {};
           const textNode = figma.createText();
+          const font = await loadAsciiMonospaceFont(String(item.charsetPreset || ''));
           textNode.fontName = font;
           textNode.fontSize = 8;
           textNode.lineHeight = { unit: 'PERCENT', value: 110 };

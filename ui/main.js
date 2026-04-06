@@ -5180,13 +5180,14 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       blocks: '　░▒▓█',
       codeStyle: ' *2/e+=',
       airy: '  .·°*+',
-      symbols: ' ·○◇□◆■',
+      symbols: ' ・○◇□◆■',
       minimal: ' .oO#',
       dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };
     const ASCII_MIN_WIDTH = 16;
     const ASCII_MAX_WIDTH = 200;
     const ASCII_TEXT_FONT_STACK = '"Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+    const ASCII_SYMBOL_FONT_STACK = '"Noto Sans Mono CJK JP", "Noto Sans Mono CJK SC", "Sarasa Mono J", "MS Gothic", "Osaka-Mono", "Hiragino Sans", monospace';
     /** advance/lineHeight (~0.55) for Latin mono at Figma 110% leading — tall cells. */
     const ASCII_CELL_ASPECT_MONOSPACE = 0.55;
     /** Block shades (░▒▓█) map to ~square terminal cells; using 0.55 undersamples rows → squat output. */
@@ -5310,10 +5311,14 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     function resolveAsciiCharAspect(values) {
       const preset = String(values.charsetPreset || 'standard').toLowerCase();
-      if (preset === 'blocks') {
+      if (preset === 'blocks' || preset === 'symbols') {
         return ASCII_CELL_ASPECT_BLOCK_ELEMENTS;
       }
       return ASCII_CELL_ASPECT_MONOSPACE;
+    }
+
+    function resolveAsciiFontStack(preset) {
+      return preset === 'symbols' ? ASCII_SYMBOL_FONT_STACK : ASCII_TEXT_FONT_STACK;
     }
 
     function bytesToDataUrl(data, mimeType = 'image/png') {
@@ -5560,8 +5565,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       if (!pre) return;
 
       const preset = String(asciiResult?.charsetPreset || 'standard').toLowerCase();
-      if (preset === 'blocks') {
-        pre.classList.add('ascii-preview-pre--blocks');
+      if (preset === 'blocks' || preset === 'symbols') {
+        pre.classList.add('ascii-preview-pre--grid');
         pre.innerHTML = '';
         const fragment = document.createDocumentFragment();
         const lines = String(asciiResult.asciiText || '').split('\n');
@@ -5592,7 +5597,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         return;
       }
 
-      pre.classList.remove('ascii-preview-pre--blocks');
+      pre.classList.remove('ascii-preview-pre--grid');
 
       if (!asciiResult?.colorOutput || !Array.isArray(asciiResult?.colorRows)) {
         pre.textContent = asciiResult?.asciiText || '';
@@ -5634,14 +5639,15 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const padding = 12;
       const lineHeight = Math.ceil(fontSize * 1.2);
       const preset = String(asciiResult.charsetPreset || 'standard').toLowerCase();
-      const useSquareCells = preset === 'blocks';
+      const useSquareCells = preset === 'blocks' || preset === 'symbols';
+      const fontStack = resolveAsciiFontStack(preset);
 
       const measureCanvas = document.createElement('canvas');
       const measureCtx = measureCanvas.getContext('2d');
       if (!measureCtx) {
         throw new Error('Canvas is unavailable for ASCII rendering.');
       }
-      measureCtx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+      measureCtx.font = `${fontSize}px ${fontStack}`;
       const charWidth = Math.max(7, Math.ceil(measureCtx.measureText('M').width));
 
       const canvas = document.createElement('canvas');
@@ -5660,7 +5666,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         canvas.height = Math.max(1, padding * 2 + lines.length * cell);
         ctx.fillStyle = background;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+        ctx.font = `${fontSize}px ${fontStack}`;
         ctx.textBaseline = 'middle';
         lines.forEach((line, row) => {
           const rowColors = colorRows?.[row];
@@ -5680,7 +5686,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         canvas.height = Math.max(1, padding * 2 + lineHeight * lines.length);
         ctx.fillStyle = background;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+        ctx.font = `${fontSize}px ${fontStack}`;
         ctx.textBaseline = 'top';
         lines.forEach((line, index) => {
           const chars = [...line];
