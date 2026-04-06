@@ -5177,7 +5177,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     const ASCII_CHARSET_PRESETS = {
       standard: ' .:-=+*#%@',
-      blocks: '░▒▓█',
+      blocks: '　░▒▓█',
       minimal: ' .oO#',
       dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };

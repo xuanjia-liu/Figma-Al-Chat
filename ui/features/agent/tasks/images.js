@@ -267,7 +267,7 @@ export const quickCreateImageTasks = [
                   default: 'standard',
                   options: [
                     { value: 'standard', label: 'Standard', hintText: ' .:-=+*#%@' },
-                    { value: 'blocks', label: 'Blocks', hintText: '░▒▓█' },
+                    { value: 'blocks', label: 'Blocks', hintText: '　░▒▓█' },
                     { value: 'minimal', label: 'Minimal', hintText: ' .oO#' },
                     { value: 'dense', label: 'Dense', hintText: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$' },
                     { value: 'custom', label: 'Custom', hintText: 'Use Custom Charset below' }
