@@ -10362,6 +10362,10 @@
       margin-top: var(--space-2xs);
     }
 
+    .prompt-field-image-max-1 .prompt-field-label-row .prompt-ai-actions {
+      display: none;
+    }
+
     /* Camera Control 3D */
     .camera-control-3d-wrapper {
       position: relative;

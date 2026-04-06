@@ -218,7 +218,8 @@ export const quickCreateImageTasks = [
             {
               key: 'imageInput',
               type: 'image',
-              label: 'Source Image (Optional)'
+              label: 'Source Image (Optional)',
+              maxImages: 1
             },
             {
               type: 'row',

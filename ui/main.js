@@ -15624,8 +15624,15 @@ Generate ONLY the reply text, nothing else.`;
             </div>
           `;
         } else if (field.type === 'image') {
+          const imageMaxSlotsRaw = field.maxImages != null && field.maxImages !== ''
+            ? parseInt(String(field.maxImages), 10)
+            : NaN;
+          const imageMaxSlots = Number.isFinite(imageMaxSlotsRaw) && imageMaxSlotsRaw > 0
+            ? Math.min(999, imageMaxSlotsRaw)
+            : 14;
+          const imageSingleSlotClass = imageMaxSlots === 1 ? ' prompt-field-image-max-1' : '';
           fieldHtml += `
-            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
+            <div class="prompt-field${imageSingleSlotClass}${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-label-row">
                 <label class="prompt-field-label">${field.label}</label>
                 <div class="prompt-ai-actions">
@@ -15644,7 +15651,7 @@ Generate ONLY the reply text, nothing else.`;
                 </div>
               </div>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <div class="prompt-image-upload-container" id="${fieldId}-container" data-field-key="${field.key}" data-max-images="14">
+              <div class="prompt-image-upload-container" id="${fieldId}-container" data-field-key="${field.key}" data-max-images="${imageMaxSlots}">
                 <div class="prompt-image-upload-grid" id="${fieldId}-grid">
                 </div>
               </div>
