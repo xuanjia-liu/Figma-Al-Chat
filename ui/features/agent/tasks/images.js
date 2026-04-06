@@ -253,6 +253,11 @@ export const quickCreateImageTasks = [
                   label: 'Charset',
                   labelRowCheckboxes: [
                     {
+                      key: 'edgesOnly',
+                      label: 'Edges only',
+                      default: false,
+                    },
+                    {
                       key: 'invert',
                       label: 'Invert',
                       default: false
@@ -284,6 +289,16 @@ export const quickCreateImageTasks = [
               label: 'Custom Charset',
               placeholder: 'Light to dark, e.g. .:-=+*#%@',
               showWhen: { field: 'charsetPreset', equals: 'custom' }
+            },
+            {
+              key: 'edgeThickness',
+              type: 'slider',
+              label: 'Edge thickness',
+              default: 1,
+              min: 1,
+              max: 12,
+              step: 1,
+              showWhen: { field: 'edgesOnly', equals: true },
             },
             {
               key: 'asciiPreview',

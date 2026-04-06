@@ -400,6 +400,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           localized.labelRowCheckbox.label = localizeActionString(localized.labelRowCheckbox.label);
         }
       }
+      if (Array.isArray(localized.labelRowCheckboxes)) {
+        localized.labelRowCheckboxes = localized.labelRowCheckboxes.map((cb) => {
+          if (!cb || typeof cb !== 'object') return cb;
+          const next = { ...cb };
+          if (typeof next.label === 'string') next.label = localizeActionString(next.label);
+          return next;
+        });
+      }
       if (Array.isArray(localized.options)) {
         localized.options = localized.options.map((option) => {
           if (!option || typeof option !== 'object') return option;
@@ -5442,11 +5450,128 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return width * outputHeight;
     }
 
+    /** Sobel gradients and magnitude (raw, before thinning), for Edges-only ASCII. */
+    function buildAsciiSobelEdgeMap(pixels, width, height) {
+      const n = width * height;
+      const gray = new Float32Array(n);
+      for (let i = 0, p = 0; i < n; i++, p += 4) {
+        const a = pixels[p + 3] / 255;
+        if (a <= 0.05) {
+          gray[i] = -1;
+        } else {
+          gray[i] =
+            (pixels[p] * 0.2126 + pixels[p + 1] * 0.7152 + pixels[p + 2] * 0.0722) / 255;
+        }
+      }
+      const mag = new Float32Array(n);
+      const gxArr = new Float32Array(n);
+      const gyArr = new Float32Array(n);
+      const sample = (yy, xx) => {
+        const yi = Math.max(0, Math.min(height - 1, yy));
+        const xi = Math.max(0, Math.min(width - 1, xx));
+        const g = gray[yi * width + xi];
+        return g < 0 ? 0 : g;
+      };
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          if (gray[idx] < 0) {
+            mag[idx] = 0;
+            gxArr[idx] = 0;
+            gyArr[idx] = 0;
+            continue;
+          }
+          const gx =
+            -sample(y - 1, x - 1) +
+            sample(y - 1, x + 1) -
+            2 * sample(y, x - 1) +
+            2 * sample(y, x + 1) -
+            sample(y + 1, x - 1) +
+            sample(y + 1, x + 1);
+          const gy =
+            -sample(y - 1, x - 1) -
+            2 * sample(y - 1, x) -
+            sample(y - 1, x + 1) +
+            sample(y + 1, x - 1) +
+            2 * sample(y + 1, x) +
+            sample(y + 1, x + 1);
+          gxArr[idx] = gx;
+          gyArr[idx] = gy;
+          mag[idx] = Math.hypot(gx, gy);
+        }
+      }
+      return { mag, gx: gxArr, gy: gyArr };
+    }
+
+    /** Thin Sobel ridges to ~1 cell wide (Canny-style NMS) so thickness 1 is not a 2px band. */
+    function nonMaxSuppressAsciiEdges(mag, gx, gy, width, height) {
+      const out = new Float32Array(mag.length);
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const i = y * width + x;
+          const m = mag[i];
+          if (m <= 0) continue;
+          const angle = (Math.atan2(gy[i], gx[i]) * 180) / Math.PI;
+          const a = ((angle + 180) % 180);
+          let n1;
+          let n2;
+          if (a < 22.5 || a >= 157.5) {
+            n1 = mag[i - 1];
+            n2 = mag[i + 1];
+          } else if (a >= 22.5 && a < 67.5) {
+            n1 = mag[i - width + 1];
+            n2 = mag[i + width - 1];
+          } else if (a >= 67.5 && a < 112.5) {
+            n1 = mag[i - width];
+            n2 = mag[i + width];
+          } else {
+            n1 = mag[i - width - 1];
+            n2 = mag[i + width + 1];
+          }
+          if (m >= n1 && m >= n2) out[i] = m;
+        }
+      }
+      return out;
+    }
+
+    function asciiEdgeMagInvMax(mag) {
+      let maxM = 0;
+      for (let i = 0; i < mag.length; i++) {
+        if (mag[i] > maxM) maxM = mag[i];
+      }
+      return maxM > 1e-9 ? 1 / maxM : 0;
+    }
+
+    /** Expand strong edge responses by taking max magnitude in a square neighborhood (Chebyshev radius). */
+    function dilateAsciiEdgeMagBoxMax(mag, width, height, radius) {
+      if (radius <= 0) return mag;
+      const out = new Float32Array(mag.length);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let m = 0;
+          const y0 = Math.max(0, y - radius);
+          const y1 = Math.min(height - 1, y + radius);
+          const x0 = Math.max(0, x - radius);
+          const x1 = Math.min(width - 1, x + radius);
+          for (let yy = y0; yy <= y1; yy++) {
+            const row = yy * width;
+            for (let xx = x0; xx <= x1; xx++) {
+              const v = mag[row + xx];
+              if (v > m) m = v;
+            }
+          }
+          out[y * width + x] = m;
+        }
+      }
+      return out;
+    }
+
     async function convertImageToAscii(source, values) {
       const charset = resolveAsciiCharset(values);
       const width = clampAsciiWidth(values.width);
       const density = normalizeAsciiDensity(values.density);
       const invert = values.invert === true || values.invert === 'true';
+      const edgesOnly = values.edgesOnly === true || values.edgesOnly === 'true';
       const colorOutput = isAsciiColorOutputEnabled(values);
       const image = await loadImageFromDataUrl(source.dataUrl);
       const charAspect = resolveAsciiCharAspect(values);
@@ -5468,6 +5593,20 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const lines = [];
       const colorRows = colorOutput ? [] : null;
       const gamma = 1.25 - density * 0.55;
+      const edgeData = edgesOnly ? buildAsciiSobelEdgeMap(pixels, width, outputHeight) : null;
+      let edgeMag = edgeData
+        ? nonMaxSuppressAsciiEdges(edgeData.mag, edgeData.gx, edgeData.gy, width, outputHeight)
+        : null;
+      let edgeInvMax = edgeMag ? asciiEdgeMagInvMax(edgeMag) : 0;
+      if (edgesOnly && edgeMag && edgeInvMax > 0) {
+        const etRaw = Number(values.edgeThickness);
+        const thickness = Number.isFinite(etRaw) ? Math.max(1, Math.min(12, Math.round(etRaw))) : 1;
+        const dilateRadius = thickness - 1;
+        if (dilateRadius > 0) {
+          edgeMag = dilateAsciiEdgeMagBoxMax(edgeMag, width, outputHeight, dilateRadius);
+          edgeInvMax = asciiEdgeMagInvMax(edgeMag);
+        }
+      }
 
       for (let y = 0; y < outputHeight; y++) {
         let line = '';
@@ -5481,12 +5620,18 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             continue;
           }
 
-          const luminance = (
-            pixels[offset] * 0.2126 +
-            pixels[offset + 1] * 0.7152 +
-            pixels[offset + 2] * 0.0722
-          ) / 255;
-          let normalized = invert ? luminance : (1 - luminance);
+          let normalized;
+          if (edgesOnly && edgeMag && edgeInvMax > 0) {
+            const rawEdge = edgeMag[y * width + x] * edgeInvMax;
+            normalized = invert ? (1 - rawEdge) : rawEdge;
+          } else {
+            const luminance = (
+              pixels[offset] * 0.2126 +
+              pixels[offset + 1] * 0.7152 +
+              pixels[offset + 2] * 0.0722
+            ) / 255;
+            normalized = invert ? luminance : (1 - luminance);
+          }
           normalized = Math.max(0, Math.min(1, Math.pow(normalized, gamma)));
           const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
           line += charset[index];
@@ -15289,7 +15434,7 @@ Generate ONLY the reply text, nothing else.`;
         const t = ev.target;
         const key = t && t.dataset ? t.dataset.fieldKey : '';
         const isWidthOrDensity =
-          key === 'width' || key === 'density';
+          key === 'width' || key === 'density' || key === 'edgeThickness';
         const isLiveSliderInput =
           ev.type === 'input' &&
           isWidthOrDensity &&
