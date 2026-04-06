@@ -14419,6 +14419,7 @@ Generate ONLY the reply text, nothing else.`;
         disposeGoogleFontPreview();
         disposeGoogleFontPreview = null;
       }
+      teardownImageToAsciiPreview();
       promptDrawer.classList.remove('open', 'minimized', 'maximized');
       promptDrawerOverlay.classList.remove('open');
       currentPromptAction = null;
@@ -14771,6 +14772,116 @@ Generate ONLY the reply text, nothing else.`;
       escapeHtml,
       getPersonaContextVars: () => _personaContextVars,
     });
+
+    let imageToAsciiPreviewSeq = 0;
+    let imageToAsciiPreviewTimer = null;
+    let imageToAsciiPreviewCleanup = null;
+
+    function teardownImageToAsciiPreview() {
+      if (imageToAsciiPreviewTimer != null) {
+        clearTimeout(imageToAsciiPreviewTimer);
+        imageToAsciiPreviewTimer = null;
+      }
+      if (typeof imageToAsciiPreviewCleanup === 'function') {
+        imageToAsciiPreviewCleanup();
+        imageToAsciiPreviewCleanup = null;
+      }
+    }
+
+    function scheduleImageToAsciiPreviewRefresh() {
+      if (currentPromptAction?.directAction !== 'imageToAscii') return;
+      if (imageToAsciiPreviewTimer != null) clearTimeout(imageToAsciiPreviewTimer);
+      imageToAsciiPreviewTimer = setTimeout(() => {
+        imageToAsciiPreviewTimer = null;
+        void runImageToAsciiPreviewUpdate();
+      }, 280);
+    }
+
+    async function runImageToAsciiPreviewUpdate() {
+      const seq = ++imageToAsciiPreviewSeq;
+      const panel = promptDrawerFields.querySelector('.prompt-field-ascii-preview');
+      if (!panel || currentPromptAction?.directAction !== 'imageToAscii') return;
+
+      const pre = panel.querySelector('.ascii-preview-pre');
+      const foot = panel.querySelector('.ascii-preview-foot');
+      if (!pre || !foot) return;
+
+      const PREVIEW_MAX_COLS = 52;
+      const values = getPromptFieldValues();
+      const previewValues = { ...values, width: Math.min(clampAsciiWidth(values.width), PREVIEW_MAX_COLS) };
+
+      const urls = extractImageDataUrls(values.imageInput);
+      let source = null;
+      if (urls.length > 0) {
+        source = { name: 'Preview', dataUrl: urls[0] };
+      } else {
+        try {
+          const exported = await requestAsciiSourceImages();
+          if (seq !== imageToAsciiPreviewSeq) return;
+          if (exported.length && exported[0]?.data) {
+            source = {
+              name: exported[0].name || 'Selection',
+              dataUrl: bytesToDataUrl(exported[0].data),
+            };
+          }
+        } catch (err) {
+          if (seq !== imageToAsciiPreviewSeq) return;
+          pre.textContent = '';
+          const msg = String(err?.message || '');
+          foot.textContent = /exportable|export|Upload an image|selection/i.test(msg)
+            ? 'Add an image or select exportable layers to preview.'
+            : msg;
+          return;
+        }
+      }
+
+      if (!source) {
+        if (seq !== imageToAsciiPreviewSeq) return;
+        pre.textContent = '';
+        foot.textContent = 'Add an image or select exportable layers to preview.';
+        return;
+      }
+
+      try {
+        const result = await convertImageToAscii(source, previewValues);
+        if (seq !== imageToAsciiPreviewSeq) return;
+        pre.textContent = result.asciiText;
+        foot.textContent = `Preview · ${result.columns}×${result.rows} characters (run uses up to ${clampAsciiWidth(values.width)} columns)`;
+      } catch (err) {
+        if (seq !== imageToAsciiPreviewSeq) return;
+        pre.textContent = '';
+        foot.textContent = err?.message || 'Preview failed.';
+      }
+    }
+
+    function setupImageToAsciiPreview() {
+      teardownImageToAsciiPreview();
+      const panel = promptDrawerFields.querySelector('.prompt-field-ascii-preview');
+      if (!panel) return;
+
+      const delegated = (ev) => {
+        if (panel.contains(ev.target)) return;
+        scheduleImageToAsciiPreviewRefresh();
+      };
+
+      promptDrawerFields.addEventListener('input', delegated);
+      promptDrawerFields.addEventListener('change', delegated);
+
+      const observer = new MutationObserver(() => scheduleImageToAsciiPreviewRefresh());
+      observer.observe(promptDrawerFields, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-image-data'],
+      });
+
+      imageToAsciiPreviewCleanup = () => {
+        promptDrawerFields.removeEventListener('input', delegated);
+        promptDrawerFields.removeEventListener('change', delegated);
+        observer.disconnect();
+      };
+
+      scheduleImageToAsciiPreviewRefresh();
+    }
 
     function renderPromptFields(fields, preservedValues = null) {
       const isFieldDisabledInAiOffMode = (fieldKey) => {
@@ -15539,6 +15650,17 @@ Generate ONLY the reply text, nothing else.`;
               </div>
             </div>
           `;
+        } else if (field.type === 'asciiPreview') {
+          fieldHtml += `
+            <div class="prompt-field prompt-field-ascii-preview${wrapperClass}"${conditionalAttrs}>
+              <label class="prompt-field-label">${escapeHtml(field.label || 'Preview')}</label>
+              ${field.hint ? `<span class="prompt-field-hint">${escapeHtml(field.hint)}</span>` : ''}
+              <div class="ascii-preview-scroll">
+                <pre class="ascii-preview-pre" aria-live="polite"></pre>
+              </div>
+              <div class="ascii-preview-foot" aria-live="polite"></div>
+            </div>
+          `;
         } else if (field.type === 'comments') {
           // Comments list field - lazy loaded with cached data
           fieldHtml += `
@@ -15691,6 +15813,12 @@ Generate ONLY the reply text, nothing else.`;
       promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
         syncSelectState(selectEl);
       });
+
+      if (currentPromptAction?.directAction === 'imageToAscii') {
+        setupImageToAsciiPreview();
+      } else {
+        teardownImageToAsciiPreview();
+      }
 
       // Setup indicator delete button listeners
       setupIndicatorListeners();

@@ -218,8 +218,7 @@ export const quickCreateImageTasks = [
             {
               key: 'imageInput',
               type: 'image',
-              label: 'Source Image (Optional)',
-              hint: 'Upload an image or import the current Figma selection. If left empty, the current selection will be used.'
+              label: 'Source Image (Optional)'
             },
             {
               type: 'row',
@@ -274,6 +273,11 @@ export const quickCreateImageTasks = [
               label: 'Custom Charset',
               placeholder: 'Light to dark, e.g. .:-=+*#%@',
               showWhen: { field: 'charsetPreset', equals: 'custom' }
+            },
+            {
+              key: 'asciiPreview',
+              type: 'asciiPreview',
+              label: 'Preview'
             },
             {
               key: 'targetMode',
