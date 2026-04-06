@@ -63,7 +63,8 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'listAllComments',
   'listAllStickies',
   'browseStyles',
-  'googleFontPreview'
+  'googleFontPreview',
+  'splitTextLocal'
 ]);
 
 export const NON_AI_LOCAL_TASKS = new Set([

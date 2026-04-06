@@ -1411,6 +1411,18 @@ function splitTextWithIndices(
   return segments;
 }
 
+/** Line gap for split-text auto layout: max(0, lineHeight − fontSize), with AUTO line-height ≈ 1.2× font size. */
+function splitTextLeadingGapPx(textNode: TextNode): number {
+  const fs = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
+  let lh = fs * 1.2;
+  if (typeof textNode.lineHeight !== 'symbol') {
+    const lineHeight = textNode.lineHeight as LineHeight;
+    if (lineHeight.unit === 'PIXELS') lh = lineHeight.value;
+    else if (lineHeight.unit === 'PERCENT') lh = fs * (lineHeight.value / 100);
+  }
+  return Math.max(0, Math.round((lh - fs) * 100) / 100);
+}
+
 // Helper function to filter and shift style segments for a text range
 function getStyleSegmentsForRange(
   originalSegments: TextStyleSegment[],
@@ -18781,6 +18793,7 @@ figma.ui.onmessage = async (msg: {
                   const keepDelimiter = cmd.keepDelimiter ?? false;
                   const direction = cmd.direction ?? 'VERTICAL';
                   const spacing = cmd.spacing ?? 0;
+                  const wrapInAutoLayout = (cmd as { wrapInAutoLayout?: boolean }).wrapInAutoLayout === true;
 
                   // Load all fonts first
                   await loadAllFontsForTextNode(textNode);
@@ -18803,6 +18816,7 @@ figma.ui.onmessage = async (msg: {
                   const originalX = textNode.x;
                   const originalY = textNode.y;
                   const originalName = textNode.name;
+                  const itemSpacingForWrap = wrapInAutoLayout ? splitTextLeadingGapPx(textNode) : 0;
 
                   // Create new text nodes for each segment
                   const newNodes: TextNode[] = [];
@@ -18893,29 +18907,61 @@ figma.ui.onmessage = async (msg: {
                       newTextNode.name = originalName;
                     }
 
-                    // Position nodes in stack
-                    if (newNodes.length === 0) {
+                    // Position nodes in stack (auto-layout wrap uses frame itemSpacing only)
+                    if (!wrapInAutoLayout) {
+                      if (newNodes.length === 0) {
+                        newTextNode.x = originalX;
+                        newTextNode.y = originalY;
+                      } else {
+                        const prevNode = newNodes[newNodes.length - 1];
+                        if (direction === 'VERTICAL') {
+                          newTextNode.x = originalX;
+                          newTextNode.y = prevNode.y + prevNode.height + spacing;
+                        } else {
+                          newTextNode.x = prevNode.x + prevNode.width + spacing;
+                          newTextNode.y = originalY;
+                        }
+                      }
+                    } else {
                       newTextNode.x = originalX;
                       newTextNode.y = originalY;
-                    } else {
-                      const prevNode = newNodes[newNodes.length - 1];
-                      if (direction === 'VERTICAL') {
-                        newTextNode.x = originalX;
-                        newTextNode.y = prevNode.y + prevNode.height + spacing;
-                      } else {
-                        newTextNode.x = prevNode.x + prevNode.width + spacing;
-                        newTextNode.y = originalY;
-                      }
                     }
 
                     newNodes.push(newTextNode);
                   }
 
-                  // Remove original node
-                  textNode.remove();
+                  if (newNodes.length === 0) {
+                    success++;
+                    break;
+                  }
 
-                  // Select new nodes
-                  figma.currentPage.selection = newNodes;
+                  if (
+                    wrapInAutoLayout &&
+                    parent &&
+                    'insertChild' in parent &&
+                    'children' in parent
+                  ) {
+                    const insertIdx = (parent as ChildrenMixin).children.indexOf(textNode);
+                    const wrapper = figma.createFrame();
+                    wrapper.name = `${originalName} split`;
+                    wrapper.fills = [];
+                    parent.insertChild(insertIdx >= 0 ? insertIdx : 0, wrapper);
+                    wrapper.x = originalX;
+                    wrapper.y = originalY;
+                    for (const n of newNodes) {
+                      wrapper.appendChild(n);
+                    }
+                    wrapper.layoutMode = 'VERTICAL';
+                    wrapper.primaryAxisSizingMode = 'AUTO';
+                    wrapper.counterAxisSizingMode = 'AUTO';
+                    wrapper.itemSpacing = itemSpacingForWrap;
+                    textNode.remove();
+                    figma.currentPage.selection = [wrapper];
+                  } else {
+                    // Remove original node
+                    textNode.remove();
+                    figma.currentPage.selection = newNodes;
+                  }
 
                   success++;
                 } catch (error) {

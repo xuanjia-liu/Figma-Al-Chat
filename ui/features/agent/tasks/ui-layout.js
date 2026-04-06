@@ -399,6 +399,34 @@ export const uiLayoutTasks = [
           directAction: 'flattenStructure',
         },
 {
+          name: 'Split text',
+          desc: 'Split text into layers by line breaks or pattern',
+          help: 'Runs locally (no AI). Line mode skips empty lines. Auto layout wraps lines in a vertical frame with gap = line height − font size. Custom accepts a literal string or /regex/flags.',
+          requiredContext: ContextMode.TEXT_ONLY,
+          directAction: 'splitTextLocal',
+          fields: [
+            {
+              key: 'splitMode',
+              type: 'select',
+              label: 'Mode',
+              default: 'lines',
+              options: [
+                { value: 'lines', label: 'By line breaks (skip empty lines)' },
+                { value: 'autolayout', label: 'By line breaks → auto layout' },
+                { value: 'custom', label: 'Split by symbol or regex' },
+              ],
+            },
+            {
+              key: 'customPattern',
+              type: 'text',
+              label: 'Pattern',
+              placeholder: 'e.g. , or /\\s*,\\s*/g',
+              hint: 'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).',
+              showWhen: { field: 'splitMode', equals: 'custom' },
+            },
+          ],
+        },
+{
           name: 'Easy wrapper',
           desc: 'Wrap or convert frames, groups, and auto layout',
           help: 'Wrap each selected layer separately, or wrap selected sibling layers together per parent, using group, frame, or auto layout. Convert mode turns existing frames/groups into auto layout. Wrapped rows are available for auto layout where applicable. Works in No AI mode.',

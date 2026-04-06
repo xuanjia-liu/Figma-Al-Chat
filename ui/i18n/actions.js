@@ -1544,6 +1544,18 @@ const exactTranslations = {
     'Direct UI Creation': '直接 UI 作成',
     'Create grid': 'グリッド作成',
     'Flatten structure (clean up)': '構造をフラット化',
+    'Split text': 'テキストを分割',
+    'Split text into layers by line breaks or pattern':
+      '改行やパターンでテキストをレイヤーに分割',
+    'Runs locally (no AI). Line mode skips empty lines. Auto layout wraps lines in a vertical frame with gap = line height − font size. Custom accepts a literal string or /regex/flags.':
+      'AI なしでローカル実行。行モードは空行をスキップ。オートレイアウトは縦方向フレームに収め、間隔は行の高さ − フォントサイズ。カスタムはリテラルまたは /正規表現/フラグ。',
+    'By line breaks (skip empty lines)': '改行で分割（空行を省略）',
+    'By line breaks → auto layout': '改行で分割 → オートレイアウト',
+    'Split by symbol or regex': '記号または正規表現で分割',
+    'Pattern': 'パターン',
+    'e.g. , or /\\s*,\\s*/g': '例: , または /\\s*,\\s*/g',
+    'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).':
+      'リテラル、または /パターン/フラグ形式の正規表現（Agent の splitText と同じ）。',
     'Easy wrapper': '簡易ラッパー',
     'Wrap or convert frames, groups, and auto layout': 'フレーム、グループ、オートレイアウトをラップまたは変換',
     'Wrap each selected layer separately, or wrap selected sibling layers together per parent, using group, frame, or auto layout. Convert mode turns existing frames/groups into auto layout. Wrapped rows are available for auto layout where applicable. Works in No AI mode.':
@@ -1999,6 +2011,17 @@ const exactTranslations = {
     'Direct UI Creation': '直接创建 UI',
     'Create grid': '创建网格',
     'Flatten structure (clean up)': '扁平化结构',
+    'Split text': '分割文本',
+    'Split text into layers by line breaks or pattern': '按换行或模式将文本拆分为多个图层',
+    'Runs locally (no AI). Line mode skips empty lines. Auto layout wraps lines in a vertical frame with gap = line height − font size. Custom accepts a literal string or /regex/flags.':
+      '本地运行（无 AI）。按行模式会跳过空行。自动布局模式将各行放入纵向画框，间距为行高减字号。自定义模式支持普通字符串或 /正则/ 标志。',
+    'By line breaks (skip empty lines)': '按换行拆分（忽略空行）',
+    'By line breaks → auto layout': '按换行拆分 → 自动布局',
+    'Split by symbol or regex': '按符号或正则拆分',
+    'Pattern': '模式',
+    'e.g. , or /\\s*,\\s*/g': '例如 , 或 /\\s*,\\s*/g',
+    'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).':
+      '直接输入字符，或使用 /pattern/flags 正则（与 Agent 的 splitText 相同）。',
     'Easy wrapper': '快捷封装',
     'Wrap or convert frames, groups, and auto layout': '封装或转换框架、分组和自动布局',
     'Wrap each selected layer separately, or wrap selected sibling layers together per parent, using group, frame, or auto layout. Convert mode turns existing frames/groups into auto layout. Wrapped rows are available for auto layout where applicable. Works in No AI mode.':

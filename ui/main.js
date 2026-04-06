@@ -22354,6 +22354,65 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runSplitTextAction(values, actionMeta) {
+      const result = await requestSelectionData(false, false, 'textOnly');
+      const textNodes = (() => {
+        const flat = Array.isArray(result?.flattened) ? result.flattened : [];
+        if (flat.length > 0) {
+          return flat.filter((n) => n?.type === 'TEXT');
+        }
+        const out = [];
+        const walk = (node) => {
+          if (!node) return;
+          if (node.type === 'TEXT') out.push(node);
+          if (Array.isArray(node.children)) node.children.forEach(walk);
+        };
+        (result?.data || []).forEach(walk);
+        return out;
+      })();
+      if (textNodes.length === 0) {
+        showToast('Please select at least one text layer.', 'error');
+        return;
+      }
+      const splitMode = values.splitMode || 'lines';
+      if (splitMode === 'custom') {
+        const pat = String(values.customPattern ?? '').trim();
+        if (!pat) {
+          showToast('Enter a pattern or regex to split by.', 'error');
+          return;
+        }
+      }
+      const delimiter = splitMode === 'custom'
+        ? String(values.customPattern ?? '').trim()
+        : '/\\r?\\n/g';
+      const wrapInAutoLayout = splitMode === 'autolayout';
+      const commands = textNodes.map((node) => ({
+        action: 'splitText',
+        nodeId: node.id,
+        delimiter,
+        keepDelimiter: false,
+        direction: 'VERTICAL',
+        spacing: 0,
+        ...(wrapInAutoLayout ? { wrapInAutoLayout: true } : {}),
+      }));
+      try {
+        const execResult = await executeCommands(commands);
+        const success = execResult?.success ?? 0;
+        const failed = execResult?.failed ?? 0;
+        if (success > 0) {
+          showToast(
+            `Split text on ${success} layer${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`,
+            failed > 0 ? 'warning' : 'success'
+          );
+        } else if (failed > 0) {
+          showToast(`Could not split ${failed} layer${failed === 1 ? '' : 's'}.`, 'error');
+        }
+      } catch (err) {
+        console.error('Split text action failed', err);
+        showToast(err?.message || `Failed to run ${actionMeta?.name || 'Split text'}`, 'error');
+      }
+    }
+
     async function runDuplicateWithInstructionsAction(values, actionMeta) {
       try {
         const noAiMode = isAiOffModeEnabled();
@@ -22770,6 +22829,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'imageToAscii':
           await runImageToAsciiAction(values, actionMeta);
+          break;
+        case 'splitTextLocal':
+          await runSplitTextAction(values, actionMeta);
           break;
         default:
           showToast('Unknown action', 'error');
