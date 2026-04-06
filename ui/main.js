@@ -23682,8 +23682,9 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         if (action.directAction) {
           // Only close drawer if it's not a multi-step action like browseIconSet
           const keepDrawerOpenForCreateIcon = action.directAction === 'createIcon' && values.showResultsInDrawer !== false;
+          const keepDrawerOpenForImageToAscii = action.directAction === 'imageToAscii';
           const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForRealtimeAction) {
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForRealtimeAction) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -23701,7 +23702,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForRealtimeAction) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForRealtimeAction) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             promptDrawerSubmit.textContent = 'Run Action';
