@@ -5177,7 +5177,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     const ASCII_CHARSET_PRESETS = {
       standard: ' .:-=+*#%@',
-      blocks: ' ░▒▓█',
+      blocks: '░▒▓█',
       minimal: ' .oO#',
       dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };
@@ -5188,6 +5188,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     const ASCII_CELL_ASPECT_MONOSPACE = 0.55;
     /** Block shades (░▒▓█) map to ~square terminal cells; using 0.55 undersamples rows → squat output. */
     const ASCII_CELL_ASPECT_BLOCK_ELEMENTS = 1;
+    let asciiBrightnessOrderCache = new Map();
 
     function clampAsciiWidth(value) {
       const parsed = parseInt(String(value ?? ''), 10);
@@ -5201,6 +5202,89 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return Math.max(0, Math.min(1, parsed / 100));
     }
 
+    function sortAsciiCharsetByBrightness(charset) {
+      const chars = [...String(charset || '')];
+      const uniqueChars = [];
+      const seen = new Set();
+      chars.forEach((ch) => {
+        if (!seen.has(ch)) {
+          seen.add(ch);
+          uniqueChars.push(ch);
+        }
+      });
+
+      if (uniqueChars.length <= 1) {
+        return uniqueChars.join('');
+      }
+
+      const cacheKey = uniqueChars.join('');
+      if (asciiBrightnessOrderCache.has(cacheKey)) {
+        return asciiBrightnessOrderCache.get(cacheKey);
+      }
+
+      const fontSize = 24;
+      const pad = 6;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        return uniqueChars.join('');
+      }
+
+      ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+      ctx.textBaseline = 'top';
+      const metrics = uniqueChars.map((ch) => {
+        const measure = ctx.measureText(ch || ' ');
+        const width = Math.max(
+          1,
+          Math.ceil(
+            Math.max(
+              measure.width || 0,
+              measure.actualBoundingBoxLeft + measure.actualBoundingBoxRight || 0,
+              fontSize * 0.7
+            )
+          )
+        );
+        const height = Math.max(
+          1,
+          Math.ceil(
+            Math.max(
+              measure.actualBoundingBoxAscent + measure.actualBoundingBoxDescent || 0,
+              fontSize * 1.2
+            )
+          )
+        );
+        canvas.width = width + pad * 2;
+        canvas.height = height + pad * 2;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${fontSize}px ${ASCII_TEXT_FONT_STACK}`;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#000000';
+        ctx.fillText(ch, pad, pad);
+
+        const image = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let total = 0;
+        for (let i = 0; i < image.length; i += 4) {
+          total += image[i];
+        }
+
+        return {
+          ch,
+          brightness: total / (canvas.width * canvas.height)
+        };
+      });
+
+      // Our mapper expects light → dark ordering.
+      const ordered = metrics
+        .sort((a, b) => b.brightness - a.brightness)
+        .map((item) => item.ch)
+        .join('');
+
+      asciiBrightnessOrderCache.set(cacheKey, ordered);
+      return ordered;
+    }
+
     function resolveAsciiCharset(values) {
       const preset = String(values.charsetPreset || 'standard').toLowerCase();
       if (preset === 'custom') {
@@ -5208,9 +5292,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         if ([...custom].length <= 1) {
           throw new Error('Custom charset must contain at least 2 characters.');
         }
-        return custom;
+        return sortAsciiCharsetByBrightness(custom);
       }
-      return ASCII_CHARSET_PRESETS[preset] || ASCII_CHARSET_PRESETS.standard;
+      return sortAsciiCharsetByBrightness(ASCII_CHARSET_PRESETS[preset] || ASCII_CHARSET_PRESETS.standard);
     }
 
     function resolveAsciiCharAspect(values) {

@@ -994,6 +994,13 @@ async function loadAsciiMonospaceFont(): Promise<FontName> {
   return smartLoadFont({ family: 'Inter', style: 'Regular' });
 }
 
+function normalizeAsciiTextForFigma(value: string): string {
+  // Preserve empty ASCII cells in Figma text layout. Plain trailing spaces can
+  // render inconsistently at line ends, which makes the grid look ragged even
+  // when the font itself is monospaced.
+  return String(value || '').replace(/ /g, '\u00A0');
+}
+
 async function getAsciiPlacement(
   sourceNodeId: string | null | undefined,
   width: number,
@@ -6285,7 +6292,7 @@ figma.ui.onmessage = async (msg: {
           textNode.fontName = font;
           textNode.fontSize = 8;
           textNode.lineHeight = { unit: 'PERCENT', value: 110 };
-          textNode.characters = String(item.asciiText || item.text || '');
+          textNode.characters = normalizeAsciiTextForFigma(String(item.asciiText || item.text || ''));
           textNode.name = `ASCII Text - ${String(item.name || 'Result')}`;
 
           const placement = await getAsciiPlacement(item.sourceNodeId, textNode.width, textNode.height, index);
