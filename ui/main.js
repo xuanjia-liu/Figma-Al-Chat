@@ -11273,6 +11273,7 @@ Generate ONLY the reply text, nothing else.`;
       if (slot.id) pendingImageDataUrlConversions.delete(slot.id);
       delete slot.dataset.imageData;
       delete slot.dataset.imageConversionToken;
+      slot.classList.remove('image-load-error');
     }
 
     function setSlotPreviewAndDeferDataUrl(slot, blob) {
@@ -11281,6 +11282,7 @@ Generate ONLY the reply text, nothing else.`;
       const objectUrl = URL.createObjectURL(blob);
       const conversionToken = `${Date.now()}-${Math.random()}`;
 
+      slot.classList.remove('image-load-error');
       if (preview) preview.src = objectUrl;
       slot.classList.add('has-image');
       slot.dataset.imageConversionToken = conversionToken;
@@ -16833,6 +16835,15 @@ Generate ONLY the reply text, nothing else.`;
         const preview = uploadEl.querySelector('.prompt-image-preview');
         const removeBtn = uploadEl.querySelector('.prompt-image-remove');
 
+        if (preview) {
+          preview.addEventListener('load', () => {
+            uploadEl.classList.remove('image-load-error');
+          });
+          preview.addEventListener('error', () => {
+            uploadEl.classList.add('image-load-error');
+          });
+        }
+
         uploadEl.addEventListener('click', (e) => {
           if (e.target.closest('.prompt-image-remove')) return;
           input.click();
@@ -16855,6 +16866,7 @@ Generate ONLY the reply text, nothing else.`;
 
           const reader = new FileReader();
           reader.onload = (e) => {
+            uploadEl.classList.remove('image-load-error');
             preview.src = e.target.result;
             uploadEl.classList.add('has-image');
             // Store base64 data on the element for retrieval
@@ -16869,6 +16881,7 @@ Generate ONLY the reply text, nothing else.`;
           input.value = '';
           preview.src = '';
           uploadEl.classList.remove('has-image');
+          uploadEl.classList.remove('image-load-error');
           delete uploadEl.dataset.imageData;
           updatePromptDrawerImageChips();
         });
@@ -17097,6 +17110,15 @@ Generate ONLY the reply text, nothing else.`;
             </svg>
             <span>${tu('actions.image.slot', { number: slotNumber })}</span>
           </div>
+          <div class="prompt-image-slot-error" aria-live="polite">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Z"/>
+              <path d="m8.5 15.5 2.5-2.5 1.8 1.8 2.2-2.2 2.5 2.5"/>
+              <circle cx="9" cy="9" r="1.2"/>
+              <path d="M12 18h0.01"/>
+            </svg>
+            <span>Image not found</span>
+          </div>
           <button class="prompt-image-slot-remove" title="${escapeHtml(tu('actions.image.remove'))}" type="button">
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -17152,6 +17174,7 @@ Generate ONLY the reply text, nothing else.`;
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onload = (e) => {
+          slot.classList.remove('image-load-error');
           preview.src = e.target.result;
           slot.classList.add('has-image');
           // Store base64 data on the slot element
@@ -17185,6 +17208,15 @@ Generate ONLY the reply text, nothing else.`;
 
       // Update remove button visibility
       updateRemoveButtonVisibility(grid);
+
+      if (preview) {
+        preview.addEventListener('load', () => {
+          slot.classList.remove('image-load-error');
+        });
+        preview.addEventListener('error', () => {
+          slot.classList.add('image-load-error');
+        });
+      }
 
       // Click to upload
       slot.addEventListener('click', (e) => {
@@ -27382,9 +27414,8 @@ Example structure:
         }
       });
 
-      chatMessages.querySelectorAll('.message-preview-body img').forEach((img) => {
-        if (img.dataset.removed === 'true') return;
-        img.onclick = () => openImagePreview(img.src);
+      chatMessages.querySelectorAll('.message .message-content img').forEach((img) => {
+        wireChatMessageContentImage(img);
       });
     }
 
@@ -27941,6 +27972,7 @@ Example structure:
           while (tempDiv.firstChild) {
             contentDiv.appendChild(tempDiv.firstChild);
           }
+          contentDiv.querySelectorAll('img').forEach(wireChatMessageContentImage);
         }
 
         const contentGroup = document.createElement('div');
@@ -30914,6 +30946,80 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       }
     }
 
+    const CHAT_IMAGE_MISSING_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5Z"/><path d="m8.5 15.5 2.5-2.5 1.8 1.8 2.2-2.2 2.5 2.5"/><circle cx="9" cy="9" r="1.2"/><path d="M12 18h0.01"/></svg>';
+
+    function insertChatImageMissingFallback(img, subtitle) {
+      if (!img) return;
+      if (img.nextElementSibling && img.nextElementSibling.classList.contains('message-preview-image-missing')) return;
+      img.classList.add('message-preview-img--missing');
+      img.style.display = 'none';
+      const fb = document.createElement('div');
+      fb.className = 'message-preview-image-missing';
+      fb.setAttribute('role', 'img');
+      fb.setAttribute('aria-label', 'Image not found');
+      const sub = subtitle ? `<span class="message-preview-image-missing-sub">${escapeHtml(subtitle)}</span>` : '';
+      fb.innerHTML = `${CHAT_IMAGE_MISSING_SVG}<span class="message-preview-image-missing-title">Image not found</span>${sub}`;
+      img.insertAdjacentElement('afterend', fb);
+    }
+
+    function wireChatMessageContentImage(img) {
+      if (!img || img.dataset.chatImageWired === 'true') return;
+      img.dataset.chatImageWired = 'true';
+
+      const openIfOk = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        if (img.classList.contains('message-preview-img--missing')) return;
+        openImagePreview(img.src);
+      };
+
+      img.addEventListener('click', openIfOk);
+
+      if (img.dataset.removed === 'true') {
+        insertChatImageMissingFallback(img, img.getAttribute('alt') || '');
+        return;
+      }
+
+      img.style.opacity = '0';
+      img.style.transition = 'opacity 0.15s ease';
+
+      const onLoad = () => {
+        img.style.opacity = '1';
+      };
+
+      const onError = () => {
+        insertChatImageMissingFallback(img, img.getAttribute('alt') || '');
+      };
+
+      img.addEventListener('load', onLoad);
+      img.addEventListener('error', onError);
+
+      if (img.complete) {
+        if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+          onError();
+        } else {
+          onLoad();
+        }
+      }
+    }
+
+    function wireStagingAttachmentImage(stagingItem, img) {
+      if (!img) return;
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
+        let fb = stagingItem.querySelector('.attachment-staging-image-missing');
+        if (!fb) {
+          fb = document.createElement('div');
+          fb.className = 'attachment-staging-image-missing';
+          fb.setAttribute('aria-label', 'Image not found');
+          fb.innerHTML = `${CHAT_IMAGE_MISSING_SVG}<span>Image not found</span>`;
+          stagingItem.insertBefore(fb, img);
+        }
+      });
+    }
+
     // Create preview element
     function createPreviewElement(type, data) {
       const previewDiv = document.createElement('div');
@@ -30930,8 +31036,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
           const url = item.src || URL.createObjectURL(new Blob([new Uint8Array(item.data)], { type: 'image/png' }));
           const img = document.createElement('img');
           img.src = url;
-          img.alt = item.name;
-          img.addEventListener('click', () => openImagePreview(url));
+          img.alt = item.name || '';
+          wireChatMessageContentImage(img);
           bodyDiv.appendChild(img);
         });
 
@@ -30971,8 +31077,8 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
           const url = URL.createObjectURL(blob);
           const img = document.createElement('img');
           img.src = url;
-          img.alt = item.name;
-          img.addEventListener('click', () => openImagePreview(url));
+          img.alt = item.name || '';
+          wireChatMessageContentImage(img);
           bodyDiv.appendChild(img);
         });
       } else if (type === 'PNG_DATA_URLS') {
@@ -30980,7 +31086,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
           const img = document.createElement('img');
           img.src = url;
           img.alt = `Selection capture ${index + 1}`;
-          img.addEventListener('click', () => openImagePreview(url));
+          wireChatMessageContentImage(img);
           bodyDiv.appendChild(img);
         });
       } else {
@@ -33107,14 +33213,20 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
         if (item.kind === 'image') {
           const blob = new Blob([new Uint8Array(item.data)], { type: 'image/png' });
           const url = URL.createObjectURL(blob);
-          stagingItem.innerHTML = `
-            <img src="${url}" alt="${item.name}" />
-            <button class="attachment-staging-remove" data-attachment-id="${item.id}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = item.name || '';
+          wireStagingAttachmentImage(stagingItem, img);
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'attachment-staging-remove';
+          removeBtn.dataset.attachmentId = item.id;
+          removeBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           `;
+          stagingItem.appendChild(img);
+          stagingItem.appendChild(removeBtn);
         } else {
           stagingItem.classList.add('code', 'clickable');
           stagingItem.dataset.attachmentId = item.id;
