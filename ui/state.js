@@ -16,6 +16,8 @@ export const INITIAL_BOT_MESSAGE_HTML = `
 export const DEFAULT_GEMINI_CHAT_MODEL = 'gemini-3-flash-preview';
 export const DEFAULT_GEMINI_TITLE_MODEL = 'gemini-3.1-flash-lite-preview';
 export const DEFAULT_OPENAI_CHAT_MODEL = 'gpt-5';
+export const DEFAULT_OLLAMA_CHAT_MODEL = 'llama3.2';
+export const DEFAULT_OLLAMA_API_BASE = 'http://localhost:11434/v1';
 
 export const DEFAULT_GEMINI_MODELS = [
   { id: DEFAULT_GEMINI_TITLE_MODEL, displayName: 'Gemini 3.1 Flash Lite Preview' },
@@ -32,6 +34,10 @@ export const DEFAULT_IMAGE_MODELS = [
 export const DEFAULT_OPENAI_MODELS = [
   { id: 'gpt-5-nano', displayName: 'GPT-5 Nano' },
   { id: DEFAULT_OPENAI_CHAT_MODEL, displayName: 'GPT-5' }
+];
+
+export const DEFAULT_OLLAMA_MODELS = [
+  { id: DEFAULT_OLLAMA_CHAT_MODEL, displayName: 'Llama 3.2' }
 ];
 
 export const DEFAULT_ANTHROPIC_MODELS = [
@@ -91,7 +97,7 @@ Plugin capabilities:
 - General design/UX/Figma Q&A; explain principles and best practices
 - Analyze exported selection data (CSS/structure/JSON) and staged/pasted images or PNGs
 - Provide design feedback, color/typography/layout guidance, token suggestions
-- Works with Gemini, OpenAI, and Anthropic models; supports model selection
+- Works with Gemini, OpenAI, Ollama (local), and Anthropic models; supports model selection
 
 **Agent Mode (Figma actions):**
 - Create/edit shapes, frames, sections, pages, text, auto-layout containers, and button components

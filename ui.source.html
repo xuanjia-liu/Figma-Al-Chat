@@ -379,6 +379,7 @@
                 <select class="setting-input" id="providerSelect">
                   <option value="gemini" data-i18n="settings.ai.providerOption.gemini">Google Gemini</option>
                   <option value="openai" data-i18n="settings.ai.providerOption.openai">OpenAI</option>
+                  <option value="ollama" data-i18n="settings.ai.providerOption.ollama">Ollama (local)</option>
                   <option value="anthropic" data-i18n="settings.ai.providerOption.anthropic">Anthropic Claude</option>
                 </select>
                 <div class="setting-hint" data-i18n="settings.ai.providerHint">Choose which assistant provider to use when AI is enabled.</div>
@@ -449,6 +450,64 @@
                   <select class="setting-input hidden" id="openaiModelSelect">
                     <option value="gpt-5-nano">GPT-5 Nano</option>
                     <option value="gpt-5">GPT-5</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="provider-settings hidden" id="ollamaSettings">
+                <div class="setting-item">
+                  <label class="setting-label" for="ollamaBaseUrlInput" data-i18n="settings.ollama.baseUrlLabel">Ollama API base URL</label>
+                  <input type="text" class="setting-input" id="ollamaBaseUrlInput" autocomplete="off"
+                    placeholder="http://localhost:11434/v1" data-i18n-placeholder="settings.ollama.baseUrlPlaceholder" />
+                  <div class="setting-hint" data-i18n="settings.ollama.baseUrlHint">
+                    Use http://localhost:11434/v1 (not 127.0.0.1; Figma allowlists localhost). A trailing /v1 is added if you paste the host only. Local APIs may need OLLAMA_ORIGINS. Only hosts in the plugin manifest work from Figma.
+                  </div>
+                  <details class="setting-hint" style="margin-top:4px;font-size:11px;opacity:.7;cursor:pointer">
+                    <summary>If “Test” fails, set OLLAMA_ORIGINS</summary>
+                    <div style="padding:4px 0 0 8px;line-height:1.5">
+                      macOS: run <code>launchctl setenv OLLAMA_ORIGINS "*"</code> in Terminal, then restart Ollama.<br/>
+                      Linux: add <code>Environment="OLLAMA_ORIGINS=*"</code> to the systemd service, then <code>systemctl daemon-reload &amp;&amp; systemctl restart ollama</code>.<br/>
+                      Docker: pass <code>-e OLLAMA_ORIGINS=*</code> to <code>docker run</code>.
+                    </div>
+                  </details>
+                </div>
+                <div class="setting-item provider-api-setting">
+                  <label class="setting-label" data-i18n="settings.ollama.apiKeyLabel">API key (optional)</label>
+                  <div class="setting-input-row">
+                    <input type="password" class="setting-input" id="ollamaApiKeyInput"
+                      placeholder="Leave empty for local Ollama" data-i18n-placeholder="settings.ollama.apiPlaceholder" />
+                    <button class="setting-btn" id="btnTestOllama" data-test-provider="ollama" data-i18n="settings.test">Test</button>
+                  </div>
+                  <div class="setting-hint" data-i18n="settings.ollama.apiHint">
+                    Only needed if your Ollama server requires Bearer authentication.
+                  </div>
+                </div>
+                <div class="setting-item">
+                  <label class="audit-toggle-switch ollama-assistant-menu-toggle">
+                    <input type="checkbox" id="ollamaShowLocalModelsToggle" checked />
+                    <span class="toggle-label" data-i18n="settings.ollama.showLocalModelsToggle">Show local models in assistant menu</span>
+                  </label>
+                  <div class="setting-hint" data-i18n="settings.ollama.showLocalModelsHint">
+                    When on, Ollama (including Gemma 4 26B) stays in the header model picker while you use other providers. Turn off to remove the Ollama group unless an API key is set, and hide Gemma 4 26B from that menu.
+                  </div>
+                </div>
+                <div class="setting-item provider-model-setting">
+                  <label class="setting-label" data-i18n="settings.selectModelsLabel">Select Models</label>
+                  <div class="model-checklist" id="ollamaModelChecklist">
+                  </div>
+                  <div class="model-actions">
+                    <button class="model-refresh-btn" data-provider="ollama" title="Refresh model list" data-i18n-title="settings.models.refreshTitle">
+                      <span>↻</span> <span data-i18n="settings.models.refresh">Refresh</span>
+                    </button>
+                    <button class="model-show-all-btn" data-provider="ollama" title="Show all models" data-i18n-title="settings.models.showAllTitle">
+                      <span data-i18n="settings.models.showAll">Show All</span>
+                    </button>
+                    <span class="check-all-toggle" data-provider="ollama" title="Check/Uncheck all" data-i18n-title="settings.models.checkAllTitle">
+                      <span class="check-all-text" data-i18n="settings.models.checkAll">Check All</span>
+                    </span>
+                  </div>
+                  <select class="setting-input hidden" id="ollamaModelSelect">
+                    <option value="llama3.2">Llama 3.2</option>
                   </select>
                 </div>
               </div>

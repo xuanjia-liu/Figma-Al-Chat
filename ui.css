@@ -7230,6 +7230,29 @@
       margin-left: var(--space-sm);
     }
 
+    .model-local-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      border: 1px solid var(--border-default, rgba(128, 128, 128, 0.35));
+      border-radius: 4px;
+      padding: 2px 6px;
+      flex-shrink: 0;
+    }
+
+    .model-select-option.selected .model-local-badge {
+      color: inherit;
+      border-color: rgba(255, 255, 255, 0.45);
+      opacity: 0.95;
+    }
+
+    .ollama-assistant-menu-toggle {
+      align-items: flex-start;
+      gap: var(--space-sm);
+    }
+
     .model-select-provider-header {
       padding: var(--space-xs) var(--space-md);
       font-size: var(--text-xs);

@@ -9,6 +9,12 @@ const SETTINGS_KEYS = {
   GEMINI_MODEL: 'figma-gemini-model',
   OPENAI_API_KEY: 'figma-openai-api-key',
   OPENAI_MODEL: 'figma-openai-model',
+  OPENAI_BASE_URL: 'figma-openai-base-url',
+  OLLAMA_BASE_URL: 'figma-ollama-base-url',
+  OLLAMA_MODEL: 'figma-ollama-model',
+  OLLAMA_API_KEY: 'figma-ollama-api-key',
+  /** When true, Ollama appears in assistant model menu without an API key; Gemma 4 26B is listed. */
+  OLLAMA_SHOW_LOCAL_MODELS_IN_ASSISTANT_MENU: 'figma-ollama-show-local-assistant-menu',
   ANTHROPIC_API_KEY: 'figma-anthropic-api-key',
   ANTHROPIC_MODEL: 'figma-anthropic-model',
   CSS_FORMAT: 'figma-css-format',
@@ -5061,6 +5067,16 @@ function collectTopLevelInstanceNodesInSubtree(
   return instances;
 }
 
+/** Only http://localhost:11434 and Docker Desktop host—must match manifest allowedDomains. */
+function isAllowedOllamaProxyUrl(rawUrl: string): boolean {
+  const s = String(rawUrl || '').trim();
+  const m = s.match(/^http:\/\/([^/:?#]+):(\d+)(?:\/|[?#]|$)/i);
+  if (!m) return false;
+  const host = m[1].toLowerCase();
+  if (host !== 'localhost' && host !== 'host.docker.internal') return false;
+  return Number(m[2]) === 11434;
+}
+
 figma.ui.onmessage = async (msg: {
   type: string,
   cssFormat?: string,
@@ -5125,6 +5141,23 @@ figma.ui.onmessage = async (msg: {
         const geminiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.GEMINI_MODEL) || 'gemini-3-flash-preview';
         const openaiApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_API_KEY) || '';
         const openaiModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_MODEL) || 'gpt-5';
+        const legacyOpenaiBaseUrl = await figma.clientStorage.getAsync(SETTINGS_KEYS.OPENAI_BASE_URL) || 'https://api.openai.com/v1';
+        const DEFAULT_OFFICIAL_OPENAI_BASE = 'https://api.openai.com/v1';
+        const DEFAULT_OLLAMA_BASE = 'http://localhost:11434/v1';
+        const storedOllamaBaseUrl = await figma.clientStorage.getAsync(SETTINGS_KEYS.OLLAMA_BASE_URL);
+        let ollamaBaseUrl = (typeof storedOllamaBaseUrl === 'string' && storedOllamaBaseUrl.trim())
+          ? storedOllamaBaseUrl.trim()
+          : '';
+        if (!ollamaBaseUrl) {
+          const leg = typeof legacyOpenaiBaseUrl === 'string' ? legacyOpenaiBaseUrl.trim() : '';
+          ollamaBaseUrl = (leg && leg !== DEFAULT_OFFICIAL_OPENAI_BASE && !leg.includes('api.openai.com'))
+            ? leg
+            : DEFAULT_OLLAMA_BASE;
+        }
+        const ollamaModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.OLLAMA_MODEL) || 'llama3.2';
+        const ollamaApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.OLLAMA_API_KEY) || '';
+        const ollamaShowLocalRaw = await figma.clientStorage.getAsync(SETTINGS_KEYS.OLLAMA_SHOW_LOCAL_MODELS_IN_ASSISTANT_MENU);
+        const ollamaShowLocalModelsInAssistantMenu = ollamaShowLocalRaw !== false;
         const anthropicApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY) || '';
         const anthropicModel = await figma.clientStorage.getAsync(SETTINGS_KEYS.ANTHROPIC_MODEL) || 'claude-sonnet-4-20250514';
         const cssFormat = await figma.clientStorage.getAsync(SETTINGS_KEYS.CSS_FORMAT) || 'classes';
@@ -5160,14 +5193,14 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, hiddenPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, hiddenPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', ollamaBaseUrl: 'http://localhost:11434/v1', ollamaModel: 'llama3.2', ollamaApiKey: '', ollamaShowLocalModelsInAssistantMenu: true, anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
         });
       }
       break;
@@ -5354,7 +5387,7 @@ figma.ui.onmessage = async (msg: {
           return;
         }
 
-        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode } = msg.settings;
+        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode } = msg.settings;
 
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PROVIDER, provider || 'gemini');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.AI_OFF_MODE, aiOffMode === true);
@@ -5362,6 +5395,11 @@ figma.ui.onmessage = async (msg: {
         await figma.clientStorage.setAsync(SETTINGS_KEYS.GEMINI_MODEL, geminiModel || 'gemini-3-flash-preview');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_API_KEY, openaiApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_MODEL, openaiModel || 'gpt-5');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_BASE_URL, 'https://api.openai.com/v1');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.OLLAMA_BASE_URL, (typeof ollamaBaseUrl === 'string' && ollamaBaseUrl.trim()) ? ollamaBaseUrl.trim() : 'http://localhost:11434/v1');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.OLLAMA_MODEL, ollamaModel || 'llama3.2');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.OLLAMA_API_KEY, ollamaApiKey || '');
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.OLLAMA_SHOW_LOCAL_MODELS_IN_ASSISTANT_MENU, ollamaShowLocalModelsInAssistantMenu !== false);
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_API_KEY, anthropicApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_MODEL, anthropicModel || 'claude-sonnet-4-20250514');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.CSS_FORMAT, cssFormat || 'classes');
@@ -5441,6 +5479,54 @@ figma.ui.onmessage = async (msg: {
         figma.ui.postMessage({ type: 'google-fonts-catalog-result', families });
       } catch (error: any) {
         figma.ui.postMessage({ type: 'google-fonts-catalog-result', error: error?.message || 'Unknown error' });
+      }
+      break;
+    }
+
+    case 'ollama-proxy-fetch': {
+      const requestMsg = msg as any;
+      const requestId = typeof requestMsg.requestId === 'string' ? requestMsg.requestId : '';
+      const url = typeof requestMsg.url === 'string' ? requestMsg.url : '';
+      const rawMethod = typeof requestMsg.method === 'string' ? requestMsg.method : 'GET';
+      const method = rawMethod.toUpperCase();
+      const headers =
+        requestMsg.headers && typeof requestMsg.headers === 'object' && !Array.isArray(requestMsg.headers)
+          ? (requestMsg.headers as Record<string, string>)
+          : undefined;
+      const body = typeof requestMsg.body === 'string' ? requestMsg.body : undefined;
+
+      const reply = (payload: Record<string, unknown>) => {
+        figma.ui.postMessage({ type: 'ollama-proxy-fetch-result', requestId, ...payload });
+      };
+
+      if (!requestId) break;
+
+      if (!isAllowedOllamaProxyUrl(url)) {
+        reply({
+          ok: false,
+          error: 'Disallowed Ollama URL (allowed: http://localhost:11434/… or http://host.docker.internal:11434/…)',
+        });
+        break;
+      }
+
+      const safeMethod = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ? method : 'GET';
+      try {
+        const proxyHeaders: Record<string, string> = headers ? { ...headers } : {};
+        proxyHeaders['Origin'] = 'http://localhost';
+        const init: {
+          method: string;
+          headers: Record<string, string>;
+          body?: string;
+        } = { method: safeMethod, headers: proxyHeaders };
+        if (safeMethod !== 'GET' && safeMethod !== 'HEAD' && body !== undefined) {
+          init.body = body;
+        }
+        const resp = await fetch(url, init as any);
+        const text = await resp.text();
+        reply({ ok: resp.ok, status: resp.status, body: text });
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        reply({ ok: false, error: err?.message || 'Ollama fetch failed' });
       }
       break;
     }
@@ -5581,6 +5667,9 @@ figma.ui.onmessage = async (msg: {
             break;
           case 'openai':
             await figma.clientStorage.setAsync(SETTINGS_KEYS.OPENAI_MODEL, modelId);
+            break;
+          case 'ollama':
+            await figma.clientStorage.setAsync(SETTINGS_KEYS.OLLAMA_MODEL, modelId);
             break;
           case 'anthropic':
             await figma.clientStorage.setAsync(SETTINGS_KEYS.ANTHROPIC_MODEL, modelId);

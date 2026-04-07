@@ -8,6 +8,9 @@ import {
   DEFAULT_GEMINI_MODELS,
   DEFAULT_GEMINI_TITLE_MODEL,
   DEFAULT_IMAGE_MODELS,
+  DEFAULT_OLLAMA_API_BASE,
+  DEFAULT_OLLAMA_CHAT_MODEL,
+  DEFAULT_OLLAMA_MODELS,
   DEFAULT_OPENAI_CHAT_MODEL,
   DEFAULT_OPENAI_MODELS,
   FIGMA_MAX_IMAGE_DIMENSION,
@@ -68,6 +71,10 @@ import {
 } from './i18n/actions.js';
 import { optimize as optimizeSvg } from 'svgo/browser';
 
+    /** Ollama model ids that show a "Local" badge in the assistant model menu (extend as needed). */
+    const OLLAMA_LOCAL_BADGE_MODEL_IDS = new Set(['gemma4:26b']);
+    const OLLAMA_GEMMA4_MODEL_ID = 'gemma4:26b';
+
     const quickActionNoSelectionBadgeIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 9.42 5.1a1 1 0 0 0 .53.53L13.25 7 9.95 8.37a1 1 0 0 0-.58.58L8 12.25 6.63 8.95a1 1 0 0 0-.58-.58L2.75 7l3.3-1.37a1 1 0 0 0 .58-.58L8 1.75Z"/></svg>';
     const quickActionImmediateBadgeIcon = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.25 3.35c0-.62.68-1 1.2-.67l5.77 3.65a.79.79 0 0 1 0 1.34L6.45 11.32a.8.8 0 0 1-1.2-.67V3.35Z"/></svg>';
 
@@ -111,12 +118,18 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let geminiModel = DEFAULT_GEMINI_CHAT_MODEL;
     let openaiApiKey = '';
     let openaiModel = DEFAULT_OPENAI_CHAT_MODEL;
+    let ollamaBaseUrl = DEFAULT_OLLAMA_API_BASE;
+    let ollamaApiKey = '';
+    let ollamaModel = DEFAULT_OLLAMA_CHAT_MODEL;
+    /** When true, Ollama is listed in the header assistant model menu without an API key; Gemma 4 26B appears when enabled below. */
+    let ollamaShowLocalModelsInAssistantMenu = true;
     let anthropicApiKey = '';
     let anthropicModel = 'claude-3-5-sonnet-20241022';
     let currentSettingsLocale = DEFAULT_SETTINGS_LOCALE;
     let enabledModels = {
       gemini: [],
       openai: [],
+      ollama: [],
       anthropic: []
     };
     // Store model metadata (displayName, description, etc.) by provider and model ID
@@ -1096,8 +1109,167 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       switch (selectedProvider) {
         case 'gemini': return geminiApiKey;
         case 'openai': return openaiApiKey;
+        case 'ollama': return ollamaApiKey;
         case 'anthropic': return anthropicApiKey;
         default: return '';
+      }
+    }
+
+    const DEFAULT_OPENAI_API_BASE = 'https://api.openai.com/v1';
+
+    function normalizeOpenAICompatBaseUrl(raw, defaultBase) {
+      const fallback = defaultBase || DEFAULT_OPENAI_API_BASE;
+      let s = String(raw || '').trim();
+      if (!s) return fallback;
+      s = s.replace(/\/+$/, '');
+      try {
+        const u = new URL(s);
+        const pathRaw = u.pathname.replace(/\/+$/, '');
+        if (!pathRaw || pathRaw === '/') {
+          u.pathname = '/v1';
+        }
+        return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function getOllamaBaseUrl() {
+      const el = document.getElementById('ollamaBaseUrlInput');
+      const fromInput = el && el.value != null ? String(el.value).trim() : '';
+      return normalizeOpenAICompatBaseUrl(fromInput || ollamaBaseUrl, DEFAULT_OLLAMA_API_BASE);
+    }
+
+    function getCompatChatBaseUrl() {
+      return selectedProvider === 'ollama' ? getOllamaBaseUrl() : DEFAULT_OPENAI_API_BASE;
+    }
+
+    function openAICompatUrl(path) {
+      const base = getCompatChatBaseUrl();
+      const p = String(path || '').replace(/^\//, '');
+      return `${base}/${p}`;
+    }
+
+    /** Pending Ollama proxy replies from plugin main (bypass UI iframe CORS to localhost). */
+    const ollamaProxyPending = new Map();
+
+    function isOllamaPluginProxyUrl(url) {
+      try {
+        const u = new URL(url);
+        if (u.protocol !== 'http:') return false;
+        const host = u.hostname.toLowerCase();
+        if (host !== 'localhost' && host !== 'host.docker.internal') return false;
+        if (!u.port) return false;
+        return Number(u.port) === 11434;
+      } catch {
+        return false;
+      }
+    }
+
+    function fetchOllamaViaPlugin(url, init = {}) {
+      return new Promise((resolve, reject) => {
+        const requestId = `ollama-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const timeoutId = setTimeout(() => {
+          if (ollamaProxyPending.has(requestId)) {
+            ollamaProxyPending.delete(requestId);
+            reject(new Error('Ollama request timed out'));
+          }
+        }, 120000);
+        ollamaProxyPending.set(requestId, {
+          settle(resultMsg) {
+            if (resultMsg.error != null && resultMsg.status === undefined) {
+              reject(new Error(resultMsg.error));
+              return;
+            }
+            resolve(new Response(resultMsg.body ?? '', {
+              status: resultMsg.status != null ? resultMsg.status : 502,
+              statusText: resultMsg.ok ? 'OK' : 'Error'
+            }));
+          },
+          reject,
+          timeoutId
+        });
+        const headers = {};
+        const h = init && init.headers;
+        if (h) {
+          if (typeof Headers !== 'undefined' && h instanceof Headers) {
+            h.forEach((v, k) => { headers[k] = v; });
+          } else if (typeof h === 'object') {
+            Object.assign(headers, h);
+          }
+        }
+        const method = (init && init.method) || 'GET';
+        let body = init && init.body;
+        if (body !== undefined && body !== null && typeof body !== 'string') {
+          body = String(body);
+        }
+        parent.postMessage({
+          pluginMessage: {
+            type: 'ollama-proxy-fetch',
+            requestId,
+            url,
+            method,
+            headers,
+            body: body !== undefined ? body : undefined
+          }
+        }, '*');
+      });
+    }
+
+    function compatHttpFetch(url, init) {
+      if (isOllamaPluginProxyUrl(url)) {
+        return fetchOllamaViaPlugin(url, init);
+      }
+      return fetch(url, init);
+    }
+
+    function openAICompatFetch(path, init) {
+      return compatHttpFetch(openAICompatUrl(path), init);
+    }
+
+    /** Headers for OpenAI-compatible chat (OpenAI key or optional Ollama Bearer). */
+    function openAIAuthHeaders() {
+      const keyEl = document.getElementById('openaiApiKeyInput');
+      const key = ((keyEl && keyEl.value != null ? String(keyEl.value) : '') || openaiApiKey).trim();
+      const headers = {};
+      if (key) headers.Authorization = `Bearer ${key}`;
+      return headers;
+    }
+
+    function ollamaAuthHeaders() {
+      const keyEl = document.getElementById('ollamaApiKeyInput');
+      const key = ((keyEl && keyEl.value != null ? String(keyEl.value) : '') || ollamaApiKey).trim();
+      const headers = {};
+      if (key) headers.Authorization = `Bearer ${key}`;
+      return headers;
+    }
+
+    function openAICompatAuthHeaders() {
+      return selectedProvider === 'ollama' ? ollamaAuthHeaders() : openAIAuthHeaders();
+    }
+
+    function hasOpenAiCredentialsForChat() {
+      const keyEl = document.getElementById('openaiApiKeyInput');
+      const key = ((keyEl && keyEl.value != null ? String(keyEl.value) : '') || openaiApiKey).trim();
+      return !!key;
+    }
+
+    function hasOllamaCredentialsForChat() {
+      return true;
+    }
+
+    function getOpenAICompatChatModelId() {
+      return selectedProvider === 'ollama' ? ollamaModel : openaiModel;
+    }
+
+    function isAiProviderReady() {
+      if (isAiOffModeEnabled()) return false;
+      switch (selectedProvider) {
+        case 'gemini': return !!geminiApiKey;
+        case 'openai': return hasOpenAiCredentialsForChat();
+        case 'ollama': return hasOllamaCredentialsForChat();
+        case 'anthropic': return !!anthropicApiKey;
+        default: return false;
       }
     }
 
@@ -1117,7 +1289,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     }
 
     function canUseSemanticFontSearch() {
-      return !isAiOffModeEnabled() && !!getCurrentApiKey();
+      return isAiProviderReady();
     }
 
     function extractJsonObjectFromText(text) {
@@ -1372,10 +1544,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
     // List available image generation models from Gemini/OpenAI API
     // Filters models by supportedGenerationMethods, description, and displayName for image-related keywords
-    let cachedImageModelsByProvider = { gemini: null, openai: null, anthropic: null };
-    let imageModelsPromisesByProvider = { gemini: null, openai: null, anthropic: null };
-    let cachedChatModelsByProvider = { gemini: null, openai: null, anthropic: null };
-    let chatModelsPromisesByProvider = { gemini: null, openai: null, anthropic: null };
+    let cachedImageModelsByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+    let imageModelsPromisesByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+    let cachedChatModelsByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+    let chatModelsPromisesByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+    let openaiChatModelsListKey = '';
+    let ollamaChatModelsListKey = '';
 
     async function listOpenAIImageModels(apiKey) {
       if (!apiKey) return [];
@@ -1471,6 +1645,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             const models = await listOpenAIImageModels(apiKey);
             cachedImageModelsByProvider.openai = models;
             return models;
+          }
+
+          if (provider === 'ollama') {
+            cachedImageModelsByProvider.ollama = [];
+            return [];
           }
 
           const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
@@ -1624,53 +1803,111 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     }
 
     async function listOpenAIModels(apiKey) {
-      if (cachedChatModelsByProvider.openai) return cachedChatModelsByProvider.openai;
-      if (chatModelsPromisesByProvider.openai) return chatModelsPromisesByProvider.openai;
+      const listKey = `${DEFAULT_OPENAI_API_BASE}|${apiKey || ''}`;
+      if (cachedChatModelsByProvider.openai != null && openaiChatModelsListKey === listKey) {
+        return cachedChatModelsByProvider.openai;
+      }
+      if (chatModelsPromisesByProvider.openai && openaiChatModelsListKey === listKey) {
+        return chatModelsPromisesByProvider.openai;
+      }
+      cachedChatModelsByProvider.openai = null;
+      chatModelsPromisesByProvider.openai = null;
+      openaiChatModelsListKey = listKey;
 
+      const fetchKey = listKey;
       chatModelsPromisesByProvider.openai = (async () => {
-        const resp = await fetch('https://api.openai.com/v1/models', {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`
-          }
+        const resp = await fetch(`${DEFAULT_OPENAI_API_BASE}/models`, {
+          headers: { Authorization: `Bearer ${apiKey}` }
         });
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
           throw new Error(err.error?.message || 'Failed to list OpenAI models');
         }
         const data = await resp.json();
-        const models = (data.data || []).map(m => ({
+        const nonChatSubstrings = [
+          'realtime', 'audio', 'whisper', 'tts', 'embedding', 'embed', 'moderation',
+          'instruct'
+        ];
+        let models = (data.data || []).map(m => ({
           id: m.id,
           displayName: m.id,
           description: getOpenAIDescription(m.id),
           created: m.created || 0
-        })).filter(m => {
+        }));
+
+        models = models.filter(m => {
           const id = m.id.toLowerCase();
-          // Include gpt, o1 and dall-e models
           if (!id.startsWith('gpt') && !id.startsWith('o1') && !id.startsWith('dall-e')) return false;
-
-          // Exclude known non-chat or specialized models
-          const nonChatSubstrings = [
-            'realtime', 'audio', 'whisper', 'tts', 'embedding', 'moderation',
-            'edit', 'search', 'instruct', 'vision-preview', 'pro'
-          ];
           if (nonChatSubstrings.some(sub => id.includes(sub))) return false;
-
-          // Exclude specific models known to be non-chat even if they have gpt prefix
           if (id === 'gpt-3.5-turbo-instruct') return false;
           if (id.includes('preview') && id.includes('vision') && !id.startsWith('o1')) return false;
-
           return true;
         });
 
-        // Sort by created timestamp descending
         const sortedModels = models.sort((a, b) => b.created - a.created);
-        cachedChatModelsByProvider.openai = sortedModels;
+        if (openaiChatModelsListKey === fetchKey) {
+          cachedChatModelsByProvider.openai = sortedModels;
+        }
         return sortedModels;
       })().catch(err => {
         chatModelsPromisesByProvider.openai = null;
+        if (openaiChatModelsListKey === fetchKey) openaiChatModelsListKey = '';
         throw err;
       });
       return chatModelsPromisesByProvider.openai;
+    }
+
+    async function listOllamaModels() {
+      const baseUrl = getOllamaBaseUrl();
+      const key = String(ollamaApiKeyInput?.value != null ? ollamaApiKeyInput.value : ollamaApiKey || '').trim();
+      const listKey = `${baseUrl}|${key}`;
+      if (cachedChatModelsByProvider.ollama != null && ollamaChatModelsListKey === listKey) {
+        return cachedChatModelsByProvider.ollama;
+      }
+      if (chatModelsPromisesByProvider.ollama && ollamaChatModelsListKey === listKey) {
+        return chatModelsPromisesByProvider.ollama;
+      }
+      cachedChatModelsByProvider.ollama = null;
+      chatModelsPromisesByProvider.ollama = null;
+      ollamaChatModelsListKey = listKey;
+      const fetchKey = listKey;
+
+      const headers = {};
+      if (key) headers.Authorization = `Bearer ${key}`;
+
+      chatModelsPromisesByProvider.ollama = (async () => {
+        const url = `${baseUrl}/models`;
+        const resp = await compatHttpFetch(url, { headers });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error?.message || 'Failed to list Ollama models');
+        }
+        const data = await resp.json();
+        const nonChatSubstrings = [
+          'realtime', 'audio', 'whisper', 'tts', 'embedding', 'embed', 'moderation',
+          'instruct'
+        ];
+        const models = (data.data || []).map(m => ({
+          id: m.id,
+          displayName: m.id,
+          description: '',
+          created: m.created || 0
+        })).filter(m => {
+          const id = m.id.toLowerCase();
+          if (nonChatSubstrings.some(sub => id.includes(sub))) return false;
+          return true;
+        });
+        const sortedModels = models.sort((a, b) => b.created - a.created);
+        if (ollamaChatModelsListKey === fetchKey) {
+          cachedChatModelsByProvider.ollama = sortedModels;
+        }
+        return sortedModels;
+      })().catch(err => {
+        chatModelsPromisesByProvider.ollama = null;
+        if (ollamaChatModelsListKey === fetchKey) ollamaChatModelsListKey = '';
+        throw err;
+      });
+      return chatModelsPromisesByProvider.ollama;
     }
 
     // Helper to build OpenAI request body with compatibility fixes
@@ -1755,8 +1992,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         cachedImageModelsByProvider[provider] = null;
         imageModelsPromisesByProvider[provider] = null;
       } else {
-        cachedImageModelsByProvider = { gemini: null, openai: null, anthropic: null };
-        imageModelsPromisesByProvider = { gemini: null, openai: null, anthropic: null };
+        cachedImageModelsByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+        imageModelsPromisesByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
       }
     }
 
@@ -1765,9 +2002,13 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (provider) {
         cachedChatModelsByProvider[provider] = null;
         chatModelsPromisesByProvider[provider] = null;
+        if (provider === 'openai') openaiChatModelsListKey = '';
+        if (provider === 'ollama') ollamaChatModelsListKey = '';
       } else {
-        cachedChatModelsByProvider = { gemini: null, openai: null, anthropic: null };
-        chatModelsPromisesByProvider = { gemini: null, openai: null, anthropic: null };
+        cachedChatModelsByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+        chatModelsPromisesByProvider = { gemini: null, openai: null, ollama: null, anthropic: null };
+        openaiChatModelsListKey = '';
+        ollamaChatModelsListKey = '';
       }
     }
 
@@ -1975,7 +2216,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     async function refreshOpenAIModelList({ apiKey, preferredModel, silent = false } = {}) {
       if (!openaiModelSelect) return;
       const fallbackValue = preferredModel || openaiModelSelect.value || openaiModel;
-      if (!apiKey) {
+      if (!hasOpenAiCredentialsForChat()) {
         populateOpenAIModelSelect(DEFAULT_OPENAI_MODELS, fallbackValue);
         return;
       }
@@ -1992,6 +2233,25 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       } finally {
         openaiModelSelect.disabled = false;
         if (selectedProvider === 'openai') populateChatModelDropdown();
+      }
+    }
+
+    async function refreshOllamaModelList({ preferredModel, silent = false } = {}) {
+      if (!ollamaModelSelect) return;
+      const fallbackValue = preferredModel || ollamaModelSelect.value || ollamaModel;
+      ollamaModelSelect.disabled = true;
+      try {
+        const models = await listOllamaModels();
+        populateOllamaModelSelect(models.length ? models : DEFAULT_OLLAMA_MODELS, fallbackValue);
+      } catch (error) {
+        console.warn('Ollama model fetch failed:', error);
+        populateOllamaModelSelect(DEFAULT_OLLAMA_MODELS, fallbackValue);
+        if (!silent) showToast(t('settings.messages.refreshUsingDefaults', {
+          provider: getLocalizedProviderName('ollama')
+        }), 'info');
+      } finally {
+        ollamaModelSelect.disabled = false;
+        if (selectedProvider === 'ollama') populateChatModelDropdown();
       }
     }
 
@@ -2038,6 +2298,28 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       const enabledList = enabledModels.openai.length > 0 ? enabledModels.openai : [];
       populateModelChecklist('openai', modelList, enabledList);
+    }
+
+    function populateOllamaModelSelect(models, preferredValue) {
+      if (!ollamaModelSelect) return;
+
+      const modelList = buildOpenAIModelList(models, preferredValue);
+      ollamaModelSelect.innerHTML = '';
+
+      modelList.forEach(model => {
+        modelMetadata.ollama[model.id] = { ...modelMetadata.ollama[model.id], ...model };
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = model.displayName || model.id;
+        ollamaModelSelect.appendChild(option);
+      });
+
+      const modelIds = modelList.map(m => m.id);
+      ollamaModelSelect.value = preferredValue && modelIds.includes(preferredValue) ? preferredValue : (modelIds[0] || '');
+      ollamaModel = ollamaModelSelect.value;
+
+      const enabledList = enabledModels.ollama.length > 0 ? enabledModels.ollama : [];
+      populateModelChecklist('ollama', modelList, enabledList);
     }
 
     function populateAnthropicModelSelect(models, preferredValue) {
@@ -2093,6 +2375,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         openai: [
           'gpt-5-nano',
           DEFAULT_OPENAI_CHAT_MODEL
+        ],
+        ollama: [
+          DEFAULT_OLLAMA_CHAT_MODEL
         ],
         anthropic: [
           'claude-sonnet-4-20250514',
@@ -2349,6 +2634,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const providers = [];
       if (geminiApiKey) providers.push('gemini');
       if (openaiApiKey) providers.push('openai');
+      if (ollamaApiKey || ollamaShowLocalModelsInAssistantMenu !== false) providers.push('ollama');
       if (anthropicApiKey) providers.push('anthropic');
       return providers;
     }
@@ -2358,6 +2644,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       switch (provider) {
         case 'gemini': return 'Google Gemini';
         case 'openai': return 'OpenAI';
+        case 'ollama': return 'Ollama';
         case 'anthropic': return 'Anthropic';
         default: return provider;
       }
@@ -2370,6 +2657,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           return '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.024c-6.437.388-11.59 5.539-11.977 11.976h-.047C11.588 17.563 6.436 12.412 0 12.024v-.047C6.437 11.588 11.588 6.437 11.976 0h.047c.388 6.437 5.54 11.588 11.977 11.977v.047Z"/></svg>';
         case 'openai':
           return '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M9.195 2.282a5.276 5.276 0 0 1 4.003.525 5.3 5.3 0 0 1 .752.531 5.277 5.277 0 0 1 6.611 5.104c0 .309-.03.616-.085.919a5.274 5.274 0 0 1 .434 6.92c-.894 1.164-1.654 1.475-2.386 1.741a5.27 5.27 0 0 1-3.72 3.7 5.276 5.276 0 0 1-4.002-.526 5.296 5.296 0 0 1-.756-.533A5.275 5.275 0 0 1 3.44 15.56c0-.31.029-.617.082-.92a5.284 5.284 0 0 1-1.475-3.017 5.274 5.274 0 0 1 3.427-5.645 5.275 5.275 0 0 1 3.72-3.696Zm6.36 14.9a.752.752 0 0 1-.375.65v-.001l-3.601 2.079a3.773 3.773 0 0 0 5.561-2.555v-4.709l-1.585-.914v5.45Zm-6.22.516a.752.752 0 0 1-.75 0l-3.646-2.106a3.776 3.776 0 0 0 3.775 3.743c.411 0 .82-.07 1.21-.202l4.131-2.386v-1.775l-4.72 2.726ZM13.94 8.56l-.44.253 5.141 2.969v4.538a3.777 3.777 0 0 0 1.352-5.14 3.746 3.746 0 0 0-.787-.955l-4.077-2.352-1.189.687Zm-8.58-.878a3.774 3.774 0 0 0-1.826 3.745 3.8 3.8 0 0 0 1.258 2.347L8.96 16.18l1.538-.887-4.765-2.752a.752.752 0 0 1-.374-.65V7.682Zm4.585 3.185v2.372L12 14.426l2.055-1.187v-2.372L12 9.679l-2.055 1.188Zm2.473-6.777A3.775 3.775 0 0 0 6.86 6.644v4.813l1.585.915V6.819a.753.753 0 0 1 .375-.65l3.598-2.079Zm2.868.577a3.8 3.8 0 0 0-1.222.204L9.945 7.25v1.882l5.186-2.992 3.93 2.267a3.775 3.775 0 0 0-3.775-3.741Z" clip-rule="evenodd"/></svg>';
+        case 'ollama':
+          return '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8V7h2c.55 0 1-.45 1-1V5h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>';
         case 'anthropic':
           return '<svg class="provider-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.5L19 8l-7 3.5L5 8l7-3.5zM4 9.5l7 3.5v7l-7-3.5v-7zm16 0v7l-7 3.5v-7l7-3.5z"/></svg>';
         default:
@@ -2397,7 +2686,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       }
 
       // Sort providers in a consistent order: Gemini, OpenAI, Anthropic
-      const providerOrder = { 'gemini': 0, 'openai': 1, 'anthropic': 2 };
+      const providerOrder = { 'gemini': 0, 'openai': 1, 'ollama': 2, 'anthropic': 3 };
       availableProviders.sort((a, b) => {
         return (providerOrder[a] ?? 99) - (providerOrder[b] ?? 99);
       });
@@ -2412,9 +2701,13 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const allModels = getAvailableModels(provider);
 
         // If no enabled models, show all models
-        const modelsToShow = providerEnabledModels.length > 0
+        let modelsToShow = providerEnabledModels.length > 0
           ? allModels.filter(m => providerEnabledModels.includes(m))
           : allModels;
+
+        if (provider === 'ollama' && ollamaShowLocalModelsInAssistantMenu === false) {
+          modelsToShow = modelsToShow.filter(m => m !== OLLAMA_GEMMA4_MODEL_ID);
+        }
 
         if (modelsToShow.length === 0) return;
 
@@ -2450,6 +2743,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
           option.appendChild(nameSpan);
 
+          if (provider === 'ollama' && OLLAMA_LOCAL_BADGE_MODEL_IDS.has(modelId)) {
+            const badge = document.createElement('span');
+            badge.className = 'model-local-badge';
+            badge.textContent = t('settings.models.localBadge');
+            badge.title = t('settings.models.localBadgeTitle');
+            option.appendChild(badge);
+          }
+
           option.addEventListener('click', (e) => {
             e.stopPropagation();
             selectChatModel(provider, modelId);
@@ -2471,6 +2772,25 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const currentMetadata = modelMetadata[selectedProvider]?.[currentModel];
       const currentDisplayName = currentMetadata?.displayName || currentModel;
       label.textContent = currentDisplayName || 'Model';
+    }
+
+    function migrateOllamaModelIfGemmaHiddenFromMenu() {
+      if (ollamaShowLocalModelsInAssistantMenu !== false) return;
+      if (ollamaModel !== OLLAMA_GEMMA4_MODEL_ID) return;
+      const fallback = DEFAULT_OLLAMA_CHAT_MODEL;
+      let next = fallback;
+      if (ollamaModelSelect && ollamaModelSelect.options.length) {
+        const ids = [...ollamaModelSelect.options].map(o => o.value);
+        next = ids.includes(fallback) ? fallback : ids[0];
+      }
+      ollamaModel = next;
+      if (ollamaModelSelect) ollamaModelSelect.value = next;
+      if (lastSavedSettings) lastSavedSettings.ollamaModel = next;
+      if (selectedProvider === 'ollama') {
+        parent.postMessage({
+          pluginMessage: { type: 'save-model-selection', provider: 'ollama', modelId: next }
+        }, '*');
+      }
     }
 
     function createModelSelectDropdownHTML(idPrefix) {
@@ -2548,6 +2868,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           if (openaiModelSelect) openaiModelSelect.value = modelId;
           if (lastSavedSettings) lastSavedSettings.openaiModel = modelId;
           break;
+        case 'ollama':
+          ollamaModel = modelId;
+          if (ollamaModelSelect) ollamaModelSelect.value = modelId;
+          if (lastSavedSettings) lastSavedSettings.ollamaModel = modelId;
+          break;
         case 'anthropic':
           anthropicModel = modelId;
           if (anthropicModelSelect) anthropicModelSelect.value = modelId;
@@ -2624,6 +2949,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         geminiModel: geminiModelSelect.value || DEFAULT_GEMINI_CHAT_MODEL,
         openaiApiKey: openaiApiKeyInput.value || '',
         openaiModel: openaiModelSelect.value || DEFAULT_OPENAI_CHAT_MODEL,
+        ollamaBaseUrl: (ollamaBaseUrlInput && ollamaBaseUrlInput.value) || DEFAULT_OLLAMA_API_BASE,
+        ollamaApiKey: ollamaApiKeyInput.value || '',
+        ollamaModel: ollamaModelSelect.value || DEFAULT_OLLAMA_CHAT_MODEL,
+        ollamaShowLocalModelsInAssistantMenu: ollamaShowLocalModelsToggle?.checked !== false,
         anthropicApiKey: anthropicApiKeyInput.value || '',
         anthropicModel: anthropicModelSelect.value || 'claude-sonnet-4-20250514',
         cssFormat: cssFormatSelect.value || 'classes',
@@ -2632,6 +2961,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         enabledModels: {
           gemini: deduplicateModelIds(getEnabledModels('gemini'), 'gemini'),
           openai: deduplicateModelIds(getEnabledModels('openai'), 'openai'),
+          ollama: deduplicateModelIds(getEnabledModels('ollama'), 'ollama'),
           anthropic: deduplicateModelIds(getEnabledModels('anthropic'), 'anthropic')
         }
       };
@@ -2646,6 +2976,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         a.geminiModel === b.geminiModel &&
         a.openaiApiKey === b.openaiApiKey &&
         a.openaiModel === b.openaiModel &&
+        a.ollamaBaseUrl === b.ollamaBaseUrl &&
+        a.ollamaApiKey === b.ollamaApiKey &&
+        a.ollamaModel === b.ollamaModel &&
+        a.ollamaShowLocalModelsInAssistantMenu === b.ollamaShowLocalModelsInAssistantMenu &&
         a.anthropicApiKey === b.anthropicApiKey &&
         a.anthropicModel === b.anthropicModel &&
         a.cssFormat === b.cssFormat &&
@@ -2676,6 +3010,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, lastSavedSettings.geminiModel || DEFAULT_GEMINI_CHAT_MODEL);
       openaiApiKeyInput.value = lastSavedSettings.openaiApiKey || '';
       populateOpenAIModelSelect(DEFAULT_OPENAI_MODELS, lastSavedSettings.openaiModel || DEFAULT_OPENAI_CHAT_MODEL);
+      if (ollamaBaseUrlInput) ollamaBaseUrlInput.value = lastSavedSettings.ollamaBaseUrl || DEFAULT_OLLAMA_API_BASE;
+      if (ollamaApiKeyInput) ollamaApiKeyInput.value = lastSavedSettings.ollamaApiKey || '';
+      if (ollamaShowLocalModelsToggle) {
+        ollamaShowLocalModelsToggle.checked = lastSavedSettings.ollamaShowLocalModelsInAssistantMenu !== false;
+      }
+      ollamaShowLocalModelsInAssistantMenu = lastSavedSettings.ollamaShowLocalModelsInAssistantMenu !== false;
+      populateOllamaModelSelect(DEFAULT_OLLAMA_MODELS, lastSavedSettings.ollamaModel || DEFAULT_OLLAMA_CHAT_MODEL);
+      migrateOllamaModelIfGemmaHiddenFromMenu();
       anthropicApiKeyInput.value = lastSavedSettings.anthropicApiKey || '';
       populateAnthropicModelSelect(DEFAULT_ANTHROPIC_MODELS, lastSavedSettings.anthropicModel || 'claude-sonnet-4-20250514');
       cssFormatSelect.value = lastSavedSettings.cssFormat || 'classes';
@@ -2694,6 +3036,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const savedEnabledModels = lastSavedSettings?.enabledModels || enabledModels;
       populateModelChecklist('gemini', geminiModels.length > 0 ? geminiModels : DEFAULT_GEMINI_MODELS, savedEnabledModels.gemini);
       populateModelChecklist('openai', openaiModels, savedEnabledModels.openai);
+      const ollamaModels = getAvailableModels('ollama');
+      populateModelChecklist('ollama', ollamaModels, savedEnabledModels.ollama);
       populateModelChecklist('anthropic', anthropicModels, savedEnabledModels.anthropic);
 
       refreshGeminiModelList({
@@ -2705,6 +3049,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       refreshOpenAIModelList({
         apiKey: openaiApiKeyInput.value,
         preferredModel: openaiModelSelect.value,
+        silent: true
+      }).then(refreshSettingsBaselineFromForm).catch(() => { });
+
+      refreshOllamaModelList({
+        preferredModel: ollamaModelSelect ? ollamaModelSelect.value : ollamaModel,
         silent: true
       }).then(refreshSettingsBaselineFromForm).catch(() => { });
 
@@ -2729,6 +3078,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       switch (selectedProvider) {
         case 'gemini': return geminiModel;
         case 'openai': return openaiModel;
+        case 'ollama': return ollamaModel;
         case 'anthropic': return anthropicModel;
         default: return '';
       }
@@ -3199,6 +3549,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const openaiSettings = document.getElementById('openaiSettings');
     const openaiApiKeyInput = document.getElementById('openaiApiKeyInput');
     const openaiModelSelect = document.getElementById('openaiModelSelect');
+    const ollamaSettings = document.getElementById('ollamaSettings');
+    const ollamaBaseUrlInput = document.getElementById('ollamaBaseUrlInput');
+    const ollamaApiKeyInput = document.getElementById('ollamaApiKeyInput');
+    const ollamaShowLocalModelsToggle = document.getElementById('ollamaShowLocalModelsToggle');
+    const ollamaModelSelect = document.getElementById('ollamaModelSelect');
     const anthropicSettings = document.getElementById('anthropicSettings');
     const anthropicApiKeyInput = document.getElementById('anthropicApiKeyInput');
     const anthropicModelSelect = document.getElementById('anthropicModelSelect');
@@ -3745,6 +4100,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       providerSelect,
       geminiApiKeyInput, geminiModelSelect,
       openaiApiKeyInput, openaiModelSelect,
+      ollamaBaseUrlInput, ollamaApiKeyInput, ollamaModelSelect,
       anthropicApiKeyInput, anthropicModelSelect,
       cssFormatSelect, quiverApiKeyInput, selectionSizeLimitSelect
     ];
@@ -3754,6 +4110,15 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       field.addEventListener('input', handleSettingsChanged);
       field.addEventListener('change', handleSettingsChanged);
     });
+
+    if (ollamaShowLocalModelsToggle) {
+      ollamaShowLocalModelsToggle.addEventListener('change', () => {
+        ollamaShowLocalModelsInAssistantMenu = ollamaShowLocalModelsToggle.checked !== false;
+        migrateOllamaModelIfGemmaHiddenFromMenu();
+        populateChatModelDropdown();
+        handleSettingsChanged();
+      });
+    }
 
     // Add event listeners for check-all toggles
     document.querySelectorAll('.check-all-toggle').forEach(toggle => {
@@ -3829,19 +4194,26 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             });
             showToast(t('settings.messages.modelListRefreshed'), 'success');
           } else if (provider === 'openai') {
-            const apiKey = openaiApiKeyInput?.value || openaiApiKey;
-            if (!apiKey) {
+            if (!hasOpenAiCredentialsForChat()) {
               showToast(t('settings.messages.enterProviderApiKey', {
                 provider: getLocalizedProviderName('openai')
               }), 'info');
               btn.classList.remove('refreshing');
               return;
             }
+            const apiKey = openaiApiKeyInput?.value || openaiApiKey;
             clearImageModelCache('openai');
             clearChatModelCache('openai');
             await refreshOpenAIModelList({
               apiKey: apiKey,
               preferredModel: openaiModelSelect?.value || openaiModel,
+              silent: false
+            });
+            showToast(t('settings.messages.modelListRefreshed'), 'success');
+          } else if (provider === 'ollama') {
+            clearChatModelCache('ollama');
+            await refreshOllamaModelList({
+              preferredModel: ollamaModelSelect?.value || ollamaModel,
               silent: false
             });
             showToast(t('settings.messages.modelListRefreshed'), 'success');
@@ -3897,6 +4269,27 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       };
       openaiApiKeyInput.addEventListener('change', triggerOpenAIRefresh);
       openaiApiKeyInput.addEventListener('blur', triggerOpenAIRefresh);
+    }
+    if (ollamaBaseUrlInput) {
+      const onOllamaBaseChange = () => {
+        ollamaBaseUrl = String(ollamaBaseUrlInput.value || '').trim() || DEFAULT_OLLAMA_API_BASE;
+        clearChatModelCache('ollama');
+        refreshOllamaModelList({
+          preferredModel: ollamaModelSelect ? ollamaModelSelect.value : ollamaModel
+        });
+      };
+      ollamaBaseUrlInput.addEventListener('change', onOllamaBaseChange);
+      ollamaBaseUrlInput.addEventListener('blur', onOllamaBaseChange);
+    }
+    if (ollamaApiKeyInput) {
+      const triggerOllamaRefresh = () => {
+        clearChatModelCache('ollama');
+        refreshOllamaModelList({
+          preferredModel: ollamaModelSelect ? ollamaModelSelect.value : ollamaModel
+        });
+      };
+      ollamaApiKeyInput.addEventListener('change', triggerOllamaRefresh);
+      ollamaApiKeyInput.addEventListener('blur', triggerOllamaRefresh);
     }
     if (anthropicApiKeyInput) {
       const triggerAnthropicRefresh = () => {
@@ -4022,7 +4415,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const isNoAi = noAiModeToggle?.checked === true;
       providerSelect.disabled = isNoAi;
 
-      [geminiSettings, openaiSettings, anthropicSettings].forEach(panel => {
+      [geminiSettings, openaiSettings, ollamaSettings, anthropicSettings].forEach(panel => {
         if (!panel) return;
 
         panel.querySelectorAll('.provider-api-setting').forEach(section => {
@@ -4053,6 +4446,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       geminiSettings.classList.toggle('hidden', activeProvider !== 'gemini');
       openaiSettings.classList.toggle('hidden', activeProvider !== 'openai');
+      if (ollamaSettings) ollamaSettings.classList.toggle('hidden', activeProvider !== 'ollama');
       anthropicSettings.classList.toggle('hidden', activeProvider !== 'anthropic');
 
       syncNoAiSettingsUi();
@@ -4061,6 +4455,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         refreshGeminiModelList({
           apiKey: geminiApiKeyInput.value || geminiApiKey,
           preferredModel: geminiModelSelect.value || geminiModel,
+          silent: true
+        });
+      }
+      if (activeProvider === 'ollama' && !isAiOffModeEnabled()) {
+        refreshOllamaModelList({
+          preferredModel: ollamaModelSelect?.value || ollamaModel,
           silent: true
         });
       }
@@ -4864,7 +5264,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     // Combined Auto-fill / Enhance System Instructions button
     auditAutoFillInstructions.addEventListener('click', async () => {
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast(tu('aux.audit.apiKeyRequired'), 'error');
         return;
       }
@@ -4917,7 +5317,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     // Auto-fill Viewport Settings from instructions or selection
     auditAutoFillViewport.addEventListener('click', async () => {
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast(tu('aux.audit.apiKeyRequired'), 'error');
         return;
       }
@@ -4964,7 +5364,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     // Auto-fill Colors from instructions or selection
     auditAutoFillColors.addEventListener('click', async () => {
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast(tu('aux.audit.apiKeyRequired'), 'error');
         return;
       }
@@ -5039,7 +5439,13 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     // ============================================
     async function callAISimple({ systemPrompt, userContent, images, temperature = 0.7, maxTokens = 4096, jsonMode = false }) {
       const apiKey = getCurrentApiKey();
-      if (!apiKey) throw new Error('No API key configured');
+      if (selectedProvider === 'openai') {
+        if (!hasOpenAiCredentialsForChat()) throw new Error('No API key configured');
+      } else if (selectedProvider === 'ollama') {
+        if (!hasOllamaCredentialsForChat()) throw new Error('Ollama is not configured');
+      } else if (!apiKey) {
+        throw new Error('No API key configured');
+      }
 
       // Build image parts per provider
       const imageDataUrls = images || [];
@@ -5086,8 +5492,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           };
         }
 
-        case 'openai': {
-          // Build user content parts for OpenAI vision format
+        case 'openai':
+        case 'ollama': {
+          // Build user content parts for OpenAI-compatible vision format
           let userMsg;
           if (imageDataUrls.length > 0) {
             const contentParts = [];
@@ -5105,12 +5512,13 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           messages.push(userMsg);
 
           const openaiOptions = { max_tokens: maxTokens, temperature };
-          if (jsonMode) openaiOptions.response_format = { type: 'json_object' };
+          if (jsonMode && selectedProvider === 'openai') openaiOptions.response_format = { type: 'json_object' };
 
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          const compatModel = getOpenAICompatChatModelId() || (selectedProvider === 'ollama' ? DEFAULT_OLLAMA_CHAT_MODEL : 'gpt-5-mini');
+          const response = await openAICompatFetch('chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify(buildOpenAIRequestBody(openaiModel || 'gpt-5-mini', messages, openaiOptions))
+            headers: { 'Content-Type': 'application/json', ...openAICompatAuthHeaders() },
+            body: JSON.stringify(buildOpenAIRequestBody(compatModel, messages, openaiOptions))
           });
           if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
@@ -6108,7 +6516,7 @@ Rules:
         userContent,
         temperature: 0.2,
         maxTokens: 4096,
-        jsonMode: selectedProvider === 'gemini' || selectedProvider === 'openai',
+        jsonMode: selectedProvider === 'gemini' || selectedProvider === 'openai' || selectedProvider === 'ollama',
       });
 
       const parsed = extractJsonObjectFromText(response.text);
@@ -6652,6 +7060,8 @@ Rules:
           if (!defaultValue) {
             if (selectedProvider === 'openai' && openaiApiKey) {
               defaultValue = 'gpt-image-1.5';
+            } else if (selectedProvider === 'ollama' && geminiApiKey) {
+              defaultValue = 'gemini-3-pro-image-preview';
             } else if (geminiApiKey) {
               defaultValue = 'gemini-3-pro-image-preview';
             } else if (openaiApiKey) {
@@ -17463,7 +17873,7 @@ Generate ONLY the reply text, nothing else.`;
 
     async function callAiService(systemPrompt, userPrompt, config = {}) {
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast('Please configure your API key in Settings', 'error');
         return null;
       }
@@ -17496,11 +17906,11 @@ Generate ONLY the reply text, nothing else.`;
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData?.error?.message || `API error: ${response.status}`);
           }
-        } else if (selectedProvider === 'openai') {
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        } else if (selectedProvider === 'openai' || selectedProvider === 'ollama') {
+          const response = await openAICompatFetch('chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify(buildOpenAIRequestBody(openaiModel || 'gpt-5-mini', [
+            headers: { 'Content-Type': 'application/json', ...openAICompatAuthHeaders() },
+            body: JSON.stringify(buildOpenAIRequestBody(getOpenAICompatChatModelId() || (selectedProvider === 'ollama' ? DEFAULT_OLLAMA_CHAT_MODEL : 'gpt-5-mini'), [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ], { max_tokens: maxTokens, temperature: temperature }))
@@ -20519,7 +20929,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       });
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         console.error('[generateSvgIconFallback] No API key configured');
         showToast('Please configure your API key in Settings', 'error');
         return null;
@@ -20600,11 +21010,11 @@ TECHNICAL RULES:
             const errData = await response.json().catch(() => ({}));
             apiError = errData?.error?.message || `API error: ${response.status}`;
           }
-        } else if (selectedProvider === 'openai') {
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        } else if (selectedProvider === 'openai' || selectedProvider === 'ollama') {
+          const response = await openAICompatFetch('chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify(buildOpenAIRequestBody(openaiModel || 'gpt-5-mini', [
+            headers: { 'Content-Type': 'application/json', ...openAICompatAuthHeaders() },
+            body: JSON.stringify(buildOpenAIRequestBody(getOpenAICompatChatModelId() || (selectedProvider === 'ollama' ? DEFAULT_OLLAMA_CHAT_MODEL : 'gpt-5-mini'), [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ], { max_tokens: 2048, temperature: 0.1 }))
@@ -20668,7 +21078,7 @@ TECHNICAL RULES:
 
     async function suggestIconSlug({ iconSet, description, styles = [], tags = [], strokeWidth, samples = [] }) {
       const apiKey = getCurrentApiKey();
-      if (!apiKey) return null;
+      if (!isAiProviderReady()) return null;
       const styleLine = styles.length ? `Style preferences: ${styles.join(', ')}` : 'Style preferences: none specified';
       const tagLine = tags.length ? `Icon set tags: ${tags.join(', ')}` : 'Icon set tags: none provided';
       const sampleLine = samples.length ? `Sample icons: ${samples.slice(0, 5).join(', ')}` : '';
@@ -20698,19 +21108,14 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
             const data = await response.json();
             responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
           }
-        } else if (selectedProvider === 'openai') {
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        } else if (selectedProvider === 'openai' || selectedProvider === 'ollama') {
+          const response = await openAICompatFetch('chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify({
-              model: openaiModel || 'gpt-5-mini',
-              messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: userPrompt }
-              ],
-              max_tokens: 60,
-              temperature: 0
-            })
+            headers: { 'Content-Type': 'application/json', ...openAICompatAuthHeaders() },
+            body: JSON.stringify(buildOpenAIRequestBody(getOpenAICompatChatModelId() || (selectedProvider === 'ollama' ? DEFAULT_OLLAMA_CHAT_MODEL : 'gpt-5-mini'), [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ], { max_tokens: 60, temperature: 0 }))
           });
           if (response.ok) {
             const data = await response.json();
@@ -21887,7 +22292,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         }
 
         const apiKey = getCurrentApiKey();
-        if (!apiKey) {
+        if (!isAiProviderReady()) {
           showToast('Please configure your API key in Settings', 'error');
           return;
         }
@@ -21905,6 +22310,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
               aiResponse = geminiResult.text;
               break;
             case 'openai':
+            case 'ollama':
               const openaiResult = await sendToOpenAIAgent(prompt, 'You are a color palette expert. Generate color palettes in JSON format only. Do not include any explanation or additional text.', apiKey, signal);
               aiResponse = openaiResult.text;
               break;
@@ -25917,6 +26323,10 @@ Example structure:
       geminiModel = settings?.geminiModel || DEFAULT_GEMINI_CHAT_MODEL;
       openaiApiKey = settings?.openaiApiKey || '';
       openaiModel = settings?.openaiModel || DEFAULT_OPENAI_CHAT_MODEL;
+      ollamaBaseUrl = settings?.ollamaBaseUrl || DEFAULT_OLLAMA_API_BASE;
+      ollamaApiKey = settings?.ollamaApiKey || '';
+      ollamaModel = settings?.ollamaModel || DEFAULT_OLLAMA_CHAT_MODEL;
+      ollamaShowLocalModelsInAssistantMenu = settings?.ollamaShowLocalModelsInAssistantMenu !== false;
       anthropicApiKey = settings?.anthropicApiKey || '';
       anthropicModel = settings?.anthropicModel || 'claude-sonnet-4-20250514';
       cssFormat = settings?.cssFormat || 'classes';
@@ -25942,6 +26352,7 @@ Example structure:
         enabledModels = {
           gemini: deduplicateModelIds(settings.enabledModels.gemini || [], 'gemini'),
           openai: deduplicateModelIds(settings.enabledModels.openai || [], 'openai'),
+          ollama: deduplicateModelIds(settings.enabledModels.ollama || [], 'ollama'),
           anthropic: deduplicateModelIds(settings.enabledModels.anthropic || [], 'anthropic')
         };
       } else {
@@ -25949,6 +26360,7 @@ Example structure:
         enabledModels = {
           gemini: [],
           openai: [],
+          ollama: [],
           anthropic: []
         };
       }
@@ -25969,6 +26381,11 @@ Example structure:
       populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, geminiModel);
       openaiApiKeyInput.value = openaiApiKey;
       populateOpenAIModelSelect(DEFAULT_OPENAI_MODELS, openaiModel);
+      if (ollamaBaseUrlInput) ollamaBaseUrlInput.value = ollamaBaseUrl;
+      if (ollamaApiKeyInput) ollamaApiKeyInput.value = ollamaApiKey;
+      if (ollamaShowLocalModelsToggle) ollamaShowLocalModelsToggle.checked = ollamaShowLocalModelsInAssistantMenu !== false;
+      populateOllamaModelSelect(DEFAULT_OLLAMA_MODELS, ollamaModel);
+      migrateOllamaModelIfGemmaHiddenFromMenu();
       anthropicApiKeyInput.value = anthropicApiKey;
       populateAnthropicModelSelect(DEFAULT_ANTHROPIC_MODELS, anthropicModel);
       cssFormatSelect.value = cssFormat;
@@ -25991,9 +26408,11 @@ Example structure:
       // Populate checklists
       const geminiModels = getAvailableModels('gemini');
       const openaiModels = getAvailableModels('openai');
+      const ollamaModels = getAvailableModels('ollama');
       const anthropicModels = getAvailableModels('anthropic');
       populateModelChecklist('gemini', geminiModels.length > 0 ? geminiModels : DEFAULT_GEMINI_MODELS, enabledModels.gemini);
       populateModelChecklist('openai', openaiModels, enabledModels.openai);
+      populateModelChecklist('ollama', ollamaModels, enabledModels.ollama);
       populateModelChecklist('anthropic', anthropicModels, enabledModels.anthropic);
 
       updateProviderSettingsVisibility();
@@ -26024,6 +26443,10 @@ Example structure:
         geminiModel,
         openaiApiKey,
         openaiModel,
+        ollamaBaseUrl,
+        ollamaApiKey,
+        ollamaModel,
+        ollamaShowLocalModelsInAssistantMenu,
         anthropicApiKey,
         anthropicModel,
         cssFormat,
@@ -26053,6 +26476,16 @@ Example structure:
       }).then(() => {
         refreshSettingsBaselineFromForm();
         if (selectedProvider === 'openai') {
+          populateChatModelDropdown();
+        }
+      }).catch(() => { });
+
+      refreshOllamaModelList({
+        preferredModel: ollamaModel,
+        silent: true
+      }).then(() => {
+        refreshSettingsBaselineFromForm();
+        if (selectedProvider === 'ollama') {
           populateChatModelDropdown();
         }
       }).catch(() => { });
@@ -26156,6 +26589,7 @@ Example structure:
       enabledModels = {
         gemini: deduplicateModelIds(getEnabledModels('gemini'), 'gemini'),
         openai: deduplicateModelIds(getEnabledModels('openai'), 'openai'),
+        ollama: deduplicateModelIds(getEnabledModels('ollama'), 'ollama'),
         anthropic: deduplicateModelIds(getEnabledModels('anthropic'), 'anthropic')
       };
 
@@ -26167,6 +26601,10 @@ Example structure:
         geminiModel: geminiModelSelect.value || DEFAULT_GEMINI_CHAT_MODEL,
         openaiApiKey: openaiApiKeyInput.value || '',
         openaiModel: openaiModelSelect.value || DEFAULT_OPENAI_CHAT_MODEL,
+        ollamaBaseUrl: (ollamaBaseUrlInput && String(ollamaBaseUrlInput.value || '').trim()) || DEFAULT_OLLAMA_API_BASE,
+        ollamaApiKey: ollamaApiKeyInput.value || '',
+        ollamaModel: ollamaModelSelect.value || DEFAULT_OLLAMA_CHAT_MODEL,
+        ollamaShowLocalModelsInAssistantMenu: ollamaShowLocalModelsToggle?.checked !== false,
         anthropicApiKey: anthropicApiKeyInput.value || '',
         anthropicModel: anthropicModelSelect.value || 'claude-sonnet-4-20250514',
         cssFormat: cssFormatSelect.value || 'classes',
@@ -26199,6 +26637,11 @@ Example structure:
       geminiModel = settings.geminiModel;
       openaiApiKey = settings.openaiApiKey;
       openaiModel = settings.openaiModel;
+      ollamaBaseUrl = settings.ollamaBaseUrl || DEFAULT_OLLAMA_API_BASE;
+      ollamaApiKey = settings.ollamaApiKey || '';
+      ollamaModel = settings.ollamaModel || DEFAULT_OLLAMA_CHAT_MODEL;
+      ollamaShowLocalModelsInAssistantMenu = settings.ollamaShowLocalModelsInAssistantMenu !== false;
+      migrateOllamaModelIfGemmaHiddenFromMenu();
       anthropicApiKey = settings.anthropicApiKey;
       anthropicModel = settings.anthropicModel;
       cssFormat = settings.cssFormat;
@@ -26936,7 +27379,7 @@ Example structure:
         return;
       }
 
-      const hasApiKey = getCurrentApiKey();
+      const hasApiKey = isAiProviderReady();
       if (hasApiKey) {
         // API key is set - hide status, show selection info and check badge
         chatStatusHeader.classList.add('hidden');
@@ -27326,7 +27769,7 @@ Example structure:
     // Generate title using LLM
     async function generateChatTitle() {
       const apiKey = getCurrentApiKey();
-      if (!apiKey || chatHistory.length < 2) return null;
+      if (!isAiProviderReady() || chatHistory.length < 2) return null;
 
       const conversationSummary = chatHistory.slice(0, 4).map(msg => {
         const role = msg.role === 'user' ? 'User' : 'Assistant';
@@ -27352,11 +27795,12 @@ Example structure:
             const data = await response.json();
             generatedTitle = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
           }
-        } else if (selectedProvider === 'openai') {
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        } else if (selectedProvider === 'openai' || selectedProvider === 'ollama') {
+          const titleModel = selectedProvider === 'ollama' ? (ollamaModel || DEFAULT_OLLAMA_CHAT_MODEL) : 'gpt-5-mini';
+          const response = await openAICompatFetch('chat/completions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-            body: JSON.stringify(buildOpenAIRequestBody('gpt-5-mini', [{ role: 'user', content: prompt }], {
+            headers: { 'Content-Type': 'application/json', ...openAICompatAuthHeaders() },
+            body: JSON.stringify(buildOpenAIRequestBody(titleModel, [{ role: 'user', content: prompt }], {
               max_tokens: 20,
               temperature: 0.3
             }))
@@ -28633,7 +29077,7 @@ Example structure:
       isAIThinking = true;
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast('Please configure your API key in Settings', 'error');
         removeThinkingIndicator();
         setSendButtonMode(false);
@@ -28655,6 +29099,7 @@ Example structure:
               aiResponse = await sendToGeminiAgent(continuePrompt, systemPrompt, apiKey, signal);
               break;
             case 'openai':
+            case 'ollama':
               aiResponse = await sendToOpenAIAgent(continuePrompt, systemPrompt, apiKey, signal);
               break;
             case 'anthropic':
@@ -28671,6 +29116,7 @@ Example structure:
               aiResponse = await sendToGeminiAudit(continuePrompt, systemPrompt, apiKey, signal);
               break;
             case 'openai':
+            case 'ollama':
               aiResponse = await sendToOpenAIAudit(continuePrompt, systemPrompt, apiKey, signal);
               break;
             case 'anthropic':
@@ -28693,6 +29139,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
               aiResponse = await sendToGemini(continuePrompt, null, apiKey, signal, systemPrompt);
               break;
             case 'openai':
+            case 'ollama':
               aiResponse = await sendToOpenAI(continuePrompt, null, apiKey, signal, systemPrompt);
               break;
             case 'anthropic':
@@ -31183,7 +31630,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       }
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast('Please configure your API key in Settings', 'error');
         return;
       }
@@ -31224,6 +31671,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
             aiResponse = await sendToGemini(message, images, apiKey, signal, systemPrompt, codeTexts);
             break;
           case 'openai':
+          case 'ollama':
             aiResponse = await sendToOpenAI(message, images, apiKey, signal, systemPrompt, codeTexts);
             break;
           case 'anthropic':
@@ -31335,35 +31783,30 @@ ${JSON.stringify(selectionData, null, 2)}`;
       return { text: botMessage, wasTruncated: finishReason === 'MAX_TOKENS' };
     }
 
-    // Send to OpenAI
+    // Send to OpenAI or Ollama (OpenAI-compatible chat Completions API)
     async function sendToOpenAI(message, images, apiKey, signal, systemPrompt = PLUGIN_SYSTEM_PROMPT, codeTexts = []) {
-      // Check if images are present and model supports vision
       const hasImages = images && images.length > 0;
-      let effectiveModel = openaiModel;
-      const modelLower = openaiModel.toLowerCase();
+      const primaryModel = getOpenAICompatChatModelId();
+      let effectiveModel = primaryModel;
+      const modelLower = primaryModel.toLowerCase();
 
-      // Check if this is a gpt-image model (for image editing)
-      const isImageEditModel = modelLower.includes('gpt-image');
+      if (selectedProvider === 'openai') {
+        const isImageEditModel = modelLower.includes('gpt-image');
+        if (hasImages && isImageEditModel && codeTexts.length === 0) {
+          return await sendToOpenAIImageEdit(message, images, apiKey, signal, primaryModel);
+        }
 
-      // If using gpt-image model with images, use the images/edits API
-      if (hasImages && isImageEditModel && codeTexts.length === 0) {
-        return await sendToOpenAIImageEdit(message, images, apiKey, signal, openaiModel);
-      }
+        const visionCapableModels = ['gpt-5', 'gpt-5-mini', 'gpt-4-vision', 'chatgpt-4o'];
+        const nonVisionModels = ['o1', 'gpt-3.5'];
 
-      // Vision-capable models (known to work with images in chat)
-      const visionCapableModels = ['gpt-5', 'gpt-5-mini', 'gpt-4-vision', 'chatgpt-4o'];
+        if (hasImages) {
+          const isVisionCapable = visionCapableModels.some(m => modelLower.includes(m));
+          const isNonVision = nonVisionModels.some(m => modelLower.startsWith(m));
 
-      // Models that DON'T support vision
-      const nonVisionModels = ['o1', 'gpt-3.5'];
-
-      if (hasImages) {
-        const isVisionCapable = visionCapableModels.some(m => modelLower.includes(m));
-        const isNonVision = nonVisionModels.some(m => modelLower.startsWith(m));
-
-        if (isNonVision || !isVisionCapable) {
-          // Fall back to gpt-5 for vision tasks
-          console.warn(`Model ${openaiModel} may not support vision. Using gpt-5 for image analysis.`);
-          effectiveModel = 'gpt-5';
+          if (isNonVision || !isVisionCapable) {
+            console.warn(`Model ${primaryModel} may not support vision. Using gpt-5 for image analysis.`);
+            effectiveModel = 'gpt-5';
+          }
         }
       }
 
@@ -31398,11 +31841,11 @@ ${JSON.stringify(selectionData, null, 2)}`;
       messages.push({ role: 'user', content });
       chatHistory.push({ role: 'user', parts: createUserHistoryParts(message || 'What can you tell me about these images?', [], codeTexts) });
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openAICompatFetch('chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          ...openAICompatAuthHeaders()
         },
         body: JSON.stringify(buildOpenAIRequestBody(effectiveModel, messages, {
           max_tokens: chatMaxTokens,
@@ -31591,7 +32034,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
       }
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast('Please configure your API key in Settings', 'error');
         return;
       }
@@ -31624,6 +32067,7 @@ ${JSON.stringify(selectionData, null, 2)}`;
             agentResponse = await sendToGeminiAgent(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'openai':
+          case 'ollama':
             agentResponse = await sendToOpenAIAgent(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'anthropic':
@@ -31880,35 +32324,30 @@ ${JSON.stringify(selectionData, null, 2)}`;
       return { text, wasTruncated: finishReason === 'MAX_TOKENS' };
     }
 
-    // OpenAI Agent request
+    // OpenAI / Ollama Agent request (OpenAI-compatible API)
     async function sendToOpenAIAgent(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
-      // Check if images are present and model supports vision
       const hasImages = imageData && (Array.isArray(imageData) ? imageData.length > 0 : true);
-      let effectiveModel = openaiModel;
-      const modelLower = openaiModel.toLowerCase();
+      const primaryModel = getOpenAICompatChatModelId();
+      let effectiveModel = primaryModel;
+      const modelLower = primaryModel.toLowerCase();
 
-      // Check if this is a gpt-image model (for image editing)
-      const isImageEditModel = modelLower.includes('gpt-image');
+      if (selectedProvider === 'openai') {
+        const isImageEditModel = modelLower.includes('gpt-image');
+        if (hasImages && isImageEditModel && codeTexts.length === 0) {
+          return await sendToOpenAIImageEditAgent(message, imageData, apiKey, signal, primaryModel);
+        }
 
-      // If using gpt-image model with images, use the images/edits API
-      if (hasImages && isImageEditModel && codeTexts.length === 0) {
-        return await sendToOpenAIImageEditAgent(message, imageData, apiKey, signal, openaiModel);
-      }
+        const visionCapableModels = ['gpt-5', 'gpt-5-mini', 'gpt-4-vision', 'chatgpt-4o'];
+        const nonVisionModels = ['o1', 'gpt-3.5'];
 
-      // Vision-capable models (known to work with images)
-      const visionCapableModels = ['gpt-5', 'gpt-5-mini', 'gpt-4-vision', 'chatgpt-4o'];
+        if (hasImages) {
+          const isVisionCapable = visionCapableModels.some(m => modelLower.includes(m));
+          const isNonVision = nonVisionModels.some(m => modelLower.startsWith(m));
 
-      // Models that DON'T support vision
-      const nonVisionModels = ['o1', 'gpt-3.5'];
-
-      if (hasImages) {
-        const isVisionCapable = visionCapableModels.some(m => modelLower.includes(m));
-        const isNonVision = nonVisionModels.some(m => modelLower.startsWith(m));
-
-        if (isNonVision || !isVisionCapable) {
-          // Fall back to gpt-5 for vision tasks
-          console.warn(`Model ${openaiModel} may not support vision. Using gpt-5 for image analysis.`);
-          effectiveModel = 'gpt-5';
+          if (isNonVision || !isVisionCapable) {
+            console.warn(`Model ${primaryModel} may not support vision. Using gpt-5 for image analysis.`);
+            effectiveModel = 'gpt-5';
+          }
         }
       }
 
@@ -31938,11 +32377,11 @@ ${JSON.stringify(selectionData, null, 2)}`;
 
       messages.push({ role: 'user', content });
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openAICompatFetch('chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          ...openAICompatAuthHeaders()
         },
         body: JSON.stringify(buildOpenAIRequestBody(effectiveModel, messages, {
           max_tokens: agentMaxTokens,
@@ -32278,7 +32717,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       }
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast('Please configure your API key in Settings', 'error');
         return;
       }
@@ -32312,6 +32751,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
             auditResponse = await sendToGeminiAudit(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'openai':
+          case 'ollama':
             auditResponse = await sendToOpenAIAudit(message, systemPrompt, apiKey, signal, imageData, codeTexts);
             break;
           case 'anthropic':
@@ -32456,29 +32896,27 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       return { text: botMessage, wasTruncated: finishReason === 'MAX_TOKENS' };
     }
 
-    // OpenAI Audit request
+    // OpenAI / Ollama Audit request
     async function sendToOpenAIAudit(message, systemPrompt, apiKey, signal, imageData = null, codeTexts = []) {
       const userMessage = message || 'この選択された要素のUI/UXレビューを行ってください。';
 
-      // Check if images are present and model supports vision
       const hasImages = !!imageData;
-      let effectiveModel = openaiModel;
+      const primaryModel = getOpenAICompatChatModelId();
+      let effectiveModel = primaryModel;
 
-      // Vision-capable models (known to work with images)
-      const visionCapableModels = ['gpt-5', 'gpt-5-mini', 'gpt-4-vision', 'chatgpt-4o'];
+      if (selectedProvider === 'openai') {
+        const visionCapableModels = ['gpt-5', 'gpt-5-mini', 'gpt-4-vision', 'chatgpt-4o'];
+        const nonVisionModels = ['o1', 'gpt-3.5'];
 
-      // Models that DON'T support vision
-      const nonVisionModels = ['o1', 'gpt-3.5'];
+        if (hasImages) {
+          const modelLower = primaryModel.toLowerCase();
+          const isVisionCapable = visionCapableModels.some(m => modelLower.includes(m));
+          const isNonVision = nonVisionModels.some(m => modelLower.startsWith(m));
 
-      if (hasImages) {
-        const modelLower = openaiModel.toLowerCase();
-        const isVisionCapable = visionCapableModels.some(m => modelLower.includes(m));
-        const isNonVision = nonVisionModels.some(m => modelLower.startsWith(m));
-
-        if (isNonVision || !isVisionCapable) {
-          // Fall back to gpt-5 for vision tasks
-          console.warn(`Model ${openaiModel} may not support vision. Using gpt-5 for image analysis.`);
-          effectiveModel = 'gpt-5';
+          if (isNonVision || !isVisionCapable) {
+            console.warn(`Model ${primaryModel} may not support vision. Using gpt-5 for image analysis.`);
+            effectiveModel = 'gpt-5';
+          }
         }
       }
 
@@ -32503,11 +32941,11 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
 
       messages.push({ role: 'user', content });
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openAICompatFetch('chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          ...openAICompatAuthHeaders()
         },
         body: JSON.stringify(buildOpenAIRequestBody(effectiveModel, messages, {
           max_tokens: auditMaxTokens,
@@ -32809,9 +33247,13 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       }
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
-        const providerName = selectedProvider === 'openai' ? 'OpenAI' : selectedProvider === 'anthropic' ? 'Anthropic' : 'Gemini';
+      if (!isAiProviderReady()) {
+        const providerName = getProviderDisplayName(selectedProvider);
         throw new Error(`Please configure your ${providerName} API key in Settings`);
+      }
+
+      if (selectedProvider === 'ollama') {
+        throw new Error('Image generation is not available with Ollama as the assistant. Switch to Google Gemini or OpenAI in Settings.');
       }
 
       // Get user's preferred model or use default
@@ -33496,6 +33938,7 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
         case 'gemini':
           return await callGeminiForIntent(modelId, prompt, apiKey, signal);
         case 'openai':
+        case 'ollama':
           return await callOpenAIForIntent(modelId, prompt, apiKey, signal);
         case 'anthropic':
           return await callAnthropicForIntent(modelId, prompt, apiKey, signal);
@@ -33520,18 +33963,16 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
     }
 
     async function callOpenAIForIntent(modelId, prompt, apiKey, signal) {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await openAICompatFetch('chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          ...openAICompatAuthHeaders()
         },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [{ role: 'user', content: prompt }],
+        body: JSON.stringify(buildOpenAIRequestBody(modelId, [{ role: 'user', content: prompt }], {
           temperature: 0.1,
           max_tokens: 256
-        }),
+        })),
         signal
       });
       if (!response.ok) throw new Error('OpenAI intent call failed');
@@ -33715,7 +34156,7 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
       const { imageMetadata = [], isFallback: presetFallback = false, fallbackContext = null } = options;
 
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         removeThinkingIndicator();
         setSendButtonMode(false);
         showToast('Please configure your API key in Settings', 'error');
@@ -35143,7 +35584,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         return null;
       }
       const apiKey = getCurrentApiKey();
-      if (!apiKey) {
+      if (!isAiProviderReady()) {
         showToast('Please configure your API key in Settings', 'error');
         return null;
       }
@@ -35178,19 +35619,15 @@ Based on the user's instruction, generate the appropriate commands to modify the
             improvedText = data.candidates[0].content.parts[0].text.trim();
             break;
           }
-          case 'openai': {
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          case 'openai':
+          case 'ollama': {
+            const response = await openAICompatFetch('chat/completions', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-              body: JSON.stringify({
-                model: openaiModel,
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: text }
-                ],
-                max_tokens: 2048,
-                temperature: 0.7
-              })
+              headers: { 'Content-Type': 'application/json', ...openAICompatAuthHeaders() },
+              body: JSON.stringify(buildOpenAIRequestBody(getOpenAICompatChatModelId() || (selectedProvider === 'ollama' ? DEFAULT_OLLAMA_CHAT_MODEL : openaiModel), [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: text }
+              ], { max_tokens: 2048, temperature: 0.7 }))
             });
             if (!response.ok) {
               const error = await response.json();
@@ -35437,7 +35874,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (currentMode === 'agent') {
         try {
           const apiKey = getCurrentApiKey();
-          if (!apiKey) {
+          if (!isAiProviderReady()) {
             removeThinkingIndicator();
             setSendButtonMode(false);
             showToast('Please configure your API key in Settings', 'error');
@@ -36776,13 +37213,22 @@ Based on the user's instruction, generate the appropriate commands to modify the
             testApiKey = openaiApiKeyInput.value;
             testModel = openaiModelSelect.value;
             break;
+          case 'ollama':
+            testApiKey = ollamaApiKeyInput ? ollamaApiKeyInput.value : '';
+            testModel = ollamaModelSelect ? ollamaModelSelect.value : ollamaModel;
+            break;
           case 'anthropic':
             testApiKey = anthropicApiKeyInput.value;
             testModel = anthropicModelSelect.value;
             break;
         }
 
-        if (!testApiKey) {
+        if (provider === 'openai') {
+          if (!String(testApiKey || '').trim()) {
+            showToast(t('settings.messages.enterApiKey'), 'error');
+            return;
+          }
+        } else if (provider !== 'ollama' && !testApiKey) {
           showToast(t('settings.messages.enterApiKey'), 'error');
           return;
         }
@@ -36802,12 +37248,23 @@ Based on the user's instruction, generate the appropriate commands to modify the
               })
             });
           } else if (provider === 'openai') {
-            response = await fetch('https://api.openai.com/v1/chat/completions', {
+            const hdr = { 'Content-Type': 'application/json', Authorization: `Bearer ${String(testApiKey || '').trim()}` };
+            response = await fetch(`${DEFAULT_OPENAI_API_BASE}/chat/completions`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${testApiKey}`
-              },
+              headers: hdr,
+              body: JSON.stringify({
+                model: testModel,
+                messages: [{ role: 'user', content: 'Hello' }],
+                max_tokens: 10
+              })
+            });
+          } else if (provider === 'ollama') {
+            const hdr = { 'Content-Type': 'application/json' };
+            const tk = String(testApiKey || '').trim();
+            if (tk) hdr.Authorization = `Bearer ${tk}`;
+            response = await compatHttpFetch(`${getOllamaBaseUrl()}/chat/completions`, {
+              method: 'POST',
+              headers: hdr,
               body: JSON.stringify({
                 model: testModel,
                 messages: [{ role: 'user', content: 'Hello' }],
@@ -36864,6 +37321,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
             } else if (provider === 'openai') {
               openaiApiKey = testApiKey;
               openaiModel = testModel;
+            } else if (provider === 'ollama') {
+              ollamaApiKey = testApiKey || '';
+              ollamaModel = testModel;
             } else if (provider === 'anthropic') {
               anthropicApiKey = testApiKey;
               anthropicModel = testModel;
@@ -36890,6 +37350,20 @@ Based on the user's instruction, generate the appropriate commands to modify the
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
       if (!msg) return;
+
+      if (msg.type === 'ollama-proxy-fetch-result') {
+        const pending = ollamaProxyPending.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timeoutId);
+          ollamaProxyPending.delete(msg.requestId);
+          try {
+            pending.settle(msg);
+          } catch (e) {
+            pending.reject(e);
+          }
+        }
+        return;
+      }
 
       // Remove loading states from export menu items
       exportMenuItems.forEach(item => item.classList.remove('loading'));
