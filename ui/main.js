@@ -21404,6 +21404,10 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
               iconApiSource,
               iconFontFamily
             });
+            const resultText = `Showing ${matches.length} icon result${matches.length === 1 ? '' : 's'} in the drawer. Click any icon to insert it.`;
+            addMessage('bot', resultText);
+            chatHistory.push({ role: 'model', parts: [{ text: resultText }] });
+            await autoSaveAfterResponse();
             return;
           }
 
