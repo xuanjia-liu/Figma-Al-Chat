@@ -959,6 +959,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let currentStickiesScope = 'all'; // 'all' (File), 'page' (This page), 'selection' (Selection)
     let figmaStickiesLastLoaded = 0; // Timestamp of last sticky load
     let figmaStickiesLoading = false; // Flag to prevent concurrent loads
+    let currentComponentsScope = 'selection'; // 'selection' | 'page' | 'file'
+    let componentInventoryByScope = { selection: null, page: null, file: null };
+    let componentsInventoryLoading = false;
+    let componentsSearchQuery = '';
+    let componentsSourceFilter = 'all';
+    let componentsTypeFilter = 'all';
+    let componentsGroupingMode = 'set';
+    let componentsSortBy = 'usage';
     // 1 minute cache TTL
     let showResolvedComments = false; // Toggle for showing resolved comments
     let figmaCurrentUser = null; // Current user info from Figma API (handle, id, etc.)
@@ -8004,10 +8012,14 @@ Rules:
             recordQuickActionUsage(actionName);
             closeCommandsDrawer();
             await handleExtractImagePrompt(actionName, actionIcon);
-          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview')) {
+          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllComponents' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview')) {
             // Handle actions that open in prompt drawer
             if (task.directAction === 'listAllComments') {
               ensureCommentsLoadedCached();
+            } else if (task.directAction === 'listAllComponents') {
+              refreshComponentsInDrawer().catch((error) => {
+                console.warn('Failed to prefetch components inventory:', error);
+              });
             } else if (task.directAction === 'listAllStickies') {
               ensureStickiesLoadedCached();
             }
@@ -10977,6 +10989,380 @@ Requirements:
       if (container) {
         renderStickiesInDrawer(container);
       }
+    }
+
+    let componentInventoryRowMap = new Map();
+
+    function requestAllComponentsInventory(scope = currentComponentsScope, forceRefresh = false) {
+      if (!forceRefresh && componentInventoryByScope[scope]) {
+        return Promise.resolve(componentInventoryByScope[scope]);
+      }
+
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timeout loading components inventory'));
+        }, 20000);
+
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (!msg || msg.type !== 'all-components-result') return;
+          if (msg.data?.scope && msg.data.scope !== scope) return;
+          clearTimeout(timeout);
+          window.removeEventListener('message', handler);
+          if (msg.error) {
+            reject(new Error(msg.error));
+            return;
+          }
+          componentInventoryByScope[scope] = msg.data || null;
+          resolve(msg.data || null);
+        };
+
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: { type: 'get-all-components', scope } }, '*');
+      });
+    }
+
+    function getCurrentComponentsInventory() {
+      return componentInventoryByScope[currentComponentsScope] || null;
+    }
+
+    function getFilteredComponentEntries() {
+      const inventory = getCurrentComponentsInventory();
+      const result = {
+        inventory,
+        setGroups: [],
+        standaloneComponents: [],
+        groupedComponents: new Map(),
+        flatComponents: [],
+        summary: {
+          visibleSetCount: 0,
+          visibleComponentCount: 0,
+          visibleInstanceCount: 0,
+        }
+      };
+
+      if (!inventory) return result;
+
+      const allComponents = Array.isArray(inventory.flatComponents) ? inventory.flatComponents : [];
+      const allSetGroups = Array.isArray(inventory.setGroups) ? inventory.setGroups : [];
+
+      const matchesItem = (item) => {
+        if (!item) return false;
+        if (componentsSourceFilter !== 'all' && item.source !== componentsSourceFilter) return false;
+        const query = componentsSearchQuery.trim().toLowerCase();
+        if (query) {
+          const haystack = [
+            item.name || '',
+            item.componentSetName || '',
+            ...(Array.isArray(item.pages) ? item.pages.map((page) => page.name || '') : [])
+          ].join('\n').toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        if (componentsTypeFilter === 'instances' && (item.counts?.instanceCount || 0) === 0) return false;
+        return true;
+      };
+
+      const sortComponents = (items) => {
+        const sorted = [...items];
+        sorted.sort((a, b) => {
+          if (componentsSortBy === 'name') {
+            return (a.name || '').localeCompare(b.name || '');
+          }
+          if (componentsSortBy === 'page') {
+            const aPage = (a.pages?.[0]?.name || '');
+            const bPage = (b.pages?.[0]?.name || '');
+            return aPage.localeCompare(bPage) || (a.name || '').localeCompare(b.name || '');
+          }
+          return (b.counts?.usageCount || 0) - (a.counts?.usageCount || 0) || (a.name || '').localeCompare(b.name || '');
+        });
+        return sorted;
+      };
+
+      const filteredComponents = sortComponents(allComponents.filter(matchesItem));
+      result.flatComponents = filteredComponents;
+      result.summary.visibleComponentCount = filteredComponents.length;
+      result.summary.visibleInstanceCount = filteredComponents.reduce((sum, item) => sum + (item.counts?.instanceCount || 0), 0);
+
+      const groupedComponents = new Map();
+      filteredComponents.forEach((item) => {
+        const groupId = item.componentSetId || '__standalone__';
+        if (!groupedComponents.has(groupId)) groupedComponents.set(groupId, []);
+        groupedComponents.get(groupId).push(item);
+      });
+      result.groupedComponents = groupedComponents;
+      result.standaloneComponents = groupedComponents.get('__standalone__') || [];
+
+      const filteredSetGroups = sortComponents(
+        allSetGroups.filter((group) => {
+          if (componentsSourceFilter !== 'all' && group.source !== componentsSourceFilter) return false;
+          const childMatches = (groupedComponents.get(group.id) || []).length > 0;
+          const query = componentsSearchQuery.trim().toLowerCase();
+          if (query) {
+            const haystack = [
+              group.name || '',
+              ...(Array.isArray(group.pages) ? group.pages.map((page) => page.name || '') : [])
+            ].join('\n').toLowerCase();
+            if (!haystack.includes(query) && !childMatches) return false;
+          }
+          if (componentsTypeFilter === 'components' || componentsTypeFilter === 'instances') {
+            return childMatches;
+          }
+          return true;
+        })
+      );
+      result.setGroups = filteredSetGroups;
+      result.summary.visibleSetCount = filteredSetGroups.length;
+      return result;
+    }
+
+    function formatComponentPages(pages) {
+      if (!Array.isArray(pages) || pages.length === 0) return 'No page';
+      if (pages.length === 1) return pages[0].name || 'Untitled';
+      return `${pages[0].name || 'Untitled'} +${pages.length - 1}`;
+    }
+
+    function formatComponentCounts(item, isGroup = false) {
+      const counts = item?.counts || {};
+      const parts = [];
+      if (isGroup) {
+        parts.push(`${counts.componentCount || 0} components`);
+      }
+      parts.push(`${counts.instanceCount || 0} uses`);
+      if (currentComponentsScope === 'file') {
+        parts.push(`${Array.isArray(item?.pages) ? item.pages.length : 0} pages`);
+      }
+      return parts.join(' · ');
+    }
+
+    function buildComponentSummaryText(entry, options = {}) {
+      const title = entry.type === 'COMPONENT_SET'
+        ? `${entry.name} [Component Set]`
+        : `${entry.name} [Component]`;
+      const lines = [title];
+      lines.push(`Source: ${entry.source === 'library' ? 'Library' : 'Local'}`);
+      if (entry.componentSetName && entry.type !== 'COMPONENT_SET') {
+        lines.push(`Set: ${entry.componentSetName}`);
+      }
+      lines.push(`Usage count: ${entry.counts?.usageCount || 0}`);
+      if (entry.counts?.componentCount) lines.push(`Component definitions: ${entry.counts.componentCount}`);
+      if (entry.counts?.componentSetCount) lines.push(`Component sets: ${entry.counts.componentSetCount}`);
+      if (Array.isArray(entry.pages) && entry.pages.length > 0) {
+        lines.push(`Pages: ${entry.pages.map((page) => page.name).join(', ')}`);
+      }
+      if (options.includeIds) {
+        const ids = entry.instanceNodeIds || entry.componentNodeIds || entry.componentSetNodeIds || [];
+        if (ids.length > 0) lines.push(`Node IDs: ${ids.join(', ')}`);
+      }
+      return lines.join('\n');
+    }
+
+    function renderComponentsInDrawer(container) {
+      const { inventory, setGroups, standaloneComponents, groupedComponents, flatComponents, summary } = getFilteredComponentEntries();
+      componentInventoryRowMap = new Map();
+
+      if (!inventory) {
+        container.innerHTML = '<div class="prompt-comments-empty">No component data loaded yet.</div>';
+        return;
+      }
+
+      const buildRowHtml = (item, { compact = false } = {}) => {
+        componentInventoryRowMap.set(item.id, item);
+        const usage = item.counts?.usageCount || 0;
+        const pageLabel = formatComponentPages(item.pages);
+        return `
+          <div class="component-browser-row${compact ? ' compact' : ''}">
+            <div class="component-browser-row-main">
+              <div class="component-browser-row-title">
+                <span>${escapeHtml(item.name || 'Untitled')}</span>
+                <span class="component-browser-badge">${item.type === 'COMPONENT_SET' ? 'Set' : 'Component'}</span>
+                <span class="component-browser-badge component-browser-badge--${item.source}">${item.source === 'library' ? 'Library' : 'Local'}</span>
+              </div>
+              <div class="component-browser-row-meta">
+                <span>${escapeHtml(formatComponentCounts(item, item.type === 'COMPONENT_SET'))}</span>
+                <span>${escapeHtml(pageLabel)}</span>
+                ${item.componentSetName && item.type !== 'COMPONENT_SET' ? `<span>${escapeHtml(item.componentSetName)}</span>` : ''}
+              </div>
+            </div>
+            <div class="component-browser-row-actions">
+              <button type="button" onclick="copyComponentInventoryEntry('${escapeHtml(item.id)}')">Copy</button>
+              <button type="button" onclick="navigateToComponentInventoryEntry('${escapeHtml(item.id)}')" ${item.representativeNodeId ? '' : 'disabled'}>Jump</button>
+              <button type="button" onclick="selectComponentInventoryEntryNodes('${escapeHtml(item.id)}')" ${(item.instanceNodeIds?.length || 0) > 0 ? '' : 'disabled'}>Select Uses (${usage})</button>
+            </div>
+          </div>
+        `;
+      };
+
+      const controlsHtml = `
+        <div class="component-browser-toolbar">
+          <input type="search" value="${escapeHtml(componentsSearchQuery)}" placeholder="Search components, sets, pages..." oninput="handleComponentsSearchInput(this.value)">
+          <select onchange="setComponentsSourceFilter(this.value)">
+            <option value="all"${componentsSourceFilter === 'all' ? ' selected' : ''}>All sources</option>
+            <option value="local"${componentsSourceFilter === 'local' ? ' selected' : ''}>Local</option>
+            <option value="library"${componentsSourceFilter === 'library' ? ' selected' : ''}>Library</option>
+          </select>
+          <select onchange="setComponentsTypeFilter(this.value)">
+            <option value="all"${componentsTypeFilter === 'all' ? ' selected' : ''}>All types</option>
+            <option value="componentSets"${componentsTypeFilter === 'componentSets' ? ' selected' : ''}>Component sets</option>
+            <option value="components"${componentsTypeFilter === 'components' ? ' selected' : ''}>Components</option>
+            <option value="instances"${componentsTypeFilter === 'instances' ? ' selected' : ''}>Instances</option>
+          </select>
+          <select onchange="setComponentsGroupingMode(this.value)">
+            <option value="set"${componentsGroupingMode === 'set' ? ' selected' : ''}>Set first</option>
+            <option value="flat"${componentsGroupingMode === 'flat' ? ' selected' : ''}>Flat by component</option>
+          </select>
+          <select onchange="setComponentsSortBy(this.value)">
+            <option value="usage"${componentsSortBy === 'usage' ? ' selected' : ''}>Usage desc</option>
+            <option value="name"${componentsSortBy === 'name' ? ' selected' : ''}>Name</option>
+            <option value="page"${componentsSortBy === 'page' ? ' selected' : ''}>Page</option>
+          </select>
+        </div>
+        <div class="component-browser-summary">
+          <span>${summary.visibleSetCount} sets</span>
+          <span>${summary.visibleComponentCount} components</span>
+          <span>${summary.visibleInstanceCount} uses</span>
+        </div>
+      `;
+
+      let bodyHtml = '';
+      if (componentsGroupingMode === 'flat' || componentsTypeFilter === 'componentSets') {
+        const items = componentsTypeFilter === 'componentSets' ? setGroups : flatComponents;
+        if (items.length === 0) {
+          bodyHtml = '<div class="prompt-comments-empty">No matching components found.</div>';
+        } else {
+          bodyHtml = items.map((item) => buildRowHtml(item)).join('');
+        }
+      } else {
+        const sections = [];
+        setGroups.forEach((group) => {
+          const children = groupedComponents.get(group.id) || [];
+          componentInventoryRowMap.set(group.id, group);
+          sections.push(`
+            <div class="component-browser-group">
+              ${buildRowHtml(group)}
+              <div class="component-browser-group-children">
+                ${children.length > 0 ? children.map((item) => buildRowHtml(item, { compact: true })).join('') : '<div class="component-browser-empty">No matching components in this set.</div>'}
+              </div>
+            </div>
+          `);
+        });
+
+        if (standaloneComponents.length > 0 && componentsTypeFilter !== 'componentSets') {
+          sections.push(`
+            <div class="component-browser-group">
+              <div class="component-browser-group-heading">Standalone components</div>
+              <div class="component-browser-group-children">
+                ${standaloneComponents.map((item) => buildRowHtml(item, { compact: true })).join('')}
+              </div>
+            </div>
+          `);
+        }
+
+        bodyHtml = sections.length > 0 ? sections.join('') : '<div class="prompt-comments-empty">No matching components found.</div>';
+      }
+
+      container.innerHTML = controlsHtml + `<div class="component-browser-list">${bodyHtml}</div>`;
+    }
+
+    async function refreshComponentsInDrawer(forceRefresh = false) {
+      const container = document.getElementById('promptComponentsContainer');
+      if (container) {
+        container.innerHTML = '<div class="prompt-comments-loading">Loading components...</div>';
+      }
+
+      try {
+        componentsInventoryLoading = true;
+        await requestAllComponentsInventory(currentComponentsScope, forceRefresh);
+        const target = document.getElementById('promptComponentsContainer');
+        if (target) renderComponentsInDrawer(target);
+      } catch (error) {
+        const target = document.getElementById('promptComponentsContainer');
+        if (target) {
+          target.innerHTML = `<div class="prompt-comments-error">Failed to load components: ${escapeHtml(error.message)}</div>`;
+        }
+      } finally {
+        componentsInventoryLoading = false;
+      }
+    }
+
+    function switchComponentsScope(scope, btn) {
+      if (currentComponentsScope === scope) return;
+      currentComponentsScope = scope;
+      const tabs = btn.parentElement;
+      tabs.querySelectorAll('.pill-tab').forEach((tab) => tab.classList.remove('active'));
+      btn.classList.add('active');
+      if (scope === 'page' || scope === 'selection') {
+        parent.postMessage({ pluginMessage: { type: 'get-current-context' } }, '*');
+      }
+      refreshComponentsInDrawer();
+    }
+
+    function handleComponentsSearchInput(value) {
+      componentsSearchQuery = String(value || '');
+      const container = document.getElementById('promptComponentsContainer');
+      if (container) renderComponentsInDrawer(container);
+    }
+
+    function setComponentsSourceFilter(value) {
+      componentsSourceFilter = value || 'all';
+      const container = document.getElementById('promptComponentsContainer');
+      if (container) renderComponentsInDrawer(container);
+    }
+
+    function setComponentsTypeFilter(value) {
+      componentsTypeFilter = value || 'all';
+      const container = document.getElementById('promptComponentsContainer');
+      if (container) renderComponentsInDrawer(container);
+    }
+
+    function setComponentsGroupingMode(value) {
+      componentsGroupingMode = value || 'set';
+      const container = document.getElementById('promptComponentsContainer');
+      if (container) renderComponentsInDrawer(container);
+    }
+
+    function setComponentsSortBy(value) {
+      componentsSortBy = value || 'usage';
+      const container = document.getElementById('promptComponentsContainer');
+      if (container) renderComponentsInDrawer(container);
+    }
+
+    async function copyVisibleComponentsSummary() {
+      const { setGroups, flatComponents } = getFilteredComponentEntries();
+      const items = componentsGroupingMode === 'set' && componentsTypeFilter !== 'components' && componentsTypeFilter !== 'instances'
+        ? setGroups
+        : flatComponents;
+      const text = items.length > 0
+        ? items.map((entry) => buildComponentSummaryText(entry)).join('\n\n')
+        : 'No matching components found.';
+      await navigator.clipboard.writeText(text);
+      showToast('Copied components summary', 'success');
+    }
+
+    async function copyComponentInventoryEntry(entryId) {
+      const entry = componentInventoryRowMap.get(entryId);
+      if (!entry) return;
+      await navigator.clipboard.writeText(buildComponentSummaryText(entry, { includeIds: true }));
+      showToast('Copied component summary', 'success');
+    }
+
+    function navigateToComponentInventoryEntry(entryId) {
+      const entry = componentInventoryRowMap.get(entryId);
+      if (!entry?.representativeNodeId) {
+        showToast('No node available to navigate to', 'error');
+        return;
+      }
+      parent.postMessage({ pluginMessage: { type: 'navigate-to-node', nodeId: entry.representativeNodeId } }, '*');
+    }
+
+    function selectComponentInventoryEntryNodes(entryId) {
+      const entry = componentInventoryRowMap.get(entryId);
+      const nodeIds = Array.isArray(entry?.instanceNodeIds) ? entry.instanceNodeIds : [];
+      if (nodeIds.length === 0) {
+        showToast('No instance nodes available to select', 'error');
+        return;
+      }
+      parent.postMessage({ pluginMessage: { type: 'select-nodes', nodeIds } }, '*');
     }
 
     let stickiesSearchTimer = null;
@@ -14893,6 +15279,7 @@ Generate ONLY the reply text, nothing else.`;
         const hidePromptDrawerHelp =
           actionData.name === 'Vertical text' ||
           actionData.name === 'Font preview' ||
+          actionData.directAction === 'listAllComponents' ||
           actionData.directAction === 'randomizeSelectedInstances';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
@@ -15156,6 +15543,36 @@ Generate ONLY the reply text, nothing else.`;
           selectedCommentIds.clear();
           // Populate comments asynchronously after drawer opens
           setTimeout(() => populateCommentsInDrawer(), 50);
+        } else if (actionData.directAction === 'listAllComponents') {
+          const submitBtn = document.getElementById('promptDrawerSubmit');
+          if (submitBtn) {
+            submitBtn.style.display = 'none';
+          }
+          const footer = document.querySelector('.prompt-drawer-footer');
+          if (footer) {
+            const existingGroup = footer.querySelector('.ai-action-group');
+            if (existingGroup) existingGroup.remove();
+            const existingBtn = footer.querySelector('.prompt-comments-summarize-btn');
+            if (existingBtn) existingBtn.remove();
+          }
+
+          const resetBtn = document.getElementById('promptDrawerReset');
+          if (resetBtn) {
+            resetBtn.textContent = tu('actions.prompt.refresh');
+            resetBtn.title = tu('actions.prompt.refresh');
+            resetBtn.style.display = '';
+            resetBtn.onclick = (e) => {
+              e.preventDefault();
+              refreshComponentsInDrawer(true);
+            };
+          }
+
+          const cancelBtn = document.getElementById('promptDrawerCancel');
+          if (cancelBtn) {
+            cancelBtn.textContent = tu('actions.prompt.close');
+          }
+
+          setTimeout(() => refreshComponentsInDrawer(), 50);
         } else if (actionData.directAction === 'listAllStickies') {
           const submitBtn = document.getElementById('promptDrawerSubmit');
           if (submitBtn) {
@@ -16770,6 +17187,30 @@ Generate ONLY the reply text, nothing else.`;
               </div>
               <div class="prompt-comments-container" id="promptStickiesContainer">
                 <div class="prompt-comments-loading">${tu('actions.stickies.loading')}</div>
+              </div>
+            </div>
+          `;
+        } else if (field.type === 'componentsBrowser') {
+          fieldHtml += `
+            <div class="prompt-field${wrapperClass} prompt-field-comments"${conditionalAttrs}>
+              <div class="prompt-field-header">
+                <div class="pill-tab-container">
+                  <button class="pill-tab ${currentComponentsScope === 'selection' ? 'active' : ''}" onclick="switchComponentsScope('selection', this)" type="button">Selection</button>
+                  <button class="pill-tab ${currentComponentsScope === 'page' ? 'active' : ''}" onclick="switchComponentsScope('page', this)" type="button">This Page</button>
+                  <button class="pill-tab ${currentComponentsScope === 'file' ? 'active' : ''}" onclick="switchComponentsScope('file', this)" type="button">Whole File</button>
+                </div>
+                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                  <button class="prompt-comments-toggle-btn" type="button" onclick="copyVisibleComponentsSummary()">Copy Summary</button>
+                  <button class="prompt-comments-refresh-btn" type="button" onclick="refreshComponentsInDrawer(true)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                      <path d="M23 4v6h-6M1 20v-6h6"/>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="prompt-comments-container" id="promptComponentsContainer">
+                <div class="prompt-comments-loading">Loading components...</div>
               </div>
             </div>
           `;
@@ -35428,6 +35869,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         task.directAction === 'createIcon' ||
         task.directAction === 'browseIconSet' ||
         task.directAction === 'generatePalette' ||
+        task.directAction === 'listAllComponents' ||
         task.directAction === 'browseStyles' ||
         task.directAction === 'googleFontPreview') {
         let hydratedFields = task.fields || [];
@@ -37506,6 +37948,11 @@ Based on the user's instruction, generate the appropriate commands to modify the
             const promptContainer = document.getElementById('promptCommentsContainer');
             if (promptContainer) renderCommentsInDrawer(promptContainer);
           }
+          if (currentPromptAction?.directAction === 'listAllComponents' && currentComponentsScope === 'selection') {
+            refreshComponentsInDrawer(true).catch((error) => {
+              console.warn('Failed to refresh components for selection scope:', error);
+            });
+          }
           if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'selection') {
             const promptContainer = document.getElementById('promptStickiesContainer');
             if (promptContainer) renderStickiesInDrawer(promptContainer);
@@ -37608,9 +38055,22 @@ Based on the user's instruction, generate the appropriate commands to modify the
             const promptContainer = document.getElementById('promptCommentsContainer');
             if (promptContainer) renderCommentsInDrawer(promptContainer);
           }
+          if (currentPromptAction?.directAction === 'listAllComponents' && currentComponentsScope === 'page') {
+            refreshComponentsInDrawer(true).catch((error) => {
+              console.warn('Failed to refresh components for page scope:', error);
+            });
+          }
           if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'page') {
             const promptContainer = document.getElementById('promptStickiesContainer');
             if (promptContainer) renderStickiesInDrawer(promptContainer);
+          }
+          break;
+
+        case 'select-nodes-result':
+          if (msg.partial) {
+            showToast(`Selected ${msg.selectedCount}/${msg.requestedCount} nodes on ${msg.pageName}`, 'info');
+          } else {
+            showToast(`Selected ${msg.selectedCount} nodes on ${msg.pageName}`, 'success');
           }
           break;
 
@@ -38516,6 +38976,17 @@ Update the text content for all selected nodes accordingly.`;
       ...commentsInlineHandlerNames,
       ...stickiesInlineHandlerNames,
       ...historyInlineHandlerNames,
+      'switchComponentsScope',
+      'handleComponentsSearchInput',
+      'setComponentsSourceFilter',
+      'setComponentsTypeFilter',
+      'setComponentsGroupingMode',
+      'setComponentsSortBy',
+      'copyVisibleComponentsSummary',
+      'copyComponentInventoryEntry',
+      'navigateToComponentInventoryEntry',
+      'selectComponentInventoryEntryNodes',
+      'refreshComponentsInDrawer',
     ]));
 
     function exposeInlineHandlerBindings() {

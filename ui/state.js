@@ -67,6 +67,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'fillFromOnlineImage',
   'imageToAscii',
   'listAllComments',
+  'listAllComponents',
   'listAllStickies',
   'browseStyles',
   'googleFontPreview',

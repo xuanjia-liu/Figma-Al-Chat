@@ -48,6 +48,21 @@ export const stylingTasks = [
           directAction: 'browseStyles'
         },
 {
+          name: 'List All Components',
+          desc: 'Browse components, sets, and instances in selection, page, or file',
+          prompt: '',
+          noSelection: true,
+          directAction: 'listAllComponents',
+          help: 'Lists local and library-backed components, component sets, and instances with usage counts and grouping tools.',
+          fields: [
+            {
+              key: 'componentsBrowser',
+              type: 'componentsBrowser',
+              label: 'Components'
+            }
+          ]
+        },
+{
           name: 'Font preview',
           desc: 'Browse Google Fonts with live preview and filters.',
           prompt: '',

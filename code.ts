@@ -865,6 +865,318 @@ function buildSelectionInfoPayload(selection: readonly SceneNode[]) {
   });
 }
 
+type ComponentInventoryScope = 'selection' | 'page' | 'file';
+type ComponentInventorySource = 'local' | 'library';
+
+interface ComponentInventoryPageRef {
+  id: string;
+  name: string;
+}
+
+interface ComponentInventoryCounts {
+  componentSetCount: number;
+  componentCount: number;
+  instanceCount: number;
+  usageCount: number;
+}
+
+interface ComponentInventoryComponentItem {
+  id: string;
+  name: string;
+  type: 'COMPONENT';
+  source: ComponentInventorySource;
+  componentSetId: string | null;
+  componentSetName: string | null;
+  componentNodeIds: string[];
+  instanceNodeIds: string[];
+  representativeNodeId: string | null;
+  pages: ComponentInventoryPageRef[];
+  counts: ComponentInventoryCounts;
+}
+
+interface ComponentInventorySetGroup {
+  id: string;
+  name: string;
+  type: 'COMPONENT_SET';
+  source: ComponentInventorySource;
+  componentSetNodeIds: string[];
+  representativeNodeId: string | null;
+  pages: ComponentInventoryPageRef[];
+  counts: ComponentInventoryCounts;
+  componentIds: string[];
+}
+
+function isLibraryBackedComponent(node: BaseNode | null | undefined): boolean {
+  if (!node) return false;
+  const candidate = node as any;
+  return candidate.remote === true || (!!candidate.libraryName && candidate.libraryName.length > 0);
+}
+
+function getNodePageRef(node: BaseNode | null | undefined): ComponentInventoryPageRef | null {
+  let current = node || null;
+  while (current && current.type !== 'PAGE') {
+    current = current.parent;
+  }
+  if (current && current.type === 'PAGE') {
+    return { id: current.id, name: current.name };
+  }
+  return null;
+}
+
+function addPageRef(target: Map<string, ComponentInventoryPageRef>, page: ComponentInventoryPageRef | null) {
+  if (!page) return;
+  target.set(page.id, page);
+}
+
+function pushUnique(list: string[], value: string | null | undefined) {
+  if (!value) return;
+  if (!list.includes(value)) {
+    list.push(value);
+  }
+}
+
+async function resolveInstanceMainComponent(instance: InstanceNode): Promise<ComponentNode | null> {
+  try {
+    if ('getMainComponentAsync' in instance && typeof (instance as any).getMainComponentAsync === 'function') {
+      return await (instance as any).getMainComponentAsync();
+    }
+    return (instance as any).mainComponent || null;
+  } catch (error) {
+    console.warn('Failed to resolve main component for instance', instance.id, error);
+    return null;
+  }
+}
+
+function collectComponentInventoryRoots(scope: ComponentInventoryScope): SceneNode[] {
+  if (scope === 'selection') {
+    return [...figma.currentPage.selection];
+  }
+  if (scope === 'page') {
+    return [...figma.currentPage.children];
+  }
+  const roots: SceneNode[] = [];
+  for (const page of figma.root.children) {
+    roots.push(...page.children);
+  }
+  return roots;
+}
+
+function collectComponentInventoryNodes(roots: SceneNode[]): SceneNode[] {
+  const nodes: SceneNode[] = [];
+  const seen = new Set<string>();
+  const visit = (node: SceneNode) => {
+    if (seen.has(node.id)) return;
+    seen.add(node.id);
+    nodes.push(node);
+    if ('children' in node) {
+      for (const child of node.children) {
+        visit(child);
+      }
+    }
+  };
+  for (const root of roots) {
+    visit(root);
+  }
+  return nodes;
+}
+
+async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
+  if (scope === 'file') {
+    await figma.loadAllPagesAsync();
+  }
+  const roots = collectComponentInventoryRoots(scope);
+  const nodes = collectComponentInventoryNodes(roots);
+  const setGroups = new Map<string, ComponentInventorySetGroup>();
+  const componentItems = new Map<string, ComponentInventoryComponentItem>();
+
+  const ensureSetGroup = (
+    key: string,
+    name: string,
+    source: ComponentInventorySource,
+    page: ComponentInventoryPageRef | null,
+    nodeId: string | null = null
+  ): ComponentInventorySetGroup => {
+    let entry = setGroups.get(key);
+    if (!entry) {
+      entry = {
+        id: key,
+        name,
+        type: 'COMPONENT_SET',
+        source,
+        componentSetNodeIds: [],
+        representativeNodeId: nodeId,
+        pages: [],
+        counts: {
+          componentSetCount: 0,
+          componentCount: 0,
+          instanceCount: 0,
+          usageCount: 0,
+        },
+        componentIds: [],
+      };
+      setGroups.set(key, entry);
+    }
+    if (nodeId) {
+      pushUnique(entry.componentSetNodeIds, nodeId);
+      if (!entry.representativeNodeId) entry.representativeNodeId = nodeId;
+    }
+    const pages = new Map(entry.pages.map((item) => [item.id, item]));
+    addPageRef(pages, page);
+    entry.pages = Array.from(pages.values());
+    return entry;
+  };
+
+  const ensureComponentItem = (
+    key: string,
+    name: string,
+    source: ComponentInventorySource,
+    componentSetId: string | null,
+    componentSetName: string | null,
+    page: ComponentInventoryPageRef | null,
+    nodeId: string | null = null
+  ): ComponentInventoryComponentItem => {
+    let entry = componentItems.get(key);
+    if (!entry) {
+      entry = {
+        id: key,
+        name,
+        type: 'COMPONENT',
+        source,
+        componentSetId,
+        componentSetName,
+        componentNodeIds: [],
+        instanceNodeIds: [],
+        representativeNodeId: nodeId,
+        pages: [],
+        counts: {
+          componentSetCount: componentSetId ? 1 : 0,
+          componentCount: 0,
+          instanceCount: 0,
+          usageCount: 0,
+        },
+      };
+      componentItems.set(key, entry);
+    }
+    if (nodeId) {
+      pushUnique(entry.componentNodeIds, nodeId);
+      if (!entry.representativeNodeId) entry.representativeNodeId = nodeId;
+    }
+    const pages = new Map(entry.pages.map((item) => [item.id, item]));
+    addPageRef(pages, page);
+    entry.pages = Array.from(pages.values());
+    return entry;
+  };
+
+  for (const node of nodes) {
+    const nodePage = getNodePageRef(node);
+
+    if (node.type === 'COMPONENT_SET') {
+      const setNode = node as ComponentSetNode;
+      const source: ComponentInventorySource = isLibraryBackedComponent(setNode) ? 'library' : 'local';
+      const setKey = source === 'library'
+        ? `set:library:${(setNode as any).key || setNode.name}`
+        : `set:local:${setNode.id}`;
+      const setGroup = ensureSetGroup(setKey, setNode.name, source, nodePage, setNode.id);
+      setGroup.counts.componentSetCount = Math.max(setGroup.counts.componentSetCount, setGroup.componentSetNodeIds.length > 0 ? 1 : 0);
+
+      for (const child of setNode.children) {
+        const componentKey = source === 'library'
+          ? `component:library:${(child as any).key || child.name}`
+          : `component:local:${child.id}`;
+        const componentItem = ensureComponentItem(componentKey, child.name, source, setKey, setNode.name, nodePage, child.id);
+        componentItem.counts.componentCount = componentItem.componentNodeIds.length > 0 ? 1 : componentItem.counts.componentCount;
+        pushUnique(setGroup.componentIds, componentItem.id);
+      }
+      continue;
+    }
+
+    if (node.type === 'COMPONENT') {
+      const componentNode = node as ComponentNode;
+      if (componentNode.parent && componentNode.parent.type === 'COMPONENT_SET') {
+        continue;
+      }
+      const source: ComponentInventorySource = isLibraryBackedComponent(componentNode) ? 'library' : 'local';
+      const componentKey = source === 'library'
+        ? `component:library:${(componentNode as any).key || componentNode.name}`
+        : `component:local:${componentNode.id}`;
+      const componentItem = ensureComponentItem(componentKey, componentNode.name, source, null, null, nodePage, componentNode.id);
+      componentItem.counts.componentCount = componentItem.componentNodeIds.length > 0 ? 1 : componentItem.counts.componentCount;
+      continue;
+    }
+
+    if (node.type === 'INSTANCE') {
+      const instanceNode = node as InstanceNode;
+      const mainComponent = await resolveInstanceMainComponent(instanceNode);
+      const source: ComponentInventorySource = isLibraryBackedComponent(mainComponent) ? 'library' : 'local';
+
+      let componentSetId: string | null = null;
+      let componentSetName: string | null = null;
+      if (mainComponent?.parent && mainComponent.parent.type === 'COMPONENT_SET') {
+        const setNode = mainComponent.parent as ComponentSetNode;
+        componentSetId = source === 'library'
+          ? `set:library:${(setNode as any).key || setNode.name}`
+          : `set:local:${setNode.id}`;
+        componentSetName = setNode.name;
+        const setGroup = ensureSetGroup(componentSetId, setNode.name, source, nodePage, source === 'local' ? setNode.id : null);
+        setGroup.counts.instanceCount += 1;
+        setGroup.counts.usageCount = setGroup.counts.instanceCount;
+        if (source === 'local' && setGroup.componentSetNodeIds.length > 0) {
+          setGroup.counts.componentSetCount = 1;
+        }
+      }
+
+      const componentName = mainComponent?.name || instanceNode.name;
+      const componentKey = source === 'library'
+        ? `component:library:${(mainComponent as any)?.key || componentName}`
+        : `component:local:${mainComponent?.id || componentName}`;
+      const componentItem = ensureComponentItem(componentKey, componentName, source, componentSetId, componentSetName, nodePage, source === 'local' ? (mainComponent?.id || null) : null);
+      pushUnique(componentItem.instanceNodeIds, instanceNode.id);
+      if (!componentItem.representativeNodeId) {
+        componentItem.representativeNodeId = instanceNode.id;
+      }
+      componentItem.counts.instanceCount += 1;
+      componentItem.counts.usageCount = componentItem.counts.instanceCount;
+      if (componentItem.componentNodeIds.length > 0) {
+        componentItem.counts.componentCount = 1;
+      }
+      if (componentSetId) {
+        const setGroup = setGroups.get(componentSetId);
+        if (setGroup) {
+          pushUnique(setGroup.componentIds, componentItem.id);
+        }
+      }
+    }
+  }
+
+  for (const setGroup of setGroups.values()) {
+    setGroup.counts.componentCount = setGroup.componentIds.length;
+    setGroup.pages.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  for (const componentItem of componentItems.values()) {
+    if (componentItem.componentNodeIds.length > 0) {
+      componentItem.counts.componentCount = 1;
+    }
+    componentItem.pages.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const components = Array.from(componentItems.values()).sort((a, b) => a.name.localeCompare(b.name));
+  const groups = Array.from(setGroups.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    scope,
+    summary: {
+      componentSetCount: groups.length,
+      componentCount: components.length,
+      instanceCount: components.reduce((sum, item) => sum + item.counts.instanceCount, 0),
+      localCount: components.filter((item) => item.source === 'local').length + groups.filter((item) => item.source === 'local').length,
+      libraryCount: components.filter((item) => item.source === 'library').length + groups.filter((item) => item.source === 'library').length,
+    },
+    setGroups: groups,
+    flatComponents: components,
+  };
+}
+
 // Global font cache to avoid redundant awaits during large batch operations
 const loadedFontsCache = new Set<string>();
 const loadingFontsPromises = new Map<string, Promise<void>>();
@@ -5734,6 +6046,37 @@ figma.ui.onmessage = async (msg: {
       break;
     }
 
+    case 'get-all-components': {
+      try {
+        const scope = ((msg as any).scope || 'selection') as ComponentInventoryScope;
+        const normalizedScope: ComponentInventoryScope = scope === 'page' || scope === 'file' ? scope : 'selection';
+        const data = await buildAllComponentsInventory(normalizedScope);
+        figma.ui.postMessage({
+          type: 'all-components-result',
+          data,
+        });
+      } catch (error) {
+        console.error('Failed to build component inventory:', error);
+        figma.ui.postMessage({
+          type: 'all-components-result',
+          data: {
+            scope: ((msg as any).scope || 'selection') as ComponentInventoryScope,
+            summary: {
+              componentSetCount: 0,
+              componentCount: 0,
+              instanceCount: 0,
+              localCount: 0,
+              libraryCount: 0,
+            },
+            setGroups: [],
+            flatComponents: [],
+          },
+          error: error instanceof Error ? error.message : 'Failed to scan components',
+        });
+      }
+      break;
+    }
+
     case 'get-all-stickies': {
       try {
         if (figma.editorType !== 'figjam') {
@@ -6189,6 +6532,63 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('[Figma AI] Failed to navigate to node:', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to navigate to node: ' + (error as Error).message });
+      }
+      break;
+    }
+
+    case 'select-nodes': {
+      try {
+        const requestedNodeIds = Array.isArray((msg as any).nodeIds)
+          ? (msg as any).nodeIds.map((id: unknown) => String(id)).filter(Boolean)
+          : [];
+        if (requestedNodeIds.length === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'No node IDs provided' });
+          break;
+        }
+
+        const nodesByPage = new Map<string, { page: PageNode; nodes: SceneNode[] }>();
+        for (const nodeId of requestedNodeIds) {
+          const node = await figma.getNodeByIdAsync(nodeId);
+          if (!node || node.type === 'DOCUMENT' || node.type === 'PAGE') continue;
+          const sceneNode = node as SceneNode;
+          const pageRef = getNodePageRef(sceneNode);
+          if (!pageRef) continue;
+          const pageNode = await figma.getNodeByIdAsync(pageRef.id);
+          if (!pageNode || pageNode.type !== 'PAGE') continue;
+          const existing = nodesByPage.get(pageRef.id) || { page: pageNode as PageNode, nodes: [] };
+          if (!existing.nodes.some((item) => item.id === sceneNode.id)) {
+            existing.nodes.push(sceneNode);
+          }
+          nodesByPage.set(pageRef.id, existing);
+        }
+
+        if (nodesByPage.size === 0) {
+          figma.ui.postMessage({ type: 'error', message: 'No selectable nodes found.' });
+          break;
+        }
+
+        const bestPageGroup = Array.from(nodesByPage.values()).sort((a, b) => b.nodes.length - a.nodes.length)[0];
+        if (figma.currentPage.id !== bestPageGroup.page.id) {
+          await figma.setCurrentPageAsync(bestPageGroup.page);
+        }
+
+        figma.currentPage.selection = bestPageGroup.nodes;
+        figma.viewport.scrollAndZoomIntoView(bestPageGroup.nodes);
+
+        figma.ui.postMessage({
+          type: 'select-nodes-result',
+          selectedCount: bestPageGroup.nodes.length,
+          requestedCount: requestedNodeIds.length,
+          pageId: bestPageGroup.page.id,
+          pageName: bestPageGroup.page.name,
+          partial: bestPageGroup.nodes.length !== requestedNodeIds.length || nodesByPage.size > 1,
+        });
+      } catch (error) {
+        console.error('Failed to select nodes:', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'Failed to select nodes: ' + (error instanceof Error ? error.message : String(error)),
+        });
       }
       break;
     }

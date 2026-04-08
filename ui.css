@@ -3547,6 +3547,213 @@
       font-size: var(--text-sm);
     }
 
+    .component-browser-toolbar {
+      display: flex;
+      gap: var(--space-xs);
+      padding: var(--space-sm);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .component-browser-toolbar input {
+      flex: 1;
+      min-width: 120px;
+      padding: 6px 10px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: var(--text-xs);
+    }
+
+    .component-browser-toolbar input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .component-browser-toolbar select {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: var(--text-xs);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-width: 0;
+      max-width: 132px;
+    }
+
+    .component-browser-toolbar select:hover,
+    .component-browser-toolbar select:focus {
+      border-color: var(--accent);
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .component-browser-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: var(--space-sm) var(--space-sm);
+      color: var(--text-muted);
+      font-size: var(--text-xs);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .component-browser-summary span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+
+    .component-browser-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: var(--space-sm);
+    }
+
+    .component-browser-group {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-primary);
+      overflow: hidden;
+    }
+
+    .component-browser-group-heading {
+      padding: 8px var(--space-md) 0;
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .component-browser-group-children {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      padding: 0;
+    }
+
+    .component-browser-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+      padding: var(--space-md);
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      transition: background 0.22s ease;
+    }
+
+    .component-browser-row.compact {
+      border-radius: 0;
+      border: 0;
+      margin-top: 0;
+    }
+
+    .component-browser-row:hover {
+      background: var(--bg-hover);
+    }
+
+    .component-browser-row:last-child {
+      border-bottom: none;
+    }
+
+    .component-browser-row-main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .component-browser-row-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .component-browser-row-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    .component-browser-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .component-browser-badge--local {
+      background: color-mix(in srgb, #22c55e 14%, var(--bg-tertiary));
+      border-color: color-mix(in srgb, #22c55e 50%, var(--border));
+      color: #15803d;
+    }
+
+    .component-browser-badge--library {
+      background: color-mix(in srgb, #3b82f6 14%, var(--bg-tertiary));
+      border-color: color-mix(in srgb, #3b82f6 50%, var(--border));
+      color: #1d4ed8;
+    }
+
+    .component-browser-row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+
+    .component-browser-row-actions button {
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      font-size: var(--text-xs);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .component-browser-row-actions button:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+
+    .component-browser-row-actions button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .component-browser-empty {
+      padding: 8px 12px;
+      color: var(--text-muted);
+      font-size: var(--text-xs);
+    }
+
     .prompt-comments-list {
       padding: 0;
     }
