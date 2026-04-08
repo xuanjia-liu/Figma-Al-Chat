@@ -27628,6 +27628,16 @@ Example structure:
       return getFirstUserMessage();
     }
 
+    function getChatArchiveSearchText(chat) {
+      if (!Array.isArray(chat?.chatHistory)) return '';
+      return chat.chatHistory
+        .flatMap(message => Array.isArray(message?.parts) ? message.parts : [])
+        .map(part => typeof part?.text === 'string' ? part.text : '')
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+    }
+
     // Save current chat to archives
     // Helper to strip large image data from archives to avoid exceeding Figma storage limits
     function getCleanArchivesForStorage(archives) {
@@ -28101,9 +28111,11 @@ Example structure:
       // Apply search filter if active
       let filteredArchives = [...chatArchives];
       if (chatHistorySearchQuery) {
-        filteredArchives = filteredArchives.filter(chat =>
-          chat.title.toLowerCase().includes(chatHistorySearchQuery)
-        );
+        filteredArchives = filteredArchives.filter(chat => {
+          const title = typeof chat?.title === 'string' ? chat.title.toLowerCase() : '';
+          const contents = getChatArchiveSearchText(chat);
+          return title.includes(chatHistorySearchQuery) || contents.includes(chatHistorySearchQuery);
+        });
       }
 
       // Sort archives by updatedAt (newest first)
