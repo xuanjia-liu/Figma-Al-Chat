@@ -27638,6 +27638,55 @@ Example structure:
         .toLowerCase();
     }
 
+    function highlightSearchMatch(text, query) {
+      const sourceText = typeof text === 'string' ? text : '';
+      const normalizedQuery = (query || '').trim();
+      if (!normalizedQuery) return escapeHtml(sourceText);
+
+      const lowerText = sourceText.toLowerCase();
+      const lowerQuery = normalizedQuery.toLowerCase();
+      const matchIndex = lowerText.indexOf(lowerQuery);
+      if (matchIndex === -1) return escapeHtml(sourceText);
+
+      const before = sourceText.slice(0, matchIndex);
+      const match = sourceText.slice(matchIndex, matchIndex + normalizedQuery.length);
+      const after = sourceText.slice(matchIndex + normalizedQuery.length);
+      return `${escapeHtml(before)}<mark class="chat-history-hit-highlight">${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+    }
+
+    function getChatArchiveMatchPreviews(chat, query, limit = 2) {
+      const normalizedQuery = (query || '').trim().toLowerCase();
+      if (!normalizedQuery || !Array.isArray(chat?.chatHistory)) return [];
+
+      const previews = [];
+
+      for (let messageIndex = chat.chatHistory.length - 1; messageIndex >= 0; messageIndex -= 1) {
+        const message = chat.chatHistory[messageIndex];
+        if (!Array.isArray(message?.parts)) continue;
+        for (const part of message.parts) {
+          if (typeof part?.text !== 'string') continue;
+          const text = part.text.replace(/\s+/g, ' ').trim();
+          if (!text) continue;
+
+          const lowerText = text.toLowerCase();
+          const matchIndex = lowerText.indexOf(normalizedQuery);
+          if (matchIndex === -1) continue;
+
+          const previewRadius = 36;
+          const start = Math.max(0, matchIndex - previewRadius);
+          const end = Math.min(text.length, matchIndex + normalizedQuery.length + previewRadius);
+          const prefix = start > 0 ? '...' : '';
+          const suffix = end < text.length ? '...' : '';
+          previews.push(`${prefix}${text.slice(start, end)}${suffix}`);
+          break;
+        }
+
+        if (previews.length >= limit) break;
+      }
+
+      return previews;
+    }
+
     // Save current chat to archives
     // Helper to strip large image data from archives to avoid exceeding Figma storage limits
     function getCleanArchivesForStorage(archives) {
@@ -28183,10 +28232,23 @@ Example structure:
           const item = document.createElement('div');
           item.className = 'chat-history-item' + (chat.id === currentChatId ? ' active' : '');
           item.dataset.chatId = chat.id;
+          const previews = chatHistorySearchQuery ? getChatArchiveMatchPreviews(chat, chatHistorySearchQuery, 2) : [];
+          const highlightedTitle = highlightSearchMatch(chat.title, chatHistorySearchQuery);
+          const previewHtml = previews
+            .map(preview => `<div class="chat-history-item-hit-message">${highlightSearchMatch(preview, chatHistorySearchQuery)}</div>`)
+            .join('');
+
+          if (chatHistorySearchQuery) {
+            item.classList.add('search-mode');
+          }
+          if (previews.length > 0) {
+            item.classList.add('has-search-hits');
+          }
 
           item.innerHTML = `
             <div class="chat-history-item-content">
-              <div class="chat-history-item-title">${escapeHtml(chat.title)}</div>
+              <div class="chat-history-item-title">${highlightedTitle}</div>
+              ${previewHtml}
               <div class="chat-history-item-date">${formatChatDate(chat.updatedAt || chat.createdAt)}</div>
             </div>
             <div class="chat-history-item-actions">
