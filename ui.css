@@ -2973,6 +2973,25 @@
       min-width: 0;
     }
 
+    .prompt-field-comments .prompt-field-header--components-toolbar {
+      justify-content: flex-start;
+      gap: var(--space-md);
+      flex-wrap: wrap;
+    }
+
+    .prompt-field-comments .prompt-field-header--components-toolbar .pill-tab-container {
+      flex: 0 0 auto;
+      width: fit-content;
+      min-width: 0;
+    }
+
+    .prompt-field-header-actions {
+      display: flex;
+      gap: var(--space-xs);
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
     .prompt-comments-refresh-btn {
       display: flex;
       align-items: center;

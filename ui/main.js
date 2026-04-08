@@ -17337,13 +17337,13 @@ Generate ONLY the reply text, nothing else.`;
         } else if (field.type === 'componentsBrowser') {
           fieldHtml += `
             <div class="prompt-field${wrapperClass} prompt-field-comments"${conditionalAttrs}>
-              <div class="prompt-field-header">
+              <div class="prompt-field-header prompt-field-header--components-toolbar">
                 <div class="pill-tab-container">
                   <button class="pill-tab ${currentComponentsScope === 'selection' ? 'active' : ''}" onclick="switchComponentsScope('selection', this)" type="button">Selection</button>
                   <button class="pill-tab ${currentComponentsScope === 'page' ? 'active' : ''}" onclick="switchComponentsScope('page', this)" type="button">This Page</button>
                   <button class="pill-tab ${currentComponentsScope === 'file' ? 'active' : ''}" onclick="switchComponentsScope('file', this)" type="button">Whole File</button>
                 </div>
-                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; align-items: center;">
+                <div class="prompt-field-header-actions">
                   <button type="button" class="prompt-comments-toggle-btn${componentsIncludeNestedInstances ? ' active' : ''}" id="componentsShowNestedToggle" onclick="toggleComponentsIncludeNestedInstances()" title="Include instances and definitions nested inside another instance">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M4 10h4v4H4zM10 4h4v4h-4zM10 16h4v4h-4zM16 10h4v4h-4z"/>
