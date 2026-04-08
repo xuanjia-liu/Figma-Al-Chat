@@ -967,6 +967,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let componentsSearchQuery = '';
     let componentsSourceFilter = 'all';
     let componentsGroupingMode = 'set';
+    let componentsSelectionManualLoadPending = false;
+    let componentsSelectionStale = false;
     // 1 minute cache TTL
     let showResolvedComments = false; // Toggle for showing resolved comments
     let figmaCurrentUser = null; // Current user info from Figma API (handle, id, etc.)
@@ -8016,10 +8018,6 @@ Rules:
             // Handle actions that open in prompt drawer
             if (task.directAction === 'listAllComments') {
               ensureCommentsLoadedCached();
-            } else if (task.directAction === 'listAllComponents') {
-              refreshComponentsInDrawer().catch((error) => {
-                console.warn('Failed to prefetch components inventory:', error);
-              });
             } else if (task.directAction === 'listAllStickies') {
               ensureStickiesLoadedCached();
             }
@@ -11178,6 +11176,124 @@ Requirements:
       return segments.length > 0 ? segments.join('_') : name;
     }
 
+    function getComponentsBrowserControlsHtml(summary) {
+      const visSets = summary.visibleSetCount;
+      const visComps = summary.visibleComponentCount;
+      const visUses = summary.visibleInstanceCount;
+      return `
+        <div class="component-browser-toolbar">
+          <input type="search" value="${escapeHtml(componentsSearchQuery)}" placeholder="Search components, sets, pages..." oninput="handleComponentsSearchInput(this.value)">
+          <div class="comments-dropdown-container">
+            <button type="button" id="componentsBrowserDropdownBtn" class="comments-dropdown-btn" onclick="toggleComponentsBrowserDropdown(event)" title="Filter and group components">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M6 12h12M10 18h4" />
+              </svg>
+              <span>Options</span>
+            </button>
+            <div class="comments-dropdown-menu hidden" id="componentsBrowserDropdownMenu">
+              <div class="dropdown-section">Source</div>
+              <button type="button" class="dropdown-item ${componentsSourceFilter === 'all' ? 'active' : ''}" onclick="setComponentsSourceFilter('all')">All sources</button>
+              <button type="button" class="dropdown-item ${componentsSourceFilter === 'local' ? 'active' : ''}" onclick="setComponentsSourceFilter('local')">Local</button>
+              <button type="button" class="dropdown-item ${componentsSourceFilter === 'library' ? 'active' : ''}" onclick="setComponentsSourceFilter('library')">Library</button>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-section">Grouping</div>
+              <button type="button" class="dropdown-item ${componentsGroupingMode === 'set' ? 'active' : ''}" onclick="setComponentsGroupingMode('set')">Set first</button>
+              <button type="button" class="dropdown-item ${componentsGroupingMode === 'flat' ? 'active' : ''}" onclick="setComponentsGroupingMode('flat')">Flat by component</button>
+            </div>
+          </div>
+          <button class="prompt-comments-refresh-btn" type="button" onclick="refreshComponentsInDrawer(true)" title="Refresh component list">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
+        <div class="component-browser-summary">
+          <span>${visSets} sets</span>
+          <span>${visComps} components</span>
+          <span>${visUses} uses</span>
+        </div>
+      `;
+    }
+
+    function updateComponentsSelectionReloadFab() {
+      const fab = document.getElementById('componentsSelectionReloadFab');
+      if (!fab) return;
+      const show =
+        currentPromptAction?.directAction === 'listAllComponents' &&
+        currentComponentsScope === 'selection' &&
+        componentsSelectionStale &&
+        !componentsSelectionManualLoadPending;
+      fab.classList.toggle('hidden', !show);
+    }
+
+    function renderComponentsSelectionIdle(container) {
+      componentInventoryRowMap = new Map();
+      const summary = { visibleSetCount: '—', visibleComponentCount: '—', visibleInstanceCount: '—' };
+      const controlsHtml = getComponentsBrowserControlsHtml(summary);
+      const idleBody = `
+        <div class="component-browser-list component-browser-list--idle">
+          <div class="component-browser-idle">
+            <p class="component-browser-idle-hint">${escapeHtml(tu('actions.prompt.components.readSelectionHint'))}</p>
+            <button type="button" class="prompt-drawer-submit component-browser-read-selection-btn" onclick="loadComponentsFromCurrentSelection()">
+              ${escapeHtml(tu('actions.prompt.components.readSelection'))}
+            </button>
+          </div>
+        </div>
+      `;
+      container.innerHTML = controlsHtml + idleBody;
+    }
+
+    function initComponentsBrowserDrawerAfterOpen() {
+      const fab = document.getElementById('componentsSelectionReloadFab');
+      if (fab) {
+        const fabLabel = tu('actions.prompt.components.reloadSelectionFab');
+        fab.title = fabLabel;
+        fab.setAttribute('aria-label', fabLabel);
+        fab.onclick = (e) => {
+          e.preventDefault();
+          reloadComponentsInventoryForNewSelection();
+        };
+      }
+      if (currentComponentsScope === 'selection') {
+        componentsSelectionManualLoadPending = true;
+        componentsSelectionStale = false;
+        const container = document.getElementById('promptComponentsContainer');
+        if (container) renderComponentsSelectionIdle(container);
+        updateComponentsSelectionReloadFab();
+      } else {
+        componentsSelectionManualLoadPending = false;
+        componentsSelectionStale = false;
+        updateComponentsSelectionReloadFab();
+        refreshComponentsInDrawer();
+      }
+    }
+
+    function loadComponentsFromCurrentSelection() {
+      if (currentComponentsScope !== 'selection') return;
+      componentsSelectionManualLoadPending = false;
+      componentsSelectionStale = false;
+      updateComponentsSelectionReloadFab();
+      refreshComponentsInDrawer(true);
+    }
+
+    function reloadComponentsInventoryForNewSelection() {
+      if (currentComponentsScope !== 'selection') return;
+      componentsSelectionStale = false;
+      updateComponentsSelectionReloadFab();
+      refreshComponentsInDrawer(true);
+    }
+
+    function renderComponentsBrowserContainer() {
+      const container = document.getElementById('promptComponentsContainer');
+      if (!container) return;
+      if (currentComponentsScope === 'selection' && componentsSelectionManualLoadPending) {
+        renderComponentsSelectionIdle(container);
+        return;
+      }
+      renderComponentsInDrawer(container);
+    }
+
     function renderComponentsInDrawer(container) {
       const { inventory, setGroups, standaloneComponents, groupedComponents, flatComponents, summary } = getFilteredComponentEntries();
       componentInventoryRowMap = new Map();
@@ -11236,40 +11352,7 @@ Requirements:
         `;
       };
 
-      const controlsHtml = `
-        <div class="component-browser-toolbar">
-          <input type="search" value="${escapeHtml(componentsSearchQuery)}" placeholder="Search components, sets, pages..." oninput="handleComponentsSearchInput(this.value)">
-          <div class="comments-dropdown-container">
-            <button type="button" id="componentsBrowserDropdownBtn" class="comments-dropdown-btn" onclick="toggleComponentsBrowserDropdown(event)" title="Filter and group components">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M3 6h18M6 12h12M10 18h4" />
-              </svg>
-              <span>Options</span>
-            </button>
-            <div class="comments-dropdown-menu hidden" id="componentsBrowserDropdownMenu">
-              <div class="dropdown-section">Source</div>
-              <button type="button" class="dropdown-item ${componentsSourceFilter === 'all' ? 'active' : ''}" onclick="setComponentsSourceFilter('all')">All sources</button>
-              <button type="button" class="dropdown-item ${componentsSourceFilter === 'local' ? 'active' : ''}" onclick="setComponentsSourceFilter('local')">Local</button>
-              <button type="button" class="dropdown-item ${componentsSourceFilter === 'library' ? 'active' : ''}" onclick="setComponentsSourceFilter('library')">Library</button>
-              <div class="dropdown-divider"></div>
-              <div class="dropdown-section">Grouping</div>
-              <button type="button" class="dropdown-item ${componentsGroupingMode === 'set' ? 'active' : ''}" onclick="setComponentsGroupingMode('set')">Set first</button>
-              <button type="button" class="dropdown-item ${componentsGroupingMode === 'flat' ? 'active' : ''}" onclick="setComponentsGroupingMode('flat')">Flat by component</button>
-            </div>
-          </div>
-          <button class="prompt-comments-refresh-btn" type="button" onclick="refreshComponentsInDrawer(true)" title="Refresh component list">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-              <path d="M23 4v6h-6M1 20v-6h6"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
-          </button>
-        </div>
-        <div class="component-browser-summary">
-          <span>${summary.visibleSetCount} sets</span>
-          <span>${summary.visibleComponentCount} components</span>
-          <span>${summary.visibleInstanceCount} uses</span>
-        </div>
-      `;
+      const controlsHtml = getComponentsBrowserControlsHtml(summary);
 
       let bodyHtml = '';
       if (componentsGroupingMode === 'flat') {
@@ -11312,6 +11395,11 @@ Requirements:
     }
 
     async function refreshComponentsInDrawer(forceRefresh = false) {
+      if (currentComponentsScope === 'selection') {
+        componentsSelectionManualLoadPending = false;
+        componentsSelectionStale = false;
+        updateComponentsSelectionReloadFab();
+      }
       const container = document.getElementById('promptComponentsContainer');
       if (container) {
         container.innerHTML = '<div class="prompt-comments-loading">Loading components...</div>';
@@ -11322,7 +11410,12 @@ Requirements:
         await requestAllComponentsInventory(currentComponentsScope, forceRefresh);
         const target = document.getElementById('promptComponentsContainer');
         if (target) renderComponentsInDrawer(target);
+        updateComponentsSelectionReloadFab();
       } catch (error) {
+        if (currentComponentsScope === 'selection') {
+          componentsSelectionStale = true;
+          updateComponentsSelectionReloadFab();
+        }
         const target = document.getElementById('promptComponentsContainer');
         if (target) {
           target.innerHTML = `<div class="prompt-comments-error">Failed to load components: ${escapeHtml(error.message)}</div>`;
@@ -11341,6 +11434,17 @@ Requirements:
       if (scope === 'page' || scope === 'selection') {
         parent.postMessage({ pluginMessage: { type: 'get-current-context' } }, '*');
       }
+      if (scope === 'selection') {
+        componentsSelectionManualLoadPending = true;
+        componentsSelectionStale = false;
+        const container = document.getElementById('promptComponentsContainer');
+        if (container) renderComponentsSelectionIdle(container);
+        updateComponentsSelectionReloadFab();
+        return;
+      }
+      componentsSelectionManualLoadPending = false;
+      componentsSelectionStale = false;
+      updateComponentsSelectionReloadFab();
       refreshComponentsInDrawer();
     }
 
@@ -11352,26 +11456,26 @@ Requirements:
 
     function handleComponentsSearchInput(value) {
       componentsSearchQuery = String(value || '');
-      const container = document.getElementById('promptComponentsContainer');
-      if (container) renderComponentsInDrawer(container);
+      renderComponentsBrowserContainer();
     }
 
     function setComponentsSourceFilter(value) {
       componentsSourceFilter = value || 'all';
-      const container = document.getElementById('promptComponentsContainer');
-      if (container) renderComponentsInDrawer(container);
+      renderComponentsBrowserContainer();
     }
 
     function setComponentsGroupingMode(value) {
       componentsGroupingMode = value || 'set';
-      const container = document.getElementById('promptComponentsContainer');
-      if (container) renderComponentsInDrawer(container);
+      renderComponentsBrowserContainer();
     }
 
     function toggleComponentsIncludeNestedInstances() {
       componentsIncludeNestedInstances = !componentsIncludeNestedInstances;
       const btn = document.getElementById('componentsShowNestedToggle');
       if (btn) btn.classList.toggle('active', componentsIncludeNestedInstances);
+      if (currentComponentsScope === 'selection' && componentsSelectionManualLoadPending) {
+        return;
+      }
       refreshComponentsInDrawer(true);
     }
 
@@ -11379,6 +11483,9 @@ Requirements:
       componentsIncludeHiddenInstances = !componentsIncludeHiddenInstances;
       const btn = document.getElementById('componentsShowHiddenToggle');
       if (btn) btn.classList.toggle('active', componentsIncludeHiddenInstances);
+      if (currentComponentsScope === 'selection' && componentsSelectionManualLoadPending) {
+        return;
+      }
       refreshComponentsInDrawer(true);
     }
 
@@ -15608,7 +15715,7 @@ Generate ONLY the reply text, nothing else.`;
             cancelBtn.textContent = tu('actions.prompt.close');
           }
 
-          setTimeout(() => refreshComponentsInDrawer(), 50);
+          setTimeout(() => initComponentsBrowserDrawerAfterOpen(), 50);
         } else if (actionData.directAction === 'listAllStickies') {
           const submitBtn = document.getElementById('promptDrawerSubmit');
           if (submitBtn) {
@@ -15812,6 +15919,7 @@ Generate ONLY the reply text, nothing else.`;
     function closePromptDrawer() {
       clearRealtimePromptActionState();
       removeAiActionMenu();
+      document.getElementById('componentsSelectionReloadFab')?.classList.add('hidden');
       if (typeof disposeGoogleFontPreview === 'function') {
         disposeGoogleFontPreview();
         disposeGoogleFontPreview = null;
@@ -17253,9 +17361,7 @@ Generate ONLY the reply text, nothing else.`;
                   </button>
                 </div>
               </div>
-              <div class="prompt-comments-container" id="promptComponentsContainer">
-                <div class="prompt-comments-loading">Loading components...</div>
-              </div>
+              <div class="prompt-comments-container" id="promptComponentsContainer"></div>
             </div>
           `;
         } else {
@@ -37993,9 +38099,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
             if (promptContainer) renderCommentsInDrawer(promptContainer);
           }
           if (currentPromptAction?.directAction === 'listAllComponents' && currentComponentsScope === 'selection') {
-            refreshComponentsInDrawer(true).catch((error) => {
-              console.warn('Failed to refresh components for selection scope:', error);
-            });
+            if (!componentsSelectionManualLoadPending) {
+              componentsSelectionStale = true;
+              updateComponentsSelectionReloadFab();
+            }
           }
           if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'selection') {
             const promptContainer = document.getElementById('promptStickiesContainer');
@@ -39035,6 +39142,8 @@ Update the text content for all selected nodes accordingly.`;
       'navigateToComponentInventoryEntry',
       'selectComponentInventoryEntryNodes',
       'refreshComponentsInDrawer',
+      'loadComponentsFromCurrentSelection',
+      'reloadComponentsInventoryForNewSelection',
     ]));
 
     function exposeInlineHandlerBindings() {

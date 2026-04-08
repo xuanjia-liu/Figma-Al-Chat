@@ -10270,6 +10270,64 @@
       position: relative;
     }
 
+    .components-selection-reload-fab {
+      position: sticky;
+      bottom: var(--space-md);
+      align-self: flex-end;
+      margin-left: auto;
+      margin-top: var(--space-md);
+      z-index: 6;
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent);
+      color: var(--text-on-accent);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+      cursor: pointer;
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+
+    .components-selection-reload-fab:hover {
+      filter: brightness(1.08);
+      transform: scale(1.04);
+    }
+
+    .components-selection-reload-fab.hidden {
+      display: none;
+    }
+
+    .component-browser-list--idle {
+      min-height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .component-browser-idle {
+      text-align: center;
+      max-width: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-md);
+    }
+
+    .component-browser-idle-hint {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .component-browser-read-selection-btn {
+      min-width: 168px;
+    }
+
     .prompt-drawer-help {
       background: var(--bg-tertiary);
       border-radius: var(--radius-md);
