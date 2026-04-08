@@ -964,7 +964,6 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let componentsInventoryLoading = false;
     let componentsSearchQuery = '';
     let componentsSourceFilter = 'all';
-    let componentsTypeFilter = 'all';
     let componentsGroupingMode = 'set';
     let componentsSortBy = 'usage';
     // 1 minute cache TTL
@@ -11059,7 +11058,6 @@ Requirements:
           ].join('\n').toLowerCase();
           if (!haystack.includes(query)) return false;
         }
-        if (componentsTypeFilter === 'instances' && (item.counts?.instanceCount || 0) === 0) return false;
         return true;
       };
 
@@ -11104,9 +11102,6 @@ Requirements:
               ...(Array.isArray(group.pages) ? group.pages.map((page) => page.name || '') : [])
             ].join('\n').toLowerCase();
             if (!haystack.includes(query) && !childMatches) return false;
-          }
-          if (componentsTypeFilter === 'components' || componentsTypeFilter === 'instances') {
-            return childMatches;
           }
           return true;
         })
@@ -11162,22 +11157,29 @@ Requirements:
         return;
       }
 
-      const buildRowHtml = (item, { compact = false } = {}) => {
+      const buildRowHtml = (item, { compact = false, isSetChild = false } = {}) => {
         componentInventoryRowMap.set(item.id, item);
         const usage = item.counts?.usageCount || 0;
         const pageLabel = formatComponentPages(item.pages);
+        const rowClass = [
+          'component-browser-row',
+          compact ? 'compact' : '',
+          isSetChild ? 'component-browser-row-set-child' : '',
+        ].filter(Boolean).join(' ');
+        const sourceBadgeHtml = !isSetChild
+          ? `<span class="component-browser-badge component-browser-badge--${item.source}">${item.source === 'library' ? 'Library' : 'Local'}</span>`
+          : '';
         return `
-          <div class="component-browser-row${compact ? ' compact' : ''}">
+          <div class="${rowClass}">
             <div class="component-browser-row-main">
               <div class="component-browser-row-title">
                 <span>${escapeHtml(item.name || 'Untitled')}</span>
-                <span class="component-browser-badge">${item.type === 'COMPONENT_SET' ? 'Set' : 'Component'}</span>
-                <span class="component-browser-badge component-browser-badge--${item.source}">${item.source === 'library' ? 'Library' : 'Local'}</span>
+                ${sourceBadgeHtml}
               </div>
               <div class="component-browser-row-meta">
                 <span>${escapeHtml(formatComponentCounts(item, item.type === 'COMPONENT_SET'))}</span>
                 <span>${escapeHtml(pageLabel)}</span>
-                ${item.componentSetName && item.type !== 'COMPONENT_SET' ? `<span>${escapeHtml(item.componentSetName)}</span>` : ''}
+                ${item.componentSetName && item.type !== 'COMPONENT_SET' && !isSetChild ? `<span>${escapeHtml(item.componentSetName)}</span>` : ''}
               </div>
             </div>
             <div class="comment-actions component-browser-row-actions">
@@ -11200,26 +11202,29 @@ Requirements:
       const controlsHtml = `
         <div class="component-browser-toolbar">
           <input type="search" value="${escapeHtml(componentsSearchQuery)}" placeholder="Search components, sets, pages..." oninput="handleComponentsSearchInput(this.value)">
-          <select onchange="setComponentsSourceFilter(this.value)">
-            <option value="all"${componentsSourceFilter === 'all' ? ' selected' : ''}>All sources</option>
-            <option value="local"${componentsSourceFilter === 'local' ? ' selected' : ''}>Local</option>
-            <option value="library"${componentsSourceFilter === 'library' ? ' selected' : ''}>Library</option>
-          </select>
-          <select onchange="setComponentsTypeFilter(this.value)">
-            <option value="all"${componentsTypeFilter === 'all' ? ' selected' : ''}>All types</option>
-            <option value="componentSets"${componentsTypeFilter === 'componentSets' ? ' selected' : ''}>Component sets</option>
-            <option value="components"${componentsTypeFilter === 'components' ? ' selected' : ''}>Components</option>
-            <option value="instances"${componentsTypeFilter === 'instances' ? ' selected' : ''}>Instances</option>
-          </select>
-          <select onchange="setComponentsGroupingMode(this.value)">
-            <option value="set"${componentsGroupingMode === 'set' ? ' selected' : ''}>Set first</option>
-            <option value="flat"${componentsGroupingMode === 'flat' ? ' selected' : ''}>Flat by component</option>
-          </select>
-          <select onchange="setComponentsSortBy(this.value)">
-            <option value="usage"${componentsSortBy === 'usage' ? ' selected' : ''}>Usage desc</option>
-            <option value="name"${componentsSortBy === 'name' ? ' selected' : ''}>Name</option>
-            <option value="page"${componentsSortBy === 'page' ? ' selected' : ''}>Page</option>
-          </select>
+          <div class="comments-dropdown-container">
+            <button type="button" id="componentsBrowserDropdownBtn" class="comments-dropdown-btn" onclick="toggleComponentsBrowserDropdown(event)" title="Sort and filter components">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M6 12h12M10 18h4" />
+              </svg>
+              <span>Options</span>
+            </button>
+            <div class="comments-dropdown-menu hidden" id="componentsBrowserDropdownMenu">
+              <div class="dropdown-section">Source</div>
+              <button type="button" class="dropdown-item ${componentsSourceFilter === 'all' ? 'active' : ''}" onclick="setComponentsSourceFilter('all')">All sources</button>
+              <button type="button" class="dropdown-item ${componentsSourceFilter === 'local' ? 'active' : ''}" onclick="setComponentsSourceFilter('local')">Local</button>
+              <button type="button" class="dropdown-item ${componentsSourceFilter === 'library' ? 'active' : ''}" onclick="setComponentsSourceFilter('library')">Library</button>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-section">Grouping</div>
+              <button type="button" class="dropdown-item ${componentsGroupingMode === 'set' ? 'active' : ''}" onclick="setComponentsGroupingMode('set')">Set first</button>
+              <button type="button" class="dropdown-item ${componentsGroupingMode === 'flat' ? 'active' : ''}" onclick="setComponentsGroupingMode('flat')">Flat by component</button>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-section">Sort</div>
+              <button type="button" class="dropdown-item ${componentsSortBy === 'usage' ? 'active' : ''}" onclick="setComponentsSortBy('usage')">Usage desc</button>
+              <button type="button" class="dropdown-item ${componentsSortBy === 'name' ? 'active' : ''}" onclick="setComponentsSortBy('name')">Name</button>
+              <button type="button" class="dropdown-item ${componentsSortBy === 'page' ? 'active' : ''}" onclick="setComponentsSortBy('page')">Page</button>
+            </div>
+          </div>
         </div>
         <div class="component-browser-summary">
           <span>${summary.visibleSetCount} sets</span>
@@ -11229,8 +11234,8 @@ Requirements:
       `;
 
       let bodyHtml = '';
-      if (componentsGroupingMode === 'flat' || componentsTypeFilter === 'componentSets') {
-        const items = componentsTypeFilter === 'componentSets' ? setGroups : flatComponents;
+      if (componentsGroupingMode === 'flat') {
+        const items = flatComponents;
         if (items.length === 0) {
           bodyHtml = '<div class="prompt-comments-empty">No matching components found.</div>';
         } else {
@@ -11245,13 +11250,13 @@ Requirements:
             <div class="component-browser-group">
               ${buildRowHtml(group)}
               <div class="component-browser-group-children">
-                ${children.length > 0 ? children.map((item) => buildRowHtml(item, { compact: true })).join('') : '<div class="component-browser-empty">No matching components in this set.</div>'}
+                ${children.length > 0 ? children.map((item) => buildRowHtml(item, { compact: true, isSetChild: true })).join('') : '<div class="component-browser-empty">No matching components in this set.</div>'}
               </div>
             </div>
           `);
         });
 
-        if (standaloneComponents.length > 0 && componentsTypeFilter !== 'componentSets') {
+        if (standaloneComponents.length > 0) {
           sections.push(`
             <div class="component-browser-group">
               <div class="component-browser-group-heading">Standalone components</div>
@@ -11301,6 +11306,12 @@ Requirements:
       refreshComponentsInDrawer();
     }
 
+    function toggleComponentsBrowserDropdown(event) {
+      if (event) event.stopPropagation();
+      const menu = document.getElementById('componentsBrowserDropdownMenu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
     function handleComponentsSearchInput(value) {
       componentsSearchQuery = String(value || '');
       const container = document.getElementById('promptComponentsContainer');
@@ -11309,12 +11320,6 @@ Requirements:
 
     function setComponentsSourceFilter(value) {
       componentsSourceFilter = value || 'all';
-      const container = document.getElementById('promptComponentsContainer');
-      if (container) renderComponentsInDrawer(container);
-    }
-
-    function setComponentsTypeFilter(value) {
-      componentsTypeFilter = value || 'all';
       const container = document.getElementById('promptComponentsContainer');
       if (container) renderComponentsInDrawer(container);
     }
@@ -11333,9 +11338,7 @@ Requirements:
 
     async function copyVisibleComponentsSummary() {
       const { setGroups, flatComponents } = getFilteredComponentEntries();
-      const items = componentsGroupingMode === 'set' && componentsTypeFilter !== 'components' && componentsTypeFilter !== 'instances'
-        ? setGroups
-        : flatComponents;
+      const items = componentsGroupingMode === 'set' ? setGroups : flatComponents;
       const text = items.length > 0
         ? items.map((entry) => buildComponentSummaryText(entry)).join('\n\n')
         : 'No matching components found.';
@@ -38663,6 +38666,11 @@ Update the text content for all selected nodes accordingly.`;
       if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn) {
         menu.classList.add('hidden');
       }
+      const componentsBrowserMenu = document.getElementById('componentsBrowserDropdownMenu');
+      const componentsBrowserBtn = document.getElementById('componentsBrowserDropdownBtn');
+      if (componentsBrowserMenu && !componentsBrowserMenu.classList.contains('hidden') && !componentsBrowserMenu.contains(e.target) && !(componentsBrowserBtn && componentsBrowserBtn.contains(e.target))) {
+        componentsBrowserMenu.classList.add('hidden');
+      }
       const moreBtn = e.target.closest('.comment-more-container button') || e.target.closest('.comment-reply-chevron-btn');
       const moreMenu = e.target.closest('.comment-more-menu');
       if (!moreBtn && !moreMenu) {
@@ -38975,8 +38983,8 @@ Update the text content for all selected nodes accordingly.`;
       ...historyInlineHandlerNames,
       'switchComponentsScope',
       'handleComponentsSearchInput',
+      'toggleComponentsBrowserDropdown',
       'setComponentsSourceFilter',
-      'setComponentsTypeFilter',
       'setComponentsGroupingMode',
       'setComponentsSortBy',
       'copyVisibleComponentsSummary',
