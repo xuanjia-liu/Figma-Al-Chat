@@ -960,12 +960,13 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let figmaStickiesLastLoaded = 0; // Timestamp of last sticky load
     let figmaStickiesLoading = false; // Flag to prevent concurrent loads
     let currentComponentsScope = 'selection'; // 'selection' | 'page' | 'file'
-    let componentInventoryByScope = { selection: null, page: null, file: null };
+    let componentInventoryCache = new Map();
+    let componentsIncludeNestedInstances = false;
+    let componentsIncludeHiddenInstances = false;
     let componentsInventoryLoading = false;
     let componentsSearchQuery = '';
     let componentsSourceFilter = 'all';
     let componentsGroupingMode = 'set';
-    let componentsSortBy = 'usage';
     // 1 minute cache TTL
     let showResolvedComments = false; // Toggle for showing resolved comments
     let figmaCurrentUser = null; // Current user info from Figma API (handle, id, etc.)
@@ -10992,10 +10993,18 @@ Requirements:
 
     let componentInventoryRowMap = new Map();
 
+    function getComponentInventoryCacheKey(scope) {
+      return `${scope}:${componentsIncludeNestedInstances}:${componentsIncludeHiddenInstances}`;
+    }
+
     function requestAllComponentsInventory(scope = currentComponentsScope, forceRefresh = false) {
-      if (!forceRefresh && componentInventoryByScope[scope]) {
-        return Promise.resolve(componentInventoryByScope[scope]);
+      const cacheKey = getComponentInventoryCacheKey(scope);
+      if (!forceRefresh && componentInventoryCache.has(cacheKey)) {
+        return Promise.resolve(componentInventoryCache.get(cacheKey));
       }
+
+      const nested = componentsIncludeNestedInstances;
+      const hidden = componentsIncludeHiddenInstances;
 
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -11007,23 +11016,31 @@ Requirements:
           const msg = event.data.pluginMessage;
           if (!msg || msg.type !== 'all-components-result') return;
           if (msg.data?.scope && msg.data.scope !== scope) return;
+          if (msg.data?.includeNestedInstances !== nested || msg.data?.includeHiddenInstances !== hidden) return;
           clearTimeout(timeout);
           window.removeEventListener('message', handler);
           if (msg.error) {
             reject(new Error(msg.error));
             return;
           }
-          componentInventoryByScope[scope] = msg.data || null;
+          componentInventoryCache.set(cacheKey, msg.data || null);
           resolve(msg.data || null);
         };
 
         window.addEventListener('message', handler);
-        parent.postMessage({ pluginMessage: { type: 'get-all-components', scope } }, '*');
+        parent.postMessage({
+          pluginMessage: {
+            type: 'get-all-components',
+            scope,
+            includeNestedInstances: nested,
+            includeHiddenInstances: hidden,
+          },
+        }, '*');
       });
     }
 
     function getCurrentComponentsInventory() {
-      return componentInventoryByScope[currentComponentsScope] || null;
+      return componentInventoryCache.get(getComponentInventoryCacheKey(currentComponentsScope)) || null;
     }
 
     function getFilteredComponentEntries() {
@@ -11063,17 +11080,9 @@ Requirements:
 
       const sortComponents = (items) => {
         const sorted = [...items];
-        sorted.sort((a, b) => {
-          if (componentsSortBy === 'name') {
-            return (a.name || '').localeCompare(b.name || '');
-          }
-          if (componentsSortBy === 'page') {
-            const aPage = (a.pages?.[0]?.name || '');
-            const bPage = (b.pages?.[0]?.name || '');
-            return aPage.localeCompare(bPage) || (a.name || '').localeCompare(b.name || '');
-          }
-          return (b.counts?.usageCount || 0) - (a.counts?.usageCount || 0) || (a.name || '').localeCompare(b.name || '');
-        });
+        sorted.sort((a, b) =>
+          (b.counts?.usageCount || 0) - (a.counts?.usageCount || 0) || (a.name || '').localeCompare(b.name || '')
+        );
         return sorted;
       };
 
@@ -11130,22 +11139,43 @@ Requirements:
       return parts.join(' · ');
     }
 
-    function buildComponentSummaryText(entry) {
-      const title = entry.type === 'COMPONENT_SET'
-        ? `${entry.name} [Component Set]`
-        : `${entry.name} [Component]`;
-      const lines = [title];
-      lines.push(`Source: ${entry.source === 'library' ? 'Library' : 'Local'}`);
-      if (entry.componentSetName && entry.type !== 'COMPONENT_SET') {
-        lines.push(`Set: ${entry.componentSetName}`);
+    const COMPONENT_VARIANT_DEFAULT_VALUES = new Set(['default', 'defualt']);
+
+    function formatComponentSetChildTitle(raw) {
+      const name = String(raw ?? '').trim();
+      if (!name) return '';
+      if (!name.includes('=')) return name;
+
+      const segments = [];
+      const parts = name.split(',').map((p) => p.trim()).filter(Boolean);
+
+      for (const part of parts) {
+        const eq = part.indexOf('=');
+        if (eq <= 0) continue;
+        const key = part.slice(0, eq).trim();
+        const value = part.slice(eq + 1).trim();
+        if (!key || !value) continue;
+
+        const vLower = value.toLowerCase();
+        const kCompact = key.replace(/\s+/g, '');
+        const capitalizedKey = kCompact ? kCompact.charAt(0).toUpperCase() + kCompact.slice(1) : '';
+
+        if (vLower === 'true' || vLower === 'on') {
+          if (capitalizedKey) segments.push(`is${capitalizedKey}`);
+          continue;
+        }
+        if (vLower === 'false' || vLower === 'off') {
+          if (capitalizedKey) segments.push(`not${capitalizedKey}`);
+          continue;
+        }
+        if (COMPONENT_VARIANT_DEFAULT_VALUES.has(vLower)) {
+          if (capitalizedKey) segments.push(`default${capitalizedKey}`);
+          continue;
+        }
+        segments.push(value);
       }
-      lines.push(`Usage count: ${entry.counts?.usageCount || 0}`);
-      if (entry.counts?.componentCount) lines.push(`Component definitions: ${entry.counts.componentCount}`);
-      if (entry.counts?.componentSetCount) lines.push(`Component sets: ${entry.counts.componentSetCount}`);
-      if (Array.isArray(entry.pages) && entry.pages.length > 0) {
-        lines.push(`Pages: ${entry.pages.map((page) => page.name).join(', ')}`);
-      }
-      return lines.join('\n');
+
+      return segments.length > 0 ? segments.join('_') : name;
     }
 
     function renderComponentsInDrawer(container) {
@@ -11169,11 +11199,18 @@ Requirements:
         const sourceBadgeHtml = !isSetChild
           ? `<span class="component-browser-badge component-browser-badge--${item.source}">${item.source === 'library' ? 'Library' : 'Local'}</span>`
           : '';
+        let titleText;
+        if (isSetChild) {
+          titleText = formatComponentSetChildTitle(item.name || '');
+          if (!titleText) titleText = 'Untitled';
+        } else {
+          titleText = item.name || 'Untitled';
+        }
         return `
           <div class="${rowClass}">
             <div class="component-browser-row-main">
               <div class="component-browser-row-title">
-                <span>${escapeHtml(item.name || 'Untitled')}</span>
+                <span>${escapeHtml(titleText)}</span>
                 ${sourceBadgeHtml}
               </div>
               <div class="component-browser-row-meta">
@@ -11203,7 +11240,7 @@ Requirements:
         <div class="component-browser-toolbar">
           <input type="search" value="${escapeHtml(componentsSearchQuery)}" placeholder="Search components, sets, pages..." oninput="handleComponentsSearchInput(this.value)">
           <div class="comments-dropdown-container">
-            <button type="button" id="componentsBrowserDropdownBtn" class="comments-dropdown-btn" onclick="toggleComponentsBrowserDropdown(event)" title="Sort and filter components">
+            <button type="button" id="componentsBrowserDropdownBtn" class="comments-dropdown-btn" onclick="toggleComponentsBrowserDropdown(event)" title="Filter and group components">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18M6 12h12M10 18h4" />
               </svg>
@@ -11218,13 +11255,14 @@ Requirements:
               <div class="dropdown-section">Grouping</div>
               <button type="button" class="dropdown-item ${componentsGroupingMode === 'set' ? 'active' : ''}" onclick="setComponentsGroupingMode('set')">Set first</button>
               <button type="button" class="dropdown-item ${componentsGroupingMode === 'flat' ? 'active' : ''}" onclick="setComponentsGroupingMode('flat')">Flat by component</button>
-              <div class="dropdown-divider"></div>
-              <div class="dropdown-section">Sort</div>
-              <button type="button" class="dropdown-item ${componentsSortBy === 'usage' ? 'active' : ''}" onclick="setComponentsSortBy('usage')">Usage desc</button>
-              <button type="button" class="dropdown-item ${componentsSortBy === 'name' ? 'active' : ''}" onclick="setComponentsSortBy('name')">Name</button>
-              <button type="button" class="dropdown-item ${componentsSortBy === 'page' ? 'active' : ''}" onclick="setComponentsSortBy('page')">Page</button>
             </div>
           </div>
+          <button class="prompt-comments-refresh-btn" type="button" onclick="refreshComponentsInDrawer(true)" title="Refresh component list">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
         </div>
         <div class="component-browser-summary">
           <span>${summary.visibleSetCount} sets</span>
@@ -11330,20 +11368,18 @@ Requirements:
       if (container) renderComponentsInDrawer(container);
     }
 
-    function setComponentsSortBy(value) {
-      componentsSortBy = value || 'usage';
-      const container = document.getElementById('promptComponentsContainer');
-      if (container) renderComponentsInDrawer(container);
+    function toggleComponentsIncludeNestedInstances() {
+      componentsIncludeNestedInstances = !componentsIncludeNestedInstances;
+      const btn = document.getElementById('componentsShowNestedToggle');
+      if (btn) btn.classList.toggle('active', componentsIncludeNestedInstances);
+      refreshComponentsInDrawer(true);
     }
 
-    async function copyVisibleComponentsSummary() {
-      const { setGroups, flatComponents } = getFilteredComponentEntries();
-      const items = componentsGroupingMode === 'set' ? setGroups : flatComponents;
-      const text = items.length > 0
-        ? items.map((entry) => buildComponentSummaryText(entry)).join('\n\n')
-        : 'No matching components found.';
-      await navigator.clipboard.writeText(text);
-      showToast('Copied components summary', 'success');
+    function toggleComponentsIncludeHiddenInstances() {
+      componentsIncludeHiddenInstances = !componentsIncludeHiddenInstances;
+      const btn = document.getElementById('componentsShowHiddenToggle');
+      if (btn) btn.classList.toggle('active', componentsIncludeHiddenInstances);
+      refreshComponentsInDrawer(true);
     }
 
     function navigateToComponentInventoryEntry(entryId) {
@@ -17199,13 +17235,21 @@ Generate ONLY the reply text, nothing else.`;
                   <button class="pill-tab ${currentComponentsScope === 'page' ? 'active' : ''}" onclick="switchComponentsScope('page', this)" type="button">This Page</button>
                   <button class="pill-tab ${currentComponentsScope === 'file' ? 'active' : ''}" onclick="switchComponentsScope('file', this)" type="button">Whole File</button>
                 </div>
-                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-                  <button class="prompt-comments-toggle-btn" type="button" onclick="copyVisibleComponentsSummary()">Copy Summary</button>
-                  <button class="prompt-comments-refresh-btn" type="button" onclick="refreshComponentsInDrawer(true)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
-                      <path d="M23 4v6h-6M1 20v-6h6"/>
-                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap; align-items: center;">
+                  <button type="button" class="prompt-comments-toggle-btn${componentsIncludeNestedInstances ? ' active' : ''}" id="componentsShowNestedToggle" onclick="toggleComponentsIncludeNestedInstances()" title="Include instances and definitions nested inside another instance">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M4 10h4v4H4zM10 4h4v4h-4zM10 16h4v4h-4zM16 10h4v4h-4z"/>
                     </svg>
+                    Nested
+                  </button>
+                  <button type="button" class="prompt-comments-toggle-btn${componentsIncludeHiddenInstances ? ' active' : ''}" id="componentsShowHiddenToggle" onclick="toggleComponentsIncludeHiddenInstances()" title="Include uses in instance trees where the outermost instance or a layer down to the use is hidden">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M10.733 5.076c.968.136 1.876.402 2.715.769C16.748 7.001 20 10.305 20 14c0 1.01-.195 1.978-.55 2.867"/>
+                      <path d="M14 14a2 2 0 1 1-2.828-2.828"/>
+                      <path d="M2 2l20 20"/>
+                      <path d="M8.023 8.023C5.646 9.292 4 11.455 4 14c0 3.314 4.5 6 8 6 1.117 0 2.183-.162 3.162-.462"/>
+                    </svg>
+                    Hidden
                   </button>
                 </div>
               </div>
@@ -38986,8 +39030,8 @@ Update the text content for all selected nodes accordingly.`;
       'toggleComponentsBrowserDropdown',
       'setComponentsSourceFilter',
       'setComponentsGroupingMode',
-      'setComponentsSortBy',
-      'copyVisibleComponentsSummary',
+      'toggleComponentsIncludeNestedInstances',
+      'toggleComponentsIncludeHiddenInstances',
       'navigateToComponentInventoryEntry',
       'selectComponentInventoryEntryNodes',
       'refreshComponentsInDrawer',

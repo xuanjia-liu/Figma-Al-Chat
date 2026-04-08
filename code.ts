@@ -904,6 +904,7 @@ interface ComponentInventorySetGroup {
   pages: ComponentInventoryPageRef[];
   counts: ComponentInventoryCounts;
   componentIds: string[];
+  instanceNodeIds: string[];
 }
 
 function isLibraryBackedComponent(node: BaseNode | null | undefined): boolean {
@@ -935,14 +936,30 @@ function pushUnique(list: string[], value: string | null | undefined) {
   }
 }
 
+function isDynamicPageDocumentAccess(): boolean {
+  return (figma as PluginAPI & { documentAccess?: string }).documentAccess === 'dynamic-page';
+}
+
 async function resolveInstanceMainComponent(instance: InstanceNode): Promise<ComponentNode | null> {
+  const dynamicPage = isDynamicPageDocumentAccess();
   try {
     if ('getMainComponentAsync' in instance && typeof (instance as any).getMainComponentAsync === 'function') {
-      return await (instance as any).getMainComponentAsync();
+      const loaded = await (instance as any).getMainComponentAsync();
+      if (loaded) return loaded;
     }
-    return (instance as any).mainComponent || null;
+    if (!dynamicPage) {
+      return instance.mainComponent ?? null;
+    }
+    return null;
   } catch (error) {
     console.warn('Failed to resolve main component for instance', instance.id, error);
+    if (!dynamicPage) {
+      try {
+        return instance.mainComponent ?? null;
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 }
@@ -980,7 +997,65 @@ function collectComponentInventoryNodes(roots: SceneNode[]): SceneNode[] {
   return nodes;
 }
 
-async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
+type ComponentInventoryBuildOptions = {
+  includeNestedInstances?: boolean;
+  includeHiddenInstances?: boolean;
+};
+
+function hasParentInstance(node: BaseNode): boolean {
+  let p: BaseNode | null = node.parent;
+  while (p && p.type !== 'PAGE' && p.type !== 'DOCUMENT') {
+    if (p.type === 'INSTANCE') return true;
+    p = p.parent as BaseNode | null;
+  }
+  return false;
+}
+
+function getOutermostInstance(node: BaseNode): InstanceNode | null {
+  let outer: InstanceNode | null = null;
+  let cur: BaseNode | null = node;
+  while (cur && cur.type !== 'PAGE' && cur.type !== 'DOCUMENT') {
+    if (cur.type === 'INSTANCE') outer = cur as InstanceNode;
+    cur = cur.parent as BaseNode | null;
+  }
+  return outer;
+}
+
+/** When includeHiddenInstances is false: exclude nodes under a hidden outermost instance or with a hidden layer between the node and that instance. */
+function isExcludedByHiddenInstancePolicy(node: SceneNode): boolean {
+  const outer = getOutermostInstance(node);
+  if (outer) {
+    if (!outer.visible) return true;
+    let cur: BaseNode | null = node;
+    while (cur && cur !== outer) {
+      if ('visible' in cur && (cur as SceneNode).visible === false) return true;
+      cur = cur.parent as BaseNode | null;
+    }
+    return false;
+  }
+  let cur: BaseNode | null = node;
+  while (cur && cur.type !== 'PAGE' && cur.type !== 'DOCUMENT') {
+    if ('visible' in cur && (cur as SceneNode).visible === false) return true;
+    cur = cur.parent as BaseNode | null;
+  }
+  return false;
+}
+
+function shouldSkipInventoryNode(
+  node: SceneNode,
+  opts: { includeNestedInstances: boolean; includeHiddenInstances: boolean }
+): boolean {
+  if (!opts.includeNestedInstances && hasParentInstance(node)) return true;
+  if (!opts.includeHiddenInstances && isExcludedByHiddenInstancePolicy(node)) return true;
+  return false;
+}
+
+async function buildAllComponentsInventory(
+  scope: ComponentInventoryScope,
+  options: ComponentInventoryBuildOptions = {}
+) {
+  const includeNestedInstances = options.includeNestedInstances === true;
+  const includeHiddenInstances = options.includeHiddenInstances === true;
   if (scope === 'file') {
     await figma.loadAllPagesAsync();
   }
@@ -1013,6 +1088,7 @@ async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
           usageCount: 0,
         },
         componentIds: [],
+        instanceNodeIds: [],
       };
       setGroups.set(key, entry);
     }
@@ -1068,6 +1144,8 @@ async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
   };
 
   for (const node of nodes) {
+    if (shouldSkipInventoryNode(node, { includeNestedInstances, includeHiddenInstances })) continue;
+
     const nodePage = getNodePageRef(node);
 
     if (node.type === 'COMPONENT_SET') {
@@ -1143,6 +1221,7 @@ async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
         const setGroup = setGroups.get(componentSetId);
         if (setGroup) {
           pushUnique(setGroup.componentIds, componentItem.id);
+          pushUnique(setGroup.instanceNodeIds, instanceNode.id);
         }
       }
     }
@@ -1151,6 +1230,13 @@ async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
   for (const setGroup of setGroups.values()) {
     setGroup.counts.componentCount = setGroup.componentIds.length;
     setGroup.pages.sort((a, b) => a.name.localeCompare(b.name));
+    for (const cid of setGroup.componentIds) {
+      const comp = componentItems.get(cid);
+      if (!comp || !Array.isArray(comp.instanceNodeIds)) continue;
+      for (const iid of comp.instanceNodeIds) {
+        pushUnique(setGroup.instanceNodeIds, iid);
+      }
+    }
   }
 
   for (const componentItem of componentItems.values()) {
@@ -1165,6 +1251,8 @@ async function buildAllComponentsInventory(scope: ComponentInventoryScope) {
 
   return {
     scope,
+    includeNestedInstances,
+    includeHiddenInstances,
     summary: {
       componentSetCount: groups.length,
       componentCount: components.length,
@@ -6050,7 +6138,12 @@ figma.ui.onmessage = async (msg: {
       try {
         const scope = ((msg as any).scope || 'selection') as ComponentInventoryScope;
         const normalizedScope: ComponentInventoryScope = scope === 'page' || scope === 'file' ? scope : 'selection';
-        const data = await buildAllComponentsInventory(normalizedScope);
+        const includeNestedInstances = (msg as any).includeNestedInstances === true;
+        const includeHiddenInstances = (msg as any).includeHiddenInstances === true;
+        const data = await buildAllComponentsInventory(normalizedScope, {
+          includeNestedInstances,
+          includeHiddenInstances,
+        });
         figma.ui.postMessage({
           type: 'all-components-result',
           data,
@@ -6061,6 +6154,8 @@ figma.ui.onmessage = async (msg: {
           type: 'all-components-result',
           data: {
             scope: ((msg as any).scope || 'selection') as ComponentInventoryScope,
+            includeNestedInstances: (msg as any).includeNestedInstances === true,
+            includeHiddenInstances: (msg as any).includeHiddenInstances === true,
             summary: {
               componentSetCount: 0,
               componentCount: 0,

@@ -2965,6 +2965,12 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: var(--space-sm);
+    }
+
+    .prompt-field-comments .prompt-field-header .pill-tab-container {
+      flex: 1;
+      min-width: 0;
     }
 
     .prompt-comments-refresh-btn {
