@@ -11135,7 +11135,7 @@ Requirements:
       return parts.join(' · ');
     }
 
-    function buildComponentSummaryText(entry, options = {}) {
+    function buildComponentSummaryText(entry) {
       const title = entry.type === 'COMPONENT_SET'
         ? `${entry.name} [Component Set]`
         : `${entry.name} [Component]`;
@@ -11149,10 +11149,6 @@ Requirements:
       if (entry.counts?.componentSetCount) lines.push(`Component sets: ${entry.counts.componentSetCount}`);
       if (Array.isArray(entry.pages) && entry.pages.length > 0) {
         lines.push(`Pages: ${entry.pages.map((page) => page.name).join(', ')}`);
-      }
-      if (options.includeIds) {
-        const ids = entry.instanceNodeIds || entry.componentNodeIds || entry.componentSetNodeIds || [];
-        if (ids.length > 0) lines.push(`Node IDs: ${ids.join(', ')}`);
       }
       return lines.join('\n');
     }
@@ -11184,10 +11180,18 @@ Requirements:
                 ${item.componentSetName && item.type !== 'COMPONENT_SET' ? `<span>${escapeHtml(item.componentSetName)}</span>` : ''}
               </div>
             </div>
-            <div class="component-browser-row-actions">
-              <button type="button" onclick="copyComponentInventoryEntry('${escapeHtml(item.id)}')">Copy</button>
-              <button type="button" onclick="navigateToComponentInventoryEntry('${escapeHtml(item.id)}')" ${item.representativeNodeId ? '' : 'disabled'}>Jump</button>
-              <button type="button" onclick="selectComponentInventoryEntryNodes('${escapeHtml(item.id)}')" ${(item.instanceNodeIds?.length || 0) > 0 ? '' : 'disabled'}>Select Uses (${usage})</button>
+            <div class="comment-actions component-browser-row-actions">
+              <button type="button" class="comment-action-btn icon-only" onclick="navigateToComponentInventoryEntry('${escapeHtml(item.id)}')" title="Go to component" ${item.representativeNodeId ? '' : 'disabled'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+              </button>
+              <button type="button" class="comment-action-btn" onclick="selectComponentInventoryEntryNodes('${escapeHtml(item.id)}')" title="Select all uses on canvas" ${(item.instanceNodeIds?.length || 0) > 0 ? '' : 'disabled'}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 3l7.07 16.97 2.51-7.66 7.66-2.51L3 3z"/>
+                </svg>
+                Select uses (${usage})
+              </button>
             </div>
           </div>
         `;
@@ -11337,13 +11341,6 @@ Requirements:
         : 'No matching components found.';
       await navigator.clipboard.writeText(text);
       showToast('Copied components summary', 'success');
-    }
-
-    async function copyComponentInventoryEntry(entryId) {
-      const entry = componentInventoryRowMap.get(entryId);
-      if (!entry) return;
-      await navigator.clipboard.writeText(buildComponentSummaryText(entry, { includeIds: true }));
-      showToast('Copied component summary', 'success');
     }
 
     function navigateToComponentInventoryEntry(entryId) {
@@ -38983,7 +38980,6 @@ Update the text content for all selected nodes accordingly.`;
       'setComponentsGroupingMode',
       'setComponentsSortBy',
       'copyVisibleComponentsSummary',
-      'copyComponentInventoryEntry',
       'navigateToComponentInventoryEntry',
       'selectComponentInventoryEntryNodes',
       'refreshComponentsInDrawer',
