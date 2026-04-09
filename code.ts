@@ -4790,6 +4790,104 @@ function serializeVariablesForDisplay(variables: Variable[], collections: Variab
   return { serializedVariables, serializedCollections };
 }
 
+function serializeLocalPaintStylesForDisplay(paintStyles: PaintStyle[]) {
+  return paintStyles.map(s => ({
+    id: s.id,
+    name: s.name,
+    type: 'paint',
+    paints: s.paints ? s.paints.slice(0, 1).map(p => {
+      if (p.type === 'SOLID') {
+        return {
+          type: 'SOLID',
+          color: { r: p.color.r, g: p.color.g, b: p.color.b, a: 'opacity' in p ? (p as any).opacity ?? 1 : 1 }
+        };
+      }
+      return { type: p.type };
+    }) : []
+  }));
+}
+
+async function getColorPickerLibrarySources() {
+  const libraryPaintStyles: Array<{ id: string; key: string; name: string; libraryName?: string; hex: string }> = [];
+  const libraryVariables: Array<{ id: string; key: string; name: string; libraryName?: string; collectionName?: string; hex: string }> = [];
+  const teamLibrary = (figma as any).teamLibrary as any;
+
+  if (!teamLibrary) {
+    return { paintStyles: libraryPaintStyles, variables: libraryVariables };
+  }
+
+  if (typeof teamLibrary.getAvailableLibraryStylesAsync === 'function') {
+    try {
+      const styles: any[] = await teamLibrary.getAvailableLibraryStylesAsync();
+      const paintStyles = styles.filter(style => style?.styleType === 'PAINT');
+      for (const style of paintStyles) {
+        if (!style?.key || typeof (figma as any).importStyleByKeyAsync !== 'function') continue;
+        try {
+          const importedStyle = await (figma as any).importStyleByKeyAsync(style.key);
+          const paints = (importedStyle as PaintStyle)?.paints;
+          const firstPaint = Array.isArray(paints) ? paints[0] : null;
+          if (!firstPaint || firstPaint.type !== 'SOLID') continue;
+          libraryPaintStyles.push({
+            id: importedStyle.id,
+            key: style.key,
+            name: style.name,
+            libraryName: style.libraryName,
+            hex: rgbToHex(firstPaint.color.r, firstPaint.color.g, firstPaint.color.b)
+          });
+        } catch (error) {
+          console.warn('Failed to import library style for color picker', style?.name, error);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch library paint styles for color picker', error);
+    }
+  }
+
+  if (
+    figma.variables &&
+    typeof figma.variables.importVariableByKeyAsync === 'function' &&
+    typeof teamLibrary.getAvailableLibraryVariableCollectionsAsync === 'function' &&
+    typeof teamLibrary.getVariablesInLibraryCollectionAsync === 'function'
+  ) {
+    try {
+      const collections: any[] = await teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+      for (const collection of collections) {
+        if (!collection?.key) continue;
+        try {
+          const variables: any[] = await teamLibrary.getVariablesInLibraryCollectionAsync(collection.key);
+          for (const variable of variables.filter(v => v?.resolvedType === 'COLOR')) {
+            if (!variable?.key) continue;
+            try {
+              const importedVariable = await figma.variables.importVariableByKeyAsync(variable.key);
+              const importedCollection = await figma.variables.getVariableCollectionByIdAsync(importedVariable.variableCollectionId);
+              const defaultModeId = importedCollection?.defaultModeId;
+              const valuesByMode = (importedVariable as any).valuesByMode || {};
+              const defaultValue = defaultModeId ? valuesByMode[defaultModeId] : null;
+              if (!defaultValue || typeof defaultValue !== 'object' || !('r' in defaultValue)) continue;
+              libraryVariables.push({
+                id: importedVariable.id,
+                key: variable.key,
+                name: variable.name,
+                libraryName: collection.libraryName,
+                collectionName: collection.name,
+                hex: rgbToHex(defaultValue.r, defaultValue.g, defaultValue.b)
+              });
+            } catch (error) {
+              console.warn('Failed to import library variable for color picker', variable?.name, error);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to fetch library variable collection for color picker', collection?.name, error);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch library color variables for color picker', error);
+    }
+  }
+
+  return { paintStyles: libraryPaintStyles, variables: libraryVariables };
+}
+
 // Extract all text content from selection (including FigJam elements)
 function extractTextContent(nodes: readonly SceneNode[]): string {
   const texts: string[] = [];
@@ -8548,20 +8646,7 @@ figma.ui.onmessage = async (msg: {
         }
 
         // Serialize the styles for the UI
-        const serializedPaintStyles = paintStyles.map(s => ({
-          id: s.id,
-          name: s.name,
-          type: 'paint',
-          paints: s.paints ? s.paints.slice(0, 1).map(p => {
-            if (p.type === 'SOLID') {
-              return {
-                type: 'SOLID',
-                color: { r: p.color.r, g: p.color.g, b: p.color.b, a: 'opacity' in p ? (p as any).opacity ?? 1 : 1 }
-              };
-            }
-            return { type: p.type };
-          }) : []
-        }));
+        const serializedPaintStyles = serializeLocalPaintStylesForDisplay(paintStyles);
 
         const serializedTextStyles = textStyles.map(s => ({
           id: s.id,
@@ -8600,6 +8685,42 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('getLocalStyles failed', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to load local styles' });
+      }
+      break;
+    }
+
+    case 'get-color-picker-local-sources': {
+      try {
+        const paintStyles = await figma.getLocalPaintStylesAsync();
+        let serializedVariables: any[] = [];
+        if (figma.variables && typeof figma.variables.getLocalVariablesAsync === 'function') {
+          const variables = await figma.variables.getLocalVariablesAsync();
+          const collections = await figma.variables.getLocalVariableCollectionsAsync();
+          serializedVariables = serializeVariablesForDisplay(variables, collections).serializedVariables;
+        }
+        figma.ui.postMessage({
+          type: 'color-picker-local-sources',
+          paintStyles: serializeLocalPaintStylesForDisplay(paintStyles),
+          variables: serializedVariables
+        });
+      } catch (error) {
+        console.error('get-color-picker-local-sources failed', error);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to load color picker local sources' });
+      }
+      break;
+    }
+
+    case 'get-color-picker-library-sources': {
+      try {
+        const result = await getColorPickerLibrarySources();
+        figma.ui.postMessage({
+          type: 'color-picker-library-sources',
+          paintStyles: result.paintStyles,
+          variables: result.variables
+        });
+      } catch (error) {
+        console.error('get-color-picker-library-sources failed', error);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to load color picker library sources' });
       }
       break;
     }
@@ -11786,6 +11907,339 @@ figma.ui.onmessage = async (msg: {
           return effect;
         });
         return { updated, effects: next, foundA, foundB };
+      };
+
+      type SwapColorTarget = {
+        kind: 'custom' | 'paintStyle' | 'colorVariable';
+        scope?: 'selection' | 'local' | 'team';
+        hex?: string;
+        id?: string;
+        key?: string;
+        name?: string;
+      };
+
+      const clonePaintWithoutColorBinding = (paint: SolidPaint): SolidPaint => {
+        const updatedPaint = { ...paint } as SolidPaint & { boundVariables?: any };
+        if ((updatedPaint as any).boundVariables) {
+          const boundVariables = { ...(updatedPaint as any).boundVariables };
+          delete boundVariables.color;
+          if (Object.keys(boundVariables).length > 0) {
+            (updatedPaint as any).boundVariables = boundVariables;
+          } else {
+            delete (updatedPaint as any).boundVariables;
+          }
+        }
+        return updatedPaint as SolidPaint;
+      };
+
+      const parseSwapTarget = async (raw: any): Promise<(SwapColorTarget & { rgba?: RGBA; resolvedId?: string }) | null> => {
+        if (!raw || typeof raw !== 'object') {
+          if (typeof raw === 'string') {
+            const hex = normalizeHex(raw);
+            return hex ? { kind: 'custom', hex, rgba: parseHexColor(hex) } : null;
+          }
+          return null;
+        }
+
+        const kind = raw.kind === 'paintStyle' || raw.kind === 'colorVariable' ? raw.kind : 'custom';
+        const hex = normalizeHex(raw.hex);
+        const normalized: SwapColorTarget & { rgba?: RGBA; resolvedId?: string } = {
+          kind,
+          scope: raw.scope,
+          hex: hex || undefined,
+          id: typeof raw.id === 'string' ? raw.id : undefined,
+          key: typeof raw.key === 'string' ? raw.key : undefined,
+          name: typeof raw.name === 'string' ? raw.name : undefined
+        };
+
+        if (kind === 'custom') {
+          if (!hex) return null;
+          normalized.hex = hex;
+          normalized.rgba = parseHexColor(hex);
+          return normalized;
+        }
+
+        if (kind === 'paintStyle') {
+          if (normalized.id) {
+            normalized.resolvedId = normalized.id;
+            return normalized;
+          }
+          if (normalized.key && typeof (figma as any).importStyleByKeyAsync === 'function') {
+            const importedStyle = await (figma as any).importStyleByKeyAsync(normalized.key);
+            normalized.resolvedId = importedStyle?.id;
+            return normalized.resolvedId ? normalized : null;
+          }
+          return null;
+        }
+
+        if (kind === 'colorVariable') {
+          if (normalized.id) {
+            normalized.resolvedId = normalized.id;
+            return normalized;
+          }
+          if (normalized.key && figma.variables && typeof figma.variables.importVariableByKeyAsync === 'function') {
+            const importedVariable = await figma.variables.importVariableByKeyAsync(normalized.key);
+            normalized.resolvedId = importedVariable?.id;
+            return normalized.resolvedId ? normalized : null;
+          }
+          return null;
+        }
+
+        return null;
+      };
+
+      const getStylePropertyNameForField = (field: 'fills' | 'strokes') => field === 'fills' ? 'fillStyleId' : 'strokeStyleId';
+
+      const clearStyleIdForField = (target: SceneNode, field: 'fills' | 'strokes') => {
+        const styleProp = getStylePropertyNameForField(field);
+        if (styleProp in target) {
+          try {
+            (target as any)[styleProp] = '';
+          } catch (error) {
+            // ignore
+          }
+        }
+      };
+
+      const setStyleIdForField = async (target: SceneNode, field: 'fills' | 'strokes', styleId: string) => {
+        if (field === 'fills') {
+          if ('setFillStyleIdAsync' in target && typeof (target as any).setFillStyleIdAsync === 'function') {
+            await (target as any).setFillStyleIdAsync(styleId);
+          } else if ('fillStyleId' in target) {
+            (target as any).fillStyleId = styleId;
+          }
+          return;
+        }
+        if ('setStrokeStyleIdAsync' in target && typeof (target as any).setStrokeStyleIdAsync === 'function') {
+          await (target as any).setStrokeStyleIdAsync(styleId);
+        } else if ('strokeStyleId' in target) {
+          (target as any).strokeStyleId = styleId;
+        }
+      };
+
+      const paintsMatchVariable = (paints: Paint[], variableId: string) => {
+        return paints.some((paint) => {
+          const colorBinding = (paint as any)?.boundVariables?.color;
+          return paint?.type === 'SOLID' && colorBinding?.type === 'VARIABLE_ALIAS' && colorBinding?.id === variableId;
+        });
+      };
+
+      const replaceBoundVariablePaintsWithRawColor = (paints: Paint[], variableId: string, rgba: RGBA) => {
+        let changed = false;
+        const nextPaints = paints.map((paint) => {
+          const colorBinding = (paint as any)?.boundVariables?.color;
+          if (paint?.type !== 'SOLID' || colorBinding?.type !== 'VARIABLE_ALIAS' || colorBinding?.id !== variableId) {
+            return paint;
+          }
+          changed = true;
+          const solid = clonePaintWithoutColorBinding(paint as SolidPaint);
+          return {
+            ...solid,
+            color: { r: rgba.r, g: rgba.g, b: rgba.b },
+            opacity: rgba.a ?? (solid as any).opacity ?? 1
+          } as SolidPaint;
+        });
+        return { changed, paints: nextPaints };
+      };
+
+      const bindVariableToPaints = (paints: Paint[], variableId: string, onlyMatchingColor?: RGBA) => {
+        let changed = false;
+        const nextPaints = paints.map((paint) => {
+          if (paint?.type !== 'SOLID') return paint;
+          const solid = paint as SolidPaint;
+          if (onlyMatchingColor && !colorsEqual(solid.color, onlyMatchingColor)) return paint;
+          const updatedPaint = { ...solid } as SolidPaint & { boundVariables?: any };
+          const boundVariables = { ...((updatedPaint as any).boundVariables || {}) };
+          boundVariables.color = { type: 'VARIABLE_ALIAS', id: variableId };
+          (updatedPaint as any).boundVariables = boundVariables;
+          changed = true;
+          return updatedPaint as Paint;
+        });
+        return { changed, paints: nextPaints };
+      };
+
+      const replacePaintsWithRawColor = (paints: Paint[], rgba: RGBA) => {
+        const solidPaints = paints.filter(paint => paint?.type === 'SOLID');
+        if (solidPaints.length === 0) {
+          return {
+            changed: true,
+            paints: [{
+              type: 'SOLID',
+              color: { r: rgba.r, g: rgba.g, b: rgba.b },
+              opacity: rgba.a ?? 1
+            } as SolidPaint]
+          };
+        }
+        return {
+          changed: true,
+          paints: solidPaints.map((paint) => {
+            const solid = clonePaintWithoutColorBinding(paint as SolidPaint);
+            return {
+              ...solid,
+              color: { r: rgba.r, g: rgba.g, b: rgba.b },
+              opacity: rgba.a ?? (solid as any).opacity ?? 1
+            } as SolidPaint;
+          })
+        };
+      };
+
+      const applyReplacementToField = async (
+        target: SceneNode,
+        field: 'fills' | 'strokes',
+        paints: Paint[],
+        replacement: SwapColorTarget & { rgba?: RGBA; resolvedId?: string },
+        sourceCustomColor?: RGBA,
+        sourceVariableId?: string
+      ) => {
+        if (replacement.kind === 'paintStyle' && replacement.resolvedId) {
+          await setStyleIdForField(target, field, replacement.resolvedId);
+          return true;
+        }
+
+        clearStyleIdForField(target, field);
+
+        if (replacement.kind === 'colorVariable' && replacement.resolvedId) {
+          const bindingResult = bindVariableToPaints(paints.length > 0 ? paints : [{
+            type: 'SOLID',
+            color: { r: 0, g: 0, b: 0 },
+            opacity: 1
+          } as SolidPaint], replacement.resolvedId, sourceCustomColor);
+          if (bindingResult.changed) {
+            (target as any)[field] = bindingResult.paints;
+          }
+          return bindingResult.changed;
+        }
+
+        if (replacement.kind === 'custom' && replacement.rgba) {
+          const next = sourceVariableId
+            ? replaceBoundVariablePaintsWithRawColor(paints, sourceVariableId, replacement.rgba)
+            : replacePaintsWithRawColor(paints, replacement.rgba);
+          if (next.changed) {
+            (target as any)[field] = next.paints;
+          }
+          return next.changed;
+        }
+
+        return false;
+      };
+
+      const applySwapTargetToNode = async (
+        target: SceneNode,
+        fromTarget: SwapColorTarget & { rgba?: RGBA; resolvedId?: string },
+        toTarget: SwapColorTarget & { rgba?: RGBA; resolvedId?: string },
+        swapMode: 'replace' | 'swap',
+        includeGradients: boolean,
+        includeStrokes: boolean,
+        includeEffects: boolean
+      ): Promise<{ changed: boolean; matched: boolean }> => {
+        let changed = false;
+        let matched = false;
+
+        const processField = async (field: 'fills' | 'strokes') => {
+          if (!(field in target)) return;
+          const styleProp = getStylePropertyNameForField(field);
+          const currentStyleId = styleProp in target ? (target as any)[styleProp] : '';
+          const fieldPaints = (target as any)[field] as Paint[] | typeof figma.mixed;
+          if (!Array.isArray(fieldPaints)) return;
+
+          if (swapMode === 'replace' && fromTarget.kind === 'custom' && toTarget.kind === 'custom' && fromTarget.rgba && toTarget.rgba) {
+            const result = swapColorsInPaints(fieldPaints, fromTarget.rgba, toTarget.rgba, includeGradients);
+            matched = matched || result.found;
+            if (result.updated) {
+              (target as any)[field] = result.paints;
+              changed = true;
+            }
+            return;
+          }
+
+          if (swapMode === 'swap' && fromTarget.kind === 'custom' && toTarget.kind === 'custom' && fromTarget.rgba && toTarget.rgba) {
+            const result = swapColorsInPaintsTwoWay(fieldPaints, fromTarget.rgba, toTarget.rgba, includeGradients);
+            matched = matched || result.foundA || result.foundB;
+            if (result.updated) {
+              (target as any)[field] = result.paints;
+              changed = true;
+            }
+            return;
+          }
+
+          const fromMatches =
+            fromTarget.kind === 'paintStyle'
+              ? !!fromTarget.resolvedId && currentStyleId === fromTarget.resolvedId
+              : fromTarget.kind === 'colorVariable'
+                ? !!fromTarget.resolvedId && paintsMatchVariable(fieldPaints, fromTarget.resolvedId)
+                : !!fromTarget.rgba && swapColorsInPaints(fieldPaints, fromTarget.rgba, fromTarget.rgba, includeGradients).found;
+
+          const toMatches =
+            toTarget.kind === 'paintStyle'
+              ? !!toTarget.resolvedId && currentStyleId === toTarget.resolvedId
+              : toTarget.kind === 'colorVariable'
+                ? !!toTarget.resolvedId && paintsMatchVariable(fieldPaints, toTarget.resolvedId)
+                : !!toTarget.rgba && swapColorsInPaints(fieldPaints, toTarget.rgba, toTarget.rgba, includeGradients).found;
+
+          matched = matched || fromMatches || (swapMode === 'swap' && toMatches);
+
+          if (fromMatches) {
+            const didChange = await applyReplacementToField(
+              target,
+              field,
+              fieldPaints,
+              toTarget,
+              fromTarget.kind === 'custom' ? fromTarget.rgba : undefined,
+              fromTarget.kind === 'colorVariable' ? fromTarget.resolvedId : undefined
+            );
+            changed = changed || didChange;
+            return;
+          }
+
+          if (swapMode === 'swap' && toMatches) {
+            const didChange = await applyReplacementToField(
+              target,
+              field,
+              fieldPaints,
+              fromTarget,
+              toTarget.kind === 'custom' ? toTarget.rgba : undefined,
+              toTarget.kind === 'colorVariable' ? toTarget.resolvedId : undefined
+            );
+            changed = changed || didChange;
+          }
+        };
+
+        await processField('fills');
+        if (includeStrokes) {
+          await processField('strokes');
+        }
+
+        if (includeEffects && fromTarget.kind === 'custom' && toTarget.kind === 'custom' && fromTarget.rgba && toTarget.rgba && 'effects' in target) {
+          const effects = (target as any).effects as ReadonlyArray<Effect> | typeof figma.mixed;
+          if (Array.isArray(effects)) {
+            if (swapMode === 'swap') {
+              const result = swapColorsInEffectsTwoWay(effects, fromTarget.rgba, toTarget.rgba);
+              matched = matched || result.foundA || result.foundB;
+              if (result.updated) {
+                (target as any).effects = result.effects;
+                changed = true;
+              }
+            } else {
+              const result = swapColorsInEffects(effects, fromTarget.rgba, toTarget.rgba);
+              matched = matched || result.found;
+              if (result.updated) {
+                (target as any).effects = result.effects;
+                changed = true;
+              }
+            }
+          }
+        }
+
+        const children = (target as any).children as ReadonlyArray<SceneNode> | undefined;
+        if (Array.isArray(children)) {
+          for (const child of children) {
+            const childResult = await applySwapTargetToNode(child, fromTarget, toTarget, swapMode, includeGradients, includeStrokes, includeEffects);
+            changed = changed || childResult.changed;
+            matched = matched || childResult.matched;
+          }
+        }
+
+        return { changed, matched };
       };
 
       const resolveComponentTarget = async (n: SceneNode | null): Promise<ComponentNode | ComponentSetNode | null> => {
@@ -16982,6 +17436,52 @@ figma.ui.onmessage = async (msg: {
                     action: 'swapPaintsTwoWay',
                     nodeId: node.id,
                     message: `No fills, strokes, gradients, or effects matched ${fromHex} or ${toHex}`
+                  };
+                }
+              }
+              break;
+            }
+
+            case 'swapColorTargets': {
+              const fromTarget = await parseSwapTarget(cmd.fromTarget);
+              const toTarget = await parseSwapTarget(cmd.toTarget);
+              if (!fromTarget || !toTarget) {
+                failed++;
+                if (!firstError) {
+                  firstError = {
+                    action: 'swapColorTargets',
+                    nodeId: node.id,
+                    message: 'Invalid color source selection'
+                  };
+                }
+                break;
+              }
+
+              const swapMode = cmd.swapMode === 'swap' ? 'swap' : 'replace';
+              const includeGradients = cmd.includeGradients !== false;
+              const includeStrokes = cmd.includeStrokes !== false;
+              const includeEffects = cmd.includeEffects !== false;
+              const result = await applySwapTargetToNode(
+                node,
+                fromTarget,
+                toTarget,
+                swapMode,
+                includeGradients,
+                includeStrokes,
+                includeEffects
+              );
+
+              if (result.changed) {
+                success++;
+              } else {
+                failed++;
+                if (!firstError) {
+                  firstError = {
+                    action: 'swapColorTargets',
+                    nodeId: node.id,
+                    message: result.matched
+                      ? 'A matching source was found but nothing changed'
+                      : 'No matching colors, styles, or variables found on the node or its children'
                   };
                 }
               }

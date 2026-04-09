@@ -4681,6 +4681,73 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     // Color picker menu helpers
     let colorPickMenuEl = null;
     let colorPickMenuAnchor = null;
+    let colorPickMenuOptions = [];
+    let colorPickMenuActiveTab = 'all';
+    let colorPickMenuSearchQuery = '';
+    let colorPickMenuSearchOpen = false;
+    let colorSwapLocalSourcesCache = null;
+    let colorSwapLibrarySourcesCache = null;
+    let colorSwapLocalSourcesPromise = null;
+    let colorSwapLibrarySourcesPromise = null;
+
+    function normalizePromptColorSelection(value, fallbackHex = '#3B82F6') {
+      const fallback = normalizeSelectionHexColor(fallbackHex) || '#3B82F6';
+      if (!value) {
+        return { kind: 'custom', scope: 'selection', hex: fallback, tab: 'custom' };
+      }
+
+      if (typeof value === 'string') {
+        const normalized = normalizeSelectionHexColor(value);
+        return {
+          kind: 'custom',
+          scope: 'selection',
+          hex: normalized || fallback,
+          tab: 'custom'
+        };
+      }
+
+      if (typeof value === 'object') {
+        const normalized = {
+          ...value,
+          kind: value.kind || 'custom',
+          scope: value.scope || (value.kind === 'custom' ? 'selection' : 'local'),
+          hex: normalizeSelectionHexColor(value.hex || fallback) || fallback,
+        };
+        normalized.tab = normalized.kind === 'custom' ? 'custom' : 'libraries';
+        return normalized;
+      }
+
+      return { kind: 'custom', scope: 'selection', hex: fallback, tab: 'custom' };
+    }
+
+    function buildColorSelectionLabel(selection) {
+      const normalized = normalizePromptColorSelection(selection);
+      if (normalized.kind === 'paintStyle') {
+        const scope = normalized.scope === 'team' ? (normalized.libraryName || 'Team library') : 'Local style';
+        return `${normalized.name || normalized.hex} • ${scope}`;
+      }
+      if (normalized.kind === 'colorVariable') {
+        const scope = normalized.scope === 'team' ? (normalized.libraryName || 'Team library') : (normalized.collectionName || 'Local variable');
+        return `${normalized.name || normalized.hex} • ${scope}`;
+      }
+      return normalized.hex;
+    }
+
+    function serializeColorSelectionForDataset(selection) {
+      try {
+        return JSON.stringify(normalizePromptColorSelection(selection));
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function getColorOptionId(option) {
+      if (!option) return '';
+      if (option.kind === 'custom') return `custom:${option.hex}`;
+      if (option.kind === 'paintStyle') return `paintStyle:${option.scope}:${option.id || option.key || option.name || option.hex}`;
+      if (option.kind === 'colorVariable') return `colorVariable:${option.scope}:${option.id || option.key || option.name || option.hex}`;
+      return `${option.kind || 'unknown'}:${option.hex || option.name || ''}`;
+    }
 
     function closeColorPickMenu() {
       if (colorPickMenuEl && colorPickMenuEl.parentNode) {
@@ -4688,6 +4755,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       }
       colorPickMenuEl = null;
       colorPickMenuAnchor = null;
+      colorPickMenuOptions = [];
+      colorPickMenuActiveTab = 'all';
+      colorPickMenuSearchQuery = '';
+      colorPickMenuSearchOpen = false;
       document.removeEventListener('mousedown', handleColorMenuOutside);
       document.removeEventListener('keydown', handleColorMenuKeydown);
     }
@@ -4701,7 +4772,128 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
     function handleColorMenuKeydown(event) {
       if (event.key === 'Escape') {
+        if (colorPickMenuSearchOpen && colorPickMenuSearchQuery) {
+          colorPickMenuSearchQuery = '';
+          if (colorPickMenuEl) renderColorPickMenu(colorPickMenuEl, colorPickMenuOptions);
+          return;
+        }
         closeColorPickMenu();
+      }
+    }
+
+    function getVisibleColorPickOptions(options) {
+      const activeTab = colorPickMenuActiveTab || 'all';
+      const searchQuery = String(colorPickMenuSearchQuery || '').trim().toLowerCase();
+      return options.filter((opt) => {
+        const matchesTab =
+          activeTab === 'custom' ? opt.tab === 'custom'
+            : activeTab === 'libraries' ? opt.tab === 'libraries'
+            : true;
+        if (!matchesTab) return false;
+        if (!searchQuery) return true;
+        const haystack = [
+          opt.name,
+          opt.hex,
+          opt.subtitle,
+          opt.label,
+          opt.collectionName,
+          opt.libraryName
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.includes(searchQuery);
+      });
+    }
+
+    function renderColorPickMenu(menu, options) {
+      const activeTab = colorPickMenuActiveTab || 'all';
+      const filteredOptions = getVisibleColorPickOptions(options);
+
+      const tabs = [
+        { id: 'all', label: 'All' },
+        { id: 'custom', label: 'Custom' },
+        { id: 'libraries', label: 'Libraries' }
+      ];
+
+      menu.innerHTML = `
+        <div class="color-pick-tabs">
+          ${tabs.map((tab) => `
+            <button type="button" class="color-pick-tab${tab.id === activeTab ? ' active' : ''}" data-tab="${tab.id}">
+              ${tab.label}
+            </button>
+          `).join('')}
+          <button type="button" class="color-pick-search-toggle${colorPickMenuSearchOpen ? ' active' : ''}" data-color-search-toggle="true" aria-label="Search colors" title="Search colors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="m20 20-3.5-3.5"></path>
+            </svg>
+          </button>
+        </div>
+        ${colorPickMenuSearchOpen ? `
+          <div class="color-pick-search-row">
+            <input
+              type="text"
+              class="color-pick-search-input"
+              data-color-search-input="true"
+              placeholder="Search colors"
+              value="${escapeHtmlAttr(colorPickMenuSearchQuery)}"
+            >
+          </div>
+        ` : ''}
+        <div class="color-pick-options">
+          ${filteredOptions.length > 0 ? filteredOptions.map((opt, idx) => `
+            <button type="button" class="color-pick-option" data-index="${idx}">
+              <span class="color-swatch" style="background:${opt.hex || '#FFFFFF'};"></span>
+              <div class="color-pick-meta">
+                <span class="color-pick-name">${escapeHtml(opt.name || opt.hex || 'Unnamed color')}</span>
+                <span class="color-pick-source">${escapeHtml(opt.subtitle || opt.label || '')}</span>
+              </div>
+              <span class="color-pick-hex">${escapeHtml(opt.hex || '')}</span>
+            </button>
+          `).join('') : '<div class="color-pick-empty">No colors in this tab</div>'}
+        </div>
+      `;
+
+      menu.querySelectorAll('.color-pick-tab').forEach((tabBtn) => {
+        tabBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          colorPickMenuActiveTab = tabBtn.dataset.tab || 'all';
+          renderColorPickMenu(menu, colorPickMenuOptions);
+        });
+      });
+
+      const searchToggle = menu.querySelector('[data-color-search-toggle="true"]');
+      if (searchToggle) {
+        searchToggle.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          colorPickMenuSearchOpen = !colorPickMenuSearchOpen;
+          if (!colorPickMenuSearchOpen) {
+            colorPickMenuSearchQuery = '';
+          }
+          renderColorPickMenu(menu, colorPickMenuOptions);
+          if (colorPickMenuSearchOpen) {
+            requestAnimationFrame(() => {
+              menu.querySelector('[data-color-search-input="true"]')?.focus();
+            });
+          }
+        });
+      }
+
+      const searchInput = menu.querySelector('[data-color-search-input="true"]');
+      if (searchInput) {
+        searchInput.addEventListener('input', () => {
+          const nextValue = searchInput.value || '';
+          colorPickMenuSearchQuery = nextValue;
+          renderColorPickMenu(menu, colorPickMenuOptions);
+          requestAnimationFrame(() => {
+            const nextInput = menu.querySelector('[data-color-search-input="true"]');
+            if (nextInput) {
+              nextInput.focus();
+              const caretPos = nextValue.length;
+              nextInput.setSelectionRange?.(caretPos, caretPos);
+            }
+          });
+        });
       }
     }
 
@@ -4711,15 +4903,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       const menu = document.createElement('div');
       menu.className = 'color-pick-menu';
-      menu.innerHTML = options.map((opt, idx) => `
-        <button type="button" class="color-pick-option" data-index="${idx}">
-          <span class="color-swatch" style="background:${opt.hex};"></span>
-          <div class="color-pick-meta">
-            <span class="color-pick-hex">${opt.hex}</span>
-            ${opt.label ? `<span class="color-pick-source">${escapeHtml(opt.label)}</span>` : ''}
-          </div>
-        </button>
-      `).join('');
+      colorPickMenuOptions = Array.isArray(options) ? options.slice() : [];
+      colorPickMenuActiveTab = colorPickMenuOptions.some(opt => opt.tab === 'libraries') ? 'all' : 'custom';
+      renderColorPickMenu(menu, colorPickMenuOptions);
 
       document.body.appendChild(menu);
       colorPickMenuEl = menu;
@@ -4746,7 +4932,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const btn = e.target.closest('.color-pick-option');
         if (!btn) return;
         const idx = Number(btn.dataset.index);
-        const choice = options[idx];
+        const filteredOptions = getVisibleColorPickOptions(colorPickMenuOptions);
+        const choice = filteredOptions[idx];
         if (!choice) return;
         closeColorPickMenu();
         if (typeof onSelect === 'function') {
@@ -4838,45 +5025,368 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           const firstLabel = entry.sources[0] || '';
           const extraCount = entry.count - entry.sources.length;
           const label = extraCount > 0 ? `${firstLabel} (+${extraCount} more)` : firstLabel;
-          return { hex: entry.hex, label: label || '', count: entry.count };
+          return {
+            kind: 'custom',
+            scope: 'selection',
+            hex: entry.hex,
+            name: entry.hex,
+            label: label || '',
+            subtitle: label || 'Selection color',
+            count: entry.count,
+            tab: 'custom'
+          };
         })
         .sort((a, b) => (b.count - a.count) || a.hex.localeCompare(b.hex));
+    }
+
+    function mapLocalColorSourcesToOptions(payload) {
+      const options = [];
+      const paintStyles = Array.isArray(payload?.paintStyles) ? payload.paintStyles : [];
+      paintStyles.forEach((style) => {
+        const hex = normalizeSelectionHexColor(style?.paints?.[0]?.color ? rgbToHex(
+          style.paints[0].color.r,
+          style.paints[0].color.g,
+          style.paints[0].color.b
+        ) : null);
+        if (!hex) return;
+        options.push({
+          kind: 'paintStyle',
+          scope: 'local',
+          id: style.id,
+          hex,
+          name: style.name || hex,
+          subtitle: 'Local style',
+          tab: 'libraries'
+        });
+      });
+
+      const variables = Array.isArray(payload?.variables) ? payload.variables : [];
+      variables.forEach((variable) => {
+        if (variable?.resolvedType !== 'COLOR') return;
+        const hex = normalizeSelectionHexColor(variable.displayValue || variable.displayColor);
+        if (!hex) return;
+        options.push({
+          kind: 'colorVariable',
+          scope: 'local',
+          id: variable.id,
+          hex,
+          name: variable.name || hex,
+          collectionName: variable.collectionName || '',
+          subtitle: variable.collectionName ? `Local variable • ${variable.collectionName}` : 'Local variable',
+          tab: 'libraries'
+        });
+      });
+
+      return options;
+    }
+
+    function mapLibraryColorSourcesToOptions(payload) {
+      const options = [];
+      const paintStyles = Array.isArray(payload?.paintStyles) ? payload.paintStyles : [];
+      paintStyles.forEach((style) => {
+        const hex = normalizeSelectionHexColor(style?.hex);
+        if (!hex) return;
+        options.push({
+          kind: 'paintStyle',
+          scope: 'team',
+          key: style.key,
+          hex,
+          name: style.name || hex,
+          libraryName: style.libraryName || '',
+          subtitle: style.libraryName ? `Library style • ${style.libraryName}` : 'Library style',
+          tab: 'libraries'
+        });
+      });
+
+      const variables = Array.isArray(payload?.variables) ? payload.variables : [];
+      variables.forEach((variable) => {
+        const hex = normalizeSelectionHexColor(variable.hex);
+        if (!hex) return;
+        options.push({
+          kind: 'colorVariable',
+          scope: 'team',
+          key: variable.key,
+          hex,
+          name: variable.name || hex,
+          collectionName: variable.collectionName || '',
+          libraryName: variable.libraryName || '',
+          subtitle: variable.libraryName
+            ? `Library variable • ${variable.libraryName}${variable.collectionName ? ` / ${variable.collectionName}` : ''}`
+            : (variable.collectionName ? `Library variable • ${variable.collectionName}` : 'Library variable'),
+          tab: 'libraries'
+        });
+      });
+
+      return options;
+    }
+
+    async function loadLocalColorSwapSources() {
+      if (Array.isArray(colorSwapLocalSourcesCache)) {
+        return colorSwapLocalSourcesCache;
+      }
+      if (colorSwapLocalSourcesPromise) {
+        return colorSwapLocalSourcesPromise;
+      }
+
+      colorSwapLocalSourcesPromise = runLocalActionRequest({
+        requestType: 'get-color-picker-local-sources',
+        resultType: 'color-picker-local-sources',
+        payload: {},
+        timeoutMs: 20000,
+        errorPrefixes: ['Failed to load color picker local sources']
+      }).then((result) => {
+        colorSwapLocalSourcesCache = mapLocalColorSourcesToOptions(result);
+        return colorSwapLocalSourcesCache;
+      }).catch((error) => {
+        console.warn('Failed to load local color swap sources', error);
+        return [];
+      }).finally(() => {
+        colorSwapLocalSourcesPromise = null;
+      });
+
+      return colorSwapLocalSourcesPromise;
+    }
+
+    async function loadLibraryColorSwapSources() {
+      if (Array.isArray(colorSwapLibrarySourcesCache)) {
+        return colorSwapLibrarySourcesCache;
+      }
+      if (colorSwapLibrarySourcesPromise) {
+        return colorSwapLibrarySourcesPromise;
+      }
+
+      colorSwapLibrarySourcesPromise = runLocalActionRequest({
+        requestType: 'get-color-picker-library-sources',
+        resultType: 'color-picker-library-sources',
+        payload: {},
+        timeoutMs: 30000,
+        errorPrefixes: ['Failed to load color picker library sources']
+      }).then((result) => {
+        colorSwapLibrarySourcesCache = mapLibraryColorSourcesToOptions(result);
+        return colorSwapLibrarySourcesCache;
+      }).catch((error) => {
+        console.warn('Failed to load library color swap sources', error);
+        return [];
+      }).finally(() => {
+        colorSwapLibrarySourcesPromise = null;
+      });
+
+      return colorSwapLibrarySourcesPromise;
+    }
+
+    function mergeColorMenuOptions(...optionSets) {
+      const optionMap = new Map();
+      optionSets.flat().forEach((option) => {
+        const normalized = normalizePromptColorSelection(option);
+        normalized.name = option.name || normalized.name || normalized.hex;
+        normalized.subtitle = option.subtitle || option.label || '';
+        normalized.label = option.label || normalized.label || '';
+        normalized.count = option.count || normalized.count || 0;
+        normalized.tab = normalized.kind === 'custom' ? 'custom' : 'libraries';
+        const key = getColorOptionId(normalized);
+        if (!optionMap.has(key)) {
+          optionMap.set(key, normalized);
+        }
+      });
+      return Array.from(optionMap.values());
+    }
+
+    function collectSelectionTokenReferences(selection) {
+      const refs = {
+        styleIds: new Set(),
+        variableIds: new Set(),
+      };
+
+      const addBoundPaintVariable = (paint) => {
+        const colorBinding = paint?.boundVariables?.color;
+        if (colorBinding?.type === 'VARIABLE_ALIAS' && colorBinding.id) {
+          refs.variableIds.add(colorBinding.id);
+        }
+      };
+
+      const walk = (node) => {
+        if (!node) return;
+        if (node.fillStyleId) refs.styleIds.add(node.fillStyleId);
+        if (node.strokeStyleId) refs.styleIds.add(node.strokeStyleId);
+
+        if (Array.isArray(node.fillsDetailed)) {
+          node.fillsDetailed.forEach(addBoundPaintVariable);
+        }
+        if (Array.isArray(node.strokesDetailed)) {
+          node.strokesDetailed.forEach(addBoundPaintVariable);
+        }
+        if (node.boundVariables && typeof node.boundVariables === 'object') {
+          Object.values(node.boundVariables).forEach((value) => {
+            if (value?.type === 'VARIABLE_ALIAS' && value.id) {
+              refs.variableIds.add(value.id);
+            } else if (Array.isArray(value)) {
+              value.forEach((entry) => {
+                if (entry?.type === 'VARIABLE_ALIAS' && entry.id) refs.variableIds.add(entry.id);
+              });
+            }
+          });
+        }
+
+        if (Array.isArray(node.children)) {
+          node.children.forEach(walk);
+        }
+      };
+
+      (Array.isArray(selection) ? selection : []).forEach(walk);
+      return refs;
+    }
+
+    function collectSelectionLibraryOptions(selection) {
+      const optionMap = new Map();
+
+      const addOption = (option) => {
+        const normalized = normalizePromptColorSelection(option);
+        normalized.name = option.name || normalized.name || normalized.hex;
+        normalized.subtitle = option.subtitle || normalized.subtitle || 'Used on selection';
+        normalized.tab = 'libraries';
+        const key = getColorOptionId(normalized);
+        if (!optionMap.has(key)) {
+          optionMap.set(key, normalized);
+        }
+      };
+
+      const getPaintHex = (paints) => {
+        if (!Array.isArray(paints)) return null;
+        for (const paint of paints) {
+          if (paint?.type === 'SOLID' && paint.color) {
+            return normalizeSelectionHexColor(paint.color);
+          }
+        }
+        return null;
+      };
+
+      const walk = (node) => {
+        if (!node) return;
+
+        if (node.fillStyleId || node.fillTokenName) {
+          addOption({
+            kind: 'paintStyle',
+            scope: 'team',
+            id: node.fillStyleId,
+            name: node.fillTokenName || 'Selection fill style',
+            hex: getPaintHex(node.fillsDetailed) || node.fills || '#000000',
+            subtitle: 'Used on selection'
+          });
+        }
+
+        if (node.strokeStyleId || node.strokeTokenName) {
+          addOption({
+            kind: 'paintStyle',
+            scope: 'team',
+            id: node.strokeStyleId,
+            name: node.strokeTokenName || 'Selection stroke style',
+            hex: getPaintHex(node.strokesDetailed) || node.strokes || '#000000',
+            subtitle: 'Used on selection'
+          });
+        }
+
+        const addPaintVariableOption = (paint, fallbackHex) => {
+          const colorBinding = paint?.boundVariables?.color;
+          if (colorBinding?.type !== 'VARIABLE_ALIAS' || !colorBinding.id) return;
+          addOption({
+            kind: 'colorVariable',
+            scope: 'team',
+            id: colorBinding.id,
+            name: colorBinding.name || 'Selection color variable',
+            hex: normalizeSelectionHexColor(fallbackHex || paint.color) || '#000000',
+            subtitle: 'Used on selection'
+          });
+        };
+
+        if (Array.isArray(node.fillsDetailed)) {
+          node.fillsDetailed.forEach((paint) => addPaintVariableOption(paint, paint.color));
+        }
+        if (Array.isArray(node.strokesDetailed)) {
+          node.strokesDetailed.forEach((paint) => addPaintVariableOption(paint, paint.color));
+        }
+
+        if (Array.isArray(node.children)) {
+          node.children.forEach(walk);
+        }
+      };
+
+      (Array.isArray(selection) ? selection : []).forEach(walk);
+      return Array.from(optionMap.values());
+    }
+
+    function filterLibraryOptionsForSelection(options, selection) {
+      const refs = collectSelectionTokenReferences(selection);
+      const matched = options.filter((option) => {
+        if (option.kind === 'paintStyle') {
+          return option.id && refs.styleIds.has(option.id);
+        }
+        if (option.kind === 'colorVariable') {
+          return option.id && refs.variableIds.has(option.id);
+        }
+        return false;
+      });
+      return mergeColorMenuOptions(matched, collectSelectionLibraryOptions(selection));
+    }
+
+    function applyPromptColorSelection(wrapper, selection) {
+      if (!wrapper) return;
+      const picker = wrapper.querySelector('.prompt-color-picker');
+      const hexInput = wrapper.querySelector('.prompt-color-hex');
+      const sourceLabel = wrapper.querySelector('.prompt-color-source-label');
+      const normalized = normalizePromptColorSelection(selection, picker?.value || hexInput?.value || '#3B82F6');
+      wrapper.dataset.selectedSource = serializeColorSelectionForDataset(normalized);
+      if (picker) picker.value = normalized.hex;
+      if (hexInput) hexInput.value = normalized.hex;
+      if (sourceLabel) {
+        sourceLabel.textContent = buildColorSelectionLabel(normalized);
+      }
     }
 
     // Pick color from selected element
     async function pickColorFromSelection(picker, hexInput, anchorEl) {
       try {
-        const { data: selectionData } = await requestSelectionData();
+        const wrapper = picker?.closest('.prompt-color-input-wrapper');
+        const fieldKey = picker?.dataset?.fieldKey || '';
+        const [{ data: selectionData }, localOptions, libraryOptions] = await Promise.all([
+          requestSelectionData(),
+          loadLocalColorSwapSources(),
+          loadLibraryColorSwapSources()
+        ]);
         if (!selectionData || selectionData.length === 0) {
           showToast('Please select an element first', 'error');
           return;
         }
 
-        const colorOptions = collectSelectionColors(selectionData);
+        const filteredLibraryOptions = fieldKey === 'fromColor'
+          ? filterLibraryOptionsForSelection(mergeColorMenuOptions(localOptions, libraryOptions), selectionData)
+          : mergeColorMenuOptions(localOptions, libraryOptions);
+        const colorOptions = mergeColorMenuOptions(
+          collectSelectionColors(selectionData),
+          filteredLibraryOptions
+        );
         if (colorOptions.length === 0) {
           showToast('Selected element has no visible fill or stroke colors', 'error');
           return;
         }
 
-        const applyColor = (hex) => {
-          const normalized = normalizeSelectionHexColor(hex);
+        const applyColor = (selection) => {
+          const normalized = normalizePromptColorSelection(selection, picker?.value || '#3B82F6');
           if (!normalized) {
             showToast('Color is not supported', 'error');
             return;
           }
-          picker.value = normalized;
-          hexInput.value = normalized;
-          showToast(`Color set to ${normalized}`);
+          applyPromptColorSelection(wrapper, normalized);
+          showToast(`Color set to ${buildColorSelectionLabel(normalized)}`);
         };
 
         if (colorOptions.length === 1) {
-          applyColor(colorOptions[0].hex);
+          applyColor(colorOptions[0]);
           return;
         }
 
         openColorPickMenu(colorOptions, anchorEl, (choice) => {
-          if (choice && choice.hex) {
-            applyColor(choice.hex);
+          if (choice) {
+            applyColor(choice);
           }
         });
       } catch (error) {
@@ -17078,14 +17588,18 @@ Generate ONLY the reply text, nothing else.`;
           `;
         } else if (field.type === 'color') {
           // Color picker with hex input
-          const colorValue = (preservedValues && preservedValues[field.key] !== undefined)
+          const preservedColorValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
             : (field.default || '#3B82F6');
+          const normalizedColorValue = normalizePromptColorSelection(preservedColorValue, field.default || '#3B82F6');
+          const colorValue = normalizedColorValue.hex || '#3B82F6';
+          const colorSourceValue = serializeColorSelectionForDataset(normalizedColorValue);
+          const colorSourceLabel = buildColorSelectionLabel(normalizedColorValue);
           fieldHtml += `
             <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <label class="prompt-field-label">${field.label}</label>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <div class="prompt-color-input-wrapper">
+              <div class="prompt-color-input-wrapper" data-selected-source="${escapeHtmlAttr(colorSourceValue)}">
                 <input type="color" class="prompt-color-picker" id="${fieldId}-picker" value="${colorValue}" data-field-key="${field.key}"${disabledAttr}>
                 <input type="text" class="prompt-color-hex" id="${fieldId}-hex" value="${colorValue}" placeholder="#000000" data-color-hex="${field.key}"${disabledAttr}>
                 <button class="audit-pick-btn prompt-color-pick-btn" title="${escapeHtml(tu('actions.color.useSelectionFill'))}"${disabledAttr}>
@@ -17094,6 +17608,7 @@ Generate ONLY the reply text, nothing else.`;
                   </svg>
                 </button>
               </div>
+              <div class="prompt-color-source-label">${escapeHtml(colorSourceLabel)}</div>
             </div>
           `;
         } else if (field.type === 'textarea') {
@@ -17992,10 +18507,18 @@ Generate ONLY the reply text, nothing else.`;
         const picker = wrapper.querySelector('.prompt-color-picker');
         const hexInput = wrapper.querySelector('.prompt-color-hex');
         const pickBtn = wrapper.querySelector('.audit-pick-btn');
+        const sourceLabel = wrapper.parentElement?.querySelector('.prompt-color-source-label');
+
+        const resetToCustomColor = (hex) => {
+          const normalized = normalizePromptColorSelection(hex || picker?.value || '#3B82F6');
+          wrapper.dataset.selectedSource = serializeColorSelectionForDataset(normalized);
+          if (sourceLabel) sourceLabel.textContent = buildColorSelectionLabel(normalized);
+        };
 
         // Sync picker -> hex input
         picker.addEventListener('input', () => {
           hexInput.value = picker.value.toUpperCase();
+          resetToCustomColor(picker.value);
         });
 
         // Sync hex input -> picker
@@ -18006,6 +18529,7 @@ Generate ONLY the reply text, nothing else.`;
           // Validate hex color
           if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
             picker.value = val;
+            resetToCustomColor(val);
           }
         });
 
@@ -18016,6 +18540,7 @@ Generate ONLY the reply text, nothing else.`;
           if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
             hexInput.value = val;
             picker.value = val;
+            resetToCustomColor(val);
           } else {
             // Reset to picker value if invalid
             hexInput.value = picker.value.toUpperCase();
@@ -24005,11 +24530,11 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runSwapColorsAction(values, actionMeta) {
-      const fromColor = normalizeHexColor(values.fromColor || '');
-      const toColor = normalizeHexColor(values.toColor || '');
+      const fromTarget = normalizePromptColorSelection(values.fromColor || '');
+      const toTarget = normalizePromptColorSelection(values.toColor || '');
       const swapMode = values.swapMode || 'replace';
 
-      if (!fromColor || !toColor) {
+      if (!fromTarget?.hex || !toTarget?.hex) {
         showToast('Please provide both From Color and To Color.', 'error');
         return;
       }
@@ -24021,12 +24546,12 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         return;
       }
 
-      const action = swapMode === 'swap' ? 'swapPaintsTwoWay' : 'swapPaints';
       const commands = selection.map(node => ({
-        action,
+        action: 'swapColorTargets',
         nodeId: node.id,
-        fromColor,
-        toColor,
+        swapMode,
+        fromTarget,
+        toTarget,
         includeGradients: values.includeGradients !== false,
         includeStrokes: values.includeStrokes !== false,
         includeEffects: values.includeEffects !== false

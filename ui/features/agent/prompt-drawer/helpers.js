@@ -298,7 +298,16 @@ export function createPromptDrawerHelpers({
       }
 
       if (el.classList.contains('prompt-color-picker')) {
-        values[key] = el.value;
+        const selectedSourceRaw = el.closest('.prompt-color-input-wrapper')?.dataset.selectedSource;
+        if (selectedSourceRaw) {
+          try {
+            values[key] = JSON.parse(selectedSourceRaw);
+          } catch (error) {
+            values[key] = el.value;
+          }
+        } else {
+          values[key] = el.value;
+        }
         return;
       }
 
