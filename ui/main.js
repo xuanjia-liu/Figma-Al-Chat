@@ -23870,14 +23870,14 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
       const splitMode = values.splitMode || 'lines';
       if (splitMode === 'custom') {
-        const pat = String(values.customPattern ?? '').trim();
-        if (!pat) {
+        const pat = String(values.customPattern ?? '');
+        if (pat.length === 0) {
           showToast('Enter a symbol or text to split by.', 'error');
           return;
         }
       }
       const delimiter = splitMode === 'custom'
-        ? String(values.customPattern ?? '').trim()
+        ? String(values.customPattern ?? '')
         : '/\\r?\\n/g';
       const wrapInAutoLayout = splitMode === 'autolayout';
       const removeLeadingSpace = values.removeLeadingSpace === true;
