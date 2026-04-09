@@ -12027,19 +12027,25 @@ figma.ui.onmessage = async (msg: {
         paints: Paint[],
         fromTarget: SwapColorTarget & { resolvedId?: string },
         toTarget: SwapColorTarget & { resolvedId?: string },
-        swapMode: 'replace' | 'swap'
+        swapMode: 'replace' | 'swap',
+        originalPaints?: Paint[],
+        fromRawColor?: RGBA,
+        toRawColor?: RGBA
       ): Paint[] => {
         const fromVarId = fromTarget.kind === 'colorVariable' ? fromTarget.resolvedId : undefined;
         const toVarId = toTarget.kind === 'colorVariable' ? toTarget.resolvedId : undefined;
         if (!fromVarId && !toVarId) return paints;
 
-        return paints.map(paint => {
+        return paints.map((paint, paintIndex) => {
           if (!isGradientPaintType(paint.type)) return paint;
           const gradient = paint as GradientPaint;
+          const originalPaint = Array.isArray(originalPaints) ? originalPaints[paintIndex] : null;
+          const originalGradient = originalPaint && isGradientPaintType(originalPaint.type) ? originalPaint as GradientPaint : null;
           let modified = false;
 
-          const newStops = gradient.gradientStops.map((stop: any) => {
-            const binding = stop?.boundVariables?.color;
+          const newStops = gradient.gradientStops.map((stop: any, stopIndex: number) => {
+            const originalStop: any = originalGradient?.gradientStops?.[stopIndex] || stop;
+            const binding = originalStop?.boundVariables?.color || stop?.boundVariables?.color;
 
             if (fromVarId && binding?.type === 'VARIABLE_ALIAS' && binding.id === fromVarId) {
               modified = true;
@@ -12063,6 +12069,29 @@ figma.ui.onmessage = async (msg: {
                 : { position: stop.position, color: stop.color };
             }
 
+            if (
+              toVarId &&
+              fromRawColor &&
+              toRawColor &&
+              colorsEqualRGB(originalStop.color, fromRawColor) &&
+              colorsEqualRGB(stop.color, toRawColor)
+            ) {
+              modified = true;
+              return { ...stop, boundVariables: { ...(stop.boundVariables || {}), color: { type: 'VARIABLE_ALIAS' as const, id: toVarId } } };
+            }
+
+            if (
+              swapMode === 'swap' &&
+              fromVarId &&
+              fromRawColor &&
+              toRawColor &&
+              colorsEqualRGB(originalStop.color, toRawColor) &&
+              colorsEqualRGB(stop.color, fromRawColor)
+            ) {
+              modified = true;
+              return { ...stop, boundVariables: { ...(stop.boundVariables || {}), color: { type: 'VARIABLE_ALIAS' as const, id: fromVarId } } };
+            }
+
             return stop;
           });
 
@@ -12075,7 +12104,10 @@ figma.ui.onmessage = async (msg: {
         effects: Effect[],
         fromTarget: SwapColorTarget & { resolvedId?: string },
         toTarget: SwapColorTarget & { resolvedId?: string },
-        swapMode: 'replace' | 'swap'
+        swapMode: 'replace' | 'swap',
+        originalEffects?: ReadonlyArray<Effect>,
+        fromRawColor?: RGBA,
+        toRawColor?: RGBA
       ): Promise<Effect[]> => {
         const fromVarId = fromTarget.kind === 'colorVariable' ? fromTarget.resolvedId : undefined;
         const toVarId = toTarget.kind === 'colorVariable' ? toTarget.resolvedId : undefined;
@@ -12090,9 +12122,10 @@ figma.ui.onmessage = async (msg: {
           try { fromVariable = await figma.variables.getVariableByIdAsync(fromVarId); } catch {}
         }
 
-        return effects.map((effect) => {
+        return effects.map((effect, effectIndex) => {
           if (effect.type !== 'DROP_SHADOW' && effect.type !== 'INNER_SHADOW') return effect;
-          const binding = (effect as any)?.boundVariables?.color;
+          const originalEffect = Array.isArray(originalEffects) ? originalEffects[effectIndex] : effect;
+          const binding = (originalEffect as any)?.boundVariables?.color || (effect as any)?.boundVariables?.color;
 
           if (fromVarId && binding?.type === 'VARIABLE_ALIAS' && binding.id === fromVarId) {
             if (toVariable) {
@@ -12116,6 +12149,31 @@ figma.ui.onmessage = async (msg: {
               cloned.boundVariables = Object.keys(restBV).length > 0 ? restBV : undefined;
             }
             return cloned as Effect;
+          }
+
+          if (
+            toVariable &&
+            fromRawColor &&
+            toRawColor &&
+            'color' in originalEffect &&
+            'color' in effect &&
+            colorsEqualRGB((originalEffect as DropShadowEffect | InnerShadowEffect).color, fromRawColor) &&
+            colorsEqualRGB((effect as DropShadowEffect | InnerShadowEffect).color, toRawColor)
+          ) {
+            return figma.variables.setBoundVariableForEffect(effect, 'color', toVariable);
+          }
+
+          if (
+            swapMode === 'swap' &&
+            fromVariable &&
+            fromRawColor &&
+            toRawColor &&
+            'color' in originalEffect &&
+            'color' in effect &&
+            colorsEqualRGB((originalEffect as DropShadowEffect | InnerShadowEffect).color, toRawColor) &&
+            colorsEqualRGB((effect as DropShadowEffect | InnerShadowEffect).color, fromRawColor)
+          ) {
+            return figma.variables.setBoundVariableForEffect(effect, 'color', fromVariable);
           }
 
           return effect;
@@ -12418,13 +12476,22 @@ figma.ui.onmessage = async (msg: {
 
           // Process gradient stops (re-read paints since solid fill handling may have modified them)
           if (includeGradients && fromRawColor && toRawColor) {
+            const originalPaints = fieldPaints.slice();
             const currentPaints = (target as any)[field] as Paint[];
             if (Array.isArray(currentPaints)) {
               if (swapMode === 'swap') {
                 const gradientResult = swapColorsInGradientStopsTwoWay(currentPaints, fromRawColor, toRawColor);
                 matched = matched || gradientResult.foundA || gradientResult.foundB;
                 if (gradientResult.updated) {
-                  const withBindings = updateGradientStopBindings(gradientResult.paints, fromTarget, toTarget, swapMode);
+                  const withBindings = updateGradientStopBindings(
+                    gradientResult.paints,
+                    fromTarget,
+                    toTarget,
+                    swapMode,
+                    originalPaints,
+                    fromRawColor,
+                    toRawColor
+                  );
                   (target as any)[field] = withBindings;
                   changed = true;
                 }
@@ -12432,7 +12499,15 @@ figma.ui.onmessage = async (msg: {
                 const gradientResult = swapColorsInGradientStops(currentPaints, fromRawColor, toRawColor);
                 matched = matched || gradientResult.found;
                 if (gradientResult.updated) {
-                  const withBindings = updateGradientStopBindings(gradientResult.paints, fromTarget, toTarget, swapMode);
+                  const withBindings = updateGradientStopBindings(
+                    gradientResult.paints,
+                    fromTarget,
+                    toTarget,
+                    swapMode,
+                    originalPaints,
+                    fromRawColor,
+                    toRawColor
+                  );
                   (target as any)[field] = withBindings;
                   changed = true;
                 }
@@ -12449,11 +12524,20 @@ figma.ui.onmessage = async (msg: {
         if (includeEffects && fromRawColor && toRawColor && 'effects' in target) {
           const effects = (target as any).effects as ReadonlyArray<Effect> | typeof figma.mixed;
           if (Array.isArray(effects)) {
+            const originalEffects = effects.slice();
             if (swapMode === 'swap') {
               const result = swapColorsInEffectsTwoWay(effects, fromRawColor, toRawColor);
               matched = matched || result.foundA || result.foundB;
               if (result.updated) {
-                const withBindings = await updateEffectVariableBindings(result.effects, fromTarget, toTarget, swapMode);
+                const withBindings = await updateEffectVariableBindings(
+                  result.effects,
+                  fromTarget,
+                  toTarget,
+                  swapMode,
+                  originalEffects,
+                  fromRawColor,
+                  toRawColor
+                );
                 (target as any).effects = withBindings;
                 changed = true;
               }
@@ -12461,7 +12545,15 @@ figma.ui.onmessage = async (msg: {
               const result = swapColorsInEffects(effects, fromRawColor, toRawColor);
               matched = matched || result.found;
               if (result.updated) {
-                const withBindings = await updateEffectVariableBindings(result.effects, fromTarget, toTarget, swapMode);
+                const withBindings = await updateEffectVariableBindings(
+                  result.effects,
+                  fromTarget,
+                  toTarget,
+                  swapMode,
+                  originalEffects,
+                  fromRawColor,
+                  toRawColor
+                );
                 (target as any).effects = withBindings;
                 changed = true;
               }
