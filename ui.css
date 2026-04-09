@@ -12556,6 +12556,55 @@
       height: 20px;
     }
 
+    .prompt-text-input-with-action {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--space-xs);
+      transition: all 0.2s ease;
+    }
+
+    .prompt-text-input-with-action:focus-within {
+      border-color: var(--accent-agent);
+    }
+
+    .prompt-text-input-with-action input[type="text"] {
+      flex: 1;
+      width: 100%;
+      background: transparent !important;
+      border: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    .prompt-text-input-with-action input[type="text"]:focus {
+      outline: none;
+      box-shadow: none !important;
+    }
+
+    .prompt-pattern-pick-btn {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .prompt-pattern-menu {
+      min-width: 220px;
+      max-width: 320px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .prompt-pattern-menu-item {
+      width: 100%;
+      border: none;
+      background: transparent;
+      text-align: left;
+    }
+
     .prompt-color-picker::-webkit-color-swatch-wrapper {
       padding: 0;
     }

@@ -17566,6 +17566,27 @@ Generate ONLY the reply text, nothing else.`;
             </div>
           ` : '';
 
+          const textInputHtml = field.selectionPicker === 'splitPattern' ? `
+              <div class="prompt-text-input-with-action">
+                <input type="text" id="${fieldId}" data-field-key="${field.key}" 
+                  value="${escapeHtml(String(textValue))}" 
+                  placeholder="${field.placeholder || ''}"
+                  ${field.actionButton ? 'readonly' : disabledAttr}>
+                <button class="audit-pick-btn prompt-pattern-pick-btn" type="button" title="${escapeHtml(tu('Use symbols from selected text'))}"${disabledAttr}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 5 3 12l5 7"/>
+                    <path d="m16 5 5 7-5 7"/>
+                    <path d="M14 4 10 20"/>
+                  </svg>
+                </button>
+              </div>
+          ` : `
+              <input type="text" id="${fieldId}" data-field-key="${field.key}" 
+                value="${escapeHtml(String(textValue))}" 
+                placeholder="${field.placeholder || ''}"
+                ${field.actionButton ? 'readonly' : disabledAttr}>
+          `;
+
           fieldHtml += `
             <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-header">
@@ -17574,10 +17595,7 @@ Generate ONLY the reply text, nothing else.`;
                 ${translateBtnHtml}
               </div>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <input type="text" id="${fieldId}" data-field-key="${field.key}" 
-                value="${textValue}" 
-                placeholder="${field.placeholder || ''}"
-                ${field.actionButton ? 'readonly' : disabledAttr}>
+              ${textInputHtml}
             </div>
           `;
         }
@@ -17601,6 +17619,8 @@ Generate ONLY the reply text, nothing else.`;
       setupCustomSelectListeners();
       // Setup event listeners for color inputs
       setupColorInputListeners();
+      // Setup event listeners for split pattern picker
+      setupSplitPatternPickerListeners();
       // Setup event listeners for image inputs
       setupImageInputListeners();
       // Setup event listeners for AI buttons
@@ -18007,6 +18027,146 @@ Generate ONLY the reply text, nothing else.`;
             pickColorFromSelection(picker, hexInput, pickBtn);
           });
         }
+      });
+    }
+
+    let splitPatternMenuEl = null;
+
+    function collectSymbolSequences(text) {
+      const sequences = [];
+      let current = '';
+      const isWordLikeChar = (char) => /[A-Za-z0-9\u00C0-\u024F\u3040-\u30FF\u3400-\u9FFF]/.test(char);
+
+      for (const char of String(text || '')) {
+        if (char === '\n' || char === '\r' || /\s/.test(char) || isWordLikeChar(char)) {
+          if (current) {
+            sequences.push(current);
+            current = '';
+          }
+          continue;
+        }
+        current += char;
+      }
+
+      if (current) sequences.push(current);
+      return sequences;
+    }
+
+    function getSelectedTextNodesForSplitPattern(result) {
+      const flat = Array.isArray(result?.flattened) ? result.flattened : [];
+      if (flat.length > 0) {
+        return flat.filter((node) => node?.type === 'TEXT');
+      }
+      const out = [];
+      const walk = (node) => {
+        if (!node) return;
+        if (node.type === 'TEXT') out.push(node);
+        if (Array.isArray(node.children)) node.children.forEach(walk);
+      };
+      (result?.data || []).forEach(walk);
+      return out;
+    }
+
+    function getSplitPatternCandidatesFromTexts(textNodes) {
+      const symbolMap = new Map();
+
+      textNodes.forEach((node) => {
+        const text = String(node?.characters || '');
+        if (!text) return;
+        collectSymbolSequences(text).forEach((sequence) => {
+          const normalized = String(sequence || '').trim();
+          if (!normalized) return;
+
+          const existingSymbol = symbolMap.get(normalized);
+          symbolMap.set(normalized, {
+            type: 'symbol',
+            value: normalized,
+            count: (existingSymbol?.count || 0) + 1,
+          });
+        });
+      });
+
+      const sortCandidates = (a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        if (a.value.length !== b.value.length) return a.value.length - b.value.length;
+        return a.value.localeCompare(b.value);
+      };
+
+      return Array.from(symbolMap.values()).sort(sortCandidates);
+    }
+
+    function ensureSplitPatternMenu() {
+      if (splitPatternMenuEl) return splitPatternMenuEl;
+      splitPatternMenuEl = document.createElement('div');
+      splitPatternMenuEl.className = 'option-context-menu prompt-pattern-menu';
+      splitPatternMenuEl.id = 'promptSplitPatternMenu';
+      document.body.appendChild(splitPatternMenuEl);
+      return splitPatternMenuEl;
+    }
+
+    function hideSplitPatternMenu() {
+      if (!splitPatternMenuEl) return;
+      splitPatternMenuEl.classList.remove('show');
+      splitPatternMenuEl.innerHTML = '';
+    }
+
+    function showSplitPatternMenu(button, input, candidates) {
+      const menu = ensureSplitPatternMenu();
+      menu.innerHTML = '';
+
+      candidates.forEach((candidate) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'option-context-item prompt-pattern-menu-item';
+        item.innerHTML = `<span class="prompt-pattern-menu-title">${escapeHtml(candidate.value)}</span>`;
+        item.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          input.value = candidate.value;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          hideSplitPatternMenu();
+        });
+        menu.appendChild(item);
+      });
+
+      const rect = button.getBoundingClientRect();
+      menu.style.left = `${rect.left}px`;
+      menu.style.top = `${rect.bottom + 6}px`;
+      menu.classList.add('show');
+
+      const menuRect = menu.getBoundingClientRect();
+      if (menuRect.right > window.innerWidth - 8) {
+        menu.style.left = `${Math.max(8, window.innerWidth - menuRect.width - 8)}px`;
+      }
+      if (menuRect.bottom > window.innerHeight - 8) {
+        menu.style.top = `${Math.max(8, rect.top - menuRect.height - 6)}px`;
+      }
+    }
+
+    function setupSplitPatternPickerListeners() {
+      promptDrawerFields.querySelectorAll('.prompt-pattern-pick-btn').forEach((button) => {
+        button.addEventListener('click', async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const wrapper = button.closest('.prompt-text-input-with-action');
+          const input = wrapper ? wrapper.querySelector('input[data-field-key="customPattern"]') : null;
+          if (!input) return;
+
+          try {
+            const result = await requestSelectionData(false, false, 'textOnly');
+            const textNodes = getSelectedTextNodesForSplitPattern(result);
+            const candidates = getSplitPatternCandidatesFromTexts(textNodes);
+            if (!candidates.length) {
+              showToast(tu('No symbols found in selected text.'), 'warning');
+              return;
+            }
+            showSplitPatternMenu(button, input, candidates);
+          } catch (error) {
+            console.error('Failed to read selected text for split pattern picker', error);
+            showToast(tu('Could not read selected text.'), 'error');
+          }
+        });
       });
     }
 
@@ -23712,7 +23872,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       if (splitMode === 'custom') {
         const pat = String(values.customPattern ?? '').trim();
         if (!pat) {
-          showToast('Enter a pattern or regex to split by.', 'error');
+          showToast('Enter a symbol or text to split by.', 'error');
           return;
         }
       }
@@ -35767,7 +35927,7 @@ Selection data now includes "fillsDetailed" array with gradient info including t
 - setSimpleText: { "action": "setSimpleText", "nodeId": "xxx", "text": "New Text" } (FAST version for bulk/simple updates; resets style to full node style; searches children recursively to find the first visible text node)
 - setText: { "action": "setText", "nodeId": "xxx", "text": "New Text" } (works for both TEXT and STICKY nodes)
 - splitText: { "action": "splitText", "nodeId": "xxx", "delimiter": "\n", "keepDelimiter": false, "direction": "VERTICAL", "spacing": 16 }
-  - Splits a text layer into multiple layers based on a delimiter (string or regex like "/[①-⑥]/").
+  - Splits a text layer into multiple layers based on a literal delimiter string.
   - direction: "VERTICAL" (stacks downward) or "HORIZONTAL" (stacks rightward).
   - spacing: gap between new layers.
   - keepDelimiter: if true, the matched delimiter is preserved.
@@ -37991,8 +38151,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
       optionContextMenu.classList.remove('show');
     }
 
-    window.addEventListener('click', () => hideOptionContextMenu());
-    window.addEventListener('resize', () => hideOptionContextMenu());
+    window.addEventListener('click', () => {
+      hideOptionContextMenu();
+      hideSplitPatternMenu();
+    });
+    window.addEventListener('resize', () => {
+      hideOptionContextMenu();
+      hideSplitPatternMenu();
+    });
 
     ctxEditOption.onclick = (e) => {
       e.stopPropagation();

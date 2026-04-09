@@ -1796,42 +1796,29 @@ function escapeRegex(str: string): string {
 // Helper function to split text and track original indices
 function splitTextWithIndices(
   text: string,
-  delimiter: string | RegExp,
+  delimiter: string,
   keepDelimiter: boolean,
   attachDelimiterToPrevious = false
 ): Array<{ text: string; startIndex: number; endIndex: number }> {
   const segments: Array<{ text: string; startIndex: number; endIndex: number }> = [];
 
-  let regex: RegExp;
-  try {
-    if (typeof delimiter === 'string') {
-      if (delimiter.startsWith('/') && delimiter.lastIndexOf('/') > 0) {
-        const lastSlash = delimiter.lastIndexOf('/');
-        const pattern = delimiter.substring(1, lastSlash);
-        const flags = delimiter.substring(lastSlash + 1);
-        regex = new RegExp(pattern, flags.includes('g') ? flags : flags + 'g');
-      } else {
-        regex = new RegExp(escapeRegex(delimiter), 'g');
-      }
-    } else {
-      regex = delimiter;
-    }
-  } catch (e) {
-    // Fallback to literal if regex is invalid
-    regex = new RegExp(escapeRegex(String(delimiter)), 'g');
-  }
-
   let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  // Reset regex lastIndex for global regex
-  if (regex.global) {
-    regex.lastIndex = 0;
+  const delimiterText = String(delimiter ?? '');
+  if (delimiterText.length === 0) {
+    if (text.length > 0) {
+      segments.push({
+        text,
+        startIndex: 0,
+        endIndex: text.length
+      });
+    }
+    return segments;
   }
 
-  while ((match = regex.exec(text)) !== null) {
-    const matchStart = match.index;
-    const matchEnd = matchStart + match[0].length;
+  while (lastIndex <= text.length) {
+    const matchStart = text.indexOf(delimiterText, lastIndex);
+    if (matchStart === -1) break;
+    const matchEnd = matchStart + delimiterText.length;
 
     // Add segment before delimiter
     if (matchStart > lastIndex) {
@@ -1846,11 +1833,11 @@ function splitTextWithIndices(
     if (keepDelimiter) {
       const previousSegment = segments[segments.length - 1];
       if (attachDelimiterToPrevious && previousSegment) {
-        previousSegment.text += match[0];
+        previousSegment.text += delimiterText;
         previousSegment.endIndex = matchEnd;
       } else {
         segments.push({
-          text: match[0],
+          text: delimiterText,
           startIndex: matchStart,
           endIndex: matchEnd
         });
@@ -1858,11 +1845,6 @@ function splitTextWithIndices(
     }
 
     lastIndex = matchEnd;
-
-    // Prevent infinite loop for zero-length matches
-    if (match[0].length === 0) {
-      regex.lastIndex++;
-    }
   }
 
   // Add remaining text after last delimiter

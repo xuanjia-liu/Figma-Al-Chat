@@ -1556,21 +1556,23 @@ const exactTranslations = {
     'Split text': 'テキストを分割',
     'Split text into layers by line breaks or pattern':
       '改行やパターンでテキストをレイヤーに分割',
-    'Runs locally (no AI). Line mode skips empty lines. Auto layout wraps lines in a vertical frame with gap = line height − font size. Custom accepts a literal string or /regex/flags.':
-      'AI なしでローカル実行。行モードは空行をスキップ。オートレイアウトは縦方向フレームに収め、間隔は行の高さ − フォントサイズ。カスタムはリテラルまたは /正規表現/フラグ。',
-    'By line breaks (skip empty lines)': '改行で分割（空行を省略）',
-    'By line breaks → auto layout': '改行で分割 → オートレイアウト',
-    'Split by symbol or regex': '記号または正規表現で分割',
-    'Pattern': 'パターン',
-    'Remove the space before the text': 'テキスト前の空白を削除',
-    'Removes leading half-width/full-width spaces from each split result.':
-      '分割後の各テキスト先頭にある半角/全角スペースを削除します。',
-    'Keep the input character': '入力した記号を残す',
-    'Keeps the matched symbol or regex with the text before it.':
-      '一致した記号または正規表現を、前のテキストの末尾に残します。',
-    'e.g. , or /\\s*,\\s*/g': '例: , または /\\s*,\\s*/g',
-    'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).':
-      'リテラル、または /パターン/フラグ形式の正規表現（Agent の splitText と同じ）。',
+    'Split into lines': '行ごとに分割',
+    'Lines in auto layout': '行ごとに分割してオートレイアウト',
+    'Split by symbol': '記号で分割',
+    'What to split by': '分割する文字・パターン',
+    'Use symbols from selected text': '選択テキストの記号を使う',
+    'No symbols found in selected text.':
+      '選択したテキスト内に使えそうな記号が見つかりませんでした。',
+    'Could not read selected text.': '選択したテキストを読み取れませんでした。',
+    'Remove leading spaces': '先頭の空白を削除',
+    'Removes spaces at the start of each result.':
+      '各結果の先頭にある空白を削除します。',
+    'Keep the symbol': '記号を残す',
+    'Keeps the matched symbol with the text before it.':
+      '一致した記号を前のテキストの末尾に残します。',
+    'e.g. , or -': '例: , または -',
+    'Enter the symbol or text to split by.':
+      '分割に使う記号や文字列を入力します。',
     'Easy wrapper': '簡易ラッパー',
     'Wrap or convert frames, groups, and auto layout': 'フレーム、グループ、オートレイアウトをラップまたは変換',
     'Wrap each selected layer separately, or wrap selected sibling layers together per parent, using group, frame, or auto layout. Convert mode turns existing frames/groups into auto layout. Wrapped rows are available for auto layout where applicable. Works in No AI mode.':
@@ -2028,21 +2030,23 @@ const exactTranslations = {
     'Flatten structure (clean up)': '扁平化结构',
     'Split text': '分割文本',
     'Split text into layers by line breaks or pattern': '按换行或模式将文本拆分为多个图层',
-    'Runs locally (no AI). Line mode skips empty lines. Auto layout wraps lines in a vertical frame with gap = line height − font size. Custom accepts a literal string or /regex/flags.':
-      '本地运行（无 AI）。按行模式会跳过空行。自动布局模式将各行放入纵向画框，间距为行高减字号。自定义模式支持普通字符串或 /正则/ 标志。',
-    'By line breaks (skip empty lines)': '按换行拆分（忽略空行）',
-    'By line breaks → auto layout': '按换行拆分 → 自动布局',
-    'Split by symbol or regex': '按符号或正则拆分',
-    'Pattern': '模式',
-    'Remove the space before the text': '移除文本前的空格',
-    'Removes leading half-width/full-width spaces from each split result.':
-      '移除每段拆分结果开头的半角/全角空格。',
-    'Keep the input character': '保留输入的字符',
-    'Keeps the matched symbol or regex with the text before it.':
-      '将匹配到的符号或正则保留在前一段文本末尾。',
-    'e.g. , or /\\s*,\\s*/g': '例如 , 或 /\\s*,\\s*/g',
-    'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).':
-      '直接输入字符，或使用 /pattern/flags 正则（与 Agent 的 splitText 相同）。',
+    'Split into lines': '按行拆分',
+    'Lines in auto layout': '按行拆分并放入自动布局',
+    'Split by symbol': '按符号拆分',
+    'What to split by': '按什么拆分',
+    'Use symbols from selected text': '使用所选文本里的符号',
+    'No symbols found in selected text.':
+      '在所选文本中没有找到可用的符号。',
+    'Could not read selected text.': '无法读取所选文本。',
+    'Remove leading spaces': '移除开头空格',
+    'Removes spaces at the start of each result.':
+      '移除每段结果开头的空格。',
+    'Keep the symbol': '保留符号',
+    'Keeps the matched symbol with the text before it.':
+      '将匹配到的符号保留在前一段文本末尾。',
+    'e.g. , or -': '例如 , 或 -',
+    'Enter the symbol or text to split by.':
+      '输入用于拆分的符号或文本。',
     'Easy wrapper': '快捷封装',
     'Wrap or convert frames, groups, and auto layout': '封装或转换框架、分组和自动布局',
     'Wrap each selected layer separately, or wrap selected sibling layers together per parent, using group, frame, or auto layout. Convert mode turns existing frames/groups into auto layout. Wrapped rows are available for auto layout where applicable. Works in No AI mode.':
