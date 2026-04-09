@@ -293,21 +293,16 @@ function rgbToOklch(r: number, g: number, b: number): { l: number, c: number, h:
   const lg = toLinear(g);
   const lb = toLinear(b);
 
-  // Convert to XYZ
-  const x = lr * 0.4124 + lg * 0.3576 + lb * 0.1805;
-  const y = lr * 0.2126 + lg * 0.7152 + lb * 0.0722;
-  const z = lr * 0.0193 + lg * 0.1192 + lb * 0.9505;
+  // Convert linear sRGB directly to LMS, then to OKLab.
+  const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+  const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+  const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
 
-  // Convert to OKLab
-  const x_ = x * 0.8189330101 + y * 0.3618667424 - z * 0.1288597133;
-  const y_ = x * 0.0329845436 + y * 1.0000000000 + z * 0.0095746948;
-  const z_ = x * 0.0482003018 + y * 0.2970766037 + z * 0.8162819536;
+  const l_ = cbrt(l);
+  const m_ = cbrt(m);
+  const s_ = cbrt(s);
 
-  const l_ = cbrt(y_);
-  const m_ = cbrt(x_);
-  const s_ = cbrt(z_);
-
-  const l = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
+  const okL = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
   const a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
   const b_ = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
 
@@ -316,7 +311,7 @@ function rgbToOklch(r: number, g: number, b: number): { l: number, c: number, h:
   const h = Math.atan2(b_, a) * (180 / Math.PI);
   const h_normalized = h < 0 ? h + 360 : h;
 
-  return { l: l * 100, c, h: h_normalized };
+  return { l: okL * 100, c, h: h_normalized };
 }
 
 function oklchToRgb(l: number, c: number, h: number): { r: number, g: number, b: number } {
@@ -335,18 +330,223 @@ function oklchToRgb(l: number, c: number, h: number): { r: number, g: number, b:
   const m_cubed = m_ * m_ * m_;
   const s_cubed = s_ * s_ * s_;
 
-  const x = l_cubed * 1.2270138511 - m_cubed * 0.5577999807 + s_cubed * 0.2812561490;
-  const y = l_cubed * -0.0405801784 + m_cubed * 1.1122568696 - s_cubed * 0.0716766787;
-  const z = l_cubed * -0.0763812845 - m_cubed * 0.4214819784 + s_cubed * 1.5861632204;
+  const linearR = 4.0767416621 * l_cubed - 3.3077115913 * m_cubed + 0.2309699292 * s_cubed;
+  const linearG = -1.2684380046 * l_cubed + 2.6097574011 * m_cubed - 0.3413193965 * s_cubed;
+  const linearB = -0.0041960863 * l_cubed - 0.7034186147 * m_cubed + 1.7076147010 * s_cubed;
 
   // Convert to sRGB
   const toSrgb = (x: number) => x <= 0.0031308 ? x * 12.92 : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
 
-  const r = Math.max(0, Math.min(1, toSrgb(x)));
-  const g = Math.max(0, Math.min(1, toSrgb(y)));
-  const b = Math.max(0, Math.min(1, toSrgb(z)));
+  const r = Math.max(0, Math.min(1, toSrgb(linearR)));
+  const g = Math.max(0, Math.min(1, toSrgb(linearG)));
+  const b = Math.max(0, Math.min(1, toSrgb(linearB)));
 
   return { r, g, b };
+}
+
+const OKLCH_SIMULATION_MAX_STOPS = 48;
+const OKLCH_SIMULATION_MAX_INTERIOR_PER_SEGMENT = 6;
+const OKLCH_SIMULATION_CHROMA_EPSILON = 0.0005;
+const OKLCH_SIMULATION_POSITION_EPSILON = 1e-6;
+const OKLCH_SIMULATION_RGBA_EPSILON = 1e-6;
+
+function isGradientPaintType(type: Paint['type'] | undefined): type is GradientPaint['type'] {
+  return type === 'GRADIENT_LINEAR' ||
+    type === 'GRADIENT_RADIAL' ||
+    type === 'GRADIENT_ANGULAR' ||
+    type === 'GRADIENT_DIAMOND';
+}
+
+function isGradientPaint(paint: Paint | undefined | null): paint is GradientPaint {
+  return !!paint && isGradientPaintType(paint.type);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function shortestHueDelta(fromHue: number, toHue: number): number {
+  let delta = (toHue - fromHue) % 360;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function normalizeHueDegrees(hue: number): number {
+  const normalized = hue % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+}
+
+function colorsNearlyEqual(a: RGBA, b: RGBA): boolean {
+  return Math.abs(a.r - b.r) <= OKLCH_SIMULATION_RGBA_EPSILON &&
+    Math.abs(a.g - b.g) <= OKLCH_SIMULATION_RGBA_EPSILON &&
+    Math.abs(a.b - b.b) <= OKLCH_SIMULATION_RGBA_EPSILON &&
+    Math.abs(a.a - b.a) <= OKLCH_SIMULATION_RGBA_EPSILON;
+}
+
+type SimulatedGradientStop = {
+  stop: ColorStop;
+  isOriginal: boolean;
+};
+
+type OklchGradientSegment = {
+  from: ColorStop;
+  to: ColorStop;
+  interiorCount: number;
+  score: number;
+  index: number;
+};
+
+function computeOklchSimulationMetrics(from: ColorStop, to: ColorStop): { interiorCount: number; score: number } {
+  const segmentSpan = to.position - from.position;
+  if (segmentSpan <= 0) return { interiorCount: 0, score: 0 };
+
+  const start = rgbToOklch(from.color.r, from.color.g, from.color.b);
+  const end = rgbToOklch(to.color.r, to.color.g, to.color.b);
+  const hueDelta = Math.abs(shortestHueDelta(start.h, end.h));
+  const avgChroma = (start.c + end.c) / 2;
+  const score =
+    (Math.abs(end.l - start.l) / 100) +
+    (Math.abs(end.c - start.c) / 0.16) +
+    ((hueDelta / 180) * Math.max(avgChroma, 0.08) / 0.16) +
+    (segmentSpan * 2);
+
+  return {
+    interiorCount: clampNumber(Math.ceil(score * 2), 0, OKLCH_SIMULATION_MAX_INTERIOR_PER_SEGMENT),
+    score
+  };
+}
+
+function trimInteriorCountsToBudget(segments: OklchGradientSegment[], originalStopCount: number, maxStops: number): void {
+  let totalStops = originalStopCount + segments.reduce((sum, segment) => sum + segment.interiorCount, 0);
+  while (totalStops > maxStops) {
+    let candidate: OklchGradientSegment | null = null;
+    for (const segment of segments) {
+      if (segment.interiorCount <= 0) continue;
+      if (!candidate ||
+        segment.interiorCount > candidate.interiorCount ||
+        (segment.interiorCount === candidate.interiorCount && segment.score > candidate.score) ||
+        (segment.interiorCount === candidate.interiorCount && segment.score === candidate.score && segment.index < candidate.index)) {
+        candidate = segment;
+      }
+    }
+    if (!candidate) break;
+    candidate.interiorCount -= 1;
+    totalStops -= 1;
+  }
+}
+
+function interpolateOklchColorStop(from: ColorStop, to: ColorStop, t: number): ColorStop {
+  const start = rgbToOklch(from.color.r, from.color.g, from.color.b);
+  const end = rgbToOklch(to.color.r, to.color.g, to.color.b);
+  const startGray = start.c < OKLCH_SIMULATION_CHROMA_EPSILON;
+  const endGray = end.c < OKLCH_SIMULATION_CHROMA_EPSILON;
+
+  let hue = start.h;
+  if (startGray && endGray) {
+    hue = start.h;
+  } else if (startGray) {
+    hue = end.h;
+  } else if (endGray) {
+    hue = start.h;
+  } else {
+    hue = normalizeHueDegrees(start.h + shortestHueDelta(start.h, end.h) * t);
+  }
+
+  const l = start.l + (end.l - start.l) * t;
+  const c = start.c + (end.c - start.c) * t;
+  const a = from.color.a + (to.color.a - from.color.a) * t;
+  const rgb = oklchToRgb(l, c, hue);
+
+  return {
+    position: from.position + (to.position - from.position) * t,
+    color: {
+      r: rgb.r,
+      g: rgb.g,
+      b: rgb.b,
+      a
+    }
+  };
+}
+
+function dedupeSimulatedGradientStops(stops: SimulatedGradientStop[]): ColorStop[] {
+  const deduped: SimulatedGradientStop[] = [];
+
+  for (const entry of stops) {
+    const previous = deduped[deduped.length - 1];
+    if (!previous) {
+      deduped.push(entry);
+      continue;
+    }
+
+    const samePosition = Math.abs(previous.stop.position - entry.stop.position) <= OKLCH_SIMULATION_POSITION_EPSILON;
+    const sameColor = colorsNearlyEqual(previous.stop.color, entry.stop.color);
+
+    if (!samePosition || !sameColor) {
+      deduped.push(entry);
+      continue;
+    }
+
+    // Preserve authored stops exactly; only collapse generated duplicates.
+    if (previous.isOriginal && entry.isOriginal) {
+      deduped.push(entry);
+      continue;
+    }
+    if (previous.isOriginal) {
+      continue;
+    }
+    deduped[deduped.length - 1] = entry;
+  }
+
+  return deduped.map(entry => entry.stop);
+}
+
+function simulateOklchGradient(gradient: GradientPaint): GradientPaint {
+  if (!Array.isArray(gradient.gradientStops) || gradient.gradientStops.length < 2) {
+    return gradient;
+  }
+
+  const sortedStops = gradient.gradientStops
+    .map((stop, index) => ({ stop, index }))
+    .sort((a, b) => {
+      const delta = a.stop.position - b.stop.position;
+      return Math.abs(delta) <= OKLCH_SIMULATION_POSITION_EPSILON ? a.index - b.index : delta;
+    });
+
+  const segments: OklchGradientSegment[] = [];
+  for (let i = 0; i < sortedStops.length - 1; i++) {
+    const from = sortedStops[i].stop;
+    const to = sortedStops[i + 1].stop;
+    const metrics = computeOklchSimulationMetrics(from, to);
+    segments.push({
+      from,
+      to,
+      interiorCount: metrics.interiorCount,
+      score: metrics.score,
+      index: i
+    });
+  }
+
+  trimInteriorCountsToBudget(segments, sortedStops.length, OKLCH_SIMULATION_MAX_STOPS);
+
+  const expanded: SimulatedGradientStop[] = [{ stop: sortedStops[0].stop, isOriginal: true }];
+  segments.forEach((segment) => {
+    if (segment.to.position - segment.from.position > OKLCH_SIMULATION_POSITION_EPSILON && segment.interiorCount > 0) {
+      for (let sampleIndex = 1; sampleIndex <= segment.interiorCount; sampleIndex++) {
+        const t = sampleIndex / (segment.interiorCount + 1);
+        expanded.push({
+          stop: interpolateOklchColorStop(segment.from, segment.to, t),
+          isOriginal: false
+        });
+      }
+    }
+    expanded.push({ stop: segment.to, isOriginal: true });
+  });
+
+  return {
+    ...gradient,
+    gradientStops: dedupeSimulatedGradientStops(expanded)
+  };
 }
 
 // Helper function to modify gradient hues using OKLCH
@@ -17853,6 +18053,47 @@ figma.ui.onmessage = async (msg: {
                 failed++;
               }
               break;
+
+            case 'simulateOklchGradient': {
+              let changed = false;
+              const includeFills = cmd.includeFills !== false;
+              const includeStrokes = cmd.includeStrokes !== false;
+
+              const transformPaintArray = (field: 'fills' | 'strokes') => {
+                if (!(field in node)) return;
+                const paints = (node as any)[field] as Paint[] | Paint | typeof figma.mixed;
+                if (paints === figma.mixed || !Array.isArray(paints)) return;
+
+                let fieldChanged = false;
+                const nextPaints = paints.map((paint) => {
+                  if (!isGradientPaint(paint)) return paint;
+                  fieldChanged = true;
+                  return simulateOklchGradient(paint);
+                });
+
+                if (fieldChanged) {
+                  (node as any)[field] = nextPaints;
+                  changed = true;
+                }
+              };
+
+              if (includeFills) transformPaintArray('fills');
+              if (includeStrokes) transformPaintArray('strokes');
+
+              if (changed) {
+                success++;
+              } else {
+                failed++;
+                if (!firstError) {
+                  firstError = {
+                    action: cmd.action,
+                    nodeId: node.id,
+                    message: 'No gradient fills or strokes were found on the selected node'
+                  };
+                }
+              }
+              break;
+            }
 
             case 'setFillStyle':
               if ('fillStyleId' in node) {

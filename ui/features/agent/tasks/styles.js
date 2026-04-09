@@ -41,6 +41,13 @@ export const stylingTasks = [
           prompt: 'For each selected element (and all descendants), use clearEffects to remove all effects including drop shadows, inner shadows, layer blur, and background blur.'
         },
 {
+          name: 'Simulate oklch gradient',
+          desc: 'Approximate OKLCH interpolation by expanding RGB gradient stops',
+          requiredContext: ContextMode.STYLE_ONLY,
+          directAction: 'simulateOklchGradient',
+          prompt: ''
+        },
+{
           name: 'Styles and variables',
           desc: 'Local colors, text and effects tokens.',
           prompt: '',

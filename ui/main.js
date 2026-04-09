@@ -24886,6 +24886,31 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runSimulateOklchGradientAction() {
+      const result = await requestSelectionData(false, false, 'styleOnly');
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      if (selection.length === 0) {
+        showToast('Please select at least one layer.', 'error');
+        return;
+      }
+
+      const commands = selection.map(node => ({
+        action: 'simulateOklchGradient',
+        nodeId: node.id,
+        includeFills: true,
+        includeStrokes: true
+      }));
+
+      const execResult = await executeCommands(commands);
+      const success = execResult?.success || 0;
+      const failed = execResult?.failed || 0;
+      if (success > 0) {
+        showToast(`Simulated OKLCH gradients on ${success} selection${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`, failed > 0 ? 'warning' : 'success');
+      } else if (failed > 0) {
+        showToast('No gradient fills or strokes were found in the selection.', 'warning');
+      }
+    }
+
     async function runTextLinkColorAction(values) {
       const result = await requestSelectionData(false, false, 'textOnly');
       const selection = Array.isArray(result?.data) ? result.data : [];
@@ -25124,6 +25149,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'removeAllEffects':
           await runRemoveAllEffectsAction(values, actionMeta);
+          break;
+        case 'simulateOklchGradient':
+          await runSimulateOklchGradientAction(values, actionMeta);
           break;
         case 'textLinkColor':
           await runTextLinkColorAction(values, actionMeta);
