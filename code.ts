@@ -3473,6 +3473,7 @@ interface GradientInfo {
 interface FillInfo {
   type: 'SOLID' | 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND' | 'IMAGE';
   color?: string; // For SOLID fills
+  opacity?: number; // For SOLID fills when alpha < 1
   gradient?: GradientInfo; // For gradient fills
   visible: boolean;
   boundVariables?: any;
@@ -3591,6 +3592,7 @@ interface TokenPaintStyle {
   name: string;
   type: Paint['type'];
   hex?: string;
+  rgba?: RGBA;
 }
 
 interface TokenTextStyle {
@@ -3638,7 +3640,13 @@ async function paintToInfo(paint: Paint): Promise<PaintInfo | null> {
   if (paint.type === 'SOLID') {
     const solid = paint as SolidPaint;
     const hexColor = rgbToHex(solid.color.r, solid.color.g, solid.color.b);
-    return { ...baseInfo, type: 'SOLID', color: hexColor };
+    const opacity = 'opacity' in solid ? (solid as any).opacity ?? 1 : 1;
+    return {
+      ...baseInfo,
+      type: 'SOLID',
+      color: hexColor,
+      ...(opacity < 1 ? { opacity } : {})
+    };
   }
 
   if (paint.type === 'GRADIENT_LINEAR' || paint.type === 'GRADIENT_RADIAL' || paint.type === 'GRADIENT_ANGULAR' || paint.type === 'GRADIENT_DIAMOND') {
@@ -4808,8 +4816,8 @@ function serializeLocalPaintStylesForDisplay(paintStyles: PaintStyle[]) {
 }
 
 async function getColorPickerLibrarySources() {
-  const libraryPaintStyles: Array<{ id: string; key: string; name: string; libraryName?: string; hex: string }> = [];
-  const libraryVariables: Array<{ id: string; key: string; name: string; libraryName?: string; collectionName?: string; hex: string }> = [];
+  const libraryPaintStyles: Array<{ id: string; key: string; name: string; libraryName?: string; hex: string; rgba?: RGBA }> = [];
+  const libraryVariables: Array<{ id: string; key: string; name: string; libraryName?: string; collectionName?: string; hex: string; rgba?: RGBA }> = [];
   const teamLibrary = (figma as any).teamLibrary as any;
 
   if (!teamLibrary) {
@@ -4832,7 +4840,13 @@ async function getColorPickerLibrarySources() {
             key: style.key,
             name: style.name,
             libraryName: style.libraryName,
-            hex: rgbToHex(firstPaint.color.r, firstPaint.color.g, firstPaint.color.b)
+            hex: rgbToHex(firstPaint.color.r, firstPaint.color.g, firstPaint.color.b),
+            rgba: {
+              r: firstPaint.color.r,
+              g: firstPaint.color.g,
+              b: firstPaint.color.b,
+              a: 'opacity' in firstPaint ? (firstPaint as any).opacity ?? 1 : 1
+            }
           });
         } catch (error) {
           console.warn('Failed to import library style for color picker', style?.name, error);
@@ -4870,7 +4884,13 @@ async function getColorPickerLibrarySources() {
                 name: variable.name,
                 libraryName: collection.libraryName,
                 collectionName: collection.name,
-                hex: rgbToHex(defaultValue.r, defaultValue.g, defaultValue.b)
+                hex: rgbToHex(defaultValue.r, defaultValue.g, defaultValue.b),
+                rgba: {
+                  r: defaultValue.r,
+                  g: defaultValue.g,
+                  b: defaultValue.b,
+                  a: defaultValue.a ?? 1
+                }
               });
             } catch (error) {
               console.warn('Failed to import library variable for color picker', variable?.name, error);

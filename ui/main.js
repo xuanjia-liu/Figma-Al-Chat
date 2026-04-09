@@ -4683,12 +4683,77 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let colorPickMenuAnchor = null;
     let colorPickMenuOptions = [];
     let colorPickMenuActiveTab = 'all';
+    let colorPickMenuViewMode = 'list';
     let colorPickMenuSearchQuery = '';
     let colorPickMenuSearchOpen = false;
+    let colorPickMenuLibraryLoading = false;
+    let colorPickMenuLibraryError = '';
     let colorSwapLocalSourcesCache = null;
     let colorSwapLibrarySourcesCache = null;
     let colorSwapLocalSourcesPromise = null;
     let colorSwapLibrarySourcesPromise = null;
+
+    function normalizeColorPreviewRgba(value) {
+      if (!value || typeof value !== 'object') return null;
+      if (!('r' in value) || !('g' in value) || !('b' in value)) return null;
+      const r = Number(value.r);
+      const g = Number(value.g);
+      const b = Number(value.b);
+      const a = Number.isFinite(Number(value.a)) ? Number(value.a) : 1;
+      if (![r, g, b, a].every(Number.isFinite)) return null;
+      return {
+        r: Math.max(0, Math.min(1, r)),
+        g: Math.max(0, Math.min(1, g)),
+        b: Math.max(0, Math.min(1, b)),
+        a: Math.max(0, Math.min(1, a))
+      };
+    }
+
+    function rgbaToCssColor(value, fallbackHex = '#FFFFFF') {
+      const rgba = normalizeColorPreviewRgba(value);
+      if (!rgba) return normalizeSelectionHexColor(fallbackHex) || '#FFFFFF';
+      return `rgba(${Math.round(rgba.r * 255)}, ${Math.round(rgba.g * 255)}, ${Math.round(rgba.b * 255)}, ${rgba.a})`;
+    }
+
+    function hexToRgbObject(hex) {
+      const normalized = normalizeSelectionHexColor(hex);
+      if (!normalized) return null;
+      const raw = normalized.replace('#', '');
+      return {
+        r: parseInt(raw.slice(0, 2), 16) / 255,
+        g: parseInt(raw.slice(2, 4), 16) / 255,
+        b: parseInt(raw.slice(4, 6), 16) / 255
+      };
+    }
+
+    function getPromptColorSourceBadgeLabel(selection) {
+      if (!selection || selection.kind === 'custom') return '';
+      return selection.kind === 'paintStyle' ? 'Style' : selection.kind === 'colorVariable' ? 'Variable' : '';
+    }
+
+    function getColorOptionPathPrefix(name) {
+      if (!name || typeof name !== 'string') return '';
+      const prefix = name.split('/').map(part => part.trim()).filter(Boolean)[0];
+      return prefix && prefix !== name ? prefix : '';
+    }
+
+    function enhanceColorOption(option) {
+      const normalized = normalizePromptColorSelection(option);
+      normalized.name = option?.name || normalized.name || normalized.hex;
+      normalized.subtitle = option?.subtitle || option?.label || normalized.subtitle || '';
+      normalized.label = option?.label || normalized.label || '';
+      normalized.count = option?.count || normalized.count || 0;
+      normalized.tab = normalized.kind === 'custom' ? 'custom' : 'libraries';
+      normalized.collectionName = option?.collectionName || normalized.collectionName || '';
+      normalized.libraryName = option?.libraryName || normalized.libraryName || '';
+      normalized.groupType = option?.groupType || normalized.kind || '';
+      normalized.groupLibrary = option?.groupLibrary || normalized.libraryName || '';
+      normalized.groupCollection = option?.groupCollection || normalized.collectionName || '';
+      normalized.groupPathPrefix = option?.groupPathPrefix || getColorOptionPathPrefix(normalized.name);
+      normalized.previewRgba = normalizeColorPreviewRgba(option?.previewRgba || option?.rgba || normalized.previewRgba);
+      normalized.previewCss = option?.previewCss || rgbaToCssColor(normalized.previewRgba, normalized.hex);
+      return normalized;
+    }
 
     function normalizePromptColorSelection(value, fallbackHex = '#3B82F6') {
       const fallback = normalizeSelectionHexColor(fallbackHex) || '#3B82F6';
@@ -4714,23 +4779,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           hex: normalizeSelectionHexColor(value.hex || fallback) || fallback,
         };
         normalized.tab = normalized.kind === 'custom' ? 'custom' : 'libraries';
+        normalized.previewRgba = normalizeColorPreviewRgba(value.previewRgba || value.rgba || normalized.previewRgba);
+        normalized.previewCss = value.previewCss || rgbaToCssColor(normalized.previewRgba, normalized.hex);
         return normalized;
       }
 
       return { kind: 'custom', scope: 'selection', hex: fallback, tab: 'custom' };
-    }
-
-    function buildColorSelectionLabel(selection) {
-      const normalized = normalizePromptColorSelection(selection);
-      if (normalized.kind === 'paintStyle') {
-        const scope = normalized.scope === 'team' ? (normalized.libraryName || 'Team library') : 'Local style';
-        return `${normalized.name || normalized.hex} • ${scope}`;
-      }
-      if (normalized.kind === 'colorVariable') {
-        const scope = normalized.scope === 'team' ? (normalized.libraryName || 'Team library') : (normalized.collectionName || 'Local variable');
-        return `${normalized.name || normalized.hex} • ${scope}`;
-      }
-      return normalized.hex;
     }
 
     function serializeColorSelectionForDataset(selection) {
@@ -4757,8 +4811,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       colorPickMenuAnchor = null;
       colorPickMenuOptions = [];
       colorPickMenuActiveTab = 'all';
+      colorPickMenuViewMode = 'list';
       colorPickMenuSearchQuery = '';
       colorPickMenuSearchOpen = false;
+      colorPickMenuLibraryLoading = false;
+      colorPickMenuLibraryError = '';
       document.removeEventListener('mousedown', handleColorMenuOutside);
       document.removeEventListener('keydown', handleColorMenuKeydown);
     }
@@ -4797,21 +4854,162 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           opt.subtitle,
           opt.label,
           opt.collectionName,
-          opt.libraryName
+          opt.libraryName,
+          opt.groupPathPrefix
         ].filter(Boolean).join(' ').toLowerCase();
         return haystack.includes(searchQuery);
       });
     }
 
+    function getColorGroupStructures(options) {
+      const customOptions = [];
+      const localStyleOptions = [];
+      const localVariableOptions = [];
+      const libraryBuckets = new Map();
+
+      const getLibraryBucket = (libraryName, collectionName) => {
+        const key = `${libraryName || 'Library'}::${collectionName || ''}`;
+        if (!libraryBuckets.has(key)) {
+          libraryBuckets.set(key, {
+            title: collectionName ? `${libraryName || 'Library'} / ${collectionName}` : (libraryName || 'Library'),
+            items: []
+          });
+        }
+        return libraryBuckets.get(key);
+      };
+
+      options.forEach((option) => {
+        if (option.tab === 'custom' || option.kind === 'custom') {
+          customOptions.push(option);
+          return;
+        }
+        if (option.scope === 'local' && option.kind === 'paintStyle') {
+          localStyleOptions.push(option);
+          return;
+        }
+        if (option.scope === 'local' && option.kind === 'colorVariable') {
+          localVariableOptions.push(option);
+          return;
+        }
+        getLibraryBucket(option.groupLibrary || option.libraryName, option.groupCollection || option.collectionName).items.push(option);
+      });
+
+      const buildSubgroups = (items) => {
+        const withPrefix = new Map();
+        const withoutPrefix = [];
+        items.forEach((item) => {
+          const prefix = item.groupPathPrefix || '';
+          if (!prefix) {
+            withoutPrefix.push(item);
+            return;
+          }
+          if (!withPrefix.has(prefix)) withPrefix.set(prefix, []);
+          withPrefix.get(prefix).push(item);
+        });
+        const groups = Array.from(withPrefix.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([title, groupedItems]) => ({
+            title,
+            items: groupedItems.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+          }));
+        if (withoutPrefix.length > 0) {
+          groups.unshift({
+            title: '',
+            items: withoutPrefix.sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+          });
+        }
+        return groups;
+      };
+
+      const sections = [];
+      if (customOptions.length > 0) {
+        sections.push({
+          key: 'custom',
+          title: '',
+          subgroups: [{ title: '', items: customOptions }]
+        });
+      }
+      if (localStyleOptions.length > 0) {
+        sections.push({
+          key: 'local-styles',
+          title: 'Local Styles',
+          subgroups: buildSubgroups(localStyleOptions)
+        });
+      }
+      if (localVariableOptions.length > 0) {
+        sections.push({
+          key: 'local-variables',
+          title: 'Local Variables',
+          subgroups: buildSubgroups(localVariableOptions)
+        });
+      }
+      Array.from(libraryBuckets.entries())
+        .sort((a, b) => a[1].title.localeCompare(b[1].title))
+        .forEach(([key, bucket]) => {
+          sections.push({
+            key: `library-${key}`,
+            title: bucket.title,
+            subgroups: buildSubgroups(bucket.items)
+          });
+        });
+      return sections;
+    }
+
+    function renderColorPickOption(option, index) {
+      return `
+        <button type="button" class="color-pick-option" data-index="${index}">
+          <span class="color-swatch">
+            <span class="color-swatch-fill" style="background:${escapeHtmlAttr(option.previewCss || option.hex || '#FFFFFF')};"></span>
+          </span>
+          <div class="color-pick-meta">
+            <span class="color-pick-name">${escapeHtml(option.name || option.hex || 'Unnamed color')}</span>
+            <span class="color-pick-source">${escapeHtml(option.subtitle || option.label || '')}</span>
+          </div>
+          <span class="color-pick-hex">${escapeHtml(option.hex || '')}</span>
+        </button>
+      `;
+    }
+
+    function renderColorPickSubgroup(subgroup, filteredOptions) {
+      const isGrid = colorPickMenuViewMode === 'grid';
+      return `
+        <div class="color-pick-subgroup">
+          ${subgroup.title ? `<div class="color-pick-subgroup-title">${escapeHtml(subgroup.title)}</div>` : ''}
+          <div class="color-pick-subgroup-items${isGrid ? ' color-pick-subgroup-items--grid' : ''}">
+            ${subgroup.items.map((opt) => renderColorPickOption(opt, filteredOptions.indexOf(opt))).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function setColorPickMenuState(partial = {}) {
+      if (partial.options) {
+        colorPickMenuOptions = Array.isArray(partial.options) ? partial.options.slice() : [];
+      }
+      if (partial.libraryLoading !== undefined) {
+        colorPickMenuLibraryLoading = partial.libraryLoading === true;
+      }
+      if (partial.libraryError !== undefined) {
+        colorPickMenuLibraryError = partial.libraryError || '';
+      }
+      if (colorPickMenuEl) {
+        renderColorPickMenu(colorPickMenuEl, colorPickMenuOptions);
+      }
+    }
+
     function renderColorPickMenu(menu, options) {
       const activeTab = colorPickMenuActiveTab || 'all';
       const filteredOptions = getVisibleColorPickOptions(options);
+      const groupedSections = getColorGroupStructures(filteredOptions);
+      const showLibraryLoader = colorPickMenuLibraryLoading && (activeTab === 'libraries' || activeTab === 'all');
+      const showLibraryError = !colorPickMenuLibraryLoading && !!colorPickMenuLibraryError && (activeTab === 'libraries' || activeTab === 'all');
 
       const tabs = [
         { id: 'all', label: 'All' },
         { id: 'custom', label: 'Custom' },
         { id: 'libraries', label: 'Libraries' }
       ];
+      const isGrid = colorPickMenuViewMode === 'grid';
 
       menu.innerHTML = `
         <div class="color-pick-tabs">
@@ -4820,6 +5018,25 @@ import { optimize as optimizeSvg } from 'svgo/browser';
               ${tab.label}
             </button>
           `).join('')}
+          <button type="button" class="color-pick-view-toggle${isGrid ? ' active' : ''}" data-color-view-toggle="true" aria-label="${isGrid ? 'Show list view' : 'Show grid view'}" title="${isGrid ? 'Show list view' : 'Show grid view'}">
+            ${isGrid ? `
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 6h13"></path>
+                <path d="M8 12h13"></path>
+                <path d="M8 18h13"></path>
+                <path d="M3 6h.01"></path>
+                <path d="M3 12h.01"></path>
+                <path d="M3 18h.01"></path>
+              </svg>
+            ` : `
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+              </svg>
+            `}
+          </button>
           <button type="button" class="color-pick-search-toggle${colorPickMenuSearchOpen ? ' active' : ''}" data-color-search-toggle="true" aria-label="Search colors" title="Search colors">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="7"></circle>
@@ -4839,16 +5056,23 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           </div>
         ` : ''}
         <div class="color-pick-options">
-          ${filteredOptions.length > 0 ? filteredOptions.map((opt, idx) => `
-            <button type="button" class="color-pick-option" data-index="${idx}">
-              <span class="color-swatch" style="background:${opt.hex || '#FFFFFF'};"></span>
-              <div class="color-pick-meta">
-                <span class="color-pick-name">${escapeHtml(opt.name || opt.hex || 'Unnamed color')}</span>
-                <span class="color-pick-source">${escapeHtml(opt.subtitle || opt.label || '')}</span>
-              </div>
-              <span class="color-pick-hex">${escapeHtml(opt.hex || '')}</span>
-            </button>
-          `).join('') : '<div class="color-pick-empty">No colors in this tab</div>'}
+          ${filteredOptions.length > 0 ? groupedSections.map((section) => `
+            <div class="color-pick-section" data-section-key="${escapeHtmlAttr(section.key)}">
+              ${section.title ? `<div class="color-pick-section-title">${escapeHtml(section.title)}</div>` : ''}
+              ${section.subgroups.map((subgroup) => renderColorPickSubgroup(subgroup, filteredOptions)).join('')}
+            </div>
+          `).join('') : (!showLibraryLoader && !showLibraryError ? '<div class="color-pick-empty">No colors in this tab</div>' : '')}
+          ${showLibraryLoader ? `
+            <div class="color-pick-status color-pick-status--loading">
+              <span class="color-pick-status-spinner" aria-hidden="true"></span>
+              <span>Loading libraries…</span>
+            </div>
+          ` : ''}
+          ${showLibraryError ? `
+            <div class="color-pick-status color-pick-status--error">
+              <span>${escapeHtml(colorPickMenuLibraryError)}</span>
+            </div>
+          ` : ''}
         </div>
       `;
 
@@ -4860,6 +5084,16 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           renderColorPickMenu(menu, colorPickMenuOptions);
         });
       });
+
+      const viewToggle = menu.querySelector('[data-color-view-toggle="true"]');
+      if (viewToggle) {
+        viewToggle.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          colorPickMenuViewMode = colorPickMenuViewMode === 'grid' ? 'list' : 'grid';
+          renderColorPickMenu(menu, colorPickMenuOptions);
+        });
+      }
 
       const searchToggle = menu.querySelector('[data-color-search-toggle="true"]');
       if (searchToggle) {
@@ -4905,6 +5139,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       menu.className = 'color-pick-menu';
       colorPickMenuOptions = Array.isArray(options) ? options.slice() : [];
       colorPickMenuActiveTab = colorPickMenuOptions.some(opt => opt.tab === 'libraries') ? 'all' : 'custom';
+      colorPickMenuViewMode = 'list';
+      colorPickMenuLibraryLoading = false;
+      colorPickMenuLibraryError = '';
       renderColorPickMenu(menu, colorPickMenuOptions);
 
       document.body.appendChild(menu);
@@ -4960,13 +5197,16 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       const colorMap = new Map();
 
-      const addColor = (hex, sourceLabel) => {
+      const addColor = (hex, sourceLabel, previewRgba = null) => {
         const normalized = normalizeSelectionHexColor(hex);
         if (!normalized) return;
-        const entry = colorMap.get(normalized) || { hex: normalized, sources: [], count: 0 };
+        const entry = colorMap.get(normalized) || { hex: normalized, sources: [], count: 0, previewRgba: null };
         entry.count += 1;
         if (sourceLabel && entry.sources.length < 2) {
           entry.sources.push(sourceLabel);
+        }
+        if (!entry.previewRgba && previewRgba) {
+          entry.previewRgba = normalizeColorPreviewRgba(previewRgba);
         }
         colorMap.set(normalized, entry);
       };
@@ -4976,7 +5216,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const baseLabel = `${kind} • ${nodeLabel}`;
 
         if (paint.type === 'SOLID' && paint.color) {
-          addColor(paint.color, baseLabel);
+          const baseColor = hexToRgbObject(paint.color);
+          addColor(paint.color, baseLabel, baseColor ? { ...baseColor, a: paint.opacity ?? 1 } : null);
           return;
         }
 
@@ -4987,7 +5228,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             const stopLabel = typeof stop.position === 'number'
               ? `${baseLabel} (stop ${Math.round(stop.position * 100)}%)`
               : baseLabel;
-            addColor(stop.color, stopLabel);
+            const stopColor = hexToRgbObject(stop.color);
+            addColor(stop.color, stopLabel, stopColor ? { ...stopColor, a: stop.opacity ?? 1 } : null);
           });
         }
       };
@@ -5025,7 +5267,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           const firstLabel = entry.sources[0] || '';
           const extraCount = entry.count - entry.sources.length;
           const label = extraCount > 0 ? `${firstLabel} (+${extraCount} more)` : firstLabel;
-          return {
+          return enhanceColorOption({
             kind: 'custom',
             scope: 'selection',
             hex: entry.hex,
@@ -5033,8 +5275,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             label: label || '',
             subtitle: label || 'Selection color',
             count: entry.count,
+            previewRgba: entry.previewRgba,
             tab: 'custom'
-          };
+          });
         })
         .sort((a, b) => (b.count - a.count) || a.hex.localeCompare(b.hex));
     }
@@ -5049,15 +5292,17 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           style.paints[0].color.b
         ) : null);
         if (!hex) return;
-        options.push({
+        const rgba = style?.paints?.[0]?.color || null;
+        options.push(enhanceColorOption({
           kind: 'paintStyle',
           scope: 'local',
           id: style.id,
           hex,
           name: style.name || hex,
           subtitle: 'Local style',
+          previewRgba: rgba,
           tab: 'libraries'
-        });
+        }));
       });
 
       const variables = Array.isArray(payload?.variables) ? payload.variables : [];
@@ -5065,7 +5310,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         if (variable?.resolvedType !== 'COLOR') return;
         const hex = normalizeSelectionHexColor(variable.displayValue || variable.displayColor);
         if (!hex) return;
-        options.push({
+        options.push(enhanceColorOption({
           kind: 'colorVariable',
           scope: 'local',
           id: variable.id,
@@ -5073,8 +5318,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           name: variable.name || hex,
           collectionName: variable.collectionName || '',
           subtitle: variable.collectionName ? `Local variable • ${variable.collectionName}` : 'Local variable',
+          previewRgba: variable.displayColor || null,
           tab: 'libraries'
-        });
+        }));
       });
 
       return options;
@@ -5086,26 +5332,29 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       paintStyles.forEach((style) => {
         const hex = normalizeSelectionHexColor(style?.hex);
         if (!hex) return;
-        options.push({
+        options.push(enhanceColorOption({
           kind: 'paintStyle',
           scope: 'team',
           key: style.key,
+          id: style.id,
           hex,
           name: style.name || hex,
           libraryName: style.libraryName || '',
           subtitle: style.libraryName ? `Library style • ${style.libraryName}` : 'Library style',
+          previewRgba: style.rgba || null,
           tab: 'libraries'
-        });
+        }));
       });
 
       const variables = Array.isArray(payload?.variables) ? payload.variables : [];
       variables.forEach((variable) => {
         const hex = normalizeSelectionHexColor(variable.hex);
         if (!hex) return;
-        options.push({
+        options.push(enhanceColorOption({
           kind: 'colorVariable',
           scope: 'team',
           key: variable.key,
+          id: variable.id,
           hex,
           name: variable.name || hex,
           collectionName: variable.collectionName || '',
@@ -5113,8 +5362,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           subtitle: variable.libraryName
             ? `Library variable • ${variable.libraryName}${variable.collectionName ? ` / ${variable.collectionName}` : ''}`
             : (variable.collectionName ? `Library variable • ${variable.collectionName}` : 'Library variable'),
+          previewRgba: variable.rgba || null,
           tab: 'libraries'
-        });
+        }));
       });
 
       return options;
@@ -5174,15 +5424,15 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       return colorSwapLibrarySourcesPromise;
     }
 
+    function prewarmColorSwapSourceCaches() {
+      void loadLocalColorSwapSources();
+      void loadLibraryColorSwapSources();
+    }
+
     function mergeColorMenuOptions(...optionSets) {
       const optionMap = new Map();
       optionSets.flat().forEach((option) => {
-        const normalized = normalizePromptColorSelection(option);
-        normalized.name = option.name || normalized.name || normalized.hex;
-        normalized.subtitle = option.subtitle || option.label || '';
-        normalized.label = option.label || normalized.label || '';
-        normalized.count = option.count || normalized.count || 0;
-        normalized.tab = normalized.kind === 'custom' ? 'custom' : 'libraries';
+        const normalized = enhanceColorOption(option);
         const key = getColorOptionId(normalized);
         if (!optionMap.has(key)) {
           optionMap.set(key, normalized);
@@ -5240,8 +5490,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const optionMap = new Map();
 
       const addOption = (option) => {
-        const normalized = normalizePromptColorSelection(option);
-        normalized.name = option.name || normalized.name || normalized.hex;
+        const normalized = enhanceColorOption(option);
         normalized.subtitle = option.subtitle || normalized.subtitle || 'Used on selection';
         normalized.tab = 'libraries';
         const key = getColorOptionId(normalized);
@@ -5270,6 +5519,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             id: node.fillStyleId,
             name: node.fillTokenName || 'Selection fill style',
             hex: getPaintHex(node.fillsDetailed) || node.fills || '#000000',
+            previewRgba: null,
             subtitle: 'Used on selection'
           });
         }
@@ -5281,6 +5531,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             id: node.strokeStyleId,
             name: node.strokeTokenName || 'Selection stroke style',
             hex: getPaintHex(node.strokesDetailed) || node.strokes || '#000000',
+            previewRgba: null,
             subtitle: 'Used on selection'
           });
         }
@@ -5294,6 +5545,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             id: colorBinding.id,
             name: colorBinding.name || 'Selection color variable',
             hex: normalizeSelectionHexColor(fallbackHex || paint.color) || '#000000',
+            previewRgba: paint?.opacity !== undefined && paint.color
+              ? { ...hexToRgbObject(paint.color), a: paint.opacity }
+              : null,
             subtitle: 'Used on selection'
           });
         };
@@ -5332,13 +5586,19 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (!wrapper) return;
       const picker = wrapper.querySelector('.prompt-color-picker');
       const hexInput = wrapper.querySelector('.prompt-color-hex');
-      const sourceLabel = wrapper.querySelector('.prompt-color-source-label');
+      const badge = wrapper.querySelector('.prompt-color-source-badge');
       const normalized = normalizePromptColorSelection(selection, picker?.value || hexInput?.value || '#3B82F6');
       wrapper.dataset.selectedSource = serializeColorSelectionForDataset(normalized);
+      wrapper.dataset.selectedKind = normalized.kind || 'custom';
       if (picker) picker.value = normalized.hex;
       if (hexInput) hexInput.value = normalized.hex;
-      if (sourceLabel) {
-        sourceLabel.textContent = buildColorSelectionLabel(normalized);
+      if (badge) {
+        const badgeLabel = getPromptColorSourceBadgeLabel(normalized);
+        badge.textContent = badgeLabel;
+        badge.hidden = !badgeLabel;
+      }
+      if (picker) {
+        picker.style.setProperty('--prompt-color-preview', normalized.previewCss || normalized.hex);
       }
     }
 
@@ -5347,23 +5607,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       try {
         const wrapper = picker?.closest('.prompt-color-input-wrapper');
         const fieldKey = picker?.dataset?.fieldKey || '';
-        const [{ data: selectionData }, localOptions, libraryOptions] = await Promise.all([
-          requestSelectionData(),
-          loadLocalColorSwapSources(),
-          loadLibraryColorSwapSources()
-        ]);
+        const { data: selectionData } = await requestSelectionData();
         if (!selectionData || selectionData.length === 0) {
           showToast('Please select an element first', 'error');
           return;
         }
 
-        const filteredLibraryOptions = fieldKey === 'fromColor'
-          ? filterLibraryOptionsForSelection(mergeColorMenuOptions(localOptions, libraryOptions), selectionData)
-          : mergeColorMenuOptions(localOptions, libraryOptions);
-        const colorOptions = mergeColorMenuOptions(
-          collectSelectionColors(selectionData),
-          filteredLibraryOptions
-        );
+        const customOptions = collectSelectionColors(selectionData);
+        const colorOptions = mergeColorMenuOptions(customOptions);
         if (colorOptions.length === 0) {
           showToast('Selected element has no visible fill or stroke colors', 'error');
           return;
@@ -5376,19 +5627,35 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             return;
           }
           applyPromptColorSelection(wrapper, normalized);
-          showToast(`Color set to ${buildColorSelectionLabel(normalized)}`);
+          showToast(`Color set to ${normalized.hex}`);
         };
-
-        if (colorOptions.length === 1) {
-          applyColor(colorOptions[0]);
-          return;
-        }
 
         openColorPickMenu(colorOptions, anchorEl, (choice) => {
           if (choice) {
             applyColor(choice);
           }
         });
+        setColorPickMenuState({ libraryLoading: true, libraryError: '' });
+
+        Promise.all([loadLocalColorSwapSources(), loadLibraryColorSwapSources()])
+          .then(([localOptions, libraryOptions]) => {
+            const filteredLibraryOptions = fieldKey === 'fromColor'
+              ? filterLibraryOptionsForSelection(mergeColorMenuOptions(localOptions, libraryOptions), selectionData)
+              : mergeColorMenuOptions(localOptions, libraryOptions);
+            const nextOptions = mergeColorMenuOptions(customOptions, filteredLibraryOptions);
+            setColorPickMenuState({
+              options: nextOptions,
+              libraryLoading: false,
+              libraryError: ''
+            });
+          })
+          .catch((error) => {
+            console.warn('Failed to stream color library options', error);
+            setColorPickMenuState({
+              libraryLoading: false,
+              libraryError: 'Could not load libraries'
+            });
+          });
       } catch (error) {
         showToast('Failed to get selection', 'error');
       }
@@ -16084,6 +16351,7 @@ Generate ONLY the reply text, nothing else.`;
 
         // Set help text - only show if help exists and this action uses the help panel
         const hidePromptDrawerHelp =
+          actionData.name === 'Swap colors' ||
           actionData.name === 'Vertical text' ||
           actionData.name === 'Font preview' ||
           actionData.directAction === 'listAllComponents' ||
@@ -16254,6 +16522,10 @@ Generate ONLY the reply text, nothing else.`;
         } else {
           renderPromptFields(localizedHydratedFields);
           promptDrawerFields.classList.remove('hidden');
+
+          if (actionData.name === 'Swap colors') {
+            prewarmColorSwapSourceCaches();
+          }
         }
 
         // Cache hydrated fields for Direct UI "Back" button and Outline editor
@@ -17594,21 +17866,21 @@ Generate ONLY the reply text, nothing else.`;
           const normalizedColorValue = normalizePromptColorSelection(preservedColorValue, field.default || '#3B82F6');
           const colorValue = normalizedColorValue.hex || '#3B82F6';
           const colorSourceValue = serializeColorSelectionForDataset(normalizedColorValue);
-          const colorSourceLabel = buildColorSelectionLabel(normalizedColorValue);
+          const colorSourceBadge = getPromptColorSourceBadgeLabel(normalizedColorValue);
           fieldHtml += `
             <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <label class="prompt-field-label">${field.label}</label>
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <div class="prompt-color-input-wrapper" data-selected-source="${escapeHtmlAttr(colorSourceValue)}">
+              <div class="prompt-color-input-wrapper" data-selected-source="${escapeHtmlAttr(colorSourceValue)}" data-selected-kind="${escapeHtmlAttr(normalizedColorValue.kind || 'custom')}">
                 <input type="color" class="prompt-color-picker" id="${fieldId}-picker" value="${colorValue}" data-field-key="${field.key}"${disabledAttr}>
                 <input type="text" class="prompt-color-hex" id="${fieldId}-hex" value="${colorValue}" placeholder="#000000" data-color-hex="${field.key}"${disabledAttr}>
+                <span class="prompt-color-source-badge"${colorSourceBadge ? '' : ' hidden'}>${escapeHtml(colorSourceBadge)}</span>
                 <button class="audit-pick-btn prompt-color-pick-btn" title="${escapeHtml(tu('actions.color.useSelectionFill'))}"${disabledAttr}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
                   </svg>
                 </button>
               </div>
-              <div class="prompt-color-source-label">${escapeHtml(colorSourceLabel)}</div>
             </div>
           `;
         } else if (field.type === 'textarea') {
@@ -18507,12 +18779,10 @@ Generate ONLY the reply text, nothing else.`;
         const picker = wrapper.querySelector('.prompt-color-picker');
         const hexInput = wrapper.querySelector('.prompt-color-hex');
         const pickBtn = wrapper.querySelector('.audit-pick-btn');
-        const sourceLabel = wrapper.parentElement?.querySelector('.prompt-color-source-label');
 
         const resetToCustomColor = (hex) => {
           const normalized = normalizePromptColorSelection(hex || picker?.value || '#3B82F6');
-          wrapper.dataset.selectedSource = serializeColorSelectionForDataset(normalized);
-          if (sourceLabel) sourceLabel.textContent = buildColorSelectionLabel(normalized);
+          applyPromptColorSelection(wrapper, normalized);
         };
 
         // Sync picker -> hex input
@@ -18552,6 +18822,16 @@ Generate ONLY the reply text, nothing else.`;
             pickColorFromSelection(picker, hexInput, pickBtn);
           });
         }
+
+        let initialSelection = picker?.value;
+        if (wrapper.dataset.selectedSource) {
+          try {
+            initialSelection = JSON.parse(wrapper.dataset.selectedSource);
+          } catch (error) {
+            initialSelection = picker?.value;
+          }
+        }
+        applyPromptColorSelection(wrapper, initialSelection);
       });
     }
 
@@ -27829,9 +28109,18 @@ Example structure:
       // Restore help section
       if (currentPromptAction) {
         const promptDrawerHelp = document.getElementById('promptDrawerHelp');
-        if (currentPromptAction.help && currentPromptAction.help.trim()) {
+        const shouldHidePromptDrawerHelp =
+          currentPromptAction.name === 'Swap colors' ||
+          currentPromptAction.name === 'Vertical text' ||
+          currentPromptAction.name === 'Font preview' ||
+          currentPromptAction.directAction === 'listAllComponents' ||
+          currentPromptAction.directAction === 'randomizeSelectedInstances';
+        if (!shouldHidePromptDrawerHelp && currentPromptAction.help && currentPromptAction.help.trim()) {
           promptDrawerHelpText.textContent = currentPromptAction.help.trim();
           promptDrawerHelp.classList.remove('hidden');
+        } else if (promptDrawerHelp) {
+          promptDrawerHelpText.textContent = '';
+          promptDrawerHelp.classList.add('hidden');
         }
         if (currentPromptAction.examples) {
           promptDrawerExamples.innerHTML = currentPromptAction.examples
