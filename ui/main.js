@@ -24018,7 +24018,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
 
       const userText = `Generate ${paletteType} color palette${baseColor ? ` from ${baseColor}` : ''}${paletteType === 'fullSystem' ? ` for: ${values.systemDescription}` : ''}`;
-      addMessage('user', userText, null, { name: actionMeta?.name || 'Color palette', icon: actionMeta?.icon });
+      addMessage('user', userText, null, { name: actionMeta?.name || 'Create color palette', icon: actionMeta?.icon });
       chatHistory.push({ role: 'user', parts: [{ text: userText }] });
       await autoSaveAfterResponse();
 

@@ -1276,7 +1276,7 @@ ${values.targetAudience || '30〜50代のビジネスパーソン'}
 {
           name: 'Character naming ideas',
           desc: 'Suggest memorable names that fit the character',
-          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
+          icon: '<svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"/><path stroke="currentColor" stroke-width="2" d="M8 14s1.5 2 4 2 4-2 4-2"/><path stroke="currentColor" stroke-linecap="square" stroke-width="2" d="M9 9h0m6 0h0"/></svg>',
           askMode: true,
           requiredContext: ContextMode.ALL,
           fields: [

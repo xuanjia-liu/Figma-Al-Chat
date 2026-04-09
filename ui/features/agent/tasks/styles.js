@@ -238,7 +238,7 @@ export const quickCreateStyleTasks = [
           promptTemplate: 'Generate a seamless, tileable SVG background texture for modern UI use.\n\nBase system:\n{patternSystem}\n\nDistribution logic:\n{distributionLogic}\n\nDensity and scale:\n{densityScale}\n\nTone and contrast:\n{toneContrast}\n\nDesign constraints:\n• modern UI texture (2024–2025)\n• flat vector, SVG only\n• low contrast, background-safe\n• system-driven, not decorative\n• no gradients, no shadows\n• no illustration style\n• no retro or ornamental patterns\n• seamless repetition required\n\nOptional modifiers:\n{customModifiers}\n\nThe result should feel suitable for SaaS, design systems, or product UI backgrounds. Return ONLY a JSON command using createNodeFromSvg.'
         },
 {
-          name: 'Color palette',
+          name: 'Create color palette',
           desc: 'Generate color palettes using AI',
           prompt: '',
           help: 'Create color palettes as styles or variables using AI - primary shades, semantic colors, or complete design systems.',
