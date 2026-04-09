@@ -964,6 +964,68 @@ async function resolveInstanceMainComponent(instance: InstanceNode): Promise<Com
   }
 }
 
+async function resolveComponentPropertyTarget(node: SceneNode | null): Promise<ComponentNode | ComponentSetNode | null> {
+  if (!node) return null;
+  if (node.type === 'COMPONENT_SET') return node;
+  if (node.type === 'COMPONENT') {
+    if (node.parent && node.parent.type === 'COMPONENT_SET') {
+      return node.parent as ComponentSetNode;
+    }
+    return node;
+  }
+  if (node.type === 'INSTANCE') {
+    const main = await resolveInstanceMainComponent(node);
+    if (main) {
+      return main.parent && main.parent.type === 'COMPONENT_SET'
+        ? main.parent as ComponentSetNode
+        : main;
+    }
+  }
+  let parent = node.parent as BaseNode | null;
+  while (parent) {
+    if (parent.type === 'COMPONENT_SET') return parent as ComponentSetNode;
+    if (parent.type === 'COMPONENT') {
+      const componentParent = parent.parent;
+      if (componentParent && componentParent.type === 'COMPONENT_SET') {
+        return componentParent as ComponentSetNode;
+      }
+      return parent as ComponentNode;
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+async function resolveConcreteComponentForPropertyDefault(node: SceneNode | null): Promise<ComponentNode | null> {
+  if (!node) return null;
+  if (node.type === 'COMPONENT') return node;
+  if (node.type === 'INSTANCE') {
+    return await resolveInstanceMainComponent(node);
+  }
+  let parent = node.parent as BaseNode | null;
+  while (parent) {
+    if (parent.type === 'COMPONENT') {
+      return parent as ComponentNode;
+    }
+    if (parent.type === 'INSTANCE') {
+      return await resolveInstanceMainComponent(parent as InstanceNode);
+    }
+    parent = parent.parent;
+  }
+  return null;
+}
+
+function findNearestInstanceBeforeTarget(node: SceneNode | null, target: ComponentNode | ComponentSetNode | null): InstanceNode | null {
+  let current: BaseNode | null = node;
+  while (current && current !== target) {
+    if (current.type === 'INSTANCE') {
+      return current as InstanceNode;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
 function collectComponentInventoryRoots(scope: ComponentInventoryScope): SceneNode[] {
   if (scope === 'selection') {
     return [...figma.currentPage.selection];
@@ -1735,7 +1797,8 @@ function escapeRegex(str: string): string {
 function splitTextWithIndices(
   text: string,
   delimiter: string | RegExp,
-  keepDelimiter: boolean
+  keepDelimiter: boolean,
+  attachDelimiterToPrevious = false
 ): Array<{ text: string; startIndex: number; endIndex: number }> {
   const segments: Array<{ text: string; startIndex: number; endIndex: number }> = [];
 
@@ -1781,11 +1844,17 @@ function splitTextWithIndices(
 
     // Add delimiter if keeping it
     if (keepDelimiter) {
-      segments.push({
-        text: match[0],
-        startIndex: matchStart,
-        endIndex: matchEnd
-      });
+      const previousSegment = segments[segments.length - 1];
+      if (attachDelimiterToPrevious && previousSegment) {
+        previousSegment.text += match[0];
+        previousSegment.endIndex = matchEnd;
+      } else {
+        segments.push({
+          text: match[0],
+          startIndex: matchStart,
+          endIndex: matchEnd
+        });
+      }
     }
 
     lastIndex = matchEnd;
@@ -8381,6 +8450,94 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('get-selection-data failed:', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to collect selection data: ' + (error instanceof Error ? error.message : String(error)) });
+      }
+      break;
+    }
+
+    case 'get-add-property-selection-context': {
+      try {
+        const validTargetMap = new Map<string, { id: string; name: string; type: string }>();
+        const invalidSelections: Array<{ id: string; name: string; type: string; reason: string }> = [];
+        const instanceOptionMap = new Map<string, { value: string; componentId: string; sourceNodeId: string; label: string; detail: string }>();
+        const selectionBindings: Array<{
+          nodeId: string;
+          name: string;
+          type: string;
+          targetId: string;
+          targetName: string;
+          targetType: string;
+          canBindBoolean: boolean;
+          canBindText: boolean;
+          canBindInstanceSwap: boolean;
+        }> = [];
+
+        for (const selectedNode of selection) {
+          const target = await resolveComponentPropertyTarget(selectedNode);
+          if (target) {
+            if (!validTargetMap.has(target.id)) {
+              validTargetMap.set(target.id, {
+                id: target.id,
+                name: target.name,
+                type: target.type
+              });
+            }
+
+            const nearestInstance = findNearestInstanceBeforeTarget(selectedNode, target);
+            selectionBindings.push({
+              nodeId: selectedNode.id,
+              name: selectedNode.name,
+              type: selectedNode.type,
+              targetId: target.id,
+              targetName: target.name,
+              targetType: target.type,
+              canBindBoolean: true,
+              canBindText: selectedNode.type === 'TEXT' && !nearestInstance,
+              canBindInstanceSwap: !!nearestInstance
+            });
+          } else {
+            invalidSelections.push({
+              id: selectedNode.id,
+              name: selectedNode.name,
+              type: selectedNode.type,
+              reason: 'Selection is not inside a component or component set'
+            });
+          }
+
+          const defaultComponent = await resolveConcreteComponentForPropertyDefault(selectedNode);
+          if (defaultComponent && !instanceOptionMap.has(defaultComponent.id)) {
+            const detail = selectedNode.type === 'INSTANCE'
+              ? `From selected instance "${selectedNode.name}"`
+              : (selectedNode.id === defaultComponent.id
+                ? 'Selected component'
+                : `From selected layer "${selectedNode.name}"`);
+            instanceOptionMap.set(defaultComponent.id, {
+              value: defaultComponent.id,
+              componentId: defaultComponent.id,
+              sourceNodeId: selectedNode.id,
+              label: defaultComponent.name,
+              detail
+            });
+          }
+        }
+
+        figma.ui.postMessage({
+          type: 'add-property-selection-context-result',
+          validTargets: Array.from(validTargetMap.values()),
+          validTargetCount: validTargetMap.size,
+          invalidSelections,
+          invalidSelectionCount: invalidSelections.length,
+          instanceOptions: Array.from(instanceOptionMap.values()),
+          instanceOptionCount: instanceOptionMap.size,
+          selectionBindings,
+          selectionBindingCount: selectionBindings.length,
+          selectionCount: selection.length
+        });
+      } catch (error) {
+        console.error('get-add-property-selection-context failed:', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: 'Failed to inspect selection for add property: ' + (error instanceof Error ? error.message : String(error))
+        });
       }
       break;
     }
@@ -18283,22 +18440,36 @@ figma.ui.onmessage = async (msg: {
                       if (existingKey !== propertyName || defs[existingKey]) {
                         // Property already exists — skip adding, just succeed silently
                         console.log(`editComponentProperty: Property '${propertyName}' already exists as '${existingKey}', skipping add.`);
+                      } else if (type === 'INSTANCE_SWAP') {
+                        const rawDefaultValue = typeof defaultValue === 'string' ? defaultValue.trim() : '';
+                        if (!rawDefaultValue) {
+                          throw new Error(`Instance swap property "${propertyName}" requires a valid default component.`);
+                        }
+                        const defaultNode = await figma.getNodeByIdAsync(rawDefaultValue);
+                        if (!defaultNode || defaultNode.type !== 'COMPONENT') {
+                          throw new Error(`Default instance "${rawDefaultValue}" is missing or is not a component.`);
+                        }
+                        component.addComponentProperty(propertyName, type, rawDefaultValue);
+                        success++;
                       } else {
                         component.addComponentProperty(propertyName, type, defaultValue);
+                        success++;
                       }
+                    } else {
+                      failed++;
                     }
                   } else if (action === 'remove' && propertyName) {
                     const fullKey = resolvePropertyKey(propertyName, component);
                     component.deleteComponentProperty(fullKey);
+                    success++;
                   } else if (action === 'edit' && propertyName) {
                     const fullKey = resolvePropertyKey(propertyName, component);
                     const updates: any = {};
                     if (newName) updates.name = newName;
                     if (defaultValue !== undefined) updates.defaultValue = defaultValue;
                     component.editComponentProperty(fullKey, updates);
+                    success++;
                   }
-
-                  success++;
                 } catch (error) {
                   console.error('editComponentProperty failed', error);
                   if (!firstError) firstError = { action: cmd.action, nodeId: node.id, message: (error as Error)?.message || 'editComponentProperty failed' };
@@ -18384,8 +18555,9 @@ figma.ui.onmessage = async (msg: {
                     propDefault = '';
                   } else if (bindType === 'instance' || bindType === 'mainComponent') {
                     propType = 'INSTANCE_SWAP';
-                    // For instance swap, default must be a valid node ID; use the current node's mainComponent if available
-                    propDefault = (node as any).mainComponent?.id || '';
+                    const bindSourceInstance = findNearestInstanceBeforeTarget(node, mainComp) || (node.type === 'INSTANCE' ? node as InstanceNode : null);
+                    const bindSourceComponent = bindSourceInstance ? await resolveInstanceMainComponent(bindSourceInstance) : null;
+                    propDefault = bindSourceComponent?.id || '';
                   }
 
                   if (propType) {
@@ -19375,6 +19547,8 @@ figma.ui.onmessage = async (msg: {
                 try {
                   const delimiter = cmd.delimiter ?? '';
                   const keepDelimiter = cmd.keepDelimiter ?? false;
+                  const attachDelimiterToPrevious = (cmd as { attachDelimiterToPrevious?: boolean }).attachDelimiterToPrevious === true;
+                  const trimLeadingSpaces = (cmd as { trimLeadingSpaces?: boolean }).trimLeadingSpaces === true;
                   const direction = cmd.direction ?? 'VERTICAL';
                   const spacing = cmd.spacing ?? 0;
                   const wrapInAutoLayout = (cmd as { wrapInAutoLayout?: boolean }).wrapInAutoLayout === true;
@@ -19387,7 +19561,12 @@ figma.ui.onmessage = async (msg: {
                   const originalSegments = getTextStyleSegments(textNode);
 
                   // Split text and track indices
-                  const textSegments = splitTextWithIndices(originalText, delimiter, keepDelimiter);
+                  const textSegments = splitTextWithIndices(
+                    originalText,
+                    delimiter,
+                    keepDelimiter,
+                    attachDelimiterToPrevious
+                  );
 
                   if (textSegments.length <= 1) {
                     // No splits occurred
@@ -19434,9 +19613,23 @@ figma.ui.onmessage = async (msg: {
 
                     if (text.length === 0) continue; // Skip empty segments
 
-                    const processedText = text.substring(startOffset, text.length - endOffset);
-                    const processedStart = seg.startIndex + startOffset;
+                    let processedText = text.substring(startOffset, text.length - endOffset);
+                    let processedStart = seg.startIndex + startOffset;
                     const processedEnd = seg.endIndex - endOffset;
+
+                    if (trimLeadingSpaces && processedText.length > 0) {
+                      const leadingSpaceMatch = processedText.match(/^[ \u3000]+/);
+                      if (leadingSpaceMatch) {
+                        const leadingSpaceLength = leadingSpaceMatch[0].length;
+                        if (leadingSpaceLength >= processedText.length) {
+                          continue;
+                        }
+                        processedText = processedText.substring(leadingSpaceLength);
+                        processedStart += leadingSpaceLength;
+                      }
+                    }
+
+                    if (processedText.length === 0) continue;
 
                     const newTextNode = figma.createText();
 

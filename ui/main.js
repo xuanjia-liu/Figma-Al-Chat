@@ -15000,6 +15000,160 @@ Generate ONLY the reply text, nothing else.`;
       return `${fieldKey}__weight__${encodeURIComponent(String(value))}`;
     }
 
+    async function requestAddPropertySelectionContext() {
+      const result = await runLocalActionRequest({
+        requestType: 'get-add-property-selection-context',
+        resultType: 'add-property-selection-context-result',
+        payload: {},
+        errorPrefixes: ['Failed to inspect selection for add property']
+      });
+      return result || {};
+    }
+
+    function buildAddPropertyFields(baseFields = [], selectionContext = {}) {
+      const instanceOptions = Array.isArray(selectionContext.instanceOptions)
+        ? selectionContext.instanceOptions.map((option) => ({
+            value: String(option.value || ''),
+            label: String(option.label || option.value || ''),
+            detail: String(option.detail || '')
+          }))
+        : [];
+      const validTargetCount = Number(selectionContext.validTargetCount) || 0;
+      const invalidSelectionCount = Number(selectionContext.invalidSelectionCount) || 0;
+      const instanceHintBase = validTargetCount > 0
+        ? `Applies to ${validTargetCount} component target${validTargetCount === 1 ? '' : 's'} in the current selection.`
+        : 'Select at least one component, component set, instance, or layer inside one.';
+      const invalidHint = invalidSelectionCount > 0
+        ? ` ${invalidSelectionCount} unsupported selection item${invalidSelectionCount === 1 ? '' : 's'} will be skipped.`
+        : '';
+      const instanceHint = instanceOptions.length > 0
+        ? `${instanceHintBase} Choose a concrete component from the current selection.${invalidHint}`
+        : `${instanceHintBase} Select at least one component or instance to use as the default instance.${invalidHint}`;
+
+      return (Array.isArray(baseFields) ? baseFields : []).map((field) => {
+        if (field.type === 'row' && Array.isArray(field.fields)) {
+          return {
+            ...field,
+            fields: buildAddPropertyFields(field.fields, selectionContext)
+          };
+        }
+        if (field.key !== 'instanceDefault') {
+          return field;
+        }
+        return {
+          ...field,
+          options: instanceOptions,
+          default: instanceOptions[0]?.value || '',
+          disabled: instanceOptions.length === 0,
+          hint: instanceHint
+        };
+      });
+    }
+
+    function isAddPropertyPromptAction(action = currentPromptAction) {
+      return !!action && action.directAction === 'addProperty';
+    }
+
+    function getAddPropertyValidation(values = {}, action = currentPromptAction) {
+      if (!isAddPropertyPromptAction(action)) {
+        return { valid: true, message: '' };
+      }
+
+      const propertyName = String(values.propertyName || '').trim();
+      if (!propertyName) {
+        return { valid: false, message: 'Property name is required.' };
+      }
+
+      const kind = values.propertyKind || 'boolean';
+      const selectionContext = action?.addPropertySelectionContext || {};
+      const validTargetCount = Number(selectionContext.validTargetCount) || 0;
+      const selectionBindings = Array.isArray(selectionContext.selectionBindings) ? selectionContext.selectionBindings : [];
+      if (validTargetCount <= 0) {
+        return { valid: false, message: 'Select at least one component target first.' };
+      }
+
+      if (kind === 'text' && !selectionBindings.some((item) => item.canBindText)) {
+        return { valid: false, message: 'Select at least one text layer inside a component.' };
+      }
+
+      if (kind === 'instanceSwap') {
+        if (!selectionBindings.some((item) => item.canBindInstanceSwap)) {
+          return { valid: false, message: 'Select at least one component instance, or a layer inside one.' };
+        }
+        const instanceDefault = String(values.instanceDefault || '').trim();
+        if (!instanceDefault) {
+          return { valid: false, message: 'Select a default instance from the current selection.' };
+        }
+        const instanceOptions = Array.isArray(selectionContext.instanceOptions) ? selectionContext.instanceOptions : [];
+        if (!instanceOptions.some((option) => String(option.value || '') === instanceDefault)) {
+          return { valid: false, message: 'Refresh the instance list and choose a valid default instance.' };
+        }
+      }
+
+      return { valid: true, message: '' };
+    }
+
+    function updatePromptDrawerSubmitState(values = null) {
+      if (!promptDrawerSubmit) return;
+      const nextValues = values || (typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {});
+      const validation = getAddPropertyValidation(nextValues);
+      if (isAddPropertyPromptAction()) {
+        promptDrawerSubmit.disabled = !validation.valid;
+        promptDrawerSubmit.title = validation.valid ? '' : validation.message;
+        return;
+      }
+      if (!isSubmittingPrompt) {
+        promptDrawerSubmit.disabled = false;
+        promptDrawerSubmit.title = '';
+      }
+    }
+
+    async function refreshOpenAddPropertyDrawerFromSelection() {
+      if (!promptDrawer.classList.contains('open') || !isAddPropertyPromptAction()) return;
+
+      const preservedValues = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+      const selectionContext = await requestAddPropertySelectionContext();
+      const baseFields = currentPromptAction?._originalFields || currentPromptAction?.fields || [];
+      const hydratedFields = buildAddPropertyFields(baseFields, selectionContext);
+      const localizedFields = hydratedFields.map(localizeTaskField);
+
+      currentPromptAction.addPropertySelectionContext = selectionContext;
+
+      const nextValues = { ...preservedValues };
+      const instanceOptions = Array.isArray(selectionContext.instanceOptions) ? selectionContext.instanceOptions : [];
+      if (Array.isArray(instanceOptions) && instanceOptions.length > 0) {
+        const currentInstanceValue = String(nextValues.instanceDefault || '').trim();
+        if (!instanceOptions.some((option) => String(option.value || '') === currentInstanceValue)) {
+          nextValues.instanceDefault = instanceOptions[0].value;
+        }
+      } else {
+        nextValues.instanceDefault = '';
+      }
+
+      currentPromptAction.fields = localizedFields;
+      renderPromptFields(localizedFields, nextValues);
+      promptDrawerFields.classList.remove('hidden');
+      updatePromptDrawerSubmitState(nextValues);
+    }
+
+    async function triggerAddPropertyDrawerRefresh(buttonEl = null) {
+      if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.classList.add('loading');
+      }
+      try {
+        await refreshOpenAddPropertyDrawerFromSelection();
+      } catch (error) {
+        console.warn('Failed to refresh add property drawer:', error);
+        showToast('Failed to refresh selection for Add property', 'error');
+      } finally {
+        if (buttonEl) {
+          buttonEl.disabled = false;
+          buttonEl.classList.remove('loading');
+        }
+      }
+    }
+
     function collectInstanceNodesForRandomization(nodes) {
       const topLevelInstances = [];
       const nestedInstances = [];
@@ -15516,6 +15670,10 @@ Generate ONLY the reply text, nothing else.`;
         if (actionData.directAction === 'browseIconSet') {
           const excludeAnyIconifySet = true;
           hydratedFields = await hydrateCreateIconFields(actionData.fields, excludeAnyIconifySet);
+        } else if (actionData.directAction === 'addProperty') {
+          const selectionContext = await requestAddPropertySelectionContext();
+          hydratedFields = buildAddPropertyFields(actionData.fields, selectionContext);
+          currentPromptAction.addPropertySelectionContext = selectionContext;
         } else if (actionData.directAction === 'generatePalette') {
           hydratedFields = await hydratePaletteFields(actionData.fields);
         } else if (actionData.directAction === 'generateImage') {
@@ -15560,6 +15718,21 @@ Generate ONLY the reply text, nothing else.`;
           });
         }
 
+        if (actionData.directAction === 'addProperty') {
+          const instanceOptions = Array.isArray(currentPromptAction.addPropertySelectionContext?.instanceOptions)
+            ? currentPromptAction.addPropertySelectionContext.instanceOptions
+            : [];
+          hydratedFields = hydratedFields.map((field) => {
+            if (field.key !== 'instanceDefault') return field;
+            const currentDefault = String(field.default || '');
+            const hasMatch = instanceOptions.some((option) => String(option.value || '') === currentDefault);
+            return {
+              ...field,
+              default: hasMatch ? currentDefault : (instanceOptions[0]?.value || '')
+            };
+          });
+        }
+
         // Render fields (Screen type, Platform, etc.)
         const localizedHydratedFields = hydratedFields.map(localizeTaskField);
         currentPromptAction.fields = localizedHydratedFields;
@@ -15582,6 +15755,8 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
           syncSelectState(selectEl);
         });
+
+        updatePromptDrawerSubmitState();
 
         // For image generation, trigger background refresh of models
         if (actionData.directAction === 'generateImage') {
@@ -17476,7 +17651,11 @@ Generate ONLY the reply text, nothing else.`;
         btn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          triggerInstanceRandomizationDrawerRefresh(btn);
+          if (btn.dataset.promptAction === 'refresh-add-property-fields') {
+            triggerAddPropertyDrawerRefresh(btn);
+          } else {
+            triggerInstanceRandomizationDrawerRefresh(btn);
+          }
         };
       });
 
@@ -17506,6 +17685,7 @@ Generate ONLY the reply text, nothing else.`;
       promptDrawerFields.addEventListener('input', (e) => {
         if (e.target.matches('input, textarea, select')) {
           savePromptHistory();
+          updatePromptDrawerSubmitState();
 
           // If user manually modified imageSubject or imageStyle, reset imagePreset to None
           if (!isApplyingPreset && (e.target.dataset.fieldKey === 'imageSubject' || e.target.dataset.fieldKey === 'imageStyle')) {
@@ -17547,6 +17727,7 @@ Generate ONLY the reply text, nothing else.`;
       });
       promptDrawerFields.addEventListener('change', (e) => {
         savePromptHistory();
+        updatePromptDrawerSubmitState();
         if (isRealtimePromptAction()) {
           scheduleRealtimePromptAction();
         }
@@ -23094,6 +23275,158 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runAddPropertyAction(values, actionMeta) {
+      const propertyName = String(values.propertyName || '').trim();
+      const propertyKind = values.propertyKind || 'boolean';
+      const selectionContext = await requestAddPropertySelectionContext();
+      currentPromptAction.addPropertySelectionContext = selectionContext;
+
+      const validation = getAddPropertyValidation(values, currentPromptAction);
+      if (!validation.valid) {
+        showToast(validation.message, 'error');
+        updatePromptDrawerSubmitState(values);
+        return;
+      }
+
+      const validTargets = Array.isArray(selectionContext.validTargets) ? selectionContext.validTargets : [];
+      const selectionBindings = Array.isArray(selectionContext.selectionBindings) ? selectionContext.selectionBindings : [];
+      if (validTargets.length === 0) {
+        showToast('No valid component targets found in the current selection.', 'error');
+        updatePromptDrawerSubmitState(values);
+        return;
+      }
+
+      let bindType = 'visible';
+      let compatibleBindings = selectionBindings.filter((item) => item.canBindBoolean);
+      let incompatibleReason = '';
+      if (propertyKind === 'text') {
+        bindType = 'text';
+        compatibleBindings = selectionBindings.filter((item) => item.canBindText);
+        incompatibleReason = 'Text Property can only bind to selected text layers inside components.';
+      } else if (propertyKind === 'instanceSwap') {
+        bindType = 'instance';
+        compatibleBindings = selectionBindings.filter((item) => item.canBindInstanceSwap);
+        incompatibleReason = 'Instance Swap Property can only bind to selected component instances (or layers inside one).';
+      }
+
+      const compatibleTargetIds = new Set(compatibleBindings.map((item) => item.targetId));
+      const targetCommands = validTargets.filter((target) => compatibleTargetIds.has(target.id));
+
+      if (compatibleBindings.length === 0) {
+        showToast(incompatibleReason || 'No compatible selected layers found to bind this property.', 'error');
+        updatePromptDrawerSubmitState(values);
+        return;
+      }
+
+      const invalidItems = Array.isArray(selectionContext.invalidSelections) ? selectionContext.invalidSelections : [];
+      const incompatibleBindings = selectionBindings.filter((item) => !compatibleBindings.some((binding) => binding.nodeId === item.nodeId));
+      const skippedSelectionCount = invalidItems.length + incompatibleBindings.length;
+      if (invalidItems.length > 0) {
+        const allSkippedItems = [
+          ...invalidItems.map((item) => item?.name || item?.type || 'Unnamed'),
+          ...incompatibleBindings.map((item) => item?.name || item?.type || 'Unnamed')
+        ];
+        const sampleNames = allSkippedItems
+          .slice(0, 3)
+          .join(', ');
+        const extraCount = Math.max(0, allSkippedItems.length - 3);
+        const message = `Add property will skip ${skippedSelectionCount} selection item${skippedSelectionCount === 1 ? '' : 's'}${sampleNames ? ` (${sampleNames}${extraCount > 0 ? ` +${extraCount} more` : ''})` : ''}. Continue?`;
+        if (!window.confirm(message)) {
+          updatePromptDrawerSubmitState(values);
+          return;
+        }
+      } else if (incompatibleBindings.length > 0) {
+        const sampleNames = incompatibleBindings
+          .slice(0, 3)
+          .map((item) => item?.name || item?.type || 'Unnamed')
+          .join(', ');
+        const extraCount = Math.max(0, incompatibleBindings.length - 3);
+        const message = `Add property will skip ${incompatibleBindings.length} incompatible selection item${incompatibleBindings.length === 1 ? '' : 's'}${sampleNames ? ` (${sampleNames}${extraCount > 0 ? ` +${extraCount} more` : ''})` : ''}. Continue?`;
+        if (!window.confirm(message)) {
+          updatePromptDrawerSubmitState(values);
+          return;
+        }
+      }
+
+      let figmaPropertyType = 'BOOLEAN';
+      let defaultValue = values.booleanDefault === true;
+      if (propertyKind === 'text') {
+        figmaPropertyType = 'TEXT';
+        defaultValue = String(values.textDefault ?? '');
+      } else if (propertyKind === 'instanceSwap') {
+        figmaPropertyType = 'INSTANCE_SWAP';
+        const instanceOption = (Array.isArray(selectionContext.instanceOptions) ? selectionContext.instanceOptions : [])
+          .find((option) => String(option.value || '') === String(values.instanceDefault || ''));
+        if (!instanceOption || !instanceOption.componentId) {
+          showToast('Refresh the instance list and choose a valid default instance.', 'error');
+          updatePromptDrawerSubmitState(values);
+          return;
+        }
+        defaultValue = String(instanceOption.componentId);
+      }
+
+      showThinkingIndicator('Adding component property...');
+      setSendButtonMode(true);
+
+      try {
+        const addCommands = targetCommands.map((target) => ({
+          action: 'editComponentProperty',
+          nodeId: target.id,
+          propertyName,
+          type: figmaPropertyType,
+          defaultValue,
+          propertyAction: 'add'
+        }));
+        const bindCommands = compatibleBindings.map((binding) => ({
+          action: 'bindComponentProperty',
+          nodeId: binding.nodeId,
+          propertyName,
+          bindType
+        }));
+        const commands = [...addCommands, ...bindCommands];
+
+        const execResult = await executeCommands(commands);
+        const commandResults = Array.isArray(execResult?.commands) ? execResult.commands : [];
+        const addedCount = commandResults.filter((result) => result?.action === 'editComponentProperty' && result.status === 'success').length;
+        const skippedCount = commandResults.filter((result) => result?.action === 'editComponentProperty' && result.status === 'skipped').length;
+        const bindCount = commandResults.filter((result) => result?.action === 'bindComponentProperty' && result.status === 'success').length;
+        const failedCount = commandResults.filter((result) =>
+          (result?.action === 'editComponentProperty' || result?.action === 'bindComponentProperty') && result.status === 'failed'
+        ).length;
+
+        if (bindCount === 0 && failedCount > 0) {
+          const errorMessage = execResult?.error?.message || 'Failed to add property.';
+          showToast(errorMessage, 'error');
+          return;
+        }
+
+        const summaryParts = [];
+        summaryParts.push(`Bound on ${bindCount} selection${bindCount === 1 ? '' : 's'}`);
+        summaryParts.push(`Added on ${addedCount} target${addedCount === 1 ? '' : 's'}`);
+        if (skippedCount > 0) {
+          summaryParts.push(`${skippedCount} already existed`);
+        }
+        if (skippedSelectionCount > 0) {
+          summaryParts.push(`${skippedSelectionCount} skipped`);
+        }
+        if (failedCount > 0) {
+          summaryParts.push(`${failedCount} failed`);
+        }
+
+        showToast(summaryParts.join(' • '), failedCount > 0 ? 'warning' : 'success');
+        if (addedCount > 0 || skippedCount > 0) {
+          closePromptDrawer();
+        }
+      } catch (error) {
+        console.error('Add property action failed:', error);
+        showToast(error.message || `Failed to run ${actionMeta?.name || 'Add property'}`, 'error');
+      } finally {
+        removeThinkingIndicator();
+        setSendButtonMode(false);
+        updatePromptDrawerSubmitState(values);
+      }
+    }
+
     async function runCreateButtonComponentSetAction(values, actionMeta) {
       const btnTypes = Array.isArray(values.btnType) ? values.btnType : [values.btnType || 'solid'];
       const btnStyles = Array.isArray(values.buttonStyle) ? values.buttonStyle : [values.buttonStyle || 'primary'];
@@ -23387,11 +23720,15 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         ? String(values.customPattern ?? '').trim()
         : '/\\r?\\n/g';
       const wrapInAutoLayout = splitMode === 'autolayout';
+      const removeLeadingSpace = values.removeLeadingSpace === true;
+      const keepInputCharacter = splitMode === 'custom' && values.keepInputCharacter === true;
       const commands = textNodes.map((node) => ({
         action: 'splitText',
         nodeId: node.id,
         delimiter,
-        keepDelimiter: false,
+        keepDelimiter: keepInputCharacter,
+        attachDelimiterToPrevious: keepInputCharacter,
+        trimLeadingSpaces: removeLeadingSpace,
         direction: 'VERTICAL',
         spacing: 0,
         ...(wrapInAutoLayout ? { wrapInAutoLayout: true } : {}),
@@ -23806,6 +24143,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'textLinkColor':
           await runTextLinkColorAction(values, actionMeta);
+          break;
+        case 'addProperty':
+          await runAddPropertyAction(values, actionMeta);
           break;
         case 'removeUnusedProperties':
           await runRemoveUnusedPropertiesAction(values, actionMeta);
@@ -25427,7 +25767,8 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           const keepDrawerOpenForCreateIcon = action.directAction === 'createIcon' && values.showResultsInDrawer !== false;
           const keepDrawerOpenForImageToAscii = action.directAction === 'imageToAscii';
           const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForRealtimeAction) {
+          const keepDrawerOpenForAddProperty = action.directAction === 'addProperty';
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -25445,7 +25786,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForRealtimeAction) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             promptDrawerSubmit.textContent = 'Run Action';
@@ -25505,8 +25846,8 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         showToast('Failed to run action: ' + error.message, 'error');
       } finally {
         isSubmittingPrompt = false;
-        promptDrawerSubmit.disabled = false;
         promptDrawerSubmit.textContent = 'Run Action';
+        updatePromptDrawerSubmitState();
       }
     }
 
@@ -35429,7 +35770,9 @@ Selection data now includes "fillsDetailed" array with gradient info including t
   - Splits a text layer into multiple layers based on a delimiter (string or regex like "/[①-⑥]/").
   - direction: "VERTICAL" (stacks downward) or "HORIZONTAL" (stacks rightward).
   - spacing: gap between new layers.
-  - keepDelimiter: if true, the delimiter is kept as part of the next segment.
+  - keepDelimiter: if true, the matched delimiter is preserved.
+  - attachDelimiterToPrevious: if true together with keepDelimiter, the delimiter stays at the end of the previous segment.
+  - trimLeadingSpaces: if true, removes leading half-width/full-width spaces from each split segment.
   - EXACT STYLE PRESERVATION: Character-level formatting (colors, fonts, sizes) is automatically preserved for each split part.
 - setFontSize: { "action": "setFontSize", "nodeId": "xxx", "size": 24 }
 - setTextAlign: { "action": "setTextAlign", "nodeId": "xxx", "align": "LEFT/CENTER/RIGHT/JUSTIFIED" }

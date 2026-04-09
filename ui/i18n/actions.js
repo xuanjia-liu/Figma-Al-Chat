@@ -1562,6 +1562,12 @@ const exactTranslations = {
     'By line breaks → auto layout': '改行で分割 → オートレイアウト',
     'Split by symbol or regex': '記号または正規表現で分割',
     'Pattern': 'パターン',
+    'Remove the space before the text': 'テキスト前の空白を削除',
+    'Removes leading half-width/full-width spaces from each split result.':
+      '分割後の各テキスト先頭にある半角/全角スペースを削除します。',
+    'Keep the input character': '入力した記号を残す',
+    'Keeps the matched symbol or regex with the text before it.':
+      '一致した記号または正規表現を、前のテキストの末尾に残します。',
     'e.g. , or /\\s*,\\s*/g': '例: , または /\\s*,\\s*/g',
     'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).':
       'リテラル、または /パターン/フラグ形式の正規表現（Agent の splitText と同じ）。',
@@ -2028,6 +2034,12 @@ const exactTranslations = {
     'By line breaks → auto layout': '按换行拆分 → 自动布局',
     'Split by symbol or regex': '按符号或正则拆分',
     'Pattern': '模式',
+    'Remove the space before the text': '移除文本前的空格',
+    'Removes leading half-width/full-width spaces from each split result.':
+      '移除每段拆分结果开头的半角/全角空格。',
+    'Keep the input character': '保留输入的字符',
+    'Keeps the matched symbol or regex with the text before it.':
+      '将匹配到的符号或正则保留在前一段文本末尾。',
     'e.g. , or /\\s*,\\s*/g': '例如 , 或 /\\s*,\\s*/g',
     'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).':
       '直接输入字符，或使用 /pattern/flags 正则（与 Agent 的 splitText 相同）。',

@@ -424,6 +424,21 @@ export const uiLayoutTasks = [
               hint: 'Literal characters, or /pattern/flags for RegExp (same as Agent splitText).',
               showWhen: { field: 'splitMode', equals: 'custom' },
             },
+            {
+              key: 'removeLeadingSpace',
+              type: 'checkbox',
+              label: 'Remove the space before the text',
+              default: false,
+              hint: 'Removes leading half-width/full-width spaces from each split result.',
+            },
+            {
+              key: 'keepInputCharacter',
+              type: 'checkbox',
+              label: 'Keep the input character',
+              default: false,
+              hint: 'Keeps the matched symbol or regex with the text before it.',
+              showWhen: { field: 'splitMode', equals: 'custom' },
+            },
           ],
         },
 {
@@ -1183,6 +1198,60 @@ Return ONLY JSON.`;
             { key: 'squareSize', type: 'number', label: 'Square size (px)', default: 50, min: 1, max: 10000, showWhen: { field: 'mode', equals: 'squareGrid' } },
             { key: 'color', type: 'color', label: 'Line Color', default: '#E5E7EB' },
             { key: 'strokeWeight', type: 'number', label: 'Stroke Weight', default: 1, min: 0.5, step: 0.5 },
+          ]
+        },
+{
+          name: 'Add property',
+          desc: 'Batch add component properties to the selection',
+          help: 'Adds a Boolean, Text, or Instance Swap property to every valid component or component set in the current selection. Mixed selections are allowed and unsupported items will be warned about before running.',
+          directAction: 'addProperty',
+          fields: [
+            {
+              key: 'propertyKind',
+              type: 'select',
+              label: 'Property Type',
+              default: 'boolean',
+              options: [
+                { value: 'boolean', label: 'Boolean Property' },
+                { value: 'text', label: 'Text Property' },
+                { value: 'instanceSwap', label: 'Instance Swap Property' }
+              ]
+            },
+            {
+              key: 'propertyName',
+              type: 'text',
+              label: 'Property Name',
+              placeholder: 'e.g., Show Icon, Label, Leading Icon'
+            },
+            {
+              key: 'booleanDefault',
+              type: 'checkbox',
+              label: 'Default Value',
+              default: true,
+              showWhen: { field: 'propertyKind', equals: 'boolean' }
+            },
+            {
+              key: 'textDefault',
+              type: 'text',
+              label: 'Default String',
+              default: '',
+              placeholder: 'e.g., Button',
+              showWhen: { field: 'propertyKind', equals: 'text' }
+            },
+            {
+              key: 'instanceDefault',
+              type: 'select',
+              label: 'Default Instance',
+              searchable: true,
+              default: '',
+              options: [],
+              hint: 'Choose a concrete component from the current selection.',
+              actionButton: {
+                action: 'refresh-add-property-fields',
+                label: 'Refresh'
+              },
+              showWhen: { field: 'propertyKind', equals: 'instanceSwap' }
+            }
           ]
         },
 {
