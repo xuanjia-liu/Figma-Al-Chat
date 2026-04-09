@@ -24529,6 +24529,21 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    function readSwapColorsIncludeFlag(fieldKey, values, defaultValue = true) {
+      try {
+        const checkbox = promptDrawerFields?.querySelector(`input[type="checkbox"][data-field-key="${fieldKey}"]`);
+        if (checkbox) {
+          return !!checkbox.checked;
+        }
+      } catch (_err) {
+        // ignore selector issues
+      }
+      const raw = values[fieldKey];
+      if (raw === false || raw === 'false' || raw === 0 || raw === '0') return false;
+      if (raw === true || raw === 'true' || raw === 1 || raw === '1') return true;
+      return defaultValue;
+    }
+
     async function runSwapColorsAction(values, actionMeta) {
       const fromTarget = normalizePromptColorSelection(values.fromColor || '');
       const toTarget = normalizePromptColorSelection(values.toColor || '');
@@ -24546,15 +24561,19 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         return;
       }
 
+      const includeGradients = readSwapColorsIncludeFlag('includeGradients', values, true);
+      const includeStrokes = readSwapColorsIncludeFlag('includeStrokes', values, true);
+      const includeEffects = readSwapColorsIncludeFlag('includeEffects', values, true);
+
       const commands = selection.map(node => ({
         action: 'swapColorTargets',
         nodeId: node.id,
         swapMode,
         fromTarget,
         toTarget,
-        includeGradients: values.includeGradients !== false,
-        includeStrokes: values.includeStrokes !== false,
-        includeEffects: values.includeEffects !== false
+        includeGradients,
+        includeStrokes,
+        includeEffects
       }));
 
       const execResult = await executeCommands(commands);

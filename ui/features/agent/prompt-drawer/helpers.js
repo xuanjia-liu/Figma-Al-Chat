@@ -336,6 +336,18 @@ export function createPromptDrawerHelpers({
       values.contextVariables = JSON.parse(JSON.stringify(personaContextVars));
     }
 
+    // Checkboxes must win over any other control that reused the same data-field-key (document order
+    // can leave a stale value from a non-checkbox element).
+    promptDrawerFields.querySelectorAll('input[type="checkbox"][data-field-key]').forEach((el) => {
+      const key = el.dataset.fieldKey;
+      if (!key) return;
+      const wrapper = el.closest('.prompt-field');
+      if (wrapper && wrapper.dataset.showWhenField && wrapper.style.display === 'none') {
+        return;
+      }
+      values[key] = el.checked;
+    });
+
     return values;
   }
 
