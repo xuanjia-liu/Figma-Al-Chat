@@ -208,13 +208,16 @@ const DEFAULT_ADJUST_OPTIONS = {
   innerShadow: true,
 };
 const DEFAULT_PRESERVE_OPTIONS = {
-  white: false,
-  black: false,
-  grayscale: false,
+  white: true,
+  black: true,
+  grayscale: true,
 };
 const MAX_OKLCH_CHROMA = 0.4;
-const HANDLE_RADIUS = 10;
+const MIN_HANDLE_RADIUS = 8;
+const MAX_HANDLE_RADIUS = 14;
 const INNER_RING = 0.15;
+const MAX_MERGE_NEAR = 100;
+const MAX_MERGE_HUE_DELTA = 48;
 
 function isNear(value, target, epsilon = 0.0001) {
   return Math.abs(value - target) <= epsilon;
@@ -259,6 +262,9 @@ export function mountHueShift(container, options = {}) {
   let colorMode = 'hsl';
   let linked = true;
   let colors = [];
+  let mergeNear = 0;
+  let mergeGroupingBasis = [];
+  let mergeGroupDefs = [];
   let activePaletteIndex = -1;
   let adjustOptions = { ...DEFAULT_ADJUST_OPTIONS };
   let preserveOptions = { ...DEFAULT_PRESERVE_OPTIONS };
@@ -373,7 +379,7 @@ export function mountHueShift(container, options = {}) {
   for (const def of preserveDefs) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'prompt-custom-select-option';
+    button.className = `prompt-custom-select-option${preserveOptions[def.key] ? ' selected' : ''}`;
     button.textContent = def.label;
     button.addEventListener('click', () => {
       preserveOptions[def.key] = !preserveOptions[def.key];
@@ -485,6 +491,162 @@ export function mountHueShift(container, options = {}) {
 
   function getCurrentHex(color) {
     return rgbToHex(color.currentRgb.r, color.currentRgb.g, color.currentRgb.b);
+  }
+
+  function getHandleRadius() {
+    const t = clamp(mergeNear / MAX_MERGE_NEAR, 0, 1);
+    return MIN_HANDLE_RADIUS + (MAX_HANDLE_RADIUS - MIN_HANDLE_RADIUS) * t;
+  }
+
+  function getMergeThresholdDegrees() {
+    return clamp((mergeNear / MAX_MERGE_NEAR) * MAX_MERGE_HUE_DELTA, 0, MAX_MERGE_HUE_DELTA);
+  }
+
+  function getColorWheelModel(index) {
+    const model = getModeModel(colors[index].currentRgb, colorMode);
+    return { index, h: model.h, s: model.s };
+  }
+
+  function materializeDisplayGroups(groupDefs) {
+    return (groupDefs || [])
+      .map((groupDef) => {
+        const indices = (groupDef.indices || []).filter((index) => index >= 0 && index < colors.length);
+        if (indices.length === 0) return null;
+        const entries = indices.map((index) => getColorWheelModel(index));
+        return {
+          indices: [...indices],
+          representativeIndex: indices.includes(groupDef.representativeIndex)
+            ? groupDef.representativeIndex
+            : indices[0],
+          h: circularAverage(entries.map((entry) => entry.h)),
+          s: entries.reduce((sum, entry) => sum + entry.s, 0) / entries.length,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function rebuildMergeGroupsFromBasis() {
+    const baseEntries = mergeGroupingBasis
+      .map((entry, index) => ({
+        index,
+        h: entry.h,
+        s: entry.s,
+      }))
+      .filter((entry) => entry.index < colors.length);
+    const mergeThreshold = getMergeThresholdDegrees();
+
+    if (baseEntries.length === 0) {
+      mergeGroupDefs = [];
+      return;
+    }
+
+    if (mergeThreshold <= 0.0001 || baseEntries.length <= 1) {
+      mergeGroupDefs = baseEntries.map((entry) => ({
+        indices: [entry.index],
+        representativeIndex: entry.index,
+      }));
+      return;
+    }
+
+    const sorted = [...baseEntries].sort((a, b) => a.h - b.h);
+    const groups = [];
+    let currentGroup = [sorted[0]];
+
+    for (let i = 1; i < sorted.length; i += 1) {
+      const previous = sorted[i - 1];
+      const next = sorted[i];
+      const delta = Math.abs(angularDelta(previous.h, next.h));
+      if (delta <= mergeThreshold) {
+        currentGroup.push(next);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [next];
+      }
+    }
+    groups.push(currentGroup);
+
+    if (groups.length > 1) {
+      const first = groups[0][0];
+      const lastGroup = groups[groups.length - 1];
+      const last = lastGroup[lastGroup.length - 1];
+      const wrapDelta = Math.abs(angularDelta(last.h, first.h));
+      if (wrapDelta <= mergeThreshold) {
+        groups[0] = [...lastGroup, ...groups[0]];
+        groups.pop();
+      }
+    }
+
+    mergeGroupDefs = groups.map((group) => {
+      const originalOrderIndices = group.map((entry) => entry.index).sort((a, b) => a - b);
+      return {
+        indices: originalOrderIndices,
+        representativeIndex: originalOrderIndices[0],
+      };
+    });
+  }
+
+  function snapshotMergeGroupingBasis() {
+    if (colorMode === 'oklch' || colors.length === 0) {
+      mergeGroupingBasis = [];
+      mergeGroupDefs = [];
+      return;
+    }
+    mergeGroupingBasis = colors.map((_, index) => {
+      const model = getColorWheelModel(index);
+      return { h: model.h, s: model.s };
+    });
+    rebuildMergeGroupsFromBasis();
+  }
+
+  function ensureMergeGroupDefs() {
+    if (colorMode === 'oklch' || colors.length === 0) return [];
+    if (mergeGroupingBasis.length !== colors.length) {
+      snapshotMergeGroupingBasis();
+    }
+    return mergeGroupDefs;
+  }
+
+  function getDisplayHandleGroups() {
+    if (colorMode === 'oklch' || colors.length === 0) return [];
+    return materializeDisplayGroups(ensureMergeGroupDefs());
+  }
+
+  function getRenderableHandleGroups() {
+    return getDisplayHandleGroups().map((group) => {
+      const pos = wheelModelToPos(group.h, group.s);
+      return {
+        ...group,
+        x: pos.x,
+        y: pos.y,
+      };
+    });
+  }
+
+  function getSelectedGroupIndex(groups) {
+    if (linked || activePaletteIndex < 0) return -1;
+    return groups.findIndex((group) => group.indices.includes(activePaletteIndex));
+  }
+
+  function getDisplayHandleGroupAt(x, y) {
+    const groups = getRenderableHandleGroups();
+    const handleRadius = getHandleRadius();
+    const selectedGroupIndex = getSelectedGroupIndex(groups);
+    const groupOrder = groups.map((_, index) => index);
+    if (selectedGroupIndex >= 0) {
+      groupOrder.splice(selectedGroupIndex, 1);
+      groupOrder.push(selectedGroupIndex);
+    }
+
+    for (let orderIndex = groupOrder.length - 1; orderIndex >= 0; orderIndex -= 1) {
+      const index = groupOrder[orderIndex];
+      const group = groups[index];
+      const dx = x - group.x;
+      const dy = y - group.y;
+      if (dx * dx + dy * dy <= (handleRadius + 4) * (handleRadius + 4)) {
+        return group;
+      }
+    }
+    return null;
   }
 
   function syncPaletteSelect() {
@@ -701,9 +863,47 @@ export function mountHueShift(container, options = {}) {
     controlsWrap.appendChild(row);
   }
 
+  function createMergeControl() {
+    const row = document.createElement('div');
+    row.className = 'hue-shift-slider-row';
+
+    const label = document.createElement('span');
+    label.className = 'hue-shift-slider-label hue-shift-slider-label--wide';
+    label.textContent = 'Merge Near';
+    row.appendChild(label);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.className = 'hue-shift-slider';
+    slider.min = '0';
+    slider.max = String(MAX_MERGE_NEAR);
+    slider.step = '1';
+    slider.value = String(mergeNear);
+    row.appendChild(slider);
+
+    const valueEl = document.createElement('span');
+    valueEl.className = 'hue-shift-slider-value hue-shift-slider-value--wide';
+    valueEl.textContent = `${Math.round(mergeNear)}`;
+    row.appendChild(valueEl);
+
+    slider.addEventListener('input', () => {
+      mergeNear = Number(slider.value);
+      snapshotMergeGroupingBasis();
+      valueEl.textContent = `${Math.round(mergeNear)}`;
+      drawOverlay();
+    });
+
+    controlEls.mergeNear = { slider, valueEl };
+    controlsWrap.appendChild(row);
+  }
+
   function renderModeControls() {
     controlsWrap.innerHTML = '';
     controlEls = {};
+
+    if (colorMode !== 'oklch') {
+      createMergeControl();
+    }
 
     if (colorMode === 'oklch') {
       createSliderControl({ key: 'l', label: 'Lightness', min: 0, max: 100, step: 1 });
@@ -726,6 +926,11 @@ export function mountHueShift(container, options = {}) {
     const model = getDisplayModel();
 
     Object.entries(controlEls).forEach(([key, entry]) => {
+      if (key === 'mergeNear') {
+        entry.slider.value = String(mergeNear);
+        entry.valueEl.textContent = `${Math.round(mergeNear)}`;
+        return;
+      }
       let value = 0;
       if (colorMode === 'oklch') {
         value = key === 'l' ? model.l : key === 'c' ? model.c : model.h;
@@ -761,6 +966,7 @@ export function mountHueShift(container, options = {}) {
       originalHex: hex,
       currentRgb: existingByOriginal.get(hex) || hexToRgb(hex),
     }));
+    snapshotMergeGroupingBasis();
 
     if (!linked && activePaletteIndex < 0 && colors.length > 0) {
       activePaletteIndex = 0;
@@ -937,14 +1143,16 @@ export function mountHueShift(container, options = {}) {
     ctx.clearRect(0, 0, wheelSize, wheelSize);
     if (colorMode === 'oklch' || colors.length === 0) return;
 
+    const groups = getRenderableHandleGroups();
+    const handleRadius = getHandleRadius();
+    const selectedGroupIndex = getSelectedGroupIndex(groups);
+
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    colors.forEach((color) => {
-      const model = getModeModel(color.currentRgb, colorMode);
-      const pos = wheelModelToPos(model.h, model.s);
+    groups.forEach((group) => {
       ctx.beginPath();
       ctx.moveTo(centerX, centerY);
-      ctx.lineTo(pos.x, pos.y);
+      ctx.lineTo(group.x, group.y);
       ctx.stroke();
     });
 
@@ -956,16 +1164,15 @@ export function mountHueShift(container, options = {}) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    const handleEntries = colors.map((color, index) => ({ color, index }));
-    if (!linked && activePaletteIndex >= 0 && activePaletteIndex < handleEntries.length) {
-      const [selectedEntry] = handleEntries.splice(activePaletteIndex, 1);
+    const handleEntries = groups.map((group, index) => ({ group, index }));
+    if (selectedGroupIndex >= 0 && selectedGroupIndex < handleEntries.length) {
+      const [selectedEntry] = handleEntries.splice(selectedGroupIndex, 1);
       handleEntries.push(selectedEntry);
     }
 
-    handleEntries.forEach(({ color, index }) => {
-      const model = getModeModel(color.currentRgb, colorMode);
-      const pos = wheelModelToPos(model.h, model.s);
-      const isSelected = activePaletteIndex === index && !linked;
+    handleEntries.forEach(({ group, index }) => {
+      const representativeColor = colors[group.representativeIndex];
+      const isSelected = selectedGroupIndex === index && !linked;
 
       ctx.save();
       ctx.shadowColor = isSelected ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.14)';
@@ -973,8 +1180,8 @@ export function mountHueShift(container, options = {}) {
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = isSelected ? 4 : 2;
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = getCurrentHex(color);
+      ctx.arc(group.x, group.y, handleRadius, 0, Math.PI * 2);
+      ctx.fillStyle = getCurrentHex(representativeColor);
       ctx.fill();
       ctx.shadowColor = 'transparent';
       ctx.strokeStyle = isSelected ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.5)';
@@ -985,16 +1192,7 @@ export function mountHueShift(container, options = {}) {
   }
 
   function findHandleAt(x, y) {
-    for (let index = colors.length - 1; index >= 0; index--) {
-      const model = getModeModel(colors[index].currentRgb, colorMode);
-      const pos = wheelModelToPos(model.h, model.s);
-      const dx = x - pos.x;
-      const dy = y - pos.y;
-      if (dx * dx + dy * dy <= (HANDLE_RADIUS + 4) * (HANDLE_RADIUS + 4)) {
-        return index;
-      }
-    }
-    return -1;
+    return getDisplayHandleGroupAt(x, y)?.representativeIndex ?? -1;
   }
 
   function onPointerDown(event) {
@@ -1002,17 +1200,19 @@ export function mountHueShift(container, options = {}) {
     const rect = overlayCanvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const handleIndex = findHandleAt(x, y);
-    if (handleIndex < 0) return;
+    const handleGroup = getDisplayHandleGroupAt(x, y);
+    if (!handleGroup) return;
+    const handleIndex = handleGroup.representativeIndex;
 
     const pointerModel = posToWheelModel(x, y);
+    const targetIndices = linked ? getControlTargetIndices(handleIndex) : [...handleGroup.indices];
     dragSession = {
       pointerId: event.pointerId,
       handleIndex,
       startPointerModel: pointerModel,
-      targetIndices: getControlTargetIndices(handleIndex),
+      targetIndices,
       models: new Map(
-        getControlTargetIndices(handleIndex).map((index) => [index, { ...getModeModel(colors[index].currentRgb, colorMode) }])
+        targetIndices.map((index) => [index, { ...getModeModel(colors[index].currentRgb, colorMode) }])
       ),
     };
     activePaletteIndex = linked ? activePaletteIndex : handleIndex;
@@ -1060,6 +1260,7 @@ export function mountHueShift(container, options = {}) {
       button.classList.toggle('active', mode === colorMode);
     });
     wheelWrap.style.display = colorMode === 'oklch' ? 'none' : '';
+    snapshotMergeGroupingBasis();
     if (colorMode !== 'oklch') {
       initWheel();
     }
