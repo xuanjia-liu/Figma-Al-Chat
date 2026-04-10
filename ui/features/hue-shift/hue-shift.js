@@ -1250,7 +1250,13 @@ export function mountHueShift(container, options = {}) {
         event.preventDefault();
         event.stopPropagation();
         activePaletteIndex = index;
-        openColorPickerPopover(swatch.getBoundingClientRect(), getCurrentHex(color), (nextHex) => {
+        const anchorRect = {
+          left: event.clientX,
+          right: event.clientX,
+          top: event.clientY,
+          bottom: event.clientY,
+        };
+        openColorPickerPopover(anchorRect, getCurrentHex(color), (nextHex) => {
           applyColorToIndices([index], nextHex);
           refreshSelectionUI();
         });
