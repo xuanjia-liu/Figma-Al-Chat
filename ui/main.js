@@ -16859,6 +16859,7 @@ Generate ONLY the reply text, nothing else.`;
             disposeHueShift = mountHueShift(hueMount, {
               postMessage: (msg) => parent.postMessage({ pluginMessage: msg }, '*'),
               showToast,
+              tu,
               onValuesChanged: () => {
                 if (isRealtimePromptAction(currentPromptAction)) {
                   scheduleRealtimePromptAction();
@@ -16883,6 +16884,7 @@ Generate ONLY the reply text, nothing else.`;
                 disposeHueShift = mountHueShift(mountEl, {
                   postMessage: (msg) => parent.postMessage({ pluginMessage: msg }, '*'),
                   showToast,
+                  tu,
                   onValuesChanged: () => {
                     if (isRealtimePromptAction(currentPromptAction)) {
                       scheduleRealtimePromptAction();

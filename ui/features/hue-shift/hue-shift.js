@@ -253,10 +253,11 @@ function modelToRgb(mode, model) {
 }
 
 export function mountHueShift(container, options = {}) {
-  const { postMessage, showToast, onValuesChanged } = options;
+  const { postMessage, showToast, onValuesChanged, tu } = options;
   const sendMessage = typeof postMessage === 'function'
     ? postMessage
     : (msg) => parent.postMessage({ pluginMessage: msg }, '*');
+  const translate = typeof tu === 'function' ? tu : (key, fallback) => fallback || key;
 
   let disposed = false;
   let colorMode = 'hsl';
@@ -304,7 +305,7 @@ export function mountHueShift(container, options = {}) {
   topActions.className = 'hue-shift-toolbar-right';
   const resetBtn = document.createElement('button');
   resetBtn.className = 'hue-shift-btn';
-  resetBtn.textContent = 'Reset';
+  resetBtn.textContent = translate('actions.hueShift.reset', 'Reset');
   resetBtn.addEventListener('click', () => {
     resetColorsToOriginal();
     notifyChanged();
@@ -342,14 +343,15 @@ export function mountHueShift(container, options = {}) {
   }
 
   const targetGroup = createOptionGroup('Adjust');
+  targetGroup.group.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.adjust', 'Adjust');
   const targetRow = targetGroup.optionsEl;
   container.appendChild(targetGroup.group);
 
   const targetDefs = [
-    { key: 'fills', label: 'Fills' },
-    { key: 'strokes', label: 'Strokes' },
-    { key: 'dropShadow', label: 'Drop shadow' },
-    { key: 'innerShadow', label: 'Inner shadow' },
+    { key: 'fills', label: translate('actions.hueShift.fills', 'Fills') },
+    { key: 'strokes', label: translate('actions.hueShift.strokes', 'Strokes') },
+    { key: 'dropShadow', label: translate('actions.hueShift.dropShadow', 'Drop shadow') },
+    { key: 'innerShadow', label: translate('actions.hueShift.innerShadow', 'Inner shadow') },
   ];
 
   for (const def of targetDefs) {
@@ -367,13 +369,14 @@ export function mountHueShift(container, options = {}) {
   }
 
   const preserveGroup = createOptionGroup('Preserve Color');
+  preserveGroup.group.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.preserveColor', 'Preserve Color');
   const preserveRow = preserveGroup.optionsEl;
   container.appendChild(preserveGroup.group);
 
   const preserveDefs = [
-    { key: 'white', label: 'White' },
-    { key: 'black', label: 'Black' },
-    { key: 'grayscale', label: 'Grayscale' },
+    { key: 'white', label: translate('actions.hueShift.white', 'White') },
+    { key: 'black', label: translate('actions.hueShift.black', 'Black') },
+    { key: 'grayscale', label: translate('actions.hueShift.grayscale', 'Grayscale') },
   ];
 
   for (const def of preserveDefs) {
@@ -395,7 +398,7 @@ export function mountHueShift(container, options = {}) {
 
   const paletteLabel = document.createElement('label');
   paletteLabel.className = 'hue-shift-palette-label';
-  paletteLabel.textContent = 'Palette';
+  paletteLabel.textContent = translate('actions.hueShift.palette', 'Palette');
 
   paletteSelect = document.createElement('select');
   paletteSelect.className = 'hue-shift-palette-select';
@@ -458,7 +461,7 @@ export function mountHueShift(container, options = {}) {
   const unlockPaletteBtn = document.createElement('button');
   unlockPaletteBtn.type = 'button';
   unlockPaletteBtn.className = 'hue-shift-btn hue-shift-palette-mask-btn';
-  unlockPaletteBtn.textContent = 'Unlock single select';
+  unlockPaletteBtn.textContent = translate('actions.hueShift.unlockSingleSelect', 'Unlock single select');
   unlockPaletteBtn.addEventListener('click', () => {
     linked = false;
     if (activePaletteIndex < 0 && colors.length > 0) {
@@ -655,14 +658,14 @@ export function mountHueShift(container, options = {}) {
 
     const allOption = document.createElement('option');
     allOption.value = 'all';
-    allOption.textContent = 'All';
+    allOption.textContent = translate('actions.hueShift.all', 'All');
     allOption.disabled = !linked;
     paletteSelect.appendChild(allOption);
 
     colors.forEach((color, index) => {
       const option = document.createElement('option');
       option.value = String(index);
-      option.textContent = `Color ${index + 1} • ${getCurrentHex(color)}`;
+      option.textContent = `${translate('actions.hueShift.color', 'Color')} ${index + 1} • ${getCurrentHex(color)}`;
       paletteSelect.appendChild(option);
     });
 
@@ -689,10 +692,14 @@ export function mountHueShift(container, options = {}) {
       input.checked = linked;
     }
     if (linkLabelText) {
-      linkLabelText.textContent = linked ? 'Linked' : 'Single';
+      linkLabelText.textContent = linked
+        ? translate('actions.hueShift.linked', 'Linked')
+        : translate('actions.hueShift.single', 'Single');
     }
     if (linkBtn) {
-      linkBtn.title = linked ? 'Linked palette adjustments' : 'Adjust one palette color';
+      linkBtn.title = linked
+        ? translate('actions.hueShift.linkedTitle', 'Linked palette adjustments')
+        : translate('actions.hueShift.singleTitle', 'Adjust one palette color');
     }
   }
 
@@ -869,7 +876,7 @@ export function mountHueShift(container, options = {}) {
 
     const label = document.createElement('span');
     label.className = 'hue-shift-slider-label hue-shift-slider-label--wide';
-    label.textContent = 'Merge Near';
+    label.textContent = translate('actions.hueShift.mergeNear', 'Merge Near');
     row.appendChild(label);
 
     const slider = document.createElement('input');
@@ -901,25 +908,23 @@ export function mountHueShift(container, options = {}) {
     controlsWrap.innerHTML = '';
     controlEls = {};
 
-    if (colorMode !== 'oklch') {
-      createMergeControl();
-    }
-
     if (colorMode === 'oklch') {
-      createSliderControl({ key: 'l', label: 'Lightness', min: 0, max: 100, step: 1 });
-      createSliderControl({ key: 'c', label: 'Chroma', min: 0, max: MAX_OKLCH_CHROMA, step: 0.001 });
-      createSliderControl({ key: 'h', label: 'Hue', min: 0, max: 360, step: 1 });
+      createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 });
+      createSliderControl({ key: 'c', label: translate('actions.hueShift.chroma', 'Chroma'), min: 0, max: MAX_OKLCH_CHROMA, step: 0.001 });
+      createSliderControl({ key: 'h', label: translate('actions.hueShift.hue', 'Hue'), min: 0, max: 360, step: 1 });
       return;
     }
 
     if (colorMode === 'hsb') {
-      createSliderControl({ key: 's', label: 'Strength', min: 0, max: 100, step: 1 });
-      createSliderControl({ key: 'v', label: 'Brightness', min: 0, max: 100, step: 1 });
+      createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 });
+      createSliderControl({ key: 'v', label: translate('actions.hueShift.brightness', 'Brightness'), min: 0, max: 100, step: 1 });
+      createMergeControl();
       return;
     }
 
-    createSliderControl({ key: 's', label: 'Strength', min: 0, max: 100, step: 1 });
-    createSliderControl({ key: 'l', label: 'Lightness', min: 0, max: 100, step: 1 });
+    createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 });
+    createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 });
+    createMergeControl();
   }
 
   function updateControlDisplayValues() {
@@ -1013,7 +1018,7 @@ export function mountHueShift(container, options = {}) {
     if (colors.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'hue-shift-empty';
-      empty.textContent = 'No colors found for the current targets';
+      empty.textContent = translate('actions.hueShift.noColorsForTargets', 'No colors found for the current targets');
       paletteBar.appendChild(empty);
       if (paletteBarLockMask) {
         paletteBar.appendChild(paletteBarLockMask);
@@ -1288,7 +1293,7 @@ export function mountHueShift(container, options = {}) {
         updateControlDisplayValues();
         updateSelectionAffordances();
         if (requestMeta.notifyAfterLoad) notifyChanged();
-        if (!requestMeta.quiet && showToast) showToast('No colors found in selection', 'info');
+        if (!requestMeta.quiet && showToast) showToast(translate('actions.hueShift.noColorsInSelection', 'No colors found in selection'), 'info');
       }
       return;
     }
