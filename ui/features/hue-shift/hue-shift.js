@@ -282,12 +282,15 @@ export function mountHueShift(container, options = {}) {
   let centerX = 0;
   let centerY = 0;
   let controlsWrap = null;
+  let settingsPopover = null;
+  let settingsBtn = null;
   let paletteSelect = null;
   let linkBtn = null;
   let linkLabelText = null;
   let wheelWrap = null;
   let paletteBar = null;
   let paletteBarLockMask = null;
+  let settingsSections = {};
   let modeButtons = {};
   let targetButtons = {};
   let preserveButtons = {};
@@ -303,6 +306,13 @@ export function mountHueShift(container, options = {}) {
 
   const topActions = document.createElement('div');
   topActions.className = 'hue-shift-toolbar-right';
+  settingsBtn = document.createElement('button');
+  settingsBtn.type = 'button';
+  settingsBtn.className = 'hue-shift-btn hue-shift-settings-btn';
+  settingsBtn.title = translate('actions.hueShift.settings', 'Settings');
+  settingsBtn.setAttribute('aria-label', translate('actions.hueShift.settings', 'Settings'));
+  settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.33 3.09c.43-1.19 2.11-1.19 2.54 0l.3.85a1.8 1.8 0 0 0 2.2 1.11l.87-.23c1.22-.32 2.4.86 2.08 2.08l-.23.87a1.8 1.8 0 0 0 1.11 2.2l.85.3c1.19.43 1.19 2.11 0 2.54l-.85.3a1.8 1.8 0 0 0-1.11 2.2l.23.87c.32 1.22-.86 2.4-2.08 2.08l-.87-.23a1.8 1.8 0 0 0-2.2 1.11l-.3.85c-.43 1.19-2.11 1.19-2.54 0l-.3-.85a1.8 1.8 0 0 0-2.2-1.11l-.87.23c-1.22.32-2.4-.86-2.08-2.08l.23-.87a1.8 1.8 0 0 0-1.11-2.2l-.85-.3c-1.19-.43-1.19-2.11 0-2.54l.85-.3a1.8 1.8 0 0 0 1.11-2.2l-.23-.87c-.32-1.22.86-2.4 2.08-2.08l.87.23a1.8 1.8 0 0 0 2.2-1.11l.3-.85Z"/><circle cx="12" cy="12" r="3.2"/></svg>';
+  topActions.appendChild(settingsBtn);
   const resetBtn = document.createElement('button');
   resetBtn.className = 'hue-shift-btn';
   resetBtn.textContent = translate('actions.hueShift.reset', 'Reset');
@@ -345,7 +355,7 @@ export function mountHueShift(container, options = {}) {
   const targetGroup = createOptionGroup('Adjust');
   targetGroup.group.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.adjust', 'Adjust');
   const targetRow = targetGroup.optionsEl;
-  container.appendChild(targetGroup.group);
+  settingsSections.adjust = targetGroup.group;
 
   const targetDefs = [
     { key: 'fills', label: translate('actions.hueShift.fills', 'Fills') },
@@ -371,7 +381,7 @@ export function mountHueShift(container, options = {}) {
   const preserveGroup = createOptionGroup('Preserve Color');
   preserveGroup.group.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.preserveColor', 'Preserve Color');
   const preserveRow = preserveGroup.optionsEl;
-  container.appendChild(preserveGroup.group);
+  settingsSections.preserve = preserveGroup.group;
 
   const preserveDefs = [
     { key: 'white', label: translate('actions.hueShift.white', 'White') },
@@ -441,6 +451,13 @@ export function mountHueShift(container, options = {}) {
 
   container.appendChild(toolbar);
 
+  settingsPopover = document.createElement('div');
+  settingsPopover.className = 'hue-shift-settings-popover hidden';
+  settingsPopover.addEventListener('pointerdown', (event) => event.stopPropagation());
+  settingsPopover.appendChild(settingsSections.adjust);
+  settingsPopover.appendChild(settingsSections.preserve);
+  topActions.appendChild(settingsPopover);
+
   wheelWrap = document.createElement('div');
   wheelWrap.className = 'hue-shift-wheel-wrap';
 
@@ -477,6 +494,23 @@ export function mountHueShift(container, options = {}) {
   controlsWrap = document.createElement('div');
   controlsWrap.className = 'hue-shift-sliders';
   container.appendChild(controlsWrap);
+
+  function setSettingsOpen(isOpen) {
+    if (!settingsPopover || !settingsBtn) return;
+    settingsPopover.classList.toggle('hidden', !isOpen);
+    settingsBtn.classList.toggle('active', isOpen);
+    settingsBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  }
+
+  function toggleSettingsOpen() {
+    setSettingsOpen(settingsPopover?.classList.contains('hidden'));
+  }
+
+  settingsBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSettingsOpen();
+  });
 
   function notifyChanged() {
     if (typeof onValuesChanged === 'function') {
@@ -806,7 +840,7 @@ export function mountHueShift(container, options = {}) {
     row.appendChild(slider);
 
     const valueEl = document.createElement('span');
-    valueEl.className = 'hue-shift-slider-value hue-shift-slider-value--wide';
+    valueEl.className = 'hue-shift-slider-value';
     row.appendChild(valueEl);
 
     const beginSession = () => {
@@ -867,10 +901,10 @@ export function mountHueShift(container, options = {}) {
 
     controlEls[config.key] = { slider, valueEl };
     row.dataset.controlKey = config.key;
-    controlsWrap.appendChild(row);
+    return row;
   }
 
-  function createMergeControl() {
+  function createMergeControlRow() {
     const row = document.createElement('div');
     row.className = 'hue-shift-slider-row';
 
@@ -889,7 +923,7 @@ export function mountHueShift(container, options = {}) {
     row.appendChild(slider);
 
     const valueEl = document.createElement('span');
-    valueEl.className = 'hue-shift-slider-value hue-shift-slider-value--wide';
+    valueEl.className = 'hue-shift-slider-value';
     valueEl.textContent = `${Math.round(mergeNear)}`;
     row.appendChild(valueEl);
 
@@ -901,30 +935,43 @@ export function mountHueShift(container, options = {}) {
     });
 
     controlEls.mergeNear = { slider, valueEl };
-    controlsWrap.appendChild(row);
+    return row;
   }
 
   function renderModeControls() {
     controlsWrap.innerHTML = '';
     controlEls = {};
+    settingsSections.merge?.remove();
+    settingsSections.merge = null;
 
     if (colorMode === 'oklch') {
-      createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 });
-      createSliderControl({ key: 'c', label: translate('actions.hueShift.chroma', 'Chroma'), min: 0, max: MAX_OKLCH_CHROMA, step: 0.001 });
-      createSliderControl({ key: 'h', label: translate('actions.hueShift.hue', 'Hue'), min: 0, max: 360, step: 1 });
+      controlsWrap.appendChild(createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 }));
+      controlsWrap.appendChild(createSliderControl({ key: 'c', label: translate('actions.hueShift.chroma', 'Chroma'), min: 0, max: MAX_OKLCH_CHROMA, step: 0.001 }));
+      controlsWrap.appendChild(createSliderControl({ key: 'h', label: translate('actions.hueShift.hue', 'Hue'), min: 0, max: 360, step: 1 }));
+      setSettingsOpen(false);
       return;
     }
 
+    const mainRow = document.createElement('div');
+    mainRow.className = 'hue-shift-inline-controls';
     if (colorMode === 'hsb') {
-      createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 });
-      createSliderControl({ key: 'v', label: translate('actions.hueShift.brightness', 'Brightness'), min: 0, max: 100, step: 1 });
-      createMergeControl();
+      mainRow.appendChild(createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 }));
+      mainRow.appendChild(createSliderControl({ key: 'v', label: translate('actions.hueShift.brightness', 'Brightness'), min: 0, max: 100, step: 1 }));
+      controlsWrap.appendChild(mainRow);
+      settingsSections.merge = createOptionGroup(translate('actions.hueShift.mergeSettings', 'Merge Near')).group;
+      settingsSections.merge.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.mergeSettings', 'Merge Near');
+      settingsSections.merge.appendChild(createMergeControlRow());
+      settingsPopover.appendChild(settingsSections.merge);
       return;
     }
 
-    createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 });
-    createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 });
-    createMergeControl();
+    mainRow.appendChild(createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 }));
+    mainRow.appendChild(createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 }));
+    controlsWrap.appendChild(mainRow);
+    settingsSections.merge = createOptionGroup(translate('actions.hueShift.mergeSettings', 'Merge Near')).group;
+    settingsSections.merge.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.mergeSettings', 'Merge Near');
+    settingsSections.merge.appendChild(createMergeControlRow());
+    settingsPopover.appendChild(settingsSections.merge);
   }
 
   function updateControlDisplayValues() {
@@ -1319,6 +1366,14 @@ export function mountHueShift(container, options = {}) {
   overlayCanvas.addEventListener('pointercancel', onPointerUp);
   window.addEventListener('message', handlePluginMessage);
   window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointerdown', handleOutsidePointerDown);
+
+  function handleOutsidePointerDown(event) {
+    if (!settingsPopover || settingsPopover.classList.contains('hidden')) return;
+    const target = event.target;
+    if (settingsPopover.contains(target) || settingsBtn?.contains(target)) return;
+    setSettingsOpen(false);
+  }
 
   const resizeObserver = new ResizeObserver(() => {
     if (disposed) return;
@@ -1356,6 +1411,7 @@ export function mountHueShift(container, options = {}) {
     overlayCanvas.removeEventListener('pointercancel', onPointerUp);
     window.removeEventListener('message', handlePluginMessage);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointerdown', handleOutsidePointerDown);
     container._hueShiftGetValues = null;
     clearPluginCache();
   };

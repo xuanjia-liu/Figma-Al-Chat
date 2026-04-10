@@ -609,6 +609,7 @@
       display: flex;
       align-items: center;
       gap: var(--space-xs);
+      position: relative;
     }
 
     .hue-shift-btn {
@@ -625,6 +626,47 @@
     .hue-shift-btn:hover {
       background: var(--bg-hover);
       color: var(--text-primary);
+    }
+
+    .hue-shift-settings-btn {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hue-shift-settings-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .hue-shift-settings-btn.active {
+      color: var(--text-primary);
+      border-color: var(--border-intense);
+      background: color-mix(in srgb, var(--bg-tertiary) 65%, var(--accent) 35%);
+    }
+
+    .hue-shift-settings-popover {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 5;
+      min-width: min(320px, calc(100vw - 48px));
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+      padding: var(--space-sm);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-intense);
+      background: color-mix(in srgb, var(--bg-secondary) 90%, black 10%);
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(12px);
+    }
+
+    .hue-shift-settings-popover.hidden {
+      display: none;
     }
 
     .hue-shift-wheel-wrap {
@@ -732,6 +774,18 @@
       gap: var(--space-xs);
     }
 
+    .hue-shift-inline-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-xs);
+    }
+
+    @media (max-width: 480px) {
+      .hue-shift-inline-controls {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
     .hue-shift-slider-row {
       display: flex;
       align-items: center;
@@ -786,10 +840,6 @@
       width: 28px;
       text-align: right;
       flex-shrink: 0;
-    }
-
-    .hue-shift-slider-value--wide {
-      width: 56px;
     }
 
     .gfp-sidebar {
