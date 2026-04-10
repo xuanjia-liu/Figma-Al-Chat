@@ -48,6 +48,13 @@ export const stylingTasks = [
           prompt: ''
         },
 {
+          name: 'HUE shift',
+          desc: 'Shift hues of selected node colors interactively',
+          prompt: '',
+          requiredContext: ContextMode.STYLE_ONLY,
+          directAction: 'hueShift',
+        },
+{
           name: 'Styles and variables',
           desc: 'Local colors, text and effects tokens.',
           prompt: '',

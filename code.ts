@@ -5349,6 +5349,176 @@ const moveComponentToBatchSection = (component: ComponentNode | ComponentSetNode
 // The UI can send 'cancel-execution' to abort in-flight processing.
 let executionCancelled = false;
 
+type HueShiftNodeSnapshot = {
+  fills?: Paint[];
+  strokes?: Paint[];
+  effects?: Effect[];
+  fillStyleId?: string;
+  strokeStyleId?: string;
+  effectStyleId?: string;
+  children?: Map<string, HueShiftNodeSnapshot>;
+};
+
+// Cache for hue shift originals (top-level node id -> recursive snapshot)
+const hueShiftOriginalCache = new Map<string, HueShiftNodeSnapshot>();
+
+function cloneHueShiftPaints(paints: readonly Paint[] | Paint[]): Paint[] {
+  return JSON.parse(JSON.stringify(paints));
+}
+
+function cloneHueShiftEffects(effects: readonly Effect[] | Effect[]): Effect[] {
+  return JSON.parse(JSON.stringify(effects));
+}
+
+function isGradientPaintForHueShift(paint: Paint): paint is GradientPaint {
+  return paint.type === 'GRADIENT_LINEAR' ||
+    paint.type === 'GRADIENT_RADIAL' ||
+    paint.type === 'GRADIENT_ANGULAR' ||
+    paint.type === 'GRADIENT_DIAMOND';
+}
+
+function snapshotHueShiftNode(node: SceneNode): HueShiftNodeSnapshot {
+  const snapshot: HueShiftNodeSnapshot = {};
+
+  if ('fills' in node && Array.isArray((node as any).fills)) {
+    snapshot.fills = cloneHueShiftPaints((node as any).fills as Paint[]);
+  }
+  if ('strokes' in node && Array.isArray((node as any).strokes)) {
+    snapshot.strokes = cloneHueShiftPaints((node as any).strokes as Paint[]);
+  }
+  if ('effects' in node && Array.isArray((node as any).effects)) {
+    snapshot.effects = cloneHueShiftEffects((node as any).effects as Effect[]);
+  }
+  if ('fillStyleId' in node && typeof (node as any).fillStyleId === 'string') {
+    snapshot.fillStyleId = (node as any).fillStyleId || '';
+  }
+  if ('strokeStyleId' in node && typeof (node as any).strokeStyleId === 'string') {
+    snapshot.strokeStyleId = (node as any).strokeStyleId || '';
+  }
+  if ('effectStyleId' in node && typeof (node as any).effectStyleId === 'string') {
+    snapshot.effectStyleId = (node as any).effectStyleId || '';
+  }
+  if ('children' in node) {
+    const children = new Map<string, HueShiftNodeSnapshot>();
+    for (const child of node.children) {
+      children.set(child.id, snapshotHueShiftNode(child));
+    }
+    if (children.size > 0) snapshot.children = children;
+  }
+
+  return snapshot;
+}
+
+function restoreHueShiftSnapshot(node: SceneNode, snapshot: HueShiftNodeSnapshot | undefined) {
+  if (!snapshot) return;
+
+  if ('fills' in node && Array.isArray(snapshot.fills)) {
+    (node as any).fills = cloneHueShiftPaints(snapshot.fills);
+  }
+  if ('strokes' in node && Array.isArray(snapshot.strokes)) {
+    (node as any).strokes = cloneHueShiftPaints(snapshot.strokes);
+  }
+  if ('effects' in node && Array.isArray(snapshot.effects)) {
+    (node as any).effects = cloneHueShiftEffects(snapshot.effects);
+  }
+  if ('fillStyleId' in node && typeof snapshot.fillStyleId === 'string') {
+    try { (node as any).fillStyleId = snapshot.fillStyleId; } catch (_error) {}
+  }
+  if ('strokeStyleId' in node && typeof snapshot.strokeStyleId === 'string') {
+    try { (node as any).strokeStyleId = snapshot.strokeStyleId; } catch (_error) {}
+  }
+  if ('effectStyleId' in node && typeof snapshot.effectStyleId === 'string') {
+    try { (node as any).effectStyleId = snapshot.effectStyleId; } catch (_error) {}
+  }
+
+  if ('children' in node && snapshot.children) {
+    for (const child of node.children) {
+      restoreHueShiftSnapshot(child, snapshot.children.get(child.id));
+    }
+  }
+}
+
+function collectHueShiftColorsFromPaints(paints: readonly Paint[], sink: string[]) {
+  for (const paint of paints) {
+    if (paint.visible === false) continue;
+    if (paint.type === 'SOLID') {
+      sink.push(rgbToHex(paint.color.r, paint.color.g, paint.color.b).toUpperCase());
+      continue;
+    }
+    if (isGradientPaintForHueShift(paint)) {
+      for (const stop of paint.gradientStops) {
+        sink.push(rgbToHex(stop.color.r, stop.color.g, stop.color.b).toUpperCase());
+      }
+    }
+  }
+}
+
+function collectHueShiftColorsFromEffects(
+  effects: readonly Effect[],
+  sink: string[],
+  includeDropShadow: boolean,
+  includeInnerShadow: boolean
+) {
+  for (const effect of effects) {
+    if ((effect as any).visible === false) continue;
+    if (effect.type === 'DROP_SHADOW' && includeDropShadow) {
+      const shadow = effect as DropShadowEffect;
+      sink.push(rgbToHex(shadow.color.r, shadow.color.g, shadow.color.b).toUpperCase());
+    } else if (effect.type === 'INNER_SHADOW' && includeInnerShadow) {
+      const shadow = effect as InnerShadowEffect;
+      sink.push(rgbToHex(shadow.color.r, shadow.color.g, shadow.color.b).toUpperCase());
+    }
+  }
+}
+
+function collectHueShiftColorsFromSnapshot(
+  snapshot: HueShiftNodeSnapshot,
+  sink: string[],
+  includeFills: boolean,
+  includeStrokes: boolean,
+  includeDropShadow: boolean,
+  includeInnerShadow: boolean
+) {
+  if (includeFills && Array.isArray(snapshot.fills)) {
+    collectHueShiftColorsFromPaints(snapshot.fills, sink);
+  }
+  if (includeStrokes && Array.isArray(snapshot.strokes)) {
+    collectHueShiftColorsFromPaints(snapshot.strokes, sink);
+  }
+  if ((includeDropShadow || includeInnerShadow) && Array.isArray(snapshot.effects)) {
+    collectHueShiftColorsFromEffects(snapshot.effects, sink, includeDropShadow, includeInnerShadow);
+  }
+  if (snapshot.children) {
+    for (const childSnapshot of snapshot.children.values()) {
+      collectHueShiftColorsFromSnapshot(childSnapshot, sink, includeFills, includeStrokes, includeDropShadow, includeInnerShadow);
+    }
+  }
+}
+
+function collectHueShiftColorsFromNode(
+  node: SceneNode,
+  sink: string[],
+  includeFills: boolean,
+  includeStrokes: boolean,
+  includeDropShadow: boolean,
+  includeInnerShadow: boolean
+) {
+  if (includeFills && 'fills' in node && Array.isArray((node as any).fills)) {
+    collectHueShiftColorsFromPaints((node as any).fills as Paint[], sink);
+  }
+  if (includeStrokes && 'strokes' in node && Array.isArray((node as any).strokes)) {
+    collectHueShiftColorsFromPaints((node as any).strokes as Paint[], sink);
+  }
+  if ((includeDropShadow || includeInnerShadow) && 'effects' in node && Array.isArray((node as any).effects)) {
+    collectHueShiftColorsFromEffects((node as any).effects as Effect[], sink, includeDropShadow, includeInnerShadow);
+  }
+  if ('children' in node) {
+    for (const child of node.children) {
+      collectHueShiftColorsFromNode(child, sink, includeFills, includeStrokes, includeDropShadow, includeInnerShadow);
+    }
+  }
+}
+
 // Helper to get only the top-level nodes from a selection (filters out children if their parent is also selected)
 function getTopLevelSelection(nodes: readonly SceneNode[]): SceneNode[] {
   const nodeIds = new Set(nodes.map(n => n.id));
@@ -10358,6 +10528,53 @@ figma.ui.onmessage = async (msg: {
       // Remove duplicates and limit to 5 colors
       const uniqueColors = [...new Set(colors)].slice(0, 5);
       figma.ui.postMessage({ type: 'selection-colors', data: uniqueColors });
+      break;
+    }
+
+    case 'get-selection-colors-hueshift': {
+      const requestId = (msg as any).requestId;
+      const includeFills = (msg as any).includeFills !== false;
+      const includeStrokes = (msg as any).includeStrokes !== false;
+      const includeDropShadow = (msg as any).includeDropShadow !== false;
+      const includeInnerShadow = (msg as any).includeInnerShadow !== false;
+
+      if (selection.length === 0) {
+        figma.ui.postMessage({ type: 'hueshift-colors', requestId, data: [] });
+        return;
+      }
+
+      const hueColors: string[] = [];
+      const topLevelSelection = getTopLevelSelection(selection);
+      for (const node of topLevelSelection) {
+        const cachedSnapshot = hueShiftOriginalCache.get(node.id);
+        if (cachedSnapshot) {
+          collectHueShiftColorsFromSnapshot(
+            cachedSnapshot,
+            hueColors,
+            includeFills,
+            includeStrokes,
+            includeDropShadow,
+            includeInnerShadow
+          );
+        } else {
+          collectHueShiftColorsFromNode(
+            node,
+            hueColors,
+            includeFills,
+            includeStrokes,
+            includeDropShadow,
+            includeInnerShadow
+          );
+        }
+      }
+
+      const uniqueHueColors = [...new Set(hueColors)].slice(0, 12);
+      figma.ui.postMessage({ type: 'hueshift-colors', requestId, data: uniqueHueColors });
+      break;
+    }
+
+    case 'clear-hue-shift-cache': {
+      hueShiftOriginalCache.clear();
       break;
     }
 
@@ -18091,6 +18308,174 @@ figma.ui.onmessage = async (msg: {
                     message: 'No gradient fills or strokes were found on the selected node'
                   };
                 }
+              }
+              break;
+            }
+
+            case 'applyHueShift': {
+              const colorMap: Array<{ from: string; to: string }> = cmd.colorMap || [];
+
+              const cachedSnapshot = hueShiftOriginalCache.get(node.id) || snapshotHueShiftNode(node);
+              if (!hueShiftOriginalCache.has(node.id)) {
+                hueShiftOriginalCache.set(node.id, cachedSnapshot);
+              }
+              restoreHueShiftSnapshot(node, cachedSnapshot);
+
+              const adjustOptions = cmd.adjustOptions && typeof cmd.adjustOptions === 'object'
+                ? cmd.adjustOptions
+                : {};
+              const includeFills = adjustOptions.fills !== false;
+              const includeStrokes = adjustOptions.strokes !== false;
+              const includeDropShadow = adjustOptions.dropShadow !== false;
+              const includeInnerShadow = adjustOptions.innerShadow !== false;
+              if (!includeFills && !includeStrokes && !includeDropShadow && !includeInnerShadow) {
+                break;
+              }
+
+              const fromToMap = new Map<string, string>();
+              for (const entry of colorMap) {
+                const fromHex = normalizeHex(entry.from);
+                const toHex = normalizeHex(entry.to);
+                if (fromHex && toHex) {
+                  fromToMap.set(fromHex, toHex);
+                }
+              }
+              if (fromToMap.size === 0) {
+                break;
+              }
+
+              let hueChanged = false;
+
+              const stripGradientStopColorBinding = (stop: ColorStop) => {
+                const cloned = { ...stop } as ColorStop & { boundVariables?: any };
+                if ((cloned as any).boundVariables) {
+                  const boundVariables = { ...((cloned as any).boundVariables || {}) };
+                  delete boundVariables.color;
+                  if (Object.keys(boundVariables).length > 0) {
+                    (cloned as any).boundVariables = boundVariables;
+                  } else {
+                    delete (cloned as any).boundVariables;
+                  }
+                }
+                return cloned;
+              };
+
+              const stripEffectColorBinding = (effect: Effect) => {
+                const cloned = { ...effect } as Effect & { boundVariables?: any };
+                if ((cloned as any).boundVariables) {
+                  const boundVariables = { ...((cloned as any).boundVariables || {}) };
+                  delete boundVariables.color;
+                  if (Object.keys(boundVariables).length > 0) {
+                    (cloned as any).boundVariables = boundVariables;
+                  } else {
+                    delete (cloned as any).boundVariables;
+                  }
+                }
+                return cloned;
+              };
+
+              function shiftPaintArray(nodeRef: SceneNode, field: 'fills' | 'strokes') {
+                if (!(field in nodeRef)) return;
+                const paints = (nodeRef as any)[field] as Paint[] | typeof figma.mixed;
+                if (paints === figma.mixed || !Array.isArray(paints)) return;
+
+                let fieldChanged = false;
+                const nextPaints = paints.map((paint: Paint) => {
+                  if (paint.visible === false) return paint;
+                  if (paint.type === 'SOLID') {
+                    const hex = rgbToHex(paint.color.r, paint.color.g, paint.color.b).toUpperCase();
+                    const target = fromToMap.get(hex);
+                    if (target && target !== hex) {
+                      const tc = parseHexColor(target);
+                      fieldChanged = true;
+                      const solid = clonePaintWithoutColorBinding(paint as SolidPaint);
+                      return {
+                        ...solid,
+                        color: { r: tc.r, g: tc.g, b: tc.b },
+                        opacity: (paint as SolidPaint).opacity
+                      };
+                    }
+                  } else if (isGradientPaintForHueShift(paint)) {
+                    let gradChanged = false;
+                    const stops = paint.gradientStops.map((stop: ColorStop) => {
+                      const hex = rgbToHex(stop.color.r, stop.color.g, stop.color.b).toUpperCase();
+                      const target = fromToMap.get(hex);
+                      if (target && target !== hex) {
+                        const tc = parseHexColor(target);
+                        gradChanged = true;
+                        const strippedStop = stripGradientStopColorBinding(stop);
+                        return {
+                          ...strippedStop,
+                          color: { r: tc.r, g: tc.g, b: tc.b, a: stop.color.a }
+                        };
+                      }
+                      return stop;
+                    });
+                    if (gradChanged) {
+                      fieldChanged = true;
+                      return { ...paint, gradientStops: stops };
+                    }
+                  }
+                  return paint;
+                });
+
+                if (fieldChanged) {
+                  clearStyleIdForField(nodeRef, field);
+                  (nodeRef as any)[field] = nextPaints;
+                  hueChanged = true;
+                }
+              }
+
+              function shiftEffects(nodeRef: SceneNode) {
+                if (!('effects' in nodeRef)) return;
+                const effects = (nodeRef as any).effects as readonly Effect[];
+                if (!Array.isArray(effects) || effects.length === 0) return;
+
+                let effectChanged = false;
+                const nextEffects = effects.map((effect: Effect) => {
+                  const isDropShadow = effect.type === 'DROP_SHADOW' && includeDropShadow;
+                  const isInnerShadow = effect.type === 'INNER_SHADOW' && includeInnerShadow;
+                  if (!isDropShadow && !isInnerShadow) return effect;
+                  if (!('color' in effect) || !(effect as any).color) return effect;
+
+                  const shadowColor = (effect as DropShadowEffect | InnerShadowEffect).color;
+                  const hex = rgbToHex(shadowColor.r, shadowColor.g, shadowColor.b).toUpperCase();
+                  const target = fromToMap.get(hex);
+                  if (target && target !== hex) {
+                    const tc = parseHexColor(target);
+                    effectChanged = true;
+                    const strippedEffect = stripEffectColorBinding(effect) as DropShadowEffect | InnerShadowEffect;
+                    return {
+                      ...strippedEffect,
+                      color: { r: tc.r, g: tc.g, b: tc.b, a: shadowColor.a }
+                    } as Effect;
+                  }
+                  return effect;
+                });
+
+                if (effectChanged) {
+                  if ('effectStyleId' in nodeRef) {
+                    try { (nodeRef as any).effectStyleId = ''; } catch (_error) {}
+                  }
+                  (nodeRef as any).effects = nextEffects;
+                  hueChanged = true;
+                }
+              }
+
+              function shiftNode(n: SceneNode) {
+                if (includeFills) shiftPaintArray(n, 'fills');
+                if (includeStrokes) shiftPaintArray(n, 'strokes');
+                if (includeDropShadow || includeInnerShadow) shiftEffects(n);
+                if ('children' in n) {
+                  for (const child of (n as any).children) {
+                    shiftNode(child);
+                  }
+                }
+              }
+
+              shiftNode(node);
+              if (hueChanged) {
+                success++;
               }
               break;
             }

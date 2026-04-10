@@ -43,6 +43,7 @@ import {
 import { createPromptDrawerHelpers } from './features/agent/prompt-drawer/helpers.js';
 import { createAgentTasks } from './features/agent/tasks/index.js';
 import { mountGoogleFontPreview } from './features/font-preview/google-font-preview.js';
+import { mountHueShift } from './features/hue-shift/hue-shift.js';
 import { AUDIT_COMMON_RULES, defaultAuditPresets } from './config/audit-config.js';
 import {
   CHART_PRESETS,
@@ -8791,7 +8792,7 @@ Rules:
             recordQuickActionUsage(actionName);
             closeCommandsDrawer();
             await handleExtractImagePrompt(actionName, actionIcon);
-          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllComponents' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview')) {
+          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllComponents' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview' || task.directAction === 'hueShift')) {
             // Handle actions that open in prompt drawer
             if (task.directAction === 'listAllComments') {
               ensureCommentsLoadedCached();
@@ -15687,6 +15688,7 @@ Generate ONLY the reply text, nothing else.`;
 
     let currentPromptAction = null; // Store current action data for submission
     let disposeGoogleFontPreview = null;
+    let disposeHueShift = null;
     let isPromptComposing = false;  // Track IME composition in prompt drawer inputs
     let isApplyingPreset = false;   // Track if we are currently applying a preset
     let randomizeDrawerRefreshVersion = 0;
@@ -16166,7 +16168,7 @@ Generate ONLY the reply text, nothing else.`;
     }
 
     function isRealtimePromptAction(action = currentPromptAction) {
-      return !!action && action.directAction === 'setImageFillFromSelection';
+      return !!action && (action.directAction === 'setImageFillFromSelection' || action.directAction === 'hueShift');
     }
 
     function clearRealtimePromptActionState() {
@@ -16354,6 +16356,7 @@ Generate ONLY the reply text, nothing else.`;
           actionData.name === 'Swap colors' ||
           actionData.name === 'Vertical text' ||
           actionData.name === 'Font preview' ||
+          actionData.name === 'HUE shift' ||
           actionData.directAction === 'listAllComponents' ||
           actionData.directAction === 'randomizeSelectedInstances';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
@@ -16389,6 +16392,10 @@ Generate ONLY the reply text, nothing else.`;
         if (typeof disposeGoogleFontPreview === 'function') {
           disposeGoogleFontPreview();
           disposeGoogleFontPreview = null;
+        }
+        if (typeof disposeHueShift === 'function') {
+          disposeHueShift();
+          disposeHueShift = null;
         }
 
         // Restore submit button text/state
@@ -16839,6 +16846,63 @@ Generate ONLY the reply text, nothing else.`;
             const existingGroup = footer.querySelector('.ai-action-group');
             if (existingGroup) existingGroup.remove();
           }
+        } else if (actionData.directAction === 'hueShift') {
+          const submitBtn = document.getElementById('promptDrawerSubmit');
+          if (submitBtn) {
+            submitBtn.style.display = 'none';
+          }
+
+          promptDrawerFields.innerHTML = '<div class="hue-shift-mount"></div>';
+          promptDrawerFields.classList.remove('hidden');
+          const hueMount = promptDrawerFields.querySelector('.hue-shift-mount');
+          if (hueMount) {
+            disposeHueShift = mountHueShift(hueMount, {
+              postMessage: (msg) => parent.postMessage({ pluginMessage: msg }, '*'),
+              showToast,
+              onValuesChanged: () => {
+                if (isRealtimePromptAction(currentPromptAction)) {
+                  scheduleRealtimePromptAction();
+                }
+              },
+            });
+          }
+
+          const resetBtn = document.getElementById('promptDrawerReset');
+          if (resetBtn) {
+            resetBtn.textContent = tu('actions.prompt.reset');
+            resetBtn.title = tu('actions.prompt.resetTitle');
+            resetBtn.style.display = '';
+            resetBtn.onclick = (e) => {
+              e.preventDefault();
+              if (typeof disposeHueShift === 'function') {
+                disposeHueShift();
+                disposeHueShift = null;
+              }
+              const mountEl = promptDrawerFields.querySelector('.hue-shift-mount');
+              if (mountEl) {
+                disposeHueShift = mountHueShift(mountEl, {
+                  postMessage: (msg) => parent.postMessage({ pluginMessage: msg }, '*'),
+                  showToast,
+                  onValuesChanged: () => {
+                    if (isRealtimePromptAction(currentPromptAction)) {
+                      scheduleRealtimePromptAction();
+                    }
+                  },
+                });
+              }
+            };
+          }
+
+          const cancelBtn = document.getElementById('promptDrawerCancel');
+          if (cancelBtn) {
+            cancelBtn.textContent = tu('actions.prompt.close');
+          }
+
+          const footer2 = document.querySelector('.prompt-drawer-footer');
+          if (footer2) {
+            const existingGroup = footer2.querySelector('.ai-action-group');
+            if (existingGroup) existingGroup.remove();
+          }
         } else {
           // Show submit button for other actions
           const submitBtn = document.getElementById('promptDrawerSubmit');
@@ -16880,6 +16944,10 @@ Generate ONLY the reply text, nothing else.`;
       if (typeof disposeGoogleFontPreview === 'function') {
         disposeGoogleFontPreview();
         disposeGoogleFontPreview = null;
+      }
+      if (typeof disposeHueShift === 'function') {
+        disposeHueShift();
+        disposeHueShift = null;
       }
       teardownImageToAsciiPreview();
       promptDrawer.classList.remove('open', 'minimized', 'maximized');
@@ -24824,6 +24892,17 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       return defaultValue;
     }
 
+    function getTopLevelSelectionEntries(selection) {
+      if (!Array.isArray(selection) || selection.length === 0) return [];
+      const descendantIds = new Set();
+      selection.forEach((node) => {
+        if (Array.isArray(node?.descendantIds)) {
+          node.descendantIds.forEach((id) => descendantIds.add(id));
+        }
+      });
+      return selection.filter((node) => !descendantIds.has(node?.id));
+    }
+
     async function runSwapColorsAction(values, actionMeta) {
       const fromTarget = normalizePromptColorSelection(values.fromColor || '');
       const toTarget = normalizePromptColorSelection(values.toColor || '');
@@ -24909,6 +24988,33 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       } else if (failed > 0) {
         showToast('No gradient fills or strokes were found in the selection.', 'warning');
       }
+    }
+
+    async function runHueShiftAction() {
+      const mount = document.querySelector('.hue-shift-mount');
+      const getValues = mount && mount._hueShiftGetValues;
+      if (typeof getValues !== 'function') return;
+
+      const hueValues = getValues();
+      const colorMap = hueValues.hueShiftColorMap;
+      if (!Array.isArray(colorMap)) return;
+      const adjustOptions = hueValues.adjustOptions || {};
+
+      const result = await requestSelectionData(false, false, 'styleOnly');
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      if (selection.length === 0) return;
+      const topLevelSelection = getTopLevelSelectionEntries(selection);
+      if (topLevelSelection.length === 0) return;
+
+      const commands = topLevelSelection.map(node => ({
+        action: 'applyHueShift',
+        nodeId: node.id,
+        colorMap: colorMap,
+        colorMode: hueValues.colorMode || 'hsl',
+        adjustOptions,
+      }));
+
+      await executeCommands(commands);
     }
 
     async function runTextLinkColorAction(values) {
@@ -25152,6 +25258,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'simulateOklchGradient':
           await runSimulateOklchGradientAction(values, actionMeta);
+          break;
+        case 'hueShift':
+          await runHueShiftAction(values, actionMeta);
           break;
         case 'textLinkColor':
           await runTextLinkColorAction(values, actionMeta);
@@ -37385,7 +37494,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
         task.directAction === 'generatePalette' ||
         task.directAction === 'listAllComponents' ||
         task.directAction === 'browseStyles' ||
-        task.directAction === 'googleFontPreview') {
+        task.directAction === 'googleFontPreview' ||
+        task.directAction === 'hueShift') {
         let hydratedFields = task.fields || [];
         if (task.directAction === 'browseIconSet') {
           const excludeAnyIconifySet = true;
