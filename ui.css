@@ -628,9 +628,22 @@
       color: var(--text-primary);
     }
 
+    .hue-shift-btn.inactive,
+    .hue-shift-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      color: var(--text-muted);
+    }
+
+    .hue-shift-btn.inactive:hover,
+    .hue-shift-btn:disabled:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+    }
+
     .hue-shift-settings-btn {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       padding: 0;
       display: inline-flex;
       align-items: center;

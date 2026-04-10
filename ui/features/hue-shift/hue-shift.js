@@ -284,6 +284,7 @@ export function mountHueShift(container, options = {}) {
   let controlsWrap = null;
   let settingsPopover = null;
   let settingsBtn = null;
+  let resetBtn = null;
   let paletteSelect = null;
   let linkBtn = null;
   let linkLabelText = null;
@@ -313,10 +314,11 @@ export function mountHueShift(container, options = {}) {
   settingsBtn.setAttribute('aria-label', translate('actions.hueShift.settings', 'Settings'));
   settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.33 3.09c.43-1.19 2.11-1.19 2.54 0l.3.85a1.8 1.8 0 0 0 2.2 1.11l.87-.23c1.22-.32 2.4.86 2.08 2.08l-.23.87a1.8 1.8 0 0 0 1.11 2.2l.85.3c1.19.43 1.19 2.11 0 2.54l-.85.3a1.8 1.8 0 0 0-1.11 2.2l.23.87c.32 1.22-.86 2.4-2.08 2.08l-.87-.23a1.8 1.8 0 0 0-2.2 1.11l-.3.85c-.43 1.19-2.11 1.19-2.54 0l-.3-.85a1.8 1.8 0 0 0-2.2-1.11l-.87.23c-1.22.32-2.4-.86-2.08-2.08l.23-.87a1.8 1.8 0 0 0-1.11-2.2l-.85-.3c-1.19-.43-1.19-2.11 0-2.54l.85-.3a1.8 1.8 0 0 0 1.11-2.2l-.23-.87c-.32-1.22.86-2.4 2.08-2.08l.87.23a1.8 1.8 0 0 0 2.2-1.11l.3-.85Z"/><circle cx="12" cy="12" r="3.2"/></svg>';
   topActions.appendChild(settingsBtn);
-  const resetBtn = document.createElement('button');
+  resetBtn = document.createElement('button');
   resetBtn.className = 'hue-shift-btn';
-  resetBtn.textContent = translate('actions.hueShift.reset', 'Reset');
+  resetBtn.textContent = translate('actions.hueShift.resetColor', 'Reset Color');
   resetBtn.addEventListener('click', () => {
+    if (resetBtn.disabled) return;
     resetColorsToOriginal();
     notifyChanged();
   });
@@ -528,6 +530,17 @@ export function mountHueShift(container, options = {}) {
 
   function getCurrentHex(color) {
     return rgbToHex(color.currentRgb.r, color.currentRgb.g, color.currentRgb.b);
+  }
+
+  function hasColorChanges() {
+    return colors.some((color) => getCurrentHex(color) !== color.originalHex);
+  }
+
+  function updateResetButtonState() {
+    if (!resetBtn) return;
+    const enabled = colors.length > 0 && hasColorChanges();
+    resetBtn.disabled = !enabled;
+    resetBtn.classList.toggle('inactive', !enabled);
   }
 
   function getHandleRadius() {
@@ -750,6 +763,7 @@ export function mountHueShift(container, options = {}) {
 
   function refreshSelectionUI() {
     updateLinkButton();
+    updateResetButtonState();
     syncPaletteSelect();
     updatePaletteBar();
     updateControlDisplayValues();
@@ -886,13 +900,14 @@ export function mountHueShift(container, options = {}) {
         colors[index].currentRgb = cloneRgb(modelToRgb(colorMode, nextModel));
       }
 
-      updatePaletteBar();
-      if (colorMode !== 'oklch') {
-        drawOverlay();
-      }
-      valueEl.textContent = formatControlValue(config.key, nextValue);
-      notifyChanged();
-    });
+    updatePaletteBar();
+    if (colorMode !== 'oklch') {
+      drawOverlay();
+    }
+    valueEl.textContent = formatControlValue(config.key, nextValue);
+    updateResetButtonState();
+    notifyChanged();
+  });
 
     slider.addEventListener('change', () => {
       controlSession = null;
@@ -932,6 +947,7 @@ export function mountHueShift(container, options = {}) {
       snapshotMergeGroupingBasis();
       valueEl.textContent = `${Math.round(mergeNear)}`;
       drawOverlay();
+      updateResetButtonState();
     });
 
     controlEls.mergeNear = { slider, valueEl };
@@ -1293,6 +1309,7 @@ export function mountHueShift(container, options = {}) {
 
     updatePaletteBar();
     drawOverlay();
+    updateResetButtonState();
     notifyChanged();
   }
 
