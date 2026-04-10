@@ -312,7 +312,7 @@ export function mountHueShift(container, options = {}) {
   settingsBtn.className = 'hue-shift-btn hue-shift-settings-btn';
   settingsBtn.title = translate('actions.hueShift.settings', 'Settings');
   settingsBtn.setAttribute('aria-label', translate('actions.hueShift.settings', 'Settings'));
-  settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.33 3.09c.43-1.19 2.11-1.19 2.54 0l.3.85a1.8 1.8 0 0 0 2.2 1.11l.87-.23c1.22-.32 2.4.86 2.08 2.08l-.23.87a1.8 1.8 0 0 0 1.11 2.2l.85.3c1.19.43 1.19 2.11 0 2.54l-.85.3a1.8 1.8 0 0 0-1.11 2.2l.23.87c.32 1.22-.86 2.4-2.08 2.08l-.87-.23a1.8 1.8 0 0 0-2.2 1.11l-.3.85c-.43 1.19-2.11 1.19-2.54 0l-.3-.85a1.8 1.8 0 0 0-2.2-1.11l-.87.23c-1.22.32-2.4-.86-2.08-2.08l.23-.87a1.8 1.8 0 0 0-1.11-2.2l-.85-.3c-1.19-.43-1.19-2.11 0-2.54l.85-.3a1.8 1.8 0 0 0 1.11-2.2l-.23-.87c-.32-1.22.86-2.4 2.08-2.08l.87.23a1.8 1.8 0 0 0 2.2-1.11l.3-.85Z"/><circle cx="12" cy="12" r="3.2"/></svg>';
+  settingsBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>';
   topActions.appendChild(settingsBtn);
   resetBtn = document.createElement('button');
   resetBtn.className = 'hue-shift-btn';
@@ -974,19 +974,25 @@ export function mountHueShift(container, options = {}) {
       mainRow.appendChild(createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 }));
       mainRow.appendChild(createSliderControl({ key: 'v', label: translate('actions.hueShift.brightness', 'Brightness'), min: 0, max: 100, step: 1 }));
       controlsWrap.appendChild(mainRow);
-      settingsSections.merge = createOptionGroup(translate('actions.hueShift.mergeSettings', 'Merge Near')).group;
-      settingsSections.merge.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.mergeSettings', 'Merge Near');
-      settingsSections.merge.appendChild(createMergeControlRow());
-      settingsPopover.appendChild(settingsSections.merge);
+    {
+      const mergeGroup = createOptionGroup(translate('actions.hueShift.mergeSettings', 'Merge Near'));
+      mergeGroup.group.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.mergeSettings', 'Merge Near');
+      mergeGroup.optionsEl.replaceWith(createMergeControlRow());
+      settingsSections.merge = mergeGroup.group;
+    }
+    settingsPopover.appendChild(settingsSections.merge);
       return;
     }
 
     mainRow.appendChild(createSliderControl({ key: 's', label: translate('actions.hueShift.strength', 'Strength'), min: 0, max: 100, step: 1 }));
     mainRow.appendChild(createSliderControl({ key: 'l', label: translate('actions.hueShift.lightness', 'Lightness'), min: 0, max: 100, step: 1 }));
     controlsWrap.appendChild(mainRow);
-    settingsSections.merge = createOptionGroup(translate('actions.hueShift.mergeSettings', 'Merge Near')).group;
-    settingsSections.merge.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.mergeSettings', 'Merge Near');
-    settingsSections.merge.appendChild(createMergeControlRow());
+    {
+      const mergeGroup = createOptionGroup(translate('actions.hueShift.mergeSettings', 'Merge Near'));
+      mergeGroup.group.querySelector('.hue-shift-option-group-label').textContent = translate('actions.hueShift.mergeSettings', 'Merge Near');
+      mergeGroup.optionsEl.replaceWith(createMergeControlRow());
+      settingsSections.merge = mergeGroup.group;
+    }
     settingsPopover.appendChild(settingsSections.merge);
   }
 
