@@ -956,7 +956,13 @@ export function mountHueShift(container, options = {}) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    colors.forEach((color, index) => {
+    const handleEntries = colors.map((color, index) => ({ color, index }));
+    if (!linked && activePaletteIndex >= 0 && activePaletteIndex < handleEntries.length) {
+      const [selectedEntry] = handleEntries.splice(activePaletteIndex, 1);
+      handleEntries.push(selectedEntry);
+    }
+
+    handleEntries.forEach(({ color, index }) => {
       const model = getModeModel(color.currentRgb, colorMode);
       const pos = wheelModelToPos(model.h, model.s);
       const isSelected = activePaletteIndex === index && !linked;
