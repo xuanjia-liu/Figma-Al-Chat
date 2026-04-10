@@ -10568,7 +10568,7 @@ figma.ui.onmessage = async (msg: {
         }
       }
 
-      const uniqueHueColors = [...new Set(hueColors)].slice(0, 12);
+      const uniqueHueColors = [...new Set(hueColors)];
       figma.ui.postMessage({ type: 'hueshift-colors', requestId, data: uniqueHueColors });
       break;
     }
