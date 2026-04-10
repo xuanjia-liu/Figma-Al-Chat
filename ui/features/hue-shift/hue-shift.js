@@ -674,8 +674,10 @@ export function mountHueShift(container, options = {}) {
           if (config.key === 'c') nextModel.c = clamp(baseModel.c + delta, 0, MAX_OKLCH_CHROMA);
           if (config.key === 'h') nextModel.h = mod(baseModel.h + delta, 360);
         } else if (colorMode === 'hsb') {
+          if (config.key === 's') nextModel.s = clamp(baseModel.s + delta, 0, 100);
           if (config.key === 'v') nextModel.v = clamp(baseModel.v + delta, 0, 100);
         } else {
+          if (config.key === 's') nextModel.s = clamp(baseModel.s + delta, 0, 100);
           if (config.key === 'l') nextModel.l = clamp(baseModel.l + delta, 0, 100);
         }
         colors[index].currentRgb = cloneRgb(modelToRgb(colorMode, nextModel));
@@ -711,10 +713,12 @@ export function mountHueShift(container, options = {}) {
     }
 
     if (colorMode === 'hsb') {
+      createSliderControl({ key: 's', label: 'Strength', min: 0, max: 100, step: 1 });
       createSliderControl({ key: 'v', label: 'Brightness', min: 0, max: 100, step: 1 });
       return;
     }
 
+    createSliderControl({ key: 's', label: 'Strength', min: 0, max: 100, step: 1 });
     createSliderControl({ key: 'l', label: 'Lightness', min: 0, max: 100, step: 1 });
   }
 
@@ -726,9 +730,9 @@ export function mountHueShift(container, options = {}) {
       if (colorMode === 'oklch') {
         value = key === 'l' ? model.l : key === 'c' ? model.c : model.h;
       } else if (colorMode === 'hsb') {
-        value = key === 'v' ? model.v : 0;
+        value = key === 's' ? model.s : key === 'v' ? model.v : 0;
       } else {
-        value = key === 'l' ? model.l : 0;
+        value = key === 's' ? model.s : key === 'l' ? model.l : 0;
       }
       entry.slider.value = String(value);
       entry.slider.dataset.referenceValue = String(value);

@@ -637,15 +637,15 @@
       justify-content: center;
       flex-shrink: 0;
       background: radial-gradient(circle at center, rgba(255,255,255,0.04), transparent 68%);
-      border-radius: 24px;
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
       transition: border-color 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease;
     }
 
     .hue-shift-wheel-wrap.single-selected {
-      border: 2px solid rgba(255, 255, 255, 1);
-      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+      border: 1px solid var(--border-intense);
+      background: radial-gradient(circle at center, rgba(255,255,255,0.1), transparent 68%);
+      box-shadow: var(--shadow-md);
     }
 
     .hue-shift-wheel-canvas,
@@ -654,7 +654,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      border-radius: 50%;
+      border-radius: var(--radius-full);
     }
 
     .hue-shift-overlay-canvas {
@@ -674,7 +674,7 @@
       display: flex;
       position: relative;
       min-height: 42px;
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-md);
       overflow: hidden;
       border: 1px solid var(--border);
       background: var(--bg-tertiary);
