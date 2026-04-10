@@ -277,6 +277,7 @@ export function mountHueShift(container, options = {}) {
   let controlsWrap = null;
   let paletteSelect = null;
   let linkBtn = null;
+  let linkLabelText = null;
   let wheelWrap = null;
   let paletteBar = null;
   let paletteBarLockMask = null;
@@ -409,12 +410,17 @@ export function mountHueShift(container, options = {}) {
   const toolbarActions = document.createElement('div');
   toolbarActions.className = 'hue-shift-toolbar-right';
 
-  linkBtn = document.createElement('button');
-  linkBtn.type = 'button';
-  linkBtn.className = 'hue-shift-link-btn active';
-  linkBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-  linkBtn.addEventListener('click', () => {
-    linked = !linked;
+  linkBtn = document.createElement('label');
+  linkBtn.className = 'camera-toggle-switch hue-shift-link-toggle';
+  const linkInput = document.createElement('input');
+  linkInput.type = 'checkbox';
+  linkInput.checked = linked;
+  linkLabelText = document.createElement('span');
+  linkLabelText.className = 'camera-toggle-label';
+  linkBtn.appendChild(linkInput);
+  linkBtn.appendChild(linkLabelText);
+  linkInput.addEventListener('change', () => {
+    linked = !!linkInput.checked;
     if (!linked && activePaletteIndex < 0 && colors.length > 0) {
       activePaletteIndex = 0;
     }
@@ -516,8 +522,16 @@ export function mountHueShift(container, options = {}) {
   }
 
   function updateLinkButton() {
-    linkBtn.classList.toggle('active', linked);
-    linkBtn.title = linked ? 'Linked palette adjustments' : 'Adjust one palette color';
+    const input = linkBtn?.querySelector('input');
+    if (input) {
+      input.checked = linked;
+    }
+    if (linkLabelText) {
+      linkLabelText.textContent = linked ? 'Linked' : 'Single';
+    }
+    if (linkBtn) {
+      linkBtn.title = linked ? 'Linked palette adjustments' : 'Adjust one palette color';
+    }
   }
 
   function updateSelectionAffordances() {

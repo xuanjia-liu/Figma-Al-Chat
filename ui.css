@@ -666,29 +666,8 @@
       cursor: grabbing;
     }
 
-    .hue-shift-link-btn {
-      position: relative;
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      opacity: 0.6;
-      transition: opacity 0.15s ease;
-    }
-
-    .hue-shift-link-btn.active {
-      opacity: 1;
-    }
-
-    .hue-shift-link-btn svg {
-      width: 16px;
-      height: 16px;
+    .hue-shift-link-toggle {
+      padding: 2px 0;
     }
 
     .hue-shift-palette-bar {
