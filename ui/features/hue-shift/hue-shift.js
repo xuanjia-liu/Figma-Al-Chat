@@ -1183,11 +1183,15 @@ export function mountHueShift(container, options = {}) {
     ctx.putImageData(image, 0, 0);
     ctx.restore();
 
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, wheelRadius + 2, 0, Math.PI * 2);
-    ctx.arc(centerX, centerY, wheelRadius * INNER_RING - 2, 0, Math.PI * 2, true);
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.lineWidth = 3;
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, wheelRadius + 2, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, wheelRadius * INNER_RING - 2, 0, Math.PI * 2);
     ctx.stroke();
   }
 
