@@ -285,6 +285,7 @@ export function mountHueShift(container, options = {}) {
   let settingsPopover = null;
   let settingsBtn = null;
   let resetBtn = null;
+  let colorPickerPopover = null;
   let paletteSelect = null;
   let linkBtn = null;
   let linkLabelText = null;
@@ -541,6 +542,144 @@ export function mountHueShift(container, options = {}) {
     const enabled = colors.length > 0 && hasColorChanges();
     resetBtn.disabled = !enabled;
     resetBtn.classList.toggle('inactive', !enabled);
+  }
+
+  function closeColorPickerPopover() {
+    if (colorPickerPopover) {
+      colorPickerPopover.remove();
+      colorPickerPopover = null;
+    }
+  }
+
+  function openColorPickerPopover(anchorRect, initialColor, onUpdate) {
+    closeColorPickerPopover();
+
+    const popover = document.createElement('div');
+    popover.className = 'color-picker-popover';
+
+    const label = document.createElement('div');
+    label.className = 'popover-title';
+    label.textContent = translate('actions.hueShift.pickColor', 'Pick a color');
+    popover.appendChild(label);
+
+    const previewRow = document.createElement('div');
+    previewRow.className = 'color-preview-row';
+
+    const colorWrapper = document.createElement('div');
+    colorWrapper.className = 'color-input-wrapper';
+
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = initialColor;
+    colorWrapper.appendChild(colorInput);
+
+    const hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.className = 'hex-input';
+    hexInput.value = initialColor;
+    hexInput.maxLength = 7;
+
+    previewRow.appendChild(colorWrapper);
+    previewRow.appendChild(hexInput);
+    popover.appendChild(previewRow);
+
+    colorInput.oninput = () => {
+      hexInput.value = colorInput.value.toUpperCase();
+    };
+
+    hexInput.oninput = () => {
+      let value = hexInput.value.trim();
+      if (!value.startsWith('#')) value = '#' + value;
+      if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+        colorInput.value = value;
+      }
+    };
+
+    const actions = document.createElement('div');
+    actions.className = 'color-picker-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'placeholder-popover-btn cancel';
+    cancelBtn.textContent = translate('aux.code.cancel', 'Cancel');
+    cancelBtn.onclick = () => {
+      closeColorPickerPopover();
+      document.removeEventListener('mousedown', clickOutside);
+    };
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'placeholder-popover-btn submit';
+    applyBtn.textContent = translate('aux.code.apply', 'Apply');
+
+    const submit = () => {
+      let finalColor = hexInput.value.trim().toUpperCase();
+      if (!finalColor.startsWith('#')) finalColor = '#' + finalColor;
+      if (/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
+        onUpdate(finalColor);
+        closeColorPickerPopover();
+        document.removeEventListener('mousedown', clickOutside);
+      }
+    };
+
+    applyBtn.onclick = submit;
+    hexInput.onkeydown = (event) => {
+      if (event.key === 'Enter') submit();
+      if (event.key === 'Escape') {
+        closeColorPickerPopover();
+        document.removeEventListener('mousedown', clickOutside);
+      }
+    };
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(applyBtn);
+    popover.appendChild(actions);
+
+    popover.addEventListener('click', (event) => event.stopPropagation());
+    popover.addEventListener('mousedown', (event) => event.stopPropagation());
+
+    document.body.appendChild(popover);
+    colorPickerPopover = popover;
+
+    const popoverRect = popover.getBoundingClientRect();
+    let top = anchorRect.bottom + 8;
+    let left = anchorRect.left;
+
+    if (left + popoverRect.width > window.innerWidth) {
+      left = window.innerWidth - popoverRect.width - 16;
+    }
+    if (top + popoverRect.height > window.innerHeight) {
+      top = anchorRect.top - popoverRect.height - 8;
+    }
+    if (left < 8) left = 8;
+    if (top < 8) top = 8;
+
+    popover.style.top = `${top}px`;
+    popover.style.left = `${left}px`;
+
+    hexInput.focus();
+    hexInput.select();
+
+    function clickOutside(event) {
+      if (!popover.contains(event.target)) {
+        closeColorPickerPopover();
+        document.removeEventListener('mousedown', clickOutside);
+      }
+    }
+
+    setTimeout(() => {
+      document.addEventListener('mousedown', clickOutside);
+    }, 0);
+  }
+
+  function applyColorToIndices(indices, nextHex) {
+    const nextRgb = hexToRgb(nextHex);
+    indices.forEach((index) => {
+      if (index < 0 || index >= colors.length) return;
+      colors[index].currentRgb = cloneRgb(nextRgb);
+    });
+    updatePaletteBar();
+    drawOverlay();
+    updateResetButtonState();
+    notifyChanged();
   }
 
   function getHandleRadius() {
@@ -1107,6 +1246,15 @@ export function mountHueShift(container, options = {}) {
         activePaletteIndex = index;
         refreshSelectionUI();
       });
+      swatch.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        activePaletteIndex = index;
+        openColorPickerPopover(swatch.getBoundingClientRect(), getCurrentHex(color), (nextHex) => {
+          applyColorToIndices([index], nextHex);
+          refreshSelectionUI();
+        });
+      });
       paletteBar.appendChild(swatch);
     });
     if (paletteBarLockMask) {
@@ -1323,6 +1471,29 @@ export function mountHueShift(container, options = {}) {
     notifyChanged();
   }
 
+  function onOverlayDoubleClick(event) {
+    if (colorMode === 'oklch' || colors.length === 0) return;
+    const rect = overlayCanvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const handleGroup = getDisplayHandleGroupAt(x, y);
+    if (!handleGroup) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    activePaletteIndex = handleGroup.representativeIndex;
+    const anchorRect = {
+      left: event.clientX,
+      right: event.clientX,
+      top: event.clientY,
+      bottom: event.clientY,
+    };
+    openColorPickerPopover(anchorRect, getCurrentHex(colors[handleGroup.representativeIndex]), (nextHex) => {
+      applyColorToIndices(handleGroup.indices, nextHex);
+      refreshSelectionUI();
+    });
+  }
+
   function onPointerUp() {
     if (!dragSession) return;
     dragSession = null;
@@ -1391,6 +1562,7 @@ export function mountHueShift(container, options = {}) {
   overlayCanvas.addEventListener('pointermove', onPointerMove);
   overlayCanvas.addEventListener('pointerup', onPointerUp);
   overlayCanvas.addEventListener('pointercancel', onPointerUp);
+  overlayCanvas.addEventListener('dblclick', onOverlayDoubleClick);
   window.addEventListener('message', handlePluginMessage);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointerdown', handleOutsidePointerDown);
@@ -1436,10 +1608,12 @@ export function mountHueShift(container, options = {}) {
     overlayCanvas.removeEventListener('pointermove', onPointerMove);
     overlayCanvas.removeEventListener('pointerup', onPointerUp);
     overlayCanvas.removeEventListener('pointercancel', onPointerUp);
+    overlayCanvas.removeEventListener('dblclick', onOverlayDoubleClick);
     window.removeEventListener('message', handlePluginMessage);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointerdown', handleOutsidePointerDown);
     container._hueShiftGetValues = null;
+    closeColorPickerPopover();
     clearPluginCache();
   };
 }
