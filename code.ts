@@ -5519,6 +5519,30 @@ function collectHueShiftColorsFromNode(
   }
 }
 
+function isHueShiftPreservedHex(
+  hex: string,
+  preserveWhite: boolean,
+  preserveBlack: boolean,
+  preserveGrayscale: boolean
+): boolean {
+  const raw = String(hex || '').trim().replace(/^#/, '');
+  const normalized = raw.length === 3
+    ? `#${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`.toUpperCase()
+    : (raw.length === 6 ? `#${raw}`.toUpperCase() : '');
+  if (!normalized) return false;
+  if (preserveWhite && normalized === '#FFFFFF') return true;
+  if (preserveBlack && normalized === '#000000') return true;
+  if (preserveGrayscale) {
+    const r = parseInt(normalized.slice(1, 3), 16);
+    const g = parseInt(normalized.slice(3, 5), 16);
+    const b = parseInt(normalized.slice(5, 7), 16);
+    const sameRG = r === g;
+    const sameGB = g === b;
+    if (sameRG && sameGB) return true;
+  }
+  return false;
+}
+
 // Helper to get only the top-level nodes from a selection (filters out children if their parent is also selected)
 function getTopLevelSelection(nodes: readonly SceneNode[]): SceneNode[] {
   const nodeIds = new Set(nodes.map(n => n.id));
@@ -10537,6 +10561,9 @@ figma.ui.onmessage = async (msg: {
       const includeStrokes = (msg as any).includeStrokes !== false;
       const includeDropShadow = (msg as any).includeDropShadow !== false;
       const includeInnerShadow = (msg as any).includeInnerShadow !== false;
+      const preserveWhite = (msg as any).preserveWhite === true;
+      const preserveBlack = (msg as any).preserveBlack === true;
+      const preserveGrayscale = (msg as any).preserveGrayscale === true;
 
       if (selection.length === 0) {
         figma.ui.postMessage({ type: 'hueshift-colors', requestId, data: [] });
@@ -10568,7 +10595,9 @@ figma.ui.onmessage = async (msg: {
         }
       }
 
-      const uniqueHueColors = [...new Set(hueColors)];
+      const uniqueHueColors = [...new Set(hueColors)].filter((hex) =>
+        !isHueShiftPreservedHex(hex, preserveWhite, preserveBlack, preserveGrayscale)
+      );
       figma.ui.postMessage({ type: 'hueshift-colors', requestId, data: uniqueHueColors });
       break;
     }
@@ -18324,10 +18353,16 @@ figma.ui.onmessage = async (msg: {
               const adjustOptions = cmd.adjustOptions && typeof cmd.adjustOptions === 'object'
                 ? cmd.adjustOptions
                 : {};
+              const preserveOptions = cmd.preserveOptions && typeof cmd.preserveOptions === 'object'
+                ? cmd.preserveOptions
+                : {};
               const includeFills = adjustOptions.fills !== false;
               const includeStrokes = adjustOptions.strokes !== false;
               const includeDropShadow = adjustOptions.dropShadow !== false;
               const includeInnerShadow = adjustOptions.innerShadow !== false;
+              const preserveWhite = preserveOptions.white === true;
+              const preserveBlack = preserveOptions.black === true;
+              const preserveGrayscale = preserveOptions.grayscale === true;
               if (!includeFills && !includeStrokes && !includeDropShadow && !includeInnerShadow) {
                 break;
               }
@@ -18384,6 +18419,9 @@ figma.ui.onmessage = async (msg: {
                   if (paint.visible === false) return paint;
                   if (paint.type === 'SOLID') {
                     const hex = rgbToHex(paint.color.r, paint.color.g, paint.color.b).toUpperCase();
+                    if (isHueShiftPreservedHex(hex, preserveWhite, preserveBlack, preserveGrayscale)) {
+                      return paint;
+                    }
                     const target = fromToMap.get(hex);
                     if (target && target !== hex) {
                       const tc = parseHexColor(target);
@@ -18399,6 +18437,9 @@ figma.ui.onmessage = async (msg: {
                     let gradChanged = false;
                     const stops = paint.gradientStops.map((stop: ColorStop) => {
                       const hex = rgbToHex(stop.color.r, stop.color.g, stop.color.b).toUpperCase();
+                      if (isHueShiftPreservedHex(hex, preserveWhite, preserveBlack, preserveGrayscale)) {
+                        return stop;
+                      }
                       const target = fromToMap.get(hex);
                       if (target && target !== hex) {
                         const tc = parseHexColor(target);
@@ -18440,6 +18481,9 @@ figma.ui.onmessage = async (msg: {
 
                   const shadowColor = (effect as DropShadowEffect | InnerShadowEffect).color;
                   const hex = rgbToHex(shadowColor.r, shadowColor.g, shadowColor.b).toUpperCase();
+                  if (isHueShiftPreservedHex(hex, preserveWhite, preserveBlack, preserveGrayscale)) {
+                    return effect;
+                  }
                   const target = fromToMap.get(hex);
                   if (target && target !== hex) {
                     const tc = parseHexColor(target);

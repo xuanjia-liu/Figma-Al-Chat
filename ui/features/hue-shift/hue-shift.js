@@ -207,9 +207,31 @@ const DEFAULT_ADJUST_OPTIONS = {
   dropShadow: true,
   innerShadow: true,
 };
+const DEFAULT_PRESERVE_OPTIONS = {
+  white: false,
+  black: false,
+  grayscale: false,
+};
 const MAX_OKLCH_CHROMA = 0.4;
 const HANDLE_RADIUS = 10;
 const INNER_RING = 0.15;
+
+function isNear(value, target, epsilon = 0.0001) {
+  return Math.abs(value - target) <= epsilon;
+}
+
+function isPreservedRgb(rgb, preserveOptions) {
+  if (preserveOptions.white && isNear(rgb.r, 1) && isNear(rgb.g, 1) && isNear(rgb.b, 1)) {
+    return true;
+  }
+  if (preserveOptions.black && isNear(rgb.r, 0) && isNear(rgb.g, 0) && isNear(rgb.b, 0)) {
+    return true;
+  }
+  if (preserveOptions.grayscale && isNear(rgb.r, rgb.g) && isNear(rgb.g, rgb.b)) {
+    return true;
+  }
+  return false;
+}
 
 function getModeModel(rgb, mode) {
   if (mode === 'hsb') return rgbToHsv(rgb.r, rgb.g, rgb.b);
@@ -239,6 +261,7 @@ export function mountHueShift(container, options = {}) {
   let colors = [];
   let activePaletteIndex = -1;
   let adjustOptions = { ...DEFAULT_ADJUST_OPTIONS };
+  let preserveOptions = { ...DEFAULT_PRESERVE_OPTIONS };
   let dragSession = null;
   let controlSession = null;
   let requestId = 0;
@@ -258,6 +281,7 @@ export function mountHueShift(container, options = {}) {
   let paletteBar = null;
   let modeButtons = {};
   let targetButtons = {};
+  let preserveButtons = {};
   let controlEls = {};
 
   container.innerHTML = '';
@@ -296,9 +320,22 @@ export function mountHueShift(container, options = {}) {
     modeSegmented.appendChild(button);
   }
 
-  const targetRow = document.createElement('div');
-  targetRow.className = 'hue-shift-target-row';
-  container.appendChild(targetRow);
+  function createOptionGroup(labelText) {
+    const group = document.createElement('div');
+    group.className = 'hue-shift-option-group';
+    const label = document.createElement('div');
+    label.className = 'hue-shift-option-group-label';
+    label.textContent = labelText;
+    const optionsEl = document.createElement('div');
+    optionsEl.className = 'prompt-custom-select-options hue-shift-target-row';
+    group.appendChild(label);
+    group.appendChild(optionsEl);
+    return { group, optionsEl };
+  }
+
+  const targetGroup = createOptionGroup('Adjust');
+  const targetRow = targetGroup.optionsEl;
+  container.appendChild(targetGroup.group);
 
   const targetDefs = [
     { key: 'fills', label: 'Fills' },
@@ -310,15 +347,39 @@ export function mountHueShift(container, options = {}) {
   for (const def of targetDefs) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'hue-shift-chip active';
+    button.className = 'prompt-custom-select-option selected';
     button.textContent = def.label;
     button.addEventListener('click', () => {
       adjustOptions[def.key] = !adjustOptions[def.key];
-      button.classList.toggle('active', adjustOptions[def.key]);
+      button.classList.toggle('selected', adjustOptions[def.key]);
       requestColors({ preserveExisting: true, notifyAfterLoad: true });
     });
     targetButtons[def.key] = button;
     targetRow.appendChild(button);
+  }
+
+  const preserveGroup = createOptionGroup('Preserve Color');
+  const preserveRow = preserveGroup.optionsEl;
+  container.appendChild(preserveGroup.group);
+
+  const preserveDefs = [
+    { key: 'white', label: 'White' },
+    { key: 'black', label: 'Black' },
+    { key: 'grayscale', label: 'Grayscale' },
+  ];
+
+  for (const def of preserveDefs) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'prompt-custom-select-option';
+    button.textContent = def.label;
+    button.addEventListener('click', () => {
+      preserveOptions[def.key] = !preserveOptions[def.key];
+      button.classList.toggle('selected', preserveOptions[def.key]);
+      requestColors({ preserveExisting: true, notifyAfterLoad: true });
+    });
+    preserveButtons[def.key] = button;
+    preserveRow.appendChild(button);
   }
 
   const toolbar = document.createElement('div');
@@ -641,7 +702,8 @@ export function mountHueShift(container, options = {}) {
   }
 
   function loadColors(hexList, options = {}) {
-    const unique = [...new Set((hexList || []).map((hex) => String(hex).toUpperCase()))];
+    const unique = [...new Set((hexList || []).map((hex) => String(hex).toUpperCase()))]
+      .filter((hex) => !isPreservedRgb(hexToRgb(hex), preserveOptions));
     const existingByOriginal = new Map(
       (options.preserveExisting ? colors : []).map((color) => [color.originalHex, cloneRgb(color.currentRgb)])
     );
@@ -670,7 +732,7 @@ export function mountHueShift(container, options = {}) {
   }
 
   function requestColors(options = {}) {
-    requestId += 1;
+      requestId += 1;
     pendingColorRequest = {
       id: requestId,
       preserveExisting: options.preserveExisting !== false,
@@ -684,6 +746,9 @@ export function mountHueShift(container, options = {}) {
       includeStrokes: adjustOptions.strokes,
       includeDropShadow: adjustOptions.dropShadow,
       includeInnerShadow: adjustOptions.innerShadow,
+      preserveWhite: preserveOptions.white,
+      preserveBlack: preserveOptions.black,
+      preserveGrayscale: preserveOptions.grayscale,
     });
   }
 
@@ -993,14 +1058,15 @@ export function mountHueShift(container, options = {}) {
   resizeObserver.observe(wheelWrap);
 
   function getValues() {
-    return {
-      colorMode,
-      adjustOptions: { ...adjustOptions },
-      hueShiftColorMap: colors.map((color) => ({
-        from: color.originalHex,
-        to: getCurrentHex(color),
-      })),
-    };
+      return {
+        colorMode,
+        adjustOptions: { ...adjustOptions },
+        preserveOptions: { ...preserveOptions },
+        hueShiftColorMap: colors.map((color) => ({
+          from: color.originalHex,
+          to: getCurrentHex(color),
+        })),
+      };
   }
 
   container._hueShiftGetValues = getValues;

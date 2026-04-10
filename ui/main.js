@@ -24999,6 +24999,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       const colorMap = hueValues.hueShiftColorMap;
       if (!Array.isArray(colorMap)) return;
       const adjustOptions = hueValues.adjustOptions || {};
+      const preserveOptions = hueValues.preserveOptions || {};
 
       const result = await requestSelectionData(false, false, 'styleOnly');
       const selection = Array.isArray(result?.data) ? result.data : [];
@@ -25012,6 +25013,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         colorMap: colorMap,
         colorMode: hueValues.colorMode || 'hsl',
         adjustOptions,
+        preserveOptions,
       }));
 
       await executeCommands(commands);
