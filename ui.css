@@ -524,10 +524,8 @@
       display: flex;
       flex-direction: column;
       gap: var(--space-sm);
-      padding: var(--space-md);
       flex: 1;
       min-height: 0;
-      background: var(--bg-secondary);
     }
 
     .prompt-drawer-body:has(.hue-shift-mount) {
@@ -556,32 +554,8 @@
       justify-content: space-between;
     }
 
-    .hue-shift-segmented {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px;
-      border-radius: 999px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-    }
-
-    .hue-shift-segment {
-      background: transparent;
-      color: var(--text-secondary);
-      border: none;
-      border-radius: 999px;
-      padding: 6px 12px;
-      font-size: var(--text-xs);
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      cursor: pointer;
-      transition: background 0.15s ease, color 0.15s ease;
-    }
-
-    .hue-shift-segment.active {
-      background: var(--accent);
-      color: #fff;
+    .hue-shift-mode-row .pill-tab-container {
+      flex-wrap: wrap;
     }
 
     .hue-shift-option-group {
@@ -599,12 +573,6 @@
 
     .hue-shift-target-row {
       gap: 8px;
-    }
-
-    .hue-shift-target-row .prompt-custom-select-option {
-      font-size: var(--text-xs);
-      min-height: 28px;
-      padding: 6px 10px;
     }
 
     .hue-shift-toolbar {
@@ -629,6 +597,12 @@
       font-size: var(--text-sm);
       cursor: pointer;
       min-width: 150px;
+    }
+
+    .hue-shift-palette-select.inactive,
+    .hue-shift-palette-select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .hue-shift-toolbar-right {
@@ -664,6 +638,14 @@
       flex-shrink: 0;
       background: radial-gradient(circle at center, rgba(255,255,255,0.04), transparent 68%);
       border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+      transition: border-color 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .hue-shift-wheel-wrap.single-selected {
+      border: 2px solid rgba(255, 255, 255, 1);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
     }
 
     .hue-shift-wheel-canvas,
@@ -711,11 +693,35 @@
 
     .hue-shift-palette-bar {
       display: flex;
+      position: relative;
       min-height: 42px;
       border-radius: var(--radius-sm);
       overflow: hidden;
       border: 1px solid var(--border);
       background: var(--bg-tertiary);
+    }
+
+    .hue-shift-palette-bar.inactive .hue-shift-swatch {
+      pointer-events: none;
+    }
+
+    .hue-shift-palette-mask {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
+      backdrop-filter: blur(1px);
+    }
+
+    .hue-shift-palette-mask.hidden {
+      display: none;
+    }
+
+    .hue-shift-palette-mask-btn {
+      pointer-events: auto;
     }
 
     .hue-shift-swatch {
@@ -726,13 +732,9 @@
       position: relative;
     }
 
-    .hue-shift-swatch.active::after {
-      content: '';
-      position: absolute;
-      inset: 3px;
+    .hue-shift-swatch.active{
       border: 2px solid rgba(255, 255, 255, 0.95);
-      border-radius: calc(var(--radius-sm) - 2px);
-      pointer-events: none;
+      border-radius: var(--radius-sm);
     }
 
     .hue-shift-empty {

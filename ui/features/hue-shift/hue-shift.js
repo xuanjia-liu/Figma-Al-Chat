@@ -279,6 +279,7 @@ export function mountHueShift(container, options = {}) {
   let linkBtn = null;
   let wheelWrap = null;
   let paletteBar = null;
+  let paletteBarLockMask = null;
   let modeButtons = {};
   let targetButtons = {};
   let preserveButtons = {};
@@ -289,7 +290,7 @@ export function mountHueShift(container, options = {}) {
   const modeRow = document.createElement('div');
   modeRow.className = 'hue-shift-mode-row';
   const modeSegmented = document.createElement('div');
-  modeSegmented.className = 'hue-shift-segmented';
+  modeSegmented.className = 'pill-tab-container';
   modeRow.appendChild(modeSegmented);
 
   const topActions = document.createElement('div');
@@ -308,7 +309,7 @@ export function mountHueShift(container, options = {}) {
   for (const mode of COLOR_MODES) {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'hue-shift-segment';
+    button.className = 'pill-tab';
     button.textContent = mode.toUpperCase();
     button.addEventListener('click', () => {
       if (colorMode === mode) return;
@@ -392,6 +393,7 @@ export function mountHueShift(container, options = {}) {
   paletteSelect = document.createElement('select');
   paletteSelect.className = 'hue-shift-palette-select';
   paletteSelect.addEventListener('change', () => {
+    if (linked) return;
     const nextValue = paletteSelect.value;
     if (!linked && nextValue === 'all') {
       activePaletteIndex = colors.length > 0 ? 0 : -1;
@@ -399,8 +401,7 @@ export function mountHueShift(container, options = {}) {
       activePaletteIndex = nextValue === 'all' ? -1 : Number(nextValue);
     }
     endInteractiveSessions();
-    syncPaletteSelect();
-    updateControlDisplayValues();
+    refreshSelectionUI();
   });
   paletteLabel.appendChild(paletteSelect);
   toolbar.appendChild(paletteLabel);
@@ -418,9 +419,7 @@ export function mountHueShift(container, options = {}) {
       activePaletteIndex = 0;
     }
     endInteractiveSessions();
-    updateLinkButton();
-    syncPaletteSelect();
-    updateControlDisplayValues();
+    refreshSelectionUI();
   });
   toolbarActions.appendChild(linkBtn);
   toolbar.appendChild(toolbarActions);
@@ -442,6 +441,22 @@ export function mountHueShift(container, options = {}) {
 
   paletteBar = document.createElement('div');
   paletteBar.className = 'hue-shift-palette-bar';
+  paletteBarLockMask = document.createElement('div');
+  paletteBarLockMask.className = 'hue-shift-palette-mask hidden';
+  const unlockPaletteBtn = document.createElement('button');
+  unlockPaletteBtn.type = 'button';
+  unlockPaletteBtn.className = 'hue-shift-btn hue-shift-palette-mask-btn';
+  unlockPaletteBtn.textContent = 'Unlock single select';
+  unlockPaletteBtn.addEventListener('click', () => {
+    linked = false;
+    if (activePaletteIndex < 0 && colors.length > 0) {
+      activePaletteIndex = 0;
+    }
+    endInteractiveSessions();
+    refreshSelectionUI();
+  });
+  paletteBarLockMask.appendChild(unlockPaletteBtn);
+  paletteBar.appendChild(paletteBarLockMask);
   container.appendChild(paletteBar);
 
   controlsWrap = document.createElement('div');
@@ -503,6 +518,26 @@ export function mountHueShift(container, options = {}) {
   function updateLinkButton() {
     linkBtn.classList.toggle('active', linked);
     linkBtn.title = linked ? 'Linked palette adjustments' : 'Adjust one palette color';
+  }
+
+  function updateSelectionAffordances() {
+    const hasSingleSelection = !linked && activePaletteIndex >= 0 && activePaletteIndex < colors.length;
+    paletteSelect.disabled = linked;
+    paletteSelect.classList.toggle('inactive', linked);
+    wheelWrap.classList.toggle('single-selected', hasSingleSelection);
+    paletteBar.classList.toggle('inactive', linked);
+    if (paletteBarLockMask) {
+      paletteBarLockMask.classList.toggle('hidden', !linked);
+    }
+  }
+
+  function refreshSelectionUI() {
+    updateLinkButton();
+    syncPaletteSelect();
+    updatePaletteBar();
+    updateControlDisplayValues();
+    drawOverlay();
+    updateSelectionAffordances();
   }
 
   function getDisplayColorIndices() {
@@ -642,7 +677,7 @@ export function mountHueShift(container, options = {}) {
 
     slider.addEventListener('change', () => {
       controlSession = null;
-      updateControlDisplayValues();
+      refreshSelectionUI();
     });
 
     controlEls[config.key] = { slider, valueEl };
@@ -694,11 +729,7 @@ export function mountHueShift(container, options = {}) {
       ...color,
       currentRgb: hexToRgb(color.originalHex),
     }));
-    updatePaletteBar();
-    if (colorMode !== 'oklch') {
-      drawOverlay();
-    }
-    updateControlDisplayValues();
+    refreshSelectionUI();
   }
 
   function loadColors(hexList, options = {}) {
@@ -725,6 +756,7 @@ export function mountHueShift(container, options = {}) {
     drawWheel();
     drawOverlay();
     updateControlDisplayValues();
+    updateSelectionAffordances();
 
     if (options.notifyAfterLoad) {
       notifyChanged();
@@ -759,6 +791,9 @@ export function mountHueShift(container, options = {}) {
       empty.className = 'hue-shift-empty';
       empty.textContent = 'No colors found for the current targets';
       paletteBar.appendChild(empty);
+      if (paletteBarLockMask) {
+        paletteBar.appendChild(paletteBarLockMask);
+      }
       return;
     }
 
@@ -770,15 +805,15 @@ export function mountHueShift(container, options = {}) {
       swatch.title = `${color.originalHex} → ${getCurrentHex(color)}`;
       swatch.classList.toggle('active', activePaletteIndex === index && !linked);
       swatch.addEventListener('click', () => {
+        if (linked) return;
         activePaletteIndex = index;
-        if (linked) linked = false;
-        updateLinkButton();
-        syncPaletteSelect();
-        updatePaletteBar();
-        updateControlDisplayValues();
+        refreshSelectionUI();
       });
       paletteBar.appendChild(swatch);
     });
+    if (paletteBarLockMask) {
+      paletteBar.appendChild(paletteBarLockMask);
+    }
   }
 
   function initWheel() {
@@ -906,16 +941,22 @@ export function mountHueShift(container, options = {}) {
     colors.forEach((color, index) => {
       const model = getModeModel(color.currentRgb, colorMode);
       const pos = wheelModelToPos(model.h, model.s);
+      const isSelected = activePaletteIndex === index && !linked;
+
+      ctx.save();
+      ctx.shadowColor = isSelected ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.14)';
+      ctx.shadowBlur = isSelected ? 12 : 6;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = isSelected ? 4 : 2;
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, HANDLE_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = getCurrentHex(color);
       ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = activePaletteIndex === index && !linked ? 3 : 2;
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = isSelected ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = isSelected ? 2 : 1;
       ctx.stroke();
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      ctx.restore();
     });
   }
 
@@ -951,8 +992,7 @@ export function mountHueShift(container, options = {}) {
       ),
     };
     activePaletteIndex = linked ? activePaletteIndex : handleIndex;
-    syncPaletteSelect();
-    updatePaletteBar();
+    refreshSelectionUI();
     overlayCanvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   }
@@ -983,7 +1023,7 @@ export function mountHueShift(container, options = {}) {
   function onPointerUp() {
     if (!dragSession) return;
     dragSession = null;
-    updateControlDisplayValues();
+    refreshSelectionUI();
   }
 
   function endInteractiveSessions() {
@@ -1000,10 +1040,8 @@ export function mountHueShift(container, options = {}) {
       initWheel();
     }
     renderModeControls();
-    updateControlDisplayValues();
     drawWheel();
-    drawOverlay();
-    updatePaletteBar();
+    refreshSelectionUI();
   }
 
   function handlePluginMessage(event) {
@@ -1023,6 +1061,7 @@ export function mountHueShift(container, options = {}) {
         drawWheel();
         drawOverlay();
         updateControlDisplayValues();
+        updateSelectionAffordances();
         if (requestMeta.notifyAfterLoad) notifyChanged();
         if (!requestMeta.quiet && showToast) showToast('No colors found in selection', 'info');
       }
