@@ -6392,10 +6392,18 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       '♥', '♦', '♣', '♠', '★', '☆', '☀', '☁', '☂', '☃', '☎', '☕', '☘', '☺', '☯',
       '☮', '☾', '☽', '♨', '✂', '✈', '✉', '✔', '✿', '❄', '⚡', '⚙', '⚽', '♪', '♫'
     ];
-    const ASCII_EMOJI_COLOR_POOL = [
-      '❤️', '🧡', '💛', '💚', '💙', '💜', '⭐️', '🌙', '☀️', '⚡️', '🔥', '✨', '❄️', '🌸', '🍀',
-      '🌼', '🍎', '🍊', '🍋', '🍇', '🫐', '🧩', '🎈', '🎵', '🎮', '🚀', '🪐', '🌎', '🦋', '🐙'
-    ];
+    const ASCII_EMOJI_COLOR_FAMILIES = {
+      red: ['❤️', '♥️', '❣️', '🌹', '🍓', '🍒', '🌶️', '🐞', '🔴', '🟥'],
+      orange: ['🧡', '🍊', '🍑', '🥕', '🦊', '🌅', '🔶', '🔸', '🟠', '🟧'],
+      yellow: ['💛', '😀', '😃', '😄', '😊', '😉', '🤩', '🌟', '⭐️', '☀️', '🌼', '🌻', '🟡', '🟨'],
+      green: ['💚', '🤢', '🤮', '🐸', '🍀', '🌿', '🍏', '🥝', '🥦', '🟢', '🟩'],
+      blue: ['💙', '🥶', '🫐', '🐟', '🐬', '🌊', '🌀', '🧊', '🔵', '🟦'],
+      purple: ['💜', '😈', '👾', '🍆', '☂️', '🪻', '🔮', '🟣', '🟪'],
+      brown: ['🤎', '🐻', '🦉', '🥔', '🍪', '🌰', '🟤', '🟫'],
+      white: ['🤍', '☁️', '🫧', '❄️', '🤍', '⚪', '⬜', '✨'],
+      black: ['🖤', '🎱', '🕷️', '🌑', '♠️', '⚫', '⬛', '🕶️'],
+    };
+    const ASCII_EMOJI_COLOR_POOL = Object.values(ASCII_EMOJI_COLOR_FAMILIES).flat();
     const ASCII_EMOJI_CHARSET_DEFAULT_SIZE = 7;
     const ASCII_EMOJI_CHARSET_MIN_SIZE = 2;
     const ASCII_EMOJI_CHARSET_MAX_SIZE = 100;
@@ -6404,7 +6412,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     const ASCII_TEXT_FONT_STACK = '"Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
     const ASCII_SYMBOL_FONT_STACK = '"Noto Sans Mono CJK JP", "Noto Sans Mono CJK SC", "Sarasa Mono J", "MS Gothic", "Osaka-Mono", "Hiragino Sans", monospace';
     const ASCII_EMOJI_TEXT_FONT_STACK = ASCII_SYMBOL_FONT_STACK;
-    const ASCII_EMOJI_COLOR_FONT_STACK = ASCII_TEXT_FONT_STACK;
+    const ASCII_EMOJI_COLOR_FONT_STACK = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
     /** advance/lineHeight (~0.55) for Latin mono at Figma 110% leading — tall cells. */
     const ASCII_CELL_ASPECT_MONOSPACE = 0.55;
     /** Block shades (░▒▓█) map to ~square terminal cells; using 0.55 undersamples rows → squat output. */
@@ -6445,6 +6453,56 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     function getAsciiEmojiPool(values) {
       return isAsciiColorOutputEnabled(values) ? ASCII_EMOJI_COLOR_POOL : ASCII_EMOJI_TEXT_POOL;
+    }
+
+    function rgbToHsl(r, g, b) {
+      const rn = Math.max(0, Math.min(1, r / 255));
+      const gn = Math.max(0, Math.min(1, g / 255));
+      const bn = Math.max(0, Math.min(1, b / 255));
+      const max = Math.max(rn, gn, bn);
+      const min = Math.min(rn, gn, bn);
+      const delta = max - min;
+
+      let h = 0;
+      if (delta > 0) {
+        if (max === rn) {
+          h = ((gn - bn) / delta) % 6;
+        } else if (max === gn) {
+          h = (bn - rn) / delta + 2;
+        } else {
+          h = (rn - gn) / delta + 4;
+        }
+        h *= 60;
+        if (h < 0) h += 360;
+      }
+
+      const l = (max + min) / 2;
+      const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+      return { h, s, l };
+    }
+
+    function getAsciiEmojiColorFamily(r, g, b) {
+      const { h, s, l } = rgbToHsl(r, g, b);
+
+      if (l <= 0.16) return 'black';
+      if (s <= 0.12 && l >= 0.82) return 'white';
+      if (s <= 0.12) return l < 0.42 ? 'black' : 'white';
+
+      if (h >= 15 && h < 45 && l < 0.5) return 'brown';
+      if (h < 20 || h >= 345) return l > 0.72 ? 'white' : 'red';
+      if (h < 45) return 'orange';
+      if (h < 70) return 'yellow';
+      if (h < 170) return 'green';
+      if (h < 255) return 'blue';
+      if (h < 345) return 'purple';
+      return 'red';
+    }
+
+    function getColorMatchedEmojiGlyph(r, g, b, normalized) {
+      const familyName = getAsciiEmojiColorFamily(r, g, b);
+      const family = ASCII_EMOJI_COLOR_FAMILIES[familyName] || ASCII_EMOJI_COLOR_FAMILIES.blue;
+      const idx = Math.max(0, Math.min(family.length - 1, Math.round(normalized * (family.length - 1))));
+      return family[idx] || family[family.length - 1] || '🟦';
     }
 
     function getAsciiEmojiCharsetSize(values) {
@@ -6846,6 +6904,8 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     }
 
     async function convertImageToAscii(source, values) {
+      const preset = String(values.charsetPreset || 'standard').toLowerCase();
+      const useColorMatchedEmoji = preset === 'emoji' && isAsciiColorOutputEnabled(values);
       const charset = splitAsciiGlyphs(resolveAsciiCharset(values));
       const width = clampAsciiWidth(values.width);
       const density = normalizeAsciiDensity(values.density);
@@ -6918,8 +6978,18 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             normalized = invert ? luminance : (1 - luminance);
           }
           normalized = Math.max(0, Math.min(1, Math.pow(normalized, gamma)));
-          const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
-          line += charset[index] || charset[charset.length - 1] || ' ';
+          const glyph = useColorMatchedEmoji
+            ? getColorMatchedEmojiGlyph(
+                pixels[offset],
+                pixels[offset + 1],
+                pixels[offset + 2],
+                normalized
+              )
+            : (() => {
+                const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
+                return charset[index] || charset[charset.length - 1] || ' ';
+              })();
+          line += glyph;
           if (rowColors) {
             rowColors.push({
               r: quantRgb(pixels[offset]),
@@ -6947,7 +7017,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         colorOutput,
         colorRows,
         colorQuantStep,
-        charsetPreset: String(values.charsetPreset || 'standard').toLowerCase(),
+        charsetPreset: preset,
         sourceNaturalWidth: image.naturalWidth,
         sourceNaturalHeight: image.naturalHeight
       };
@@ -7024,6 +7094,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       if (!pre) return;
 
       const preset = String(asciiResult?.charsetPreset || 'standard').toLowerCase();
+      const useNativeColorEmoji = preset === 'emoji' && !!asciiResult?.colorOutput;
       pre.style.fontFamily = resolveAsciiFontStack(preset, !!asciiResult?.colorOutput);
       pre.classList.toggle('ascii-preview-pre--symbols', preset === 'symbols');
       pre.classList.toggle('ascii-preview-pre--emoji', preset === 'emoji');
@@ -7043,7 +7114,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             span.textContent = ch === ' ' ? '\u00A0' : ch;
 
             const color = rowColors?.[colIndex];
-            if (color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) {
+            if (!useNativeColorEmoji && color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) {
               span.style.color = `rgba(${color.r}, ${color.g}, ${color.b}, ${Number.isFinite(color.a) ? color.a : 1})`;
             }
 
