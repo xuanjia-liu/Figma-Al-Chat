@@ -9036,29 +9036,41 @@ Rules:
         const hasFields = quickActionHasFields(task);
         const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${localizeActionString(task.category)}</div>` : '';
         const itemTitle = localizedTask.displayDesc || localizedTask.displayName || task.name;
-        const customTag = task.isCustomQuickAction ? `<div class="command-item-custom-tag">${task.askMode ? 'Ask' : 'Agent'} custom</div>` : '';
+        const customTag = task.isCustomQuickAction ? `<div class="command-item-custom-tag">${task.askMode ? 'Ask' : 'Agent'}</div>` : '';
         const customActions = task.isCustomQuickAction ? `
           <div class="command-item-custom-actions">
-            <button class="command-item-custom-btn" data-custom-action="edit" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Edit custom quick action">
+            <button class="command-item-custom-trigger" data-custom-popover-trigger="${escapeHtml(task.customQuickActionId)}" title="More actions" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="5" r="1.5"/>
+                <circle cx="12" cy="12" r="1.5"/>
+                <circle cx="12" cy="19" r="1.5"/>
+              </svg>
+            </button>
+            <div class="command-item-custom-popover" role="menu">
+              <button class="dropdown-item" data-custom-action="edit" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Edit custom quick action">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/>
               </svg>
-            </button>
-            <button class="command-item-custom-btn" data-custom-action="duplicate" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Duplicate custom quick action">
+              <span>Edit</span>
+              </button>
+              <button class="dropdown-item" data-custom-action="duplicate" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Duplicate custom quick action">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
-            </button>
-            <button class="command-item-custom-btn" data-custom-action="delete" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Delete custom quick action">
+              <span>Duplicate</span>
+              </button>
+              <button class="dropdown-item dropdown-item-danger" data-custom-action="delete" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Delete custom quick action">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18"/>
                 <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
                 <path d="M10 11v6M14 11v6"/>
               </svg>
-            </button>
+              <span>Delete</span>
+              </button>
+            </div>
           </div>
         ` : '';
         html += `
@@ -9084,10 +9096,30 @@ Rules:
         openCustomQuickActionModal();
       });
 
+      commandsContent.querySelectorAll('[data-custom-popover-trigger]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const actionId = button.dataset.customPopoverTrigger;
+          const container = button.closest('.command-item-custom-actions');
+          if (!actionId || !container) return;
+          const shouldOpen = openCustomActionPopoverId !== actionId;
+          closeCommandItemPopover();
+          if (shouldOpen) {
+            openCustomActionPopoverId = actionId;
+            container.classList.add('is-open');
+            button.setAttribute('aria-expanded', 'true');
+          } else {
+            button.setAttribute('aria-expanded', 'false');
+          }
+        });
+      });
+
       commandsContent.querySelectorAll('[data-custom-action]').forEach((button) => {
         button.addEventListener('click', (event) => {
           event.preventDefault();
           event.stopPropagation();
+          closeCommandItemPopover();
           const { customAction, customActionId } = button.dataset;
           if (!customActionId) return;
           if (customAction === 'edit') {
@@ -39251,6 +39283,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
     const customQuickActionDescription = document.getElementById('customQuickActionDescription');
     const customQuickActionPrompt = document.getElementById('customQuickActionPrompt');
     const customQuickActionContext = document.getElementById('customQuickActionContext');
+    const customQuickActionContextTrigger = document.getElementById('customQuickActionContextTrigger');
+    const customQuickActionContextMenu = document.getElementById('customQuickActionContextMenu');
     const customQuickActionNoSelection = document.getElementById('customQuickActionNoSelection');
     const customQuickActionIncludeTokens = document.getElementById('customQuickActionIncludeTokens');
 
@@ -39258,6 +39292,40 @@ Based on the user's instruction, generate the appropriate commands to modify the
     let editingOptionOriginalId = null; // Store ID of option being edited
     let editingOptionOriginalValue = null; // Store value of option being edited (fallback for old data)
     let editingCustomQuickActionId = null;
+    let openCustomActionPopoverId = null;
+
+    const customQuickActionContextOptions = [
+      {
+        value: ContextMode.ALL,
+        label: 'All',
+        description: 'Full selection metadata for the most capable behavior.'
+      },
+      {
+        value: ContextMode.MINIMAL,
+        label: 'Minimal',
+        description: 'Only core node identity data to reduce token usage.'
+      },
+      {
+        value: ContextMode.TEXT_ONLY,
+        label: 'Text only',
+        description: 'Just text content and text-node basics.'
+      },
+      {
+        value: ContextMode.LAYOUT_ONLY,
+        label: 'Layout only',
+        description: 'Geometry, size, and position without full styling.'
+      },
+      {
+        value: ContextMode.STYLE_ONLY,
+        label: 'Style only',
+        description: 'Fills, strokes, and effects without deeper layout data.'
+      },
+      {
+        value: ContextMode.HIERARCHY,
+        label: 'Hierarchy',
+        description: 'Layer structure and nesting relationships.'
+      }
+    ];
 
     function generateCustomQuickActionId() {
       return `qa_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -39299,9 +39367,53 @@ Based on the user's instruction, generate the appropriate commands to modify the
       `).join('');
     }
 
+    function getCustomQuickActionContextValue() {
+      return VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(customQuickActionContext?.dataset.value)
+        ? customQuickActionContext.dataset.value
+        : ContextMode.ALL;
+    }
+
+    function closeCustomQuickActionContextMenu() {
+      customQuickActionContext?.classList.remove('open');
+      customQuickActionContextTrigger?.setAttribute('aria-expanded', 'false');
+    }
+
+    function setCustomQuickActionContextValue(value) {
+      const selected = customQuickActionContextOptions.find((option) => option.value === value)
+        || customQuickActionContextOptions[0];
+      if (!customQuickActionContext || !customQuickActionContextTrigger || !customQuickActionContextMenu) return;
+      customQuickActionContext.dataset.value = selected.value;
+      customQuickActionContextTrigger.setAttribute('aria-expanded', 'false');
+      customQuickActionContextTrigger.querySelector('.custom-quick-action-context-trigger-label').textContent = selected.label;
+      customQuickActionContextTrigger.querySelector('.custom-quick-action-context-trigger-desc').textContent = selected.description;
+      customQuickActionContextMenu.innerHTML = customQuickActionContextOptions.map((option) => `
+        <button
+          type="button"
+          class="custom-quick-action-context-option${option.value === selected.value ? ' is-selected' : ''}"
+          data-context-value="${escapeHtml(option.value)}"
+          role="option"
+          aria-selected="${option.value === selected.value ? 'true' : 'false'}"
+        >
+          <span class="custom-quick-action-context-option-title">${escapeHtml(option.label)}</span>
+          <span class="custom-quick-action-context-option-desc">${escapeHtml(option.description)}</span>
+        </button>
+      `).join('');
+    }
+
+    function closeCommandItemPopover() {
+      openCustomActionPopoverId = null;
+      document.querySelectorAll('.command-item-custom-actions.is-open').forEach((node) => {
+        node.classList.remove('is-open');
+      });
+      document.querySelectorAll('[data-custom-popover-trigger][aria-expanded="true"]').forEach((node) => {
+        node.setAttribute('aria-expanded', 'false');
+      });
+    }
+
     function closeCustomQuickActionModal() {
       if (!customQuickActionModal) return;
       customQuickActionModal.classList.remove('show');
+      closeCustomQuickActionContextMenu();
       editingCustomQuickActionId = null;
     }
 
@@ -39327,7 +39439,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (customQuickActionMode) customQuickActionMode.value = action?.mode === 'ask' ? 'ask' : 'agent';
       if (customQuickActionDescription) customQuickActionDescription.value = action?.desc || '';
       if (customQuickActionPrompt) customQuickActionPrompt.value = action?.promptTemplate || '';
-      if (customQuickActionContext) customQuickActionContext.value = VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action?.requiredContext) ? action.requiredContext : ContextMode.ALL;
+      setCustomQuickActionContextValue(
+        VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action?.requiredContext) ? action.requiredContext : ContextMode.ALL
+      );
       if (customQuickActionNoSelection) customQuickActionNoSelection.checked = action?.noSelection === true;
       if (customQuickActionIncludeTokens) customQuickActionIncludeTokens.checked = action?.includeTokens === true;
       populateCustomQuickActionCategoryOptions(action?.category || defaultCategory);
@@ -39371,9 +39485,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       const mode = customQuickActionMode?.value === 'ask' ? 'ask' : 'agent';
       const desc = customQuickActionDescription?.value.trim() || '';
       const promptTemplate = customQuickActionPrompt?.value.trim() || '';
-      const requiredContext = VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(customQuickActionContext?.value)
-        ? customQuickActionContext.value
-        : ContextMode.ALL;
+      const requiredContext = getCustomQuickActionContextValue();
 
       if (!name) {
         showToast('Custom quick action name is required.', 'error');
@@ -39973,12 +40085,38 @@ Based on the user's instruction, generate the appropriate commands to modify the
     addOptionModal.onclick = (e) => {
       if (e.target === addOptionModal) closeAddOptionModal();
     };
+    customQuickActionContextTrigger?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const nextOpen = !customQuickActionContext.classList.contains('open');
+      closeCustomQuickActionContextMenu();
+      if (nextOpen) {
+        customQuickActionContext.classList.add('open');
+        customQuickActionContextTrigger.setAttribute('aria-expanded', 'true');
+      }
+    });
+    customQuickActionContextMenu?.addEventListener('click', (e) => {
+      const option = e.target.closest('[data-context-value]');
+      if (!option) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setCustomQuickActionContextValue(option.dataset.contextValue);
+      closeCustomQuickActionContextMenu();
+    });
     closeCustomQuickActionBtn.onclick = closeCustomQuickActionModal;
     cancelCustomQuickActionBtn.onclick = closeCustomQuickActionModal;
     saveCustomQuickActionBtn.onclick = handleSaveCustomQuickAction;
     customQuickActionModal.onclick = (e) => {
       if (e.target === customQuickActionModal) closeCustomQuickActionModal();
     };
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.command-item-custom-actions')) {
+        closeCommandItemPopover();
+      }
+      if (!e.target.closest('.custom-quick-action-context-select')) {
+        closeCustomQuickActionContextMenu();
+      }
+    });
 
     // Settings
     btnSaveSettings.addEventListener('click', saveSettings);

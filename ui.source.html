@@ -836,15 +836,20 @@
         </div>
         <div class="custom-quick-action-modal-row">
           <div class="setting-item">
-            <label class="setting-label" for="customQuickActionContext">Context mode</label>
-            <select class="setting-input" id="customQuickActionContext">
-              <option value="all">All</option>
-              <option value="minimal">Minimal</option>
-              <option value="textOnly">Text only</option>
-              <option value="layoutOnly">Layout only</option>
-              <option value="styleOnly">Style only</option>
-              <option value="hierarchy">Hierarchy</option>
-            </select>
+            <label class="setting-label" for="customQuickActionContextTrigger">Context mode</label>
+            <div class="custom-quick-action-context-select" id="customQuickActionContext" data-value="all">
+              <button type="button" class="custom-quick-action-context-trigger" id="customQuickActionContextTrigger" aria-haspopup="listbox" aria-expanded="false">
+                <span class="custom-quick-action-context-trigger-text">
+                  <span class="custom-quick-action-context-trigger-label">All</span>
+                  <span class="custom-quick-action-context-trigger-desc">Full selection metadata for the most capable behavior.</span>
+                </span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+              <div class="custom-quick-action-context-menu" id="customQuickActionContextMenu" role="listbox" aria-label="Context mode">
+              </div>
+            </div>
           </div>
         </div>
         <label class="custom-quick-action-toggle">
