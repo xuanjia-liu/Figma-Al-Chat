@@ -1646,9 +1646,12 @@ async function loadAsciiMonospaceFont(preset?: string | null, colorOutput?: bool
   if (normalizedPreset === 'emoji') {
     const emojiCandidates: FontName[] = colorOutput
       ? [
-          { family: 'Apple Color Emoji', style: 'Regular' },
-          { family: 'Segoe UI Emoji', style: 'Regular' },
-          { family: 'Noto Color Emoji', style: 'Regular' },
+          { family: 'Roboto Mono', style: 'Regular' },
+          { family: 'SF Mono', style: 'Regular' },
+          { family: 'Menlo', style: 'Regular' },
+          { family: 'Monaco', style: 'Regular' },
+          { family: 'Consolas', style: 'Regular' },
+          { family: 'Courier New', style: 'Regular' },
         ]
       : [
           { family: 'Noto Sans Mono CJK JP', style: 'Regular' },
@@ -7510,9 +7513,8 @@ figma.ui.onmessage = async (msg: {
           textNode.characters = normalizeAsciiTextForFigma(String(item.asciiText || item.text || ''));
           textNode.name = `ASCII Text - ${String(item.name || 'Result')}`;
 
-          const useNativeColorEmoji = String(item.charsetPreset || '').toLowerCase() === 'emoji' && item.colorOutput === true;
           const colorRuns = Array.isArray(item.colorRuns) ? item.colorRuns : [];
-          for (const run of useNativeColorEmoji ? [] : colorRuns) {
+          for (const run of colorRuns) {
             const start = Number(run?.start);
             const end = Number(run?.end);
             const color = run?.color;

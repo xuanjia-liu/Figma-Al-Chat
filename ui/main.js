@@ -6412,7 +6412,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     const ASCII_TEXT_FONT_STACK = '"Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
     const ASCII_SYMBOL_FONT_STACK = '"Noto Sans Mono CJK JP", "Noto Sans Mono CJK SC", "Sarasa Mono J", "MS Gothic", "Osaka-Mono", "Hiragino Sans", monospace';
     const ASCII_EMOJI_TEXT_FONT_STACK = ASCII_SYMBOL_FONT_STACK;
-    const ASCII_EMOJI_COLOR_FONT_STACK = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+    const ASCII_EMOJI_COLOR_FONT_STACK = ASCII_TEXT_FONT_STACK;
     /** advance/lineHeight (~0.55) for Latin mono at Figma 110% leading — tall cells. */
     const ASCII_CELL_ASPECT_MONOSPACE = 0.55;
     /** Block shades (░▒▓█) map to ~square terminal cells; using 0.55 undersamples rows → squat output. */
@@ -7117,7 +7117,6 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       if (!pre) return;
 
       const preset = String(asciiResult?.charsetPreset || 'standard').toLowerCase();
-      const useNativeColorEmoji = preset === 'emoji' && !!asciiResult?.colorOutput;
       pre.style.fontFamily = resolveAsciiFontStack(preset, !!asciiResult?.colorOutput);
       pre.classList.toggle('ascii-preview-pre--symbols', preset === 'symbols');
       pre.classList.toggle('ascii-preview-pre--emoji', preset === 'emoji');
@@ -7137,7 +7136,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             span.textContent = ch === ' ' ? '\u00A0' : ch;
 
             const color = rowColors?.[colIndex];
-            if (!useNativeColorEmoji && color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) {
+            if (color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)) {
               span.style.color = `rgba(${color.r}, ${color.g}, ${color.b}, ${Number.isFinite(color.a) ? color.a : 1})`;
             }
 
