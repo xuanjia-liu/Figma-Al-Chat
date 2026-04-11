@@ -7448,7 +7448,7 @@ figma.ui.onmessage = async (msg: {
 
     case 'get-ascii-source-images': {
       if (selection.length === 0) {
-        figma.ui.postMessage({ type: 'error', message: 'Please select at least one exportable element' });
+        figma.ui.postMessage({ type: 'ascii-source-images-result', images: [] });
         return;
       }
 
@@ -7474,7 +7474,7 @@ figma.ui.onmessage = async (msg: {
 
         const exported = images.filter((item): item is NonNullable<typeof item> => item !== null);
         if (exported.length === 0) {
-          figma.ui.postMessage({ type: 'error', message: 'Please select at least one exportable element' });
+          figma.ui.postMessage({ type: 'ascii-source-images-result', images: [] });
           return;
         }
 

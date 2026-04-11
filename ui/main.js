@@ -6498,11 +6498,15 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return 'red';
     }
 
-    function getColorMatchedEmojiGlyph(r, g, b, normalized) {
+    function getColorMatchedEmojiGlyph(r, g, b, normalized, emojiGlyphs = null) {
       const familyName = getAsciiEmojiColorFamily(r, g, b);
-      const family = ASCII_EMOJI_COLOR_FAMILIES[familyName] || ASCII_EMOJI_COLOR_FAMILIES.blue;
-      const idx = Math.max(0, Math.min(family.length - 1, Math.round(normalized * (family.length - 1))));
-      return family[idx] || family[family.length - 1] || '🟦';
+      const fallbackFamily = ASCII_EMOJI_COLOR_FAMILIES[familyName] || ASCII_EMOJI_COLOR_FAMILIES.blue;
+      const availableGlyphs = Array.isArray(emojiGlyphs) && emojiGlyphs.length > 0 ? emojiGlyphs : fallbackFamily;
+      const familySet = new Set(fallbackFamily);
+      const familyGlyphs = availableGlyphs.filter((glyph) => familySet.has(glyph));
+      const pool = familyGlyphs.length > 0 ? familyGlyphs : availableGlyphs;
+      const idx = Math.max(0, Math.min(pool.length - 1, Math.round(normalized * (pool.length - 1))));
+      return pool[idx] || pool[pool.length - 1] || fallbackFamily[fallbackFamily.length - 1] || '🟦';
     }
 
     function getAsciiEmojiCharsetSize(values) {
@@ -6708,10 +6712,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         'ascii-source-images-result',
         {
           timeoutMs: 45000,
-          errorMatcher: (msg) => typeof msg.message === 'string' && (
-            msg.message.includes('Please select at least one exportable element') ||
-            msg.message.includes('Failed to export ASCII source images')
-          )
+          errorMatcher: (msg) => typeof msg.message === 'string' && msg.message.includes('Failed to export ASCII source images')
         }
       );
 
@@ -6764,6 +6765,23 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         x: Number.isFinite(item.x) ? item.x : null,
         y: Number.isFinite(item.y) ? item.y : null
       }));
+    }
+
+    async function prefillImageToAsciiSourceImageFromSelection() {
+      if (currentPromptAction?.directAction !== 'imageToAscii') return;
+      const container = promptDrawerFields.querySelector('.prompt-image-upload-container[data-field-key="imageInput"]');
+      if (!container) return;
+
+      const currentValues = getPromptFieldValues();
+      if (extractImageDataUrls(currentValues.imageInput).length > 0) return;
+
+      const exportedImages = await requestAsciiSourceImages();
+      if (!Array.isArray(exportedImages) || exportedImages.length === 0) return;
+
+      populateImageFieldWithReference([exportedImages[0]], container);
+      updatePromptDrawerImageChips();
+      savePromptHistory();
+      scheduleImageToAsciiPreviewRefresh();
     }
 
     /** Match `convertImageToAscii` geometry: columns × rows for the current source and width. */
@@ -6907,6 +6925,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const preset = String(values.charsetPreset || 'standard').toLowerCase();
       const useColorMatchedEmoji = preset === 'emoji' && isAsciiColorOutputEnabled(values);
       const charset = splitAsciiGlyphs(resolveAsciiCharset(values));
+      const emojiGlyphs = useColorMatchedEmoji ? charset.slice() : null;
       const width = clampAsciiWidth(values.width);
       const density = normalizeAsciiDensity(values.density);
       const invert = values.invert === true || values.invert === 'true';
@@ -6978,12 +6997,16 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             normalized = invert ? luminance : (1 - luminance);
           }
           normalized = Math.max(0, Math.min(1, Math.pow(normalized, gamma)));
+          const qR = quantRgb(pixels[offset]);
+          const qG = quantRgb(pixels[offset + 1]);
+          const qB = quantRgb(pixels[offset + 2]);
           const glyph = useColorMatchedEmoji
             ? getColorMatchedEmojiGlyph(
-                pixels[offset],
-                pixels[offset + 1],
-                pixels[offset + 2],
-                normalized
+                qR,
+                qG,
+                qB,
+                normalized,
+                emojiGlyphs
               )
             : (() => {
                 const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
@@ -6992,9 +7015,9 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           line += glyph;
           if (rowColors) {
             rowColors.push({
-              r: quantRgb(pixels[offset]),
-              g: quantRgb(pixels[offset + 1]),
-              b: quantRgb(pixels[offset + 2]),
+              r: qR,
+              g: qG,
+              b: qB,
               a: alpha
             });
           }
@@ -18724,6 +18747,11 @@ Generate ONLY the reply text, nothing else.`;
       setupSplitPatternPickerListeners();
       // Setup event listeners for image inputs
       setupImageInputListeners();
+      if (currentPromptAction?.directAction === 'imageToAscii') {
+        prefillImageToAsciiSourceImageFromSelection().catch((error) => {
+          console.warn('Failed to preload Image to ASCII source image from selection:', error);
+        });
+      }
       // Setup event listeners for AI buttons
       setupAiButtonListeners();
       // Setup event listeners for text-with-tags fields
