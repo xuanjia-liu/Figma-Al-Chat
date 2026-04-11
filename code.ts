@@ -1641,8 +1641,34 @@ function decodeBase64ToBytes(base64: string): Uint8Array {
   return out;
 }
 
-async function loadAsciiMonospaceFont(preset?: string | null): Promise<FontName> {
+async function loadAsciiMonospaceFont(preset?: string | null, colorOutput?: boolean): Promise<FontName> {
   const normalizedPreset = String(preset || '').toLowerCase();
+  if (normalizedPreset === 'emoji') {
+    const emojiCandidates: FontName[] = colorOutput
+      ? [
+          { family: 'Roboto Mono', style: 'Regular' },
+          { family: 'SF Mono', style: 'Regular' },
+          { family: 'Menlo', style: 'Regular' },
+          { family: 'Monaco', style: 'Regular' },
+          { family: 'Consolas', style: 'Regular' },
+          { family: 'Courier New', style: 'Regular' },
+        ]
+      : [
+          { family: 'Noto Sans Mono CJK JP', style: 'Regular' },
+          { family: 'Noto Sans Mono CJK SC', style: 'Regular' },
+          { family: 'Sarasa Mono J', style: 'Regular' },
+          { family: 'MS Gothic', style: 'Regular' },
+          { family: 'Osaka-Mono', style: 'Regular' },
+          { family: 'Hiragino Sans', style: 'Regular' },
+        ];
+
+    for (const candidate of emojiCandidates) {
+      if (await tryLoadFontOnceForCache(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
   if (normalizedPreset === 'symbols') {
     const symbolCandidates: FontName[] = [
       { family: 'Noto Sans Mono CJK JP', style: 'Regular' },
@@ -7477,7 +7503,10 @@ figma.ui.onmessage = async (msg: {
         for (let index = 0; index < items.length; index++) {
           const item = items[index] || {};
           const textNode = figma.createText();
-          const font = await loadAsciiMonospaceFont(String(item.charsetPreset || ''));
+          const font = await loadAsciiMonospaceFont(
+            String(item.charsetPreset || ''),
+            item.colorOutput === true
+          );
           textNode.fontName = font;
           textNode.fontSize = 8;
           textNode.lineHeight = { unit: 'PERCENT', value: 110 };

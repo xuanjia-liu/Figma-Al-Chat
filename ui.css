@@ -11344,6 +11344,15 @@
       display: none;
     }
 
+    .prompt-field-label-row .prompt-ai-actions {
+      margin-left: auto;
+    }
+
+    .prompt-field-header-action-btn {
+      min-width: auto;
+      padding: 4px 10px;
+    }
+
     /* Camera Control 3D */
     .camera-control-3d-wrapper {
       position: relative;

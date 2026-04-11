@@ -278,6 +278,7 @@ export const quickCreateImageTasks = [
                     { value: 'symbols', label: 'Symbols', hintText: '　・○◇□◆■' },
                     { value: 'minimal', label: 'Minimal', hintText: ' .oO#' },
                     { value: 'dense', label: 'Dense', hintText: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$' },
+                    { value: 'emoji', label: 'Emoji', hintText: 'Auto-randomized emoji set based on Color output' },
                     { value: 'custom', label: 'Custom', hintText: 'Use Custom Charset below' }
                   ]
                 }
@@ -287,8 +288,27 @@ export const quickCreateImageTasks = [
               key: 'customCharset',
               type: 'text',
               label: 'Custom Charset',
-              placeholder: 'Light to dark, e.g. .:-=+*#%@',
-              showWhen: { field: 'charsetPreset', equals: 'custom' }
+              hint: 'Editable. Emoji mode auto-fills this field and Randomize regenerates it.',
+              placeholder: 'Light to dark, e.g. .:-=+*#%@ or auto-generated emoji',
+              headerActions: [
+                {
+                  key: 'randomizeAsciiEmojiCharset',
+                  label: 'Randomize',
+                  title: 'Randomize emoji charset'
+                }
+              ],
+              showWhen: { field: 'charsetPreset', equalsAny: ['custom', 'emoji'] }
+            },
+            {
+              key: 'emojiCharsetCount',
+              type: 'slider',
+              label: 'Emoji Count',
+              default: 7,
+              min: 2,
+              max: 100,
+              step: 1,
+              hint: 'Controls how many emoji are generated into Custom Charset.',
+              showWhen: { field: 'charsetPreset', equals: 'emoji' }
             },
             {
               key: 'edgeThickness',

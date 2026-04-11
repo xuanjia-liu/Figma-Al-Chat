@@ -6388,15 +6388,31 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       minimal: ' .oO#',
       dense: ' `^",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
     };
+    const ASCII_EMOJI_TEXT_POOL = [
+      '♥', '♦', '♣', '♠', '★', '☆', '☀', '☁', '☂', '☃', '☎', '☕', '☘', '☺', '☯',
+      '☮', '☾', '☽', '♨', '✂', '✈', '✉', '✔', '✿', '❄', '⚡', '⚙', '⚽', '♪', '♫'
+    ];
+    const ASCII_EMOJI_COLOR_POOL = [
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '⭐️', '🌙', '☀️', '⚡️', '🔥', '✨', '❄️', '🌸', '🍀',
+      '🌼', '🍎', '🍊', '🍋', '🍇', '🫐', '🧩', '🎈', '🎵', '🎮', '🚀', '🪐', '🌎', '🦋', '🐙'
+    ];
+    const ASCII_EMOJI_CHARSET_DEFAULT_SIZE = 7;
+    const ASCII_EMOJI_CHARSET_MIN_SIZE = 2;
+    const ASCII_EMOJI_CHARSET_MAX_SIZE = 100;
     const ASCII_MIN_WIDTH = 16;
     const ASCII_MAX_WIDTH = 200;
     const ASCII_TEXT_FONT_STACK = '"Roboto Mono", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
     const ASCII_SYMBOL_FONT_STACK = '"Noto Sans Mono CJK JP", "Noto Sans Mono CJK SC", "Sarasa Mono J", "MS Gothic", "Osaka-Mono", "Hiragino Sans", monospace';
+    const ASCII_EMOJI_TEXT_FONT_STACK = ASCII_SYMBOL_FONT_STACK;
+    const ASCII_EMOJI_COLOR_FONT_STACK = ASCII_TEXT_FONT_STACK;
     /** advance/lineHeight (~0.55) for Latin mono at Figma 110% leading — tall cells. */
     const ASCII_CELL_ASPECT_MONOSPACE = 0.55;
     /** Block shades (░▒▓█) map to ~square terminal cells; using 0.55 undersamples rows → squat output. */
     const ASCII_CELL_ASPECT_BLOCK_ELEMENTS = 1;
     let asciiBrightnessOrderCache = new Map();
+    const asciiGraphemeSegmenter = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+      ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+      : null;
 
     function clampAsciiWidth(value) {
       const parsed = parseInt(String(value ?? ''), 10);
@@ -6414,8 +6430,47 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return values?.colorOutput === true || values?.colorOutput === 'true';
     }
 
+    function splitAsciiGlyphs(value) {
+      const text = String(value || '');
+      if (!text) return [];
+      if (asciiGraphemeSegmenter) {
+        return Array.from(asciiGraphemeSegmenter.segment(text), (entry) => entry.segment).filter(Boolean);
+      }
+      return Array.from(text);
+    }
+
+    function isAsciiEmojiPreset(values) {
+      return String(values?.charsetPreset || '').toLowerCase() === 'emoji';
+    }
+
+    function getAsciiEmojiPool(values) {
+      return isAsciiColorOutputEnabled(values) ? ASCII_EMOJI_COLOR_POOL : ASCII_EMOJI_TEXT_POOL;
+    }
+
+    function getAsciiEmojiCharsetSize(values) {
+      const parsed = Number(values?.emojiCharsetCount);
+      if (!Number.isFinite(parsed)) return ASCII_EMOJI_CHARSET_DEFAULT_SIZE;
+      return Math.max(
+        ASCII_EMOJI_CHARSET_MIN_SIZE,
+        Math.min(ASCII_EMOJI_CHARSET_MAX_SIZE, Math.round(parsed))
+      );
+    }
+
+    function generateAsciiEmojiCharset(values, { randomize = true } = {}) {
+      const pool = [...getAsciiEmojiPool(values)];
+      if (pool.length === 0) return '';
+
+      const picked = [];
+      const targetSize = Math.min(getAsciiEmojiCharsetSize(values), pool.length);
+      while (picked.length < targetSize && pool.length > 0) {
+        const index = randomize ? Math.floor(Math.random() * pool.length) : 0;
+        picked.push(pool.splice(index, 1)[0]);
+      }
+      return picked.join('');
+    }
+
     function sortAsciiCharsetByBrightness(charset) {
-      const chars = [...String(charset || '')];
+      const chars = splitAsciiGlyphs(charset);
       const uniqueChars = [];
       const seen = new Set();
       chars.forEach((ch) => {
@@ -6497,11 +6552,25 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       return ordered;
     }
 
+    function resolveAsciiEmojiCharset(values, { fallbackToGenerated = true } = {}) {
+      const custom = String(values?.customCharset || '');
+      if (splitAsciiGlyphs(custom).length > 1) {
+        return custom;
+      }
+      if (!fallbackToGenerated) {
+        throw new Error('Emoji charset must contain at least 2 emoji.');
+      }
+      return generateAsciiEmojiCharset(values, { randomize: false });
+    }
+
     function resolveAsciiCharset(values) {
       const preset = String(values.charsetPreset || 'standard').toLowerCase();
+      if (preset === 'emoji') {
+        return resolveAsciiEmojiCharset(values);
+      }
       if (preset === 'custom') {
         const custom = String(values.customCharset || '');
-        if ([...custom].length <= 1) {
+        if (splitAsciiGlyphs(custom).length <= 1) {
           throw new Error('Custom charset must contain at least 2 characters.');
         }
         return sortAsciiCharsetByBrightness(custom);
@@ -6515,14 +6584,18 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     function resolveAsciiCharAspect(values) {
       const preset = String(values.charsetPreset || 'standard').toLowerCase();
-      if (preset === 'blocks' || preset === 'symbols') {
+      if (preset === 'blocks' || preset === 'symbols' || preset === 'emoji') {
         return ASCII_CELL_ASPECT_BLOCK_ELEMENTS;
       }
       return ASCII_CELL_ASPECT_MONOSPACE;
     }
 
-    function resolveAsciiFontStack(preset) {
-      return preset === 'symbols' ? ASCII_SYMBOL_FONT_STACK : ASCII_TEXT_FONT_STACK;
+    function resolveAsciiFontStack(preset, colorOutput = false) {
+      if (preset === 'symbols') return ASCII_SYMBOL_FONT_STACK;
+      if (preset === 'emoji') {
+        return colorOutput ? ASCII_EMOJI_COLOR_FONT_STACK : ASCII_EMOJI_TEXT_FONT_STACK;
+      }
+      return ASCII_TEXT_FONT_STACK;
     }
 
     function bytesToDataUrl(data, mimeType = 'image/png') {
@@ -6770,7 +6843,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     }
 
     async function convertImageToAscii(source, values) {
-      const charset = resolveAsciiCharset(values);
+      const charset = splitAsciiGlyphs(resolveAsciiCharset(values));
       const width = clampAsciiWidth(values.width);
       const density = normalizeAsciiDensity(values.density);
       const invert = values.invert === true || values.invert === 'true';
@@ -6824,7 +6897,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           const offset = (y * width + x) * 4;
           const alpha = pixels[offset + 3] / 255;
           if (alpha <= 0.05) {
-            line += charset[0];
+            line += charset[0] || ' ';
             if (rowColors) rowColors.push(null);
             continue;
           }
@@ -6843,7 +6916,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
           }
           normalized = Math.max(0, Math.min(1, Math.pow(normalized, gamma)));
           const index = Math.max(0, Math.min(charset.length - 1, Math.round(normalized * (charset.length - 1))));
-          line += charset[index];
+          line += charset[index] || charset[charset.length - 1] || ' ';
           if (rowColors) {
             rowColors.push({
               r: quantRgb(pixels[offset]),
@@ -6898,9 +6971,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
       for (let row = 0; row < lines.length; row++) {
         const line = lines[row];
+        const glyphs = splitAsciiGlyphs(line);
         const rowColors = Array.isArray(colorRows[row]) ? colorRows[row] : [];
         let col = 0;
-        for (const _ of line) {
+        for (const glyph of glyphs) {
           const color = col < rowColors.length ? rowColors[col] : undefined;
           col += 1;
           const nextColor = color && Number.isFinite(color.r) && Number.isFinite(color.g) && Number.isFinite(color.b)
@@ -6914,7 +6988,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
           if (!nextColor) {
             flushRun();
-            cursor += 1;
+            cursor += glyph.length;
             continue;
           }
 
@@ -6926,12 +7000,12 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
             activeRun.end === cursor;
 
           if (sameAsActive) {
-            activeRun.end += 1;
+            activeRun.end += glyph.length;
           } else {
             flushRun();
-            activeRun = { start: cursor, end: cursor + 1, color: nextColor };
+            activeRun = { start: cursor, end: cursor + glyph.length, color: nextColor };
           }
-          cursor += 1;
+          cursor += glyph.length;
         }
 
         flushRun();
@@ -6947,8 +7021,10 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       if (!pre) return;
 
       const preset = String(asciiResult?.charsetPreset || 'standard').toLowerCase();
+      pre.style.fontFamily = resolveAsciiFontStack(preset, !!asciiResult?.colorOutput);
       pre.classList.toggle('ascii-preview-pre--symbols', preset === 'symbols');
-      if (preset === 'blocks' || preset === 'symbols') {
+      pre.classList.toggle('ascii-preview-pre--emoji', preset === 'emoji');
+      if (preset === 'blocks' || preset === 'symbols' || preset === 'emoji') {
         pre.classList.add('ascii-preview-pre--grid');
         pre.innerHTML = '';
         const fragment = document.createDocumentFragment();
@@ -6956,7 +7032,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         const colorRows = Array.isArray(asciiResult?.colorRows) ? asciiResult.colorRows : null;
 
         lines.forEach((line, rowIndex) => {
-          const chars = [...line];
+          const chars = splitAsciiGlyphs(line);
           const rowColors = colorRows?.[rowIndex];
           chars.forEach((ch, colIndex) => {
             const span = document.createElement('span');
@@ -6982,6 +7058,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
       pre.classList.remove('ascii-preview-pre--grid');
       pre.classList.remove('ascii-preview-pre--symbols');
+      pre.classList.remove('ascii-preview-pre--emoji');
 
       if (!asciiResult?.colorOutput || !Array.isArray(asciiResult?.colorRows)) {
         pre.textContent = asciiResult?.asciiText || '';
@@ -6994,7 +7071,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
       const colorRows = asciiResult.colorRows;
 
       lines.forEach((line, rowIndex) => {
-        const chars = [...line];
+        const chars = splitAsciiGlyphs(line);
         const rowColors = Array.isArray(colorRows[rowIndex]) ? colorRows[rowIndex] : [];
         chars.forEach((ch, colIndex) => {
           const color = rowColors[colIndex];
@@ -7108,13 +7185,13 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
 
     function renderAsciiToBitmap(asciiResult) {
       const lines = String(asciiResult.asciiText || '').split('\n');
-      const columns = lines.reduce((max, line) => Math.max(max, [...line].length), 1);
+      const columns = lines.reduce((max, line) => Math.max(max, splitAsciiGlyphs(line).length), 1);
       const fontSize = 12;
       const padding = 12;
       const lineHeight = Math.ceil(fontSize * 1.2);
       const preset = String(asciiResult.charsetPreset || 'standard').toLowerCase();
-      const useSquareCells = preset === 'blocks' || preset === 'symbols';
-      const fontStack = resolveAsciiFontStack(preset);
+      const useSquareCells = preset === 'blocks' || preset === 'symbols' || preset === 'emoji';
+      const fontStack = resolveAsciiFontStack(preset, asciiResult.colorOutput);
 
       const measureCanvas = document.createElement('canvas');
       const measureCtx = measureCanvas.getContext('2d');
@@ -7144,7 +7221,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         ctx.textBaseline = 'middle';
         lines.forEach((line, row) => {
           const rowColors = colorRows?.[row];
-          [...line].forEach((ch, col) => {
+          splitAsciiGlyphs(line).forEach((ch, col) => {
             const w = ctx.measureText(ch).width;
             const x = padding + col * cell + Math.max(0, (cell - w) / 2);
             const y = padding + row * cell + cell / 2;
@@ -7163,7 +7240,7 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
         ctx.font = `${fontSize}px ${fontStack}`;
         ctx.textBaseline = 'top';
         lines.forEach((line, index) => {
-          const chars = [...line];
+          const chars = splitAsciiGlyphs(line);
           const rowColors = colorRows?.[index];
           chars.forEach((ch, col) => {
             const color = rowColors?.[col];
@@ -17490,6 +17567,66 @@ Generate ONLY the reply text, nothing else.`;
       scheduleImageToAsciiPreviewRefresh();
     }
 
+    function setAsciiEmojiCharsetInputValue(input, values, { randomize = true } = {}) {
+      if (!input) return;
+      const nextValue = generateAsciiEmojiCharset(values, { randomize });
+      setInputValueWithUndo(input, nextValue);
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function setupImageToAsciiEmojiControls() {
+      if (currentPromptAction?.directAction !== 'imageToAscii') return;
+
+      const charsetSelect = promptDrawerFields.querySelector('.prompt-custom-select[data-field-key="charsetPreset"]');
+      const customCharsetInput = promptDrawerFields.querySelector('input[data-field-key="customCharset"]');
+      const randomizeBtn = promptDrawerFields.querySelector('button[data-prompt-field-action="randomizeAsciiEmojiCharset"]');
+      const colorOutputInput = promptDrawerFields.querySelector('input[data-field-key="colorOutput"]');
+      const emojiCountInput = promptDrawerFields.querySelector('[data-field-key="emojiCharsetCount"]');
+      if (!charsetSelect || !customCharsetInput) return;
+
+      const maybePopulateEmojiCharset = ({ force = false, randomize = true } = {}) => {
+        const values = getPromptFieldValues();
+        if (!isAsciiEmojiPreset(values)) return;
+        if (!force && splitAsciiGlyphs(customCharsetInput.value).length > 1) return;
+        setAsciiEmojiCharsetInputValue(customCharsetInput, values, { randomize });
+      };
+
+      charsetSelect.addEventListener('change', () => {
+        const values = getPromptFieldValues();
+        if (isAsciiEmojiPreset(values)) {
+          setAsciiEmojiCharsetInputValue(customCharsetInput, values, { randomize: true });
+        }
+      });
+
+      if (colorOutputInput) {
+        colorOutputInput.addEventListener('change', () => {
+          const values = getPromptFieldValues();
+          if (!isAsciiEmojiPreset(values)) return;
+          setAsciiEmojiCharsetInputValue(customCharsetInput, values, { randomize: true });
+        });
+      }
+
+      if (emojiCountInput) {
+        const refreshEmojiCount = () => {
+          const values = getPromptFieldValues();
+          if (!isAsciiEmojiPreset(values)) return;
+          setAsciiEmojiCharsetInputValue(customCharsetInput, values, { randomize: true });
+        };
+        emojiCountInput.addEventListener('change', refreshEmojiCount);
+      }
+
+      if (randomizeBtn) {
+        randomizeBtn.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const values = getPromptFieldValues();
+          setAsciiEmojiCharsetInputValue(customCharsetInput, values, { randomize: true });
+        });
+      }
+
+      maybePopulateEmojiCharset({ randomize: false });
+    }
+
     function renderPromptFields(fields, preservedValues = null) {
       const renderLabelRowCheckboxes = (fieldId, checkboxDefs, disabledAttr = '') => {
         const defs = Array.isArray(checkboxDefs) ? checkboxDefs.filter(def => def && def.key) : [];
@@ -17512,6 +17649,25 @@ Generate ONLY the reply text, nothing else.`;
                 </label>
               `;
             }).join('')}
+          </div>
+        `;
+      };
+
+      const renderFieldHeaderActionButtons = (actions, disabledAttr = '') => {
+        const defs = Array.isArray(actions) ? actions.filter((action) => action && action.key) : [];
+        if (defs.length === 0) return '';
+
+        return `
+          <div class="prompt-ai-actions">
+            ${defs.map((action) => `
+              <button
+                class="prompt-ai-btn prompt-field-header-action-btn"
+                data-prompt-field-action="${escapeHtml(String(action.key))}"
+                type="button"
+                title="${escapeHtml(String(action.title || action.label || ''))}"${disabledAttr}>
+                <span>${escapeHtml(String(action.label || 'Action'))}</span>
+              </button>
+            `).join('')}
           </div>
         `;
       };
@@ -18060,6 +18216,7 @@ Generate ONLY the reply text, nothing else.`;
           const reloadLh = field.reloadLineHeightFromSelection === true;
           const reloadDisabled = reloadLh && !verticalTextLineHeightReloadEnabled;
           const reloadTitle = escapeHtml(tu('actions.verticalText.reloadLineHeightTitle'));
+          const headerActionButtonsHtml = renderFieldHeaderActionButtons(field.headerActions, disabledAttr);
           const reloadBtnHtml = reloadLh ? `
             <button type="button" class="prompt-field-reload-btn prompt-ai-btn" data-reload-line-height="true" title="${reloadTitle}"${reloadDisabled ? ' disabled' : ''}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -18078,6 +18235,12 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field-label-row">
               <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
               ${reloadBtnHtml}
+            </div>`;
+          } else if (headerActionButtonsHtml) {
+            numberLabelHtml = `
+            <div class="prompt-field-label-row">
+              <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+              ${headerActionButtonsHtml}
             </div>`;
           } else if (labelRowCbs.length > 0) {
             numberLabelHtml = `
@@ -18159,10 +18322,15 @@ Generate ONLY the reply text, nothing else.`;
           const textValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
             : (field.default || '');
+          const headerActionButtonsHtml = renderFieldHeaderActionButtons(field.headerActions, disabledAttr);
 
           fieldHtml += `
             <div class="prompt-field${wrapperClass}${field.disabled ? ' disabled' : ''}"${conditionalAttrs}>
-              <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+              ${headerActionButtonsHtml ? `
+              <div class="prompt-field-label-row">
+                <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                ${headerActionButtonsHtml}
+              </div>` : `<label class="prompt-field-label" for="${fieldId}">${field.label}</label>`}
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               <div class="prompt-text-with-tags" data-field-key="${field.key}">
                 <input type="text" id="${fieldId}" data-field-key="${field.key}" 
@@ -18401,6 +18569,7 @@ Generate ONLY the reply text, nothing else.`;
           const textValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
             : (field.default || '');
+          const headerActionButtonsHtml = renderFieldHeaderActionButtons(field.headerActions, disabledAttr);
 
           const actionButtonHtml = field.actionButton ? `
             <div class="prompt-ai-actions">
@@ -18448,6 +18617,7 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
               <div class="prompt-field-header">
                 <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                ${headerActionButtonsHtml}
                 ${actionButtonHtml}
                 ${translateBtnHtml}
               </div>
@@ -18497,6 +18667,7 @@ Generate ONLY the reply text, nothing else.`;
       });
 
       if (currentPromptAction?.directAction === 'imageToAscii') {
+        setupImageToAsciiEmojiControls();
         setupImageToAsciiPreview();
       } else {
         teardownImageToAsciiPreview();
@@ -25407,6 +25578,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             name: result.name,
             sourceNodeId: result.sourceNodeId,
             charsetPreset: result.charsetPreset,
+            colorOutput: result.colorOutput,
             colorRuns: buildAsciiColorRuns(result),
           }));
           await createAsciiTextNodes(asciiTextItems, {
