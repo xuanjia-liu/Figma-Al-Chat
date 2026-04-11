@@ -300,17 +300,6 @@ export const quickCreateImageTasks = [
               showWhen: { field: 'charsetPreset', equalsAny: ['custom', 'emoji'] }
             },
             {
-              key: 'emojiCharsetCount',
-              type: 'slider',
-              label: 'Emoji Count',
-              default: 7,
-              min: 2,
-              max: 100,
-              step: 1,
-              hint: 'Controls how many emoji are generated into Custom Charset.',
-              showWhen: { field: 'charsetPreset', equals: 'emoji' }
-            },
-            {
               key: 'edgeThickness',
               type: 'slider',
               label: 'Edge thickness',
@@ -321,14 +310,29 @@ export const quickCreateImageTasks = [
               showWhen: { field: 'edgesOnly', equals: true },
             },
             {
-              key: 'colorMaxColors',
-              type: 'slider',
-              label: 'Number of colors',
-              default: 120,
-              min: 8,
-              max: 512,
-              step: 1,
-              showWhen: { field: 'colorOutput', equals: true },
+              type: 'row',
+              fields: [
+                {
+                  key: 'emojiCharsetCount',
+                  type: 'slider',
+                  label: 'Emoji Count',
+                  default: 7,
+                  min: 2,
+                  max: 100,
+                  step: 1,
+                  showWhen: { field: 'charsetPreset', equals: 'emoji' }
+                },
+                {
+                  key: 'colorMaxColors',
+                  type: 'slider',
+                  label: 'Number of colors',
+                  default: 120,
+                  min: 8,
+                  max: 512,
+                  step: 1,
+                  showWhen: { field: 'colorOutput', equals: true },
+                }
+              ]
             },
             {
               key: 'asciiPreview',

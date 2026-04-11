@@ -6457,14 +6457,17 @@ Include specific checkpoints and [OK/NG] evaluation format. Keep professional to
     }
 
     function generateAsciiEmojiCharset(values, { randomize = true } = {}) {
-      const pool = [...getAsciiEmojiPool(values)];
-      if (pool.length === 0) return '';
+      const sourcePool = getAsciiEmojiPool(values);
+      if (!Array.isArray(sourcePool) || sourcePool.length === 0) return '';
 
       const picked = [];
-      const targetSize = Math.min(getAsciiEmojiCharsetSize(values), pool.length);
-      while (picked.length < targetSize && pool.length > 0) {
-        const index = randomize ? Math.floor(Math.random() * pool.length) : 0;
-        picked.push(pool.splice(index, 1)[0]);
+      const targetSize = getAsciiEmojiCharsetSize(values);
+      while (picked.length < targetSize) {
+        const cyclePool = [...sourcePool];
+        while (picked.length < targetSize && cyclePool.length > 0) {
+          const index = randomize ? Math.floor(Math.random() * cyclePool.length) : 0;
+          picked.push(cyclePool.splice(index, 1)[0]);
+        }
       }
       return picked.join('');
     }
