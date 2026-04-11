@@ -35,6 +35,7 @@ const SETTINGS_KEYS = {
   CUSTOM_RE_STYLE_PRESETS: 'figma-custom-re-style-presets',
   CUSTOM_SMART_RENAME_PRESETS: 'figma-custom-smart-rename-presets',
   CUSTOM_STYLE_CATEGORIES: 'figma-custom-style-categories',
+  CUSTOM_QUICK_ACTIONS: 'figma-custom-quick-actions',
   // Last used quick actions
   LAST_USED_QUICK_ACTIONS: 'figma-last-used-quick-actions',
   // Icon API source
@@ -77,6 +78,98 @@ const VERTICAL_TEXT_MAX_COLUMNS = 100;
 const VERTICAL_TEXT_MAX_FLAT_CODEPOINTS = 120_000;
 const VERTICAL_TEXT_WRAP_SIMULATION_MAX_LENGTH = 12_000;
 const VERTICAL_TEXT_DEFAULT_LINE_HEIGHT_FACTOR = 1.1;
+
+interface CustomQuickAction {
+  id: string;
+  name: string;
+  category: string;
+  mode: 'ask' | 'agent';
+  promptTemplate: string;
+  desc?: string;
+  noSelection?: boolean;
+  includeTokens?: boolean;
+  requiredContext?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set([
+  'all',
+  'minimal',
+  'textOnly',
+  'layoutOnly',
+  'styleOnly',
+  'hierarchy'
+]);
+
+const VALID_CUSTOM_QUICK_ACTION_CATEGORIES = new Set([
+  'UI & Layout',
+  'Styling & Effects',
+  'Smart Text',
+  'Layer Naming',
+  'Accessibility & Quality',
+  'Quick Create',
+  'FigJam',
+  'User Research',
+  'Comments'
+]);
+
+function sanitizeCustomQuickActions(rawValue: unknown): CustomQuickAction[] {
+  if (!Array.isArray(rawValue)) return [];
+
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const sanitized: CustomQuickAction[] = [];
+
+  for (const item of rawValue) {
+    if (!item || typeof item !== 'object') continue;
+
+    const candidate = item as Record<string, unknown>;
+    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+    const name = typeof candidate.name === 'string' ? candidate.name.trim() : '';
+    const category = typeof candidate.category === 'string' ? candidate.category.trim() : '';
+    const mode = candidate.mode === 'ask' ? 'ask' : candidate.mode === 'agent' ? 'agent' : null;
+    const promptTemplate = typeof candidate.promptTemplate === 'string'
+      ? candidate.promptTemplate.trim()
+      : '';
+
+    if (!id || !name || !category || !mode || !promptTemplate) continue;
+    if (!VALID_CUSTOM_QUICK_ACTION_CATEGORIES.has(category)) continue;
+
+    const normalizedName = name.toLocaleLowerCase();
+    if (seenIds.has(id) || seenNames.has(normalizedName)) continue;
+
+    const createdAt = Number.isFinite(Number(candidate.createdAt))
+      ? Number(candidate.createdAt)
+      : Date.now();
+    const updatedAt = Number.isFinite(Number(candidate.updatedAt))
+      ? Number(candidate.updatedAt)
+      : createdAt;
+    const requiredContext = typeof candidate.requiredContext === 'string' &&
+      VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(candidate.requiredContext)
+      ? candidate.requiredContext
+      : 'all';
+
+    sanitized.push({
+      id,
+      name,
+      category,
+      mode,
+      promptTemplate,
+      desc: typeof candidate.desc === 'string' ? candidate.desc.trim() : '',
+      noSelection: candidate.noSelection === true,
+      includeTokens: candidate.includeTokens === true,
+      requiredContext,
+      createdAt,
+      updatedAt,
+    });
+
+    seenIds.add(id);
+    seenNames.add(normalizedName);
+  }
+
+  return sanitized;
+}
 
 function countCodePoints(s: string): number {
   let n = 0;
@@ -6164,6 +6257,9 @@ figma.ui.onmessage = async (msg: {
         const customReStylePresets = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_RE_STYLE_PRESETS) || [];
         const customSmartRenamePresets = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_SMART_RENAME_PRESETS) || [];
         const customStyleCategories = await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_STYLE_CATEGORIES) || [];
+        const customQuickActions = sanitizeCustomQuickActions(
+          await figma.clientStorage.getAsync(SETTINGS_KEYS.CUSTOM_QUICK_ACTIONS) || []
+        );
         const enabledModels = await figma.clientStorage.getAsync(SETTINGS_KEYS.ENABLED_MODELS) || null;
         const figmaPersonalToken = await figma.clientStorage.getAsync(SETTINGS_KEYS.FIGMA_PERSONAL_TOKEN) || '';
         const quiverApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.QUIVER_API_KEY) || '';
@@ -6182,14 +6278,14 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, hiddenPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, customQuickActions, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, hiddenPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', ollamaBaseUrl: 'http://localhost:11434/v1', ollamaModel: 'llama3.2', ollamaApiKey: '', ollamaShowLocalModelsInAssistantMenu: true, anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', ollamaBaseUrl: 'http://localhost:11434/v1', ollamaModel: 'llama3.2', ollamaApiKey: '', ollamaShowLocalModelsInAssistantMenu: true, anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], customQuickActions: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
         });
       }
       break;
@@ -6340,6 +6436,17 @@ figma.ui.onmessage = async (msg: {
       } catch (error) {
         console.error('Failed to save custom style categories:', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to save custom style categories' });
+      }
+      break;
+    }
+
+    case 'save-custom-quick-actions': {
+      try {
+        const customQuickActions = sanitizeCustomQuickActions((msg as any).customQuickActions);
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.CUSTOM_QUICK_ACTIONS, customQuickActions);
+      } catch (error) {
+        console.error('Failed to save custom quick actions:', error);
+        figma.ui.postMessage({ type: 'error', message: 'Failed to save custom quick actions' });
       }
       break;
     }

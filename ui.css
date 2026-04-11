@@ -9904,7 +9904,8 @@
     }
 
     .audit-modal-content,
-    .add-option-modal-content {
+    .add-option-modal-content,
+    .custom-quick-action-modal-content {
       width: 100%;
       max-width: 560px;
       max-height: 90vh;
@@ -9923,6 +9924,21 @@
       padding: var(--space-lg);
     }
 
+    .custom-quick-action-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.65);
+      padding: var(--space-lg);
+      z-index: 1400;
+    }
+
+    .custom-quick-action-modal.show {
+      display: flex;
+    }
+
     .add-option-modal-content {
       max-width: 360px;
       max-height: 84vh;
@@ -9930,6 +9946,15 @@
       border: 1px solid var(--border-intense);
       border-radius: var(--radius-lg);
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .custom-quick-action-modal-content {
+      max-width: 520px;
+      max-height: 88vh;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-intense);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
     }
 
     @keyframes slideUp {
@@ -9947,6 +9972,7 @@
     .settings-modal-header,
     .audit-modal-header,
     .add-option-modal-header,
+    .custom-quick-action-modal-header,
     .comments-quick-modal-header {
       display: flex;
       align-items: center;
@@ -9959,6 +9985,10 @@
     .add-option-modal-header {
       padding: 8px 12px;
       background: rgba(139, 92, 246, 0.06);
+    }
+
+    .custom-quick-action-modal-header {
+      padding: 10px 14px;
     }
 
     .add-option-modal .settings-modal-title {
@@ -9978,6 +10008,7 @@
     .settings-modal-close,
     .audit-modal-close,
     .add-option-modal-close,
+    .custom-quick-action-modal-close,
     .comments-quick-modal-close {
       width: 28px;
       height: 28px;
@@ -10003,6 +10034,11 @@
       color: #c4b5fd;
     }
 
+    .custom-quick-action-modal-close:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
     .add-option-modal-close svg {
       width: 14px;
       height: 14px;
@@ -10017,6 +10053,7 @@
 
     .settings-modal-close svg,
     .audit-modal-close svg,
+    .custom-quick-action-modal-close svg,
     .comments-quick-modal-close svg {
       width: 16px;
       height: 16px;
@@ -10025,6 +10062,7 @@
     .settings-modal-body,
     .audit-modal-body,
     .add-option-modal-body,
+    .custom-quick-action-modal-body,
     .comments-quick-modal-body {
       max-height: 80vh;
       height: 100%;
@@ -10039,6 +10077,42 @@
       padding: 10px 12px;
       gap: 8px;
       max-height: calc(84vh - 44px);
+    }
+
+    .custom-quick-action-modal-body {
+      padding: 14px;
+      gap: 10px;
+      max-height: calc(88vh - 52px);
+    }
+
+    .custom-quick-action-modal-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .custom-quick-action-modal .setting-item {
+      margin-bottom: 0;
+    }
+
+    .custom-quick-action-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .custom-quick-action-toggle input {
+      margin: 0;
+    }
+
+    .custom-quick-action-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
     }
 
     .add-option-modal .setting-item {
@@ -10372,12 +10446,47 @@
     }
 
     .commands-content-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
       font-size: var(--text-sm);
       font-weight: 500;
       color: var(--text-secondary);
       margin-bottom: var(--space-md);
       padding-bottom: var(--space-sm);
       border-bottom: 1px solid var(--border);
+    }
+
+    .commands-content-title {
+      min-width: 0;
+    }
+
+    .commands-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .commands-header-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+
+    .commands-header-btn:hover {
+      border-color: var(--border-intense);
+      background: var(--bg-tertiary);
     }
 
     .commands-items-grid {
@@ -10573,6 +10682,74 @@
       min-width: 0;
     }
 
+    .command-item-main {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-md);
+      flex: 1;
+      min-width: 0;
+    }
+
+    .command-item-custom-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .command-item:hover .command-item-custom-actions,
+    .command-item:focus-within .command-item-custom-actions {
+      opacity: 1;
+    }
+
+    .command-item-custom-btn {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .command-item-custom-btn:hover {
+      border-color: var(--border-intense);
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+
+    .command-item-custom-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .command-item-custom-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent-agent) 12%, transparent);
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .commands-empty-actions {
+      margin-top: 12px;
+      display: flex;
+      justify-content: center;
+    }
+
     /* Responsive styles for Commands Drawer */
     @media (max-width: 479px) {
       .commands-drawer-body {
@@ -10610,6 +10787,14 @@
       .commands-sidebar-item svg {
         width: 12px;
         height: 12px;
+      }
+
+      .custom-quick-action-modal-row {
+        grid-template-columns: 1fr;
+      }
+
+      .command-item-custom-actions {
+        opacity: 1;
       }
     }
 

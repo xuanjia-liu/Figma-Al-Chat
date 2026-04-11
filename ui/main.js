@@ -7518,6 +7518,7 @@ Rules:
     let customStyleCategories = [];
     let customReStylePresets = [];
     let customSmartRenamePresets = [];
+    let customQuickActions = [];
     let replyTemplates = [];
 
     function toggleReplyTemplatesDropdown(event, commentId) {
@@ -7737,9 +7738,119 @@ Rules:
       }
     }
 
-    const agentTasks = createAgentTasks({
+    const baseAgentTasks = createAgentTasks({
       getCustomStyleCategories: () => customStyleCategories,
     });
+
+    const builtInQuickActionNames = new Set(buildQuickActionsList(baseAgentTasks).map(action => action.name));
+    const BUILT_IN_COMMAND_CATEGORIES = Object.keys(baseAgentTasks);
+    const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set(Object.values(ContextMode));
+
+    function cloneAgentTaskMap(taskMap) {
+      return Object.fromEntries(
+        Object.entries(taskMap || {}).map(([category, tasks]) => [category, [...(tasks || [])]])
+      );
+    }
+
+    function sanitizeCustomQuickActions(rawActions) {
+      if (!Array.isArray(rawActions)) return [];
+
+      const seenIds = new Set();
+      const seenNames = new Set();
+
+      return rawActions.reduce((acc, item) => {
+        if (!item || typeof item !== 'object') return acc;
+
+        const id = typeof item.id === 'string' ? item.id.trim() : '';
+        const name = typeof item.name === 'string' ? item.name.trim() : '';
+        const category = typeof item.category === 'string' ? item.category.trim() : '';
+        const mode = item.mode === 'ask' ? 'ask' : item.mode === 'agent' ? 'agent' : null;
+        const promptTemplate = typeof item.promptTemplate === 'string' ? item.promptTemplate.trim() : '';
+        const normalizedName = name.toLowerCase();
+
+        if (!id || !name || !category || !mode || !promptTemplate) return acc;
+        if (!BUILT_IN_COMMAND_CATEGORIES.includes(category)) return acc;
+        if (builtInQuickActionNames.has(name)) return acc;
+        if (seenIds.has(id) || seenNames.has(normalizedName)) return acc;
+
+        acc.push({
+          id,
+          name,
+          category,
+          mode,
+          promptTemplate,
+          desc: typeof item.desc === 'string' ? item.desc.trim() : '',
+          noSelection: item.noSelection === true,
+          includeTokens: item.includeTokens === true,
+          requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(item.requiredContext) ? item.requiredContext : ContextMode.ALL,
+          createdAt: Number.isFinite(Number(item.createdAt)) ? Number(item.createdAt) : Date.now(),
+          updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : Date.now(),
+        });
+
+        seenIds.add(id);
+        seenNames.add(normalizedName);
+        return acc;
+      }, []);
+    }
+
+    function mapCustomQuickActionToTask(action) {
+      return {
+        name: action.name,
+        desc: action.desc || '',
+        prompt: action.promptTemplate,
+        promptTemplate: action.promptTemplate,
+        noSelection: action.noSelection === true,
+        includeTokens: action.includeTokens === true,
+        requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action.requiredContext) ? action.requiredContext : ContextMode.ALL,
+        askMode: action.mode === 'ask',
+        category: action.category,
+        isCustomQuickAction: true,
+        customQuickActionId: action.id,
+      };
+    }
+
+    function pruneQuickActionUsageState() {
+      const validNames = new Set(allQuickActions.map(action => action.name));
+      const nextUsage = {};
+
+      Object.entries(quickActionUsage || {}).forEach(([name, value]) => {
+        if (validNames.has(name) && typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+          nextUsage[name] = value;
+        }
+      });
+
+      quickActionUsage = nextUsage;
+      lastUsedQuickActions = lastUsedQuickActions.filter(name => validNames.has(name)).slice(0, MAX_LAST_USED_ACTIONS);
+      saveQuickActionUsageToLocal();
+    }
+
+    function rebuildAgentTasks(refreshUI = false) {
+      const merged = cloneAgentTaskMap(baseAgentTasks);
+      const sanitizedCustomActions = sanitizeCustomQuickActions(customQuickActions);
+      customQuickActions = sanitizedCustomActions;
+
+      sanitizedCustomActions.forEach((action) => {
+        const category = action.category;
+        if (!merged[category]) merged[category] = [];
+        merged[category].unshift(mapCustomQuickActionToTask(action));
+      });
+
+      agentTasks = merged;
+      allQuickActions = buildQuickActionsList(agentTasks);
+      pruneQuickActionUsageState();
+
+      if (refreshUI) {
+        if (commandsDrawer?.classList.contains('show')) {
+          renderDrawerContent(commandsSearch?.value || '');
+        }
+        if (slashMenuVisible || !lastSlashQuery) {
+          handleSlashInput();
+        }
+        updateNodeActionsContent(lastKnownSelectionItems || []);
+      }
+    }
+
+    let agentTasks = cloneAgentTaskMap(baseAgentTasks);
 
     const anyIconSetOption = {
       value: '',
@@ -8397,7 +8508,7 @@ Rules:
     let quickActionUsage = sanitizeQuickActionUsageMap(loadQuickActionUsageFromLocal());
     let lastUsedQuickActions = loadLastUsedQuickActionsFromLocal();
     let quickActionUsageLoadedFromPlugin = false;
-    const allQuickActions = buildQuickActionsList(agentTasks);
+    let allQuickActions = buildQuickActionsList(agentTasks);
 
     function loadQuickActionUsageFromLocal() {
       try {
@@ -8893,12 +9004,25 @@ Rules:
               <path d="M21 21l-4.35-4.35"/>
                 </svg>
             <span>${tu('actions.commands.empty', { suffix })}</span>
+            <div class="commands-empty-actions">
+              <button class="commands-header-btn" id="addCustomQuickActionBtnEmpty">Add Custom Action</button>
             </div>
+          </div>
         `;
+        document.getElementById('addCustomQuickActionBtnEmpty')?.addEventListener('click', () => {
+          openCustomQuickActionModal();
+        });
         return;
       }
 
-      let html = `<div class="commands-content-header">${headerText}</div>`;
+      let html = `
+        <div class="commands-content-header">
+          <div class="commands-content-title">${headerText}</div>
+          <div class="commands-header-actions">
+            <button class="commands-header-btn" id="addCustomQuickActionBtn">Add Custom Action</button>
+          </div>
+        </div>
+      `;
       html += '<div class="commands-items-grid">';
 
       filteredTasks.forEach((task, taskIndex) => {
@@ -8912,23 +9036,78 @@ Rules:
         const hasFields = quickActionHasFields(task);
         const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${localizeActionString(task.category)}</div>` : '';
         const itemTitle = localizedTask.displayDesc || localizedTask.displayName || task.name;
+        const customTag = task.isCustomQuickAction ? `<div class="command-item-custom-tag">${task.askMode ? 'Ask' : 'Agent'} custom</div>` : '';
+        const customActions = task.isCustomQuickAction ? `
+          <div class="command-item-custom-actions">
+            <button class="command-item-custom-btn" data-custom-action="edit" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Edit custom quick action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/>
+              </svg>
+            </button>
+            <button class="command-item-custom-btn" data-custom-action="duplicate" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Duplicate custom quick action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </button>
+            <button class="command-item-custom-btn" data-custom-action="delete" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Delete custom quick action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18"/>
+                <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+              </svg>
+            </button>
+          </div>
+        ` : '';
         html += `
-                <button class="command-item" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="false" title="${itemTitle}">
-            <div class="command-item-icon">${icon}${commandBadges}</div>
-            <div class="command-item-text">
-              <div class="command-item-name">${localizedTask.displayName}</div>
-              <div class="command-item-desc">${localizedTask.displayDesc}</div>
-              ${categoryLabel}
+                <div class="command-item" role="button" tabindex="0" data-task-index="${taskIndex}" data-prompt="${(task.prompt || '').replace(/"/g, '&quot;')}" data-no-selection="${task.noSelection || false}" data-action-name="${task.name}" data-action-icon="${iconEncoded}" data-has-fields="${hasFields}" data-ai-disabled="false" title="${itemTitle}">
+            <div class="command-item-main">
+              <div class="command-item-icon">${icon}${commandBadges}</div>
+              <div class="command-item-text">
+                <div class="command-item-name">${localizedTask.displayName}</div>
+                <div class="command-item-desc">${localizedTask.displayDesc}</div>
+                ${categoryLabel}
+                ${customTag}
+              </div>
             </div>
-          </button>
+            ${customActions}
+          </div>
         `;
       });
 
       html += '</div>';
       commandsContent.innerHTML = html;
 
+      document.getElementById('addCustomQuickActionBtn')?.addEventListener('click', () => {
+        openCustomQuickActionModal();
+      });
+
+      commandsContent.querySelectorAll('[data-custom-action]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const { customAction, customActionId } = button.dataset;
+          if (!customActionId) return;
+          if (customAction === 'edit') {
+            editCustomQuickAction(customActionId);
+          } else if (customAction === 'duplicate') {
+            duplicateCustomQuickAction(customActionId);
+          } else if (customAction === 'delete') {
+            deleteCustomQuickAction(customActionId);
+          }
+        });
+      });
+
       // Add click handlers to command items
       commandsContent.querySelectorAll('.command-item').forEach(item => {
+        item.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            item.click();
+          }
+        });
         item.addEventListener('click', async () => {
           if (item.dataset.aiDisabled === 'true') {
             showToast(item.title || getAiOffBlockedMessage(item.dataset.actionName || 'Quick action'), 'error');
@@ -28683,9 +28862,11 @@ Example structure:
         chatMaxTokens = settings?.chatMaxTokens || 16384;
         promptHistory = settings?.promptHistory || {};
         replyTemplates = settings?.replyTemplates || [];
+        customQuickActions = sanitizeCustomQuickActions(settings?.customQuickActions || []);
         hiddenPromptCommentsByFile = settings?.hiddenPromptCommentsByFile && typeof settings.hiddenPromptCommentsByFile === 'object'
           ? settings.hiddenPromptCommentsByFile
           : loadHiddenPromptCommentsByFileFromLocal();
+        rebuildAgentTasks();
         if (settings?.lastCommandsCategory && agentTasks[settings.lastCommandsCategory]) {
           selectedCategory = settings.lastCommandsCategory;
         }
@@ -39059,10 +39240,219 @@ Based on the user's instruction, generate the appropriate commands to modify the
     const customStylePrimaryColors = document.getElementById('customStylePrimaryColors');
     const customStyleSecondaryColors = document.getElementById('customStyleSecondaryColors');
     const customStyleEffects = document.getElementById('customStyleEffects');
+    const customQuickActionModal = document.getElementById('customQuickActionModal');
+    const customQuickActionModalTitle = document.getElementById('customQuickActionModalTitle');
+    const closeCustomQuickActionBtn = document.getElementById('closeCustomQuickActionBtn');
+    const cancelCustomQuickActionBtn = document.getElementById('cancelCustomQuickActionBtn');
+    const saveCustomQuickActionBtn = document.getElementById('saveCustomQuickActionBtn');
+    const customQuickActionName = document.getElementById('customQuickActionName');
+    const customQuickActionCategory = document.getElementById('customQuickActionCategory');
+    const customQuickActionMode = document.getElementById('customQuickActionMode');
+    const customQuickActionDescription = document.getElementById('customQuickActionDescription');
+    const customQuickActionPrompt = document.getElementById('customQuickActionPrompt');
+    const customQuickActionContext = document.getElementById('customQuickActionContext');
+    const customQuickActionNoSelection = document.getElementById('customQuickActionNoSelection');
+    const customQuickActionIncludeTokens = document.getElementById('customQuickActionIncludeTokens');
 
     let currentAddingFor = null; // 'tone', 'imagePreset', 'reStylePreset', 'renamePreset', or 'styleCategory'
     let editingOptionOriginalId = null; // Store ID of option being edited
     let editingOptionOriginalValue = null; // Store value of option being edited (fallback for old data)
+    let editingCustomQuickActionId = null;
+
+    function generateCustomQuickActionId() {
+      return `qa_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    }
+
+    function persistCustomQuickActions() {
+      parent.postMessage({
+        pluginMessage: {
+          type: 'save-custom-quick-actions',
+          customQuickActions
+        }
+      }, '*');
+    }
+
+    function getUniqueCustomQuickActionName(baseName, excludeId = null) {
+      const candidateBase = (baseName || 'Custom quick action').trim() || 'Custom quick action';
+      const isTaken = (candidate) => {
+        if (builtInQuickActionNames.has(candidate)) return true;
+        return customQuickActions.some((action) =>
+          action.id !== excludeId && action.name.toLowerCase() === candidate.toLowerCase()
+        );
+      };
+
+      if (!isTaken(candidateBase)) return candidateBase;
+
+      let counter = 2;
+      let nextCandidate = `${candidateBase} ${counter}`;
+      while (isTaken(nextCandidate)) {
+        counter += 1;
+        nextCandidate = `${candidateBase} ${counter}`;
+      }
+      return nextCandidate;
+    }
+
+    function populateCustomQuickActionCategoryOptions(selectedValue) {
+      if (!customQuickActionCategory) return;
+      customQuickActionCategory.innerHTML = BUILT_IN_COMMAND_CATEGORIES.map((category) => `
+        <option value="${escapeHtml(category)}"${category === selectedValue ? ' selected' : ''}>${escapeHtml(localizeActionString(category))}</option>
+      `).join('');
+    }
+
+    function closeCustomQuickActionModal() {
+      if (!customQuickActionModal) return;
+      customQuickActionModal.classList.remove('show');
+      editingCustomQuickActionId = null;
+    }
+
+    function openCustomQuickActionModal(action = null, options = {}) {
+      const duplicate = options.duplicate === true;
+      const isEdit = !!action && !duplicate;
+      const title = duplicate
+        ? 'Duplicate Custom Quick Action'
+        : isEdit
+          ? 'Edit Custom Quick Action'
+          : 'Add Custom Quick Action';
+      const defaultCategory = BUILT_IN_COMMAND_CATEGORIES.includes(selectedCategory)
+        ? selectedCategory
+        : BUILT_IN_COMMAND_CATEGORIES[0];
+      const nextName = action
+        ? (duplicate ? getUniqueCustomQuickActionName(action.name) : action.name)
+        : '';
+
+      editingCustomQuickActionId = isEdit ? action.id : null;
+      if (customQuickActionModalTitle) customQuickActionModalTitle.textContent = title;
+      if (saveCustomQuickActionBtn) saveCustomQuickActionBtn.textContent = isEdit ? 'Update Action' : 'Save Action';
+      if (customQuickActionName) customQuickActionName.value = nextName;
+      if (customQuickActionMode) customQuickActionMode.value = action?.mode === 'ask' ? 'ask' : 'agent';
+      if (customQuickActionDescription) customQuickActionDescription.value = action?.desc || '';
+      if (customQuickActionPrompt) customQuickActionPrompt.value = action?.promptTemplate || '';
+      if (customQuickActionContext) customQuickActionContext.value = VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action?.requiredContext) ? action.requiredContext : ContextMode.ALL;
+      if (customQuickActionNoSelection) customQuickActionNoSelection.checked = action?.noSelection === true;
+      if (customQuickActionIncludeTokens) customQuickActionIncludeTokens.checked = action?.includeTokens === true;
+      populateCustomQuickActionCategoryOptions(action?.category || defaultCategory);
+      customQuickActionModal.classList.add('show');
+      customQuickActionName?.focus();
+      customQuickActionName?.select();
+    }
+
+    function updateQuickActionUsageName(oldName, newName) {
+      if (!oldName || !newName || oldName === newName) return;
+
+      const existingCount = quickActionUsage[oldName] || 0;
+      if (existingCount > 0) {
+        quickActionUsage[newName] = (quickActionUsage[newName] || 0) + existingCount;
+        delete quickActionUsage[oldName];
+      }
+
+      const updatedLastUsed = [];
+      const seen = new Set();
+      lastUsedQuickActions.forEach((name) => {
+        const nextName = name === oldName ? newName : name;
+        if (nextName && !seen.has(nextName)) {
+          updatedLastUsed.push(nextName);
+          seen.add(nextName);
+        }
+      });
+      lastUsedQuickActions = updatedLastUsed.slice(0, MAX_LAST_USED_ACTIONS);
+      saveQuickActionUsage();
+    }
+
+    function removeQuickActionUsageName(name) {
+      if (!name) return;
+      delete quickActionUsage[name];
+      lastUsedQuickActions = lastUsedQuickActions.filter((entry) => entry !== name);
+      saveQuickActionUsage();
+    }
+
+    function handleSaveCustomQuickAction() {
+      const name = customQuickActionName?.value.trim() || '';
+      const category = customQuickActionCategory?.value || '';
+      const mode = customQuickActionMode?.value === 'ask' ? 'ask' : 'agent';
+      const desc = customQuickActionDescription?.value.trim() || '';
+      const promptTemplate = customQuickActionPrompt?.value.trim() || '';
+      const requiredContext = VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(customQuickActionContext?.value)
+        ? customQuickActionContext.value
+        : ContextMode.ALL;
+
+      if (!name) {
+        showToast('Custom quick action name is required.', 'error');
+        return;
+      }
+
+      if (!promptTemplate) {
+        showToast('Custom quick action prompt is required.', 'error');
+        return;
+      }
+
+      if (!BUILT_IN_COMMAND_CATEGORIES.includes(category)) {
+        showToast('Please choose a valid category.', 'error');
+        return;
+      }
+
+      const duplicateName = builtInQuickActionNames.has(name) || customQuickActions.some((action) =>
+        action.id !== editingCustomQuickActionId && action.name.toLowerCase() === name.toLowerCase()
+      );
+      if (duplicateName) {
+        showToast('That quick action name is already in use.', 'error');
+        return;
+      }
+
+      const existing = editingCustomQuickActionId
+        ? customQuickActions.find((action) => action.id === editingCustomQuickActionId)
+        : null;
+      const nextAction = {
+        id: existing?.id || generateCustomQuickActionId(),
+        name,
+        category,
+        mode,
+        promptTemplate,
+        desc,
+        noSelection: customQuickActionNoSelection?.checked === true,
+        includeTokens: customQuickActionIncludeTokens?.checked === true,
+        requiredContext,
+        createdAt: existing?.createdAt || Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      if (existing) {
+        const actionIndex = customQuickActions.findIndex((action) => action.id === existing.id);
+        if (actionIndex !== -1) {
+          customQuickActions[actionIndex] = nextAction;
+        }
+        updateQuickActionUsageName(existing.name, nextAction.name);
+      } else {
+        customQuickActions.unshift(nextAction);
+      }
+
+      customQuickActions = sanitizeCustomQuickActions(customQuickActions);
+      persistCustomQuickActions();
+      rebuildAgentTasks(true);
+      closeCustomQuickActionModal();
+    }
+
+    function duplicateCustomQuickAction(actionId) {
+      const action = customQuickActions.find((entry) => entry.id === actionId);
+      if (!action) return;
+      openCustomQuickActionModal(action, { duplicate: true });
+    }
+
+    function editCustomQuickAction(actionId) {
+      const action = customQuickActions.find((entry) => entry.id === actionId);
+      if (!action) return;
+      openCustomQuickActionModal(action);
+    }
+
+    function deleteCustomQuickAction(actionId) {
+      const action = customQuickActions.find((entry) => entry.id === actionId);
+      if (!action) return;
+      customQuickActions = customQuickActions.filter((entry) => entry.id !== actionId);
+      removeQuickActionUsageName(action.name);
+      customQuickActions = sanitizeCustomQuickActions(customQuickActions);
+      persistCustomQuickActions();
+      rebuildAgentTasks(true);
+      showToast(`Deleted "${action.name}".`, 'success');
+    }
 
     function getDrawerFieldTypedText(fieldKey) {
       if (!promptDrawerFields || !fieldKey) return '';
@@ -39582,6 +39972,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
     btnConfirmAddOption.onclick = handleAddOptionSubmit;
     addOptionModal.onclick = (e) => {
       if (e.target === addOptionModal) closeAddOptionModal();
+    };
+    closeCustomQuickActionBtn.onclick = closeCustomQuickActionModal;
+    cancelCustomQuickActionBtn.onclick = closeCustomQuickActionModal;
+    saveCustomQuickActionBtn.onclick = handleSaveCustomQuickAction;
+    customQuickActionModal.onclick = (e) => {
+      if (e.target === customQuickActionModal) closeCustomQuickActionModal();
     };
 
     // Settings
