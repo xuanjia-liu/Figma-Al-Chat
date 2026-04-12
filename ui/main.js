@@ -365,6 +365,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       ContextMode.STYLE_ONLY,
       ContextMode.TYPOGRAPHY_ONLY,
       ContextMode.EFFECTS_ONLY,
+      ContextMode.COMPONENT_ONLY,
       ContextMode.INDEX_ONLY,
     ]);
 
@@ -379,6 +380,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         [ContextMode.STYLE_ONLY]: 'aux.audit.context.styleOnly',
         [ContextMode.TYPOGRAPHY_ONLY]: 'aux.audit.context.typographyOnly',
         [ContextMode.EFFECTS_ONLY]: 'aux.audit.context.effectsOnly',
+        [ContextMode.COMPONENT_ONLY]: 'aux.audit.context.componentOnly',
         [ContextMode.INDEX_ONLY]: 'aux.audit.context.indexOnly',
       };
       return keyMap[mode] ? tu(keyMap[mode]) : mode;
@@ -39419,6 +39421,11 @@ Based on the user's instruction, generate the appropriate commands to modify the
         value: ContextMode.EFFECTS_ONLY,
         label: 'Effects only',
         description: 'Shadows, blur, blend mode, and effect styles only.'
+      },
+      {
+        value: ContextMode.COMPONENT_ONLY,
+        label: 'Components only',
+        description: 'Variants, component properties, and instance metadata only.'
       },
       {
         value: ContextMode.INDEX_ONLY,

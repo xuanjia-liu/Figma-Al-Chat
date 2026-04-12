@@ -9,7 +9,7 @@ export const ContextMode = {
       TYPOGRAPHY_ONLY: 'typographyOnly', // id, name, type, text content and typography metadata
       EFFECTS_ONLY: 'effectsOnly', // id, name, type, effects and effect style metadata
       INDEX_ONLY: 'indexOnly', // id, name, type, bounds, z-order, truncated text snippets
-      COMPONENT_ONLY: 'componentOnly', // internal: component and variant metadata
+      COMPONENT_ONLY: 'componentOnly', // id, name, type, component and variant metadata
       PILL_ONLY: 'pillOnly', // internal: emergency fallback for huge selections
     };
 
