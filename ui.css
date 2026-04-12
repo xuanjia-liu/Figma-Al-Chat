@@ -7181,6 +7181,10 @@
       pointer-events: auto;
     }
 
+    .node-actions-content.has-open-custom-menu {
+      overflow: visible;
+    }
+
     .node-actions-content::-webkit-scrollbar {
       display: none;
     }
@@ -7231,14 +7235,15 @@
       max-width: 28px;
     }
 
-    .node-action-btn span {
+    .node-action-btn > span {
       max-width: 0;
       opacity: 0;
       overflow: hidden;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .node-action-btn:hover span {
+    .node-action-btn:hover > span,
+    .node-action-btn:focus-within > span {
       max-width: 200px;
       opacity: 1;
     }
@@ -7247,6 +7252,66 @@
       width: 14px;
       height: 14px;
       flex-shrink: 0;
+    }
+
+    .node-action-btn--custom {
+      position: relative;
+      overflow: visible;
+    }
+
+    .node-action-btn--custom:not([aria-disabled="true"]):hover,
+    .node-action-btn--custom:not([aria-disabled="true"]):focus-within {
+      max-width: 220px;
+      padding-right: 36px;
+    }
+
+    .node-action-custom-actions {
+      position: absolute;
+      top: 50%;
+      right: 6px;
+      transform: translateY(-50%);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 30;
+    }
+
+    .node-action-btn--custom:hover .node-action-custom-actions,
+    .node-action-btn--custom:focus-within .node-action-custom-actions,
+    .node-action-custom-actions.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .node-action-custom-actions .command-item-custom-popover {
+      top: auto;
+      bottom: calc(100% + 6px);
+      right: 0;
+    }
+
+    .node-action-custom-actions .command-item-custom-trigger {
+      width: 20px;
+      height: 20px;
+      background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+      border-color: color-mix(in srgb, var(--border) 82%, transparent);
+      color: currentColor;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+      opacity: 0;
+      visibility: hidden;
+      transform: scale(0.92);
+      transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .node-action-custom-actions .command-item-custom-trigger:hover {
+      background: var(--bg-primary);
+      border-color: color-mix(in srgb, var(--border) 92%, transparent);
+    }
+
+    .node-action-btn--custom:hover .node-action-custom-actions .command-item-custom-trigger,
+    .node-action-btn--custom:focus-within .node-action-custom-actions .command-item-custom-trigger,
+    .node-action-custom-actions.is-open .command-item-custom-trigger {
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
     }
 
     .audit-input-actions {
@@ -7906,7 +7971,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-xl);
-      width: 210px;
+      width: 320px;
       display: none;
       flex-direction: column;
       padding: var(--space-xs);
@@ -8356,6 +8421,13 @@
       opacity: 1;
       transform: translateY(0);
       pointer-events: all;
+    }
+
+    .export-menu-divider {
+      height: 1px;
+      margin: 4px 6px;
+      background: var(--border);
+      flex-shrink: 0;
     }
 
     .export-menu-item {
@@ -10091,6 +10163,10 @@
       gap: 10px;
     }
 
+    .custom-quick-action-modal-row-full {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
     .custom-quick-action-modal .setting-item {
       margin-bottom: 0;
     }
@@ -10117,6 +10193,7 @@
 
     .custom-quick-action-context-select {
       position: relative;
+      width: 100%;
     }
 
     .custom-quick-action-context-trigger {
@@ -10167,18 +10244,20 @@
 
     .custom-quick-action-context-menu {
       position: absolute;
-      top: calc(100% + 6px);
+      bottom: calc(100% + 6px);
       left: 0;
       right: 0;
       display: none;
       flex-direction: column;
-      gap: 4px;
+      gap:0;
       padding: 6px;
       background: var(--bg-primary);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       box-shadow: var(--shadow-md);
       z-index: 20;
+      max-height: min(320px, 40vh);
+      overflow-y: auto;
     }
 
     .custom-quick-action-context-select.open .custom-quick-action-context-menu {

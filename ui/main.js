@@ -3203,7 +3203,49 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const disabledClass = isDisabled ? ' ai-disabled' : '';
         const disabledAttrs = isDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
         const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
-        html += `
+        const customActions = action.isCustomQuickAction ? `
+          <div class="command-item-custom-actions node-action-custom-actions">
+            <button class="command-item-custom-trigger" data-custom-popover-trigger="${escapeHtml(action.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.moreActionsTitle'))}" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="5" r="1.5"/>
+                <circle cx="12" cy="12" r="1.5"/>
+                <circle cx="12" cy="19" r="1.5"/>
+              </svg>
+            </button>
+            <div class="command-item-custom-popover" role="menu">
+              <button class="dropdown-item" data-custom-action="edit" data-custom-action-id="${escapeHtml(action.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.editTitle'))}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 20h9"/>
+                  <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/>
+                </svg>
+                <span>${escapeHtml(tu('actions.option.edit'))}</span>
+              </button>
+              <button class="dropdown-item" data-custom-action="duplicate" data-custom-action-id="${escapeHtml(action.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.duplicateTitle'))}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <span>${escapeHtml(tu('actions.option.duplicate'))}</span>
+              </button>
+              <button class="dropdown-item dropdown-item-danger" data-custom-action="delete" data-custom-action-id="${escapeHtml(action.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.deleteTitle'))}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18"/>
+                  <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  <path d="M10 11v6M14 11v6"/>
+                </svg>
+                <span>${escapeHtml(tu('actions.option.remove'))}</span>
+              </button>
+            </div>
+          </div>
+        ` : '';
+        html += action.isCustomQuickAction ? `
+          <div class="node-action-btn last-used-action-btn node-action-btn--custom${disabledClass}" data-last-used-index="${idx}" title="${title}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" role="button"${disabledAttrs}>
+              ${action.icon || defaultActionIcon}
+              <span>${action.name}</span>
+              ${customActions}
+          </div>
+        ` : `
           <button class="node-action-btn last-used-action-btn${disabledClass}" data-last-used-index="${idx}" title="${title}" data-ai-disabled="${isDisabled ? 'true' : 'false'}"${disabledAttrs}>
             ${action.icon || defaultActionIcon}
             <span>${action.name}</span>
@@ -3309,6 +3351,49 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           const idx = parseInt(btn.dataset.lastUsedIndex);
           if (!Number.isNaN(idx) && lastUsed[idx]) {
             triggerSlashAction(lastUsed[idx]);
+          }
+        });
+        btn.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            btn.click();
+          }
+        });
+      });
+
+      nodeActionsContent.querySelectorAll('[data-custom-popover-trigger]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const actionId = button.dataset.customPopoverTrigger;
+          const container = button.closest('.command-item-custom-actions');
+          if (!actionId || !container) return;
+          const shouldOpen = openCustomActionPopoverId !== actionId;
+          closeCommandItemPopover();
+          if (shouldOpen) {
+            openCustomActionPopoverId = actionId;
+            container.classList.add('is-open');
+            nodeActionsContent.classList.add('has-open-custom-menu');
+            button.setAttribute('aria-expanded', 'true');
+          } else {
+            button.setAttribute('aria-expanded', 'false');
+          }
+        });
+      });
+
+      nodeActionsContent.querySelectorAll('[data-custom-action]').forEach((button) => {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          closeCommandItemPopover();
+          const { customAction, customActionId } = button.dataset;
+          if (!customActionId) return;
+          if (customAction === 'edit') {
+            editCustomQuickAction(customActionId);
+          } else if (customAction === 'duplicate') {
+            duplicateCustomQuickAction(customActionId);
+          } else if (customAction === 'delete') {
+            deleteCustomQuickAction(customActionId);
           }
         });
       });
@@ -3552,7 +3637,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const chatSendBtn = document.getElementById('chatSendBtn');
     const plusBtn = document.getElementById('plusBtn');
     const exportMenu = document.getElementById('exportMenu');
-    const exportMenuItems = document.querySelectorAll('.export-menu-item');
+    const exportMenuItems = document.querySelectorAll('.export-menu-item[data-export]');
+    const addCustomQuickActionMenuBtn = document.getElementById('addCustomQuickActionMenuBtn');
     const uploadImageBtn = document.getElementById('uploadImageBtn');
     const uploadImageInput = document.getElementById('uploadImageInput');
     const imagePreviewModal = document.getElementById('imagePreviewModal');
@@ -39087,6 +39173,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
       });
     }
 
+    if (addCustomQuickActionMenuBtn) {
+      addCustomQuickActionMenuBtn.addEventListener('click', () => {
+        openCustomQuickActionModal();
+        plusBtn.classList.remove('active');
+        exportMenu.classList.remove('show');
+      });
+    }
+
     // Event delegation for message action buttons (edit, copy)
     chatMessages.addEventListener('click', async (e) => {
       // Handle code block copy button
@@ -39517,6 +39611,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       document.querySelectorAll('.command-item-custom-actions.is-open').forEach((node) => {
         node.classList.remove('is-open');
       });
+      nodeActionsContent?.classList.remove('has-open-custom-menu');
       document.querySelectorAll('[data-custom-popover-trigger][aria-expanded="true"]').forEach((node) => {
         node.setAttribute('aria-expanded', 'false');
       });

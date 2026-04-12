@@ -225,6 +225,13 @@
                   </svg>
                 </button>
                 <div class="export-menu" id="exportMenu">
+                  <button class="export-menu-item" id="addCustomQuickActionMenuBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    <span data-i18n="settings.exportMenu.customAction">Custom Action</span>
+                  </button>
+                  <div class="export-menu-divider" role="separator" aria-hidden="true"></div>
                   <button class="export-menu-item" data-export="css">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
@@ -834,7 +841,7 @@
           <label class="setting-label" for="customQuickActionPrompt" data-i18n-action="actions.customQuickAction.promptLabel">Prompt</label>
           <textarea class="setting-input" id="customQuickActionPrompt" style="min-height: 120px; resize: vertical;" placeholder="Write the prompt that should run for this action." data-i18n-action-placeholder="actions.customQuickAction.promptPlaceholder"></textarea>
         </div>
-        <div class="custom-quick-action-modal-row">
+        <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full">
           <div class="setting-item">
             <label class="setting-label" for="customQuickActionContextTrigger" data-i18n-action="actions.customQuickAction.context.label">Context mode</label>
             <div class="custom-quick-action-context-select" id="customQuickActionContext" data-value="all">

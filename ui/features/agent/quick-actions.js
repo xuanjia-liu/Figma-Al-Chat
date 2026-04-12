@@ -132,6 +132,8 @@ export function buildQuickActionsList(agentTasks) {
         desc: task.desc || '',
         help: task.help || '',
         icon: getActionIconForTask(task, category),
+        isCustomQuickAction: task.isCustomQuickAction === true,
+        customQuickActionId: task.customQuickActionId || null,
         order: order++,
       });
     });
