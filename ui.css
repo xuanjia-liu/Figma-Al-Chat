@@ -10155,8 +10155,7 @@
 
     .custom-quick-action-context-trigger-text {
       display: flex;
-      flex-direction: column;
-      gap: 2px;
+      align-items: center;
       min-width: 0;
     }
 
@@ -10164,12 +10163,6 @@
       font-size: var(--text-sm);
       font-weight: 600;
       color: var(--text-primary);
-    }
-
-    .custom-quick-action-context-trigger-desc {
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-      line-height: 1.35;
     }
 
     .custom-quick-action-context-menu {

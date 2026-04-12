@@ -39385,7 +39385,6 @@ Based on the user's instruction, generate the appropriate commands to modify the
       customQuickActionContext.dataset.value = selected.value;
       customQuickActionContextTrigger.setAttribute('aria-expanded', 'false');
       customQuickActionContextTrigger.querySelector('.custom-quick-action-context-trigger-label').textContent = selected.label;
-      customQuickActionContextTrigger.querySelector('.custom-quick-action-context-trigger-desc').textContent = selected.description;
       customQuickActionContextMenu.innerHTML = customQuickActionContextOptions.map((option) => `
         <button
           type="button"
