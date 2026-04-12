@@ -505,6 +505,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         element.innerHTML = tu(element.dataset.i18nActionHtml);
       });
 
+      customQuickActionContextMenu?.setAttribute('aria-label', tu('actions.customQuickAction.context.label'));
+      if (customQuickActionContext) {
+        setCustomQuickActionContextValue(getCustomQuickActionContextValue());
+      }
+
       const commandsDrawerTitle = document.querySelector('.commands-drawer-title');
       if (commandsDrawerTitle) {
         commandsDrawerTitle.textContent = tu('actions.commands.title');
@@ -9054,10 +9059,10 @@ Rules:
         const hasFields = quickActionHasFields(task);
         const categoryLabel = lowerFilter && task.category ? `<div class="command-item-category">${localizeActionString(task.category)}</div>` : '';
         const itemTitle = localizedTask.displayDesc || localizedTask.displayName || task.name;
-        const customTag = task.isCustomQuickAction ? `<div class="command-item-custom-tag">${task.askMode ? 'Ask' : 'Agent'}</div>` : '';
+        const customTag = task.isCustomQuickAction ? `<div class="command-item-custom-tag">${task.askMode ? tu('actions.customQuickAction.mode.ask') : tu('actions.customQuickAction.mode.agent')}</div>` : '';
         const customActions = task.isCustomQuickAction ? `
           <div class="command-item-custom-actions">
-            <button class="command-item-custom-trigger" data-custom-popover-trigger="${escapeHtml(task.customQuickActionId)}" title="More actions" aria-haspopup="menu" aria-expanded="false">
+            <button class="command-item-custom-trigger" data-custom-popover-trigger="${escapeHtml(task.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.moreActionsTitle'))}" aria-haspopup="menu" aria-expanded="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="5" r="1.5"/>
                 <circle cx="12" cy="12" r="1.5"/>
@@ -9065,28 +9070,28 @@ Rules:
               </svg>
             </button>
             <div class="command-item-custom-popover" role="menu">
-              <button class="dropdown-item" data-custom-action="edit" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Edit custom quick action">
+              <button class="dropdown-item" data-custom-action="edit" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.editTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 20h9"/>
                 <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/>
               </svg>
-              <span>Edit</span>
+              <span>${escapeHtml(tu('actions.option.edit'))}</span>
               </button>
-              <button class="dropdown-item" data-custom-action="duplicate" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Duplicate custom quick action">
+              <button class="dropdown-item" data-custom-action="duplicate" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.duplicateTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2"/>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
               </svg>
-              <span>Duplicate</span>
+              <span>${escapeHtml(tu('actions.option.duplicate'))}</span>
               </button>
-              <button class="dropdown-item dropdown-item-danger" data-custom-action="delete" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="Delete custom quick action">
+              <button class="dropdown-item dropdown-item-danger" data-custom-action="delete" data-custom-action-id="${escapeHtml(task.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.deleteTitle'))}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18"/>
                 <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/>
                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
                 <path d="M10 11v6M14 11v6"/>
               </svg>
-              <span>Delete</span>
+              <span>${escapeHtml(tu('actions.option.remove'))}</span>
               </button>
             </div>
           </div>
@@ -39379,58 +39384,58 @@ Based on the user's instruction, generate the appropriate commands to modify the
     const customQuickActionContextOptions = [
       {
         value: ContextMode.SMART,
-        label: 'Smart',
-        description: 'Adaptive full context with compression for the best default behavior.'
+        labelKey: 'actions.customQuickAction.context.smart.label',
+        descriptionKey: 'actions.customQuickAction.context.smart.description'
       },
       {
         value: ContextMode.ALL,
-        label: 'All',
-        description: 'Full selection metadata without smart compression.'
+        labelKey: 'actions.customQuickAction.context.all.label',
+        descriptionKey: 'actions.customQuickAction.context.all.description'
       },
       {
         value: ContextMode.MINIMAL,
-        label: 'Minimal',
-        description: 'Only core node identity data to reduce token usage.'
+        labelKey: 'actions.customQuickAction.context.minimal.label',
+        descriptionKey: 'actions.customQuickAction.context.minimal.description'
       },
       {
         value: ContextMode.TEXT_ONLY,
-        label: 'Text only',
-        description: 'Text content only, without rich typography metadata.'
+        labelKey: 'actions.customQuickAction.context.textOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.textOnly.description'
       },
       {
         value: ContextMode.LAYOUT_ONLY,
-        label: 'Layout only',
-        description: 'Geometry, size, and position without full styling.'
+        labelKey: 'actions.customQuickAction.context.layoutOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.layoutOnly.description'
       },
       {
         value: ContextMode.HIERARCHY,
-        label: 'Hierarchy',
-        description: 'Layer structure and nesting relationships.'
+        labelKey: 'actions.customQuickAction.context.hierarchy.label',
+        descriptionKey: 'actions.customQuickAction.context.hierarchy.description'
       },
       {
         value: ContextMode.STYLE_ONLY,
-        label: 'Paint & Tokens',
-        description: 'Fills, strokes, opacity, and paint token bindings.'
+        labelKey: 'actions.customQuickAction.context.styleOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.styleOnly.description'
       },
       {
         value: ContextMode.TYPOGRAPHY_ONLY,
-        label: 'Typography only',
-        description: 'Text content plus text styles and rich typography metadata.'
+        labelKey: 'actions.customQuickAction.context.typographyOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.typographyOnly.description'
       },
       {
         value: ContextMode.EFFECTS_ONLY,
-        label: 'Effects only',
-        description: 'Shadows, blur, blend mode, and effect styles only.'
+        labelKey: 'actions.customQuickAction.context.effectsOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.effectsOnly.description'
       },
       {
         value: ContextMode.COMPONENT_ONLY,
-        label: 'Components only',
-        description: 'Variants, component properties, and instance metadata only.'
+        labelKey: 'actions.customQuickAction.context.componentOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.componentOnly.description'
       },
       {
         value: ContextMode.INDEX_ONLY,
-        label: 'Index only',
-        description: 'Lookup-focused node index with bounds, order, and short text snippets.'
+        labelKey: 'actions.customQuickAction.context.indexOnly.label',
+        descriptionKey: 'actions.customQuickAction.context.indexOnly.description'
       }
     ];
 
@@ -39448,7 +39453,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
     }
 
     function getUniqueCustomQuickActionName(baseName, excludeId = null) {
-      const candidateBase = (baseName || 'Custom quick action').trim() || 'Custom quick action';
+      const fallbackName = tu('actions.customQuickAction.defaultName');
+      const candidateBase = (baseName || fallbackName).trim() || fallbackName;
       const isTaken = (candidate) => {
         if (builtInQuickActionNames.has(candidate)) return true;
         return customQuickActions.some((action) =>
@@ -39491,7 +39497,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (!customQuickActionContext || !customQuickActionContextTrigger || !customQuickActionContextMenu) return;
       customQuickActionContext.dataset.value = selected.value;
       customQuickActionContextTrigger.setAttribute('aria-expanded', 'false');
-      customQuickActionContextTrigger.querySelector('.custom-quick-action-context-trigger-label').textContent = selected.label;
+      customQuickActionContextTrigger.querySelector('.custom-quick-action-context-trigger-label').textContent = tu(selected.labelKey);
       customQuickActionContextMenu.innerHTML = customQuickActionContextOptions.map((option) => `
         <button
           type="button"
@@ -39500,8 +39506,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
           role="option"
           aria-selected="${option.value === selected.value ? 'true' : 'false'}"
         >
-          <span class="custom-quick-action-context-option-title">${escapeHtml(option.label)}</span>
-          <span class="custom-quick-action-context-option-desc">${escapeHtml(option.description)}</span>
+          <span class="custom-quick-action-context-option-title">${escapeHtml(tu(option.labelKey))}</span>
+          <span class="custom-quick-action-context-option-desc">${escapeHtml(tu(option.descriptionKey))}</span>
         </button>
       `).join('');
     }
@@ -39527,10 +39533,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
       const duplicate = options.duplicate === true;
       const isEdit = !!action && !duplicate;
       const title = duplicate
-        ? 'Duplicate Custom Quick Action'
+        ? tu('actions.customQuickAction.modal.duplicateTitle')
         : isEdit
-          ? 'Edit Custom Quick Action'
-          : 'Add Custom Quick Action';
+          ? tu('actions.customQuickAction.modal.editTitle')
+          : tu('actions.customQuickAction.modal.addTitle');
       const defaultCategory = BUILT_IN_COMMAND_CATEGORIES.includes(selectedCategory)
         ? selectedCategory
         : BUILT_IN_COMMAND_CATEGORIES[0];
@@ -39540,7 +39546,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       editingCustomQuickActionId = isEdit ? action.id : null;
       if (customQuickActionModalTitle) customQuickActionModalTitle.textContent = title;
-      if (saveCustomQuickActionBtn) saveCustomQuickActionBtn.textContent = isEdit ? 'Update Action' : 'Save Action';
+      if (saveCustomQuickActionBtn) saveCustomQuickActionBtn.textContent = isEdit
+        ? tu('actions.customQuickAction.update')
+        : tu('actions.customQuickAction.save');
       if (customQuickActionName) customQuickActionName.value = nextName;
       if (customQuickActionMode) customQuickActionMode.value = action?.mode === 'ask' ? 'ask' : 'agent';
       if (customQuickActionDescription) customQuickActionDescription.value = action?.desc || '';
@@ -39594,17 +39602,17 @@ Based on the user's instruction, generate the appropriate commands to modify the
       const requiredContext = getCustomQuickActionContextValue();
 
       if (!name) {
-        showToast('Custom quick action name is required.', 'error');
+        showToast(tu('actions.customQuickAction.validation.nameRequired'), 'error');
         return;
       }
 
       if (!promptTemplate) {
-        showToast('Custom quick action prompt is required.', 'error');
+        showToast(tu('actions.customQuickAction.validation.promptRequired'), 'error');
         return;
       }
 
       if (!BUILT_IN_COMMAND_CATEGORIES.includes(category)) {
-        showToast('Please choose a valid category.', 'error');
+        showToast(tu('actions.customQuickAction.validation.categoryInvalid'), 'error');
         return;
       }
 
@@ -39612,7 +39620,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         action.id !== editingCustomQuickActionId && action.name.toLowerCase() === name.toLowerCase()
       );
       if (duplicateName) {
-        showToast('That quick action name is already in use.', 'error');
+        showToast(tu('actions.customQuickAction.validation.nameExists'), 'error');
         return;
       }
 

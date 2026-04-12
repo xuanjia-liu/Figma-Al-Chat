@@ -801,7 +801,7 @@
   <div class="custom-quick-action-modal" id="customQuickActionModal">
     <div class="custom-quick-action-modal-content">
       <div class="custom-quick-action-modal-header">
-        <span class="settings-modal-title" id="customQuickActionModalTitle">Add Custom Quick Action</span>
+        <span class="settings-modal-title" id="customQuickActionModalTitle" data-i18n-action="actions.customQuickAction.modal.addTitle">Add Custom Quick Action</span>
         <button class="custom-quick-action-modal-close" id="closeCustomQuickActionBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M18 6L6 18M6 6l12 12" />
@@ -810,37 +810,37 @@
       </div>
       <div class="custom-quick-action-modal-body">
         <div class="setting-item">
-          <label class="setting-label" for="customQuickActionName">Name</label>
-          <input type="text" class="setting-input" id="customQuickActionName" placeholder="e.g. Summarize selected UI" />
+          <label class="setting-label" for="customQuickActionName" data-i18n-action="actions.customQuickAction.nameLabel">Name</label>
+          <input type="text" class="setting-input" id="customQuickActionName" placeholder="e.g. Summarize selected UI" data-i18n-action-placeholder="actions.customQuickAction.namePlaceholder" />
         </div>
         <div class="custom-quick-action-modal-row">
           <div class="setting-item">
-            <label class="setting-label" for="customQuickActionCategory">Category</label>
+            <label class="setting-label" for="customQuickActionCategory" data-i18n-action="actions.customQuickAction.categoryLabel">Category</label>
             <select class="setting-input" id="customQuickActionCategory"></select>
           </div>
           <div class="setting-item">
-            <label class="setting-label" for="customQuickActionMode">Mode</label>
+            <label class="setting-label" for="customQuickActionMode" data-i18n-action="actions.customQuickAction.modeLabel">Mode</label>
             <select class="setting-input" id="customQuickActionMode">
-              <option value="agent">Agent</option>
-              <option value="ask">Ask</option>
+              <option value="agent" data-i18n-action="actions.customQuickAction.mode.agent">Agent</option>
+              <option value="ask" data-i18n-action="actions.customQuickAction.mode.ask">Ask</option>
             </select>
           </div>
         </div>
         <div class="setting-item">
-          <label class="setting-label" for="customQuickActionDescription">Description</label>
-          <input type="text" class="setting-input" id="customQuickActionDescription" placeholder="Optional short description" />
+          <label class="setting-label" for="customQuickActionDescription" data-i18n-action="actions.customQuickAction.descriptionLabel">Description</label>
+          <input type="text" class="setting-input" id="customQuickActionDescription" placeholder="Optional short description" data-i18n-action-placeholder="actions.customQuickAction.descriptionPlaceholder" />
         </div>
         <div class="setting-item">
-          <label class="setting-label" for="customQuickActionPrompt">Prompt</label>
-          <textarea class="setting-input" id="customQuickActionPrompt" style="min-height: 120px; resize: vertical;" placeholder="Write the prompt that should run for this action."></textarea>
+          <label class="setting-label" for="customQuickActionPrompt" data-i18n-action="actions.customQuickAction.promptLabel">Prompt</label>
+          <textarea class="setting-input" id="customQuickActionPrompt" style="min-height: 120px; resize: vertical;" placeholder="Write the prompt that should run for this action." data-i18n-action-placeholder="actions.customQuickAction.promptPlaceholder"></textarea>
         </div>
         <div class="custom-quick-action-modal-row">
           <div class="setting-item">
-            <label class="setting-label" for="customQuickActionContextTrigger">Context mode</label>
+            <label class="setting-label" for="customQuickActionContextTrigger" data-i18n-action="actions.customQuickAction.context.label">Context mode</label>
             <div class="custom-quick-action-context-select" id="customQuickActionContext" data-value="all">
               <button type="button" class="custom-quick-action-context-trigger" id="customQuickActionContextTrigger" aria-haspopup="listbox" aria-expanded="false">
                 <span class="custom-quick-action-context-trigger-text">
-                  <span class="custom-quick-action-context-trigger-label">All</span>
+                  <span class="custom-quick-action-context-trigger-label" data-i18n-action="actions.customQuickAction.context.all.label">All</span>
                 </span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="m6 9 6 6 6-6" />
@@ -853,15 +853,15 @@
         </div>
         <label class="custom-quick-action-toggle">
           <input type="checkbox" id="customQuickActionNoSelection" />
-          <span>Allow without selection</span>
+          <span data-i18n-action="actions.customQuickAction.allowWithoutSelection">Allow without selection</span>
         </label>
         <label class="custom-quick-action-toggle">
           <input type="checkbox" id="customQuickActionIncludeTokens" />
-          <span>Include local tokens</span>
+          <span data-i18n-action="actions.customQuickAction.includeLocalTokens">Include local tokens</span>
         </label>
         <div class="custom-quick-action-modal-actions">
-          <button class="setting-btn secondary" id="cancelCustomQuickActionBtn">Cancel</button>
-          <button class="setting-btn primary" id="saveCustomQuickActionBtn">Save Action</button>
+          <button class="setting-btn secondary" id="cancelCustomQuickActionBtn" data-i18n-action="actions.customQuickAction.cancel">Cancel</button>
+          <button class="setting-btn primary" id="saveCustomQuickActionBtn" data-i18n-action="actions.customQuickAction.save">Save Action</button>
         </div>
       </div>
     </div>
