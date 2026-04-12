@@ -1,10 +1,16 @@
 export const ContextMode = {
+      SMART: 'smart',
       ALL: 'all',
       MINIMAL: 'minimal', // id, name, type
       TEXT_ONLY: 'textOnly', // id, name, type, characters
       LAYOUT_ONLY: 'layoutOnly', // id, name, type, width, height, x, y, absX, absY
-      STYLE_ONLY: 'styleOnly', // id, name, type, fills, strokes, effects
-      HIERARCHY: 'hierarchy' // id, name, type, children (recursive but minimal)
+      STYLE_ONLY: 'styleOnly', // id, name, type, paint metadata, paint tokens
+      HIERARCHY: 'hierarchy', // id, name, type, children (recursive but minimal)
+      TYPOGRAPHY_ONLY: 'typographyOnly', // id, name, type, text content and typography metadata
+      EFFECTS_ONLY: 'effectsOnly', // id, name, type, effects and effect style metadata
+      INDEX_ONLY: 'indexOnly', // id, name, type, bounds, z-order, truncated text snippets
+      COMPONENT_ONLY: 'componentOnly', // internal: component and variant metadata
+      PILL_ONLY: 'pillOnly', // internal: emergency fallback for huge selections
     };
 
 

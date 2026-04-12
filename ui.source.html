@@ -903,7 +903,12 @@
                   <option value="all" data-i18n-action="aux.audit.context.all">Full Detail</option>
                   <option value="minimal" data-i18n-action="aux.audit.context.minimal">Minimal</option>
                   <option value="textOnly" data-i18n-action="aux.audit.context.textOnly">Text Only</option>
+                  <option value="layoutOnly" data-i18n-action="aux.audit.context.layoutOnly">Layout Only</option>
                   <option value="hierarchy" data-i18n-action="aux.audit.context.hierarchy">Hierarchy</option>
+                  <option value="styleOnly" data-i18n-action="aux.audit.context.styleOnly">Paint &amp; Tokens</option>
+                  <option value="typographyOnly" data-i18n-action="aux.audit.context.typographyOnly">Typography Only</option>
+                  <option value="effectsOnly" data-i18n-action="aux.audit.context.effectsOnly">Effects Only</option>
+                  <option value="indexOnly" data-i18n-action="aux.audit.context.indexOnly">Index Only</option>
                 </select>
                 <svg class="audit-preset-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M6 9l6 6 6-6" />
@@ -1380,6 +1385,15 @@
       </div>
       <div class="mode-desc" data-i18n-action="aux.context.allDesc">Bypass intent system; use all meta data</div>
     </div>
+    <div class="context-mode-item" data-mode="minimal">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+        <span data-i18n-action="aux.context.minimalTitle">Minimal</span>
+      </div>
+      <div class="mode-desc" data-i18n-action="aux.context.minimalDesc">Only node names and types</div>
+    </div>
     <div class="context-mode-item" data-mode="textOnly">
       <div class="mode-title">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1388,15 +1402,6 @@
         <span data-i18n-action="aux.context.textOnlyTitle">Text Content Only</span>
       </div>
       <div class="mode-desc" data-i18n-action="aux.context.textOnlyDesc">Only text content and hierarchy</div>
-    </div>
-    <div class="context-mode-item" data-mode="styleOnly">
-      <div class="mode-title">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />
-        </svg>
-        <span data-i18n-action="aux.context.styleOnlyTitle">Styles & Variables</span>
-      </div>
-      <div class="mode-desc" data-i18n-action="aux.context.styleOnlyDesc">Colors, typography, and variables</div>
     </div>
     <div class="context-mode-item" data-mode="layoutOnly">
       <div class="mode-title">
@@ -1408,14 +1413,51 @@
       </div>
       <div class="mode-desc" data-i18n-action="aux.context.layoutOnlyDesc">Frames, sizing, and spacing</div>
     </div>
-    <div class="context-mode-item" data-mode="minimal">
+    <div class="context-mode-item" data-mode="hierarchy">
       <div class="mode-title">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          <path d="M4 6h6v4H4zM14 6h6v4h-6zM9 14h6v4H9z" />
+          <path d="M12 10v2M7 10v2h10v-2" />
         </svg>
-        <span data-i18n-action="aux.context.minimalTitle">Minimal</span>
+        <span data-i18n-action="aux.context.hierarchyTitle">Hierarchy</span>
       </div>
-      <div class="mode-desc" data-i18n-action="aux.context.minimalDesc">Only node names and types</div>
+      <div class="mode-desc" data-i18n-action="aux.context.hierarchyDesc">Layer structure and nesting relationships</div>
+    </div>
+    <div class="context-mode-item" data-mode="styleOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />
+        </svg>
+        <span data-i18n-action="aux.context.styleOnlyTitle">Paint &amp; Tokens</span>
+      </div>
+      <div class="mode-desc" data-i18n-action="aux.context.styleOnlyDesc">Paint, strokes, opacity, and token bindings</div>
+    </div>
+    <div class="context-mode-item" data-mode="typographyOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+        </svg>
+        <span data-i18n-action="aux.context.typographyOnlyTitle">Typography Only</span>
+      </div>
+      <div class="mode-desc" data-i18n-action="aux.context.typographyOnlyDesc">Text content and text styling only</div>
+    </div>
+    <div class="context-mode-item" data-mode="effectsOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M6 7h12M8 12h8M10 17h4" />
+        </svg>
+        <span data-i18n-action="aux.context.effectsOnlyTitle">Effects Only</span>
+      </div>
+      <div class="mode-desc" data-i18n-action="aux.context.effectsOnlyDesc">Shadows, blur, blend mode, and effect styles</div>
+    </div>
+    <div class="context-mode-item" data-mode="indexOnly">
+      <div class="mode-title">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        <span data-i18n-action="aux.context.indexOnlyTitle">Index Only</span>
+      </div>
+      <div class="mode-desc" data-i18n-action="aux.context.indexOnlyDesc">Lookup-focused node index with bounds and short text</div>
     </div>
   </div>
   <!-- Reply Template Manager Modal -->

@@ -32,6 +32,7 @@ for the browser to run.
 Developer note: the plugin UI is now maintained as split source files, not directly in the generated `ui.html`.
 Edit `ui.source.html`, `ui.css`, and files under `ui/`, then run `npm run build` before reloading the plugin in Figma.
 `ui.html` is a generated artifact used by `figma.showUI(__html__)`, so direct edits there will be overwritten.
+Selection context now defaults to `smart` mode, with lighter public modes for minimal/text/layout/hierarchy/paint/typography/effects/index use cases. The `pillOnly` mode remains internal and is only used as the large-selection fallback.
 
 We recommend writing TypeScript code using Visual Studio code:
 

@@ -36,7 +36,7 @@ export const stylingTasks = [
 {
           name: 'Remove all effects',
           desc: 'Strip shadows & blur',
-          requiredContext: ContextMode.STYLE_ONLY,
+          requiredContext: ContextMode.EFFECTS_ONLY,
           directAction: 'removeAllEffects',
           prompt: 'For each selected element (and all descendants), use clearEffects to remove all effects including drop shadows, inner shadows, layer blur, and background blur.'
         },
@@ -96,7 +96,7 @@ export const stylingTasks = [
           name: 'text link/color',
           desc: 'Add link or recolor text substrings (one per line)',
           isTextAction: true,
-          requiredContext: ContextMode.TEXT_ONLY,
+          requiredContext: ContextMode.TYPOGRAPHY_ONLY,
           directAction: 'textLinkColor',
           promptTemplate: function (values) {
             const textAction = values.textAction || 'link';
@@ -138,7 +138,7 @@ export const stylingTasks = [
 {
           name: 'Remove unused properties',
           desc: 'Delete unused component properties',
-          requiredContext: ContextMode.HIERARCHY,
+          requiredContext: ContextMode.COMPONENT_ONLY,
           directAction: 'removeUnusedProperties',
           prompt: 'Identify the current selection. If it is a component, component set, or instance, return ONLY JSON: [{"action":"removeUnusedComponentProperties","nodeId":"<SELECTED_ID>"}]. This helper scans for usage of component properties (text, boolean, instance swap) and deletes those that are not linked to any descendant node. Variant properties are never removed. Return a list of commands, one for each component or component set you find in the selection or its ancestors.'
         },

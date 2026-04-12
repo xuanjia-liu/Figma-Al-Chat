@@ -235,6 +235,8 @@ Agent mode: natural-language creation and editing of frames, text, auto layout, 
 
 Audit mode: accessibility, spacing, and consistency checks on selections.
 
+Selection context uses Smart Focus by default, with lighter text, layout, paint, typography, effects, and index modes to reduce token usage when full metadata is unnecessary.
+
 Export CSS/SVG/text/snapshots to give models rich file context. You configure API keys in settings; capabilities depend on the model you pick.
 ```
 
@@ -252,6 +254,8 @@ Figma / FigJam 上で LLM を使い、デザイン中にその場で相談・実
 Ask：デザイン・UX の質問、フィードバック、選択の分析、画像・PNG のビジョン解析。Gemini / OpenAI / Anthropic の API キーとモデル選択。
 
 Agent：自然言語でのフレーム・テキスト・オートレイアウト・コンポーネント・スタイル・変数・SVG・画像などの作成・編集、FigJam 対応。
+
+選択コンテキストは既定で Smart Focus を使い、必要に応じてテキスト・レイアウト・ペイント・タイポグラフィ・エフェクト・インデックスの軽量モードでトークン消費を抑えます。
 
 Audit：選択 UI の a11y・余白・一貫性のレビュー。CSS/SVG/テキスト/スナップショットで文脈を渡せます。API キーは設定が必要で、機能はモデル依存です。
 ```

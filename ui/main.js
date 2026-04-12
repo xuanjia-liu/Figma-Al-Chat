@@ -355,15 +355,31 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       return getLocalizedActionText(currentSettingsLocale, value);
     }
 
+    const PUBLIC_CONTEXT_MODES = new Set([
+      ContextMode.SMART,
+      ContextMode.ALL,
+      ContextMode.MINIMAL,
+      ContextMode.TEXT_ONLY,
+      ContextMode.LAYOUT_ONLY,
+      ContextMode.HIERARCHY,
+      ContextMode.STYLE_ONLY,
+      ContextMode.TYPOGRAPHY_ONLY,
+      ContextMode.EFFECTS_ONLY,
+      ContextMode.INDEX_ONLY,
+    ]);
+
     function getLocalizedContextModeLabel(mode) {
       const keyMap = {
-        smart: 'aux.audit.context.smart',
-        all: 'aux.audit.context.all',
-        minimal: 'aux.audit.context.minimal',
-        textOnly: 'aux.audit.context.textOnly',
-        hierarchy: 'aux.audit.context.hierarchy',
-        styleOnly: 'aux.context.styleOnlyTitle',
-        layoutOnly: 'aux.context.layoutOnlyTitle',
+        [ContextMode.SMART]: 'aux.audit.context.smart',
+        [ContextMode.ALL]: 'aux.audit.context.all',
+        [ContextMode.MINIMAL]: 'aux.audit.context.minimal',
+        [ContextMode.TEXT_ONLY]: 'aux.audit.context.textOnly',
+        [ContextMode.LAYOUT_ONLY]: 'aux.audit.context.layoutOnly',
+        [ContextMode.HIERARCHY]: 'aux.audit.context.hierarchy',
+        [ContextMode.STYLE_ONLY]: 'aux.audit.context.styleOnly',
+        [ContextMode.TYPOGRAPHY_ONLY]: 'aux.audit.context.typographyOnly',
+        [ContextMode.EFFECTS_ONLY]: 'aux.audit.context.effectsOnly',
+        [ContextMode.INDEX_ONLY]: 'aux.audit.context.indexOnly',
       };
       return keyMap[mode] ? tu(keyMap[mode]) : mode;
     }
@@ -4391,7 +4407,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       },
       auditSizeEnabled: false,
       auditColorsEnabled: false,
-      contextMode: 'smart',
+      contextMode: ContextMode.SMART,
       language: 'auto',
       postComments: false
     };
@@ -5760,7 +5776,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       setInputValueWithUndo(auditInstructions, preset.instructions);
       if (preset.language) auditLanguageSelect.value = preset.language;
-      if (auditContextModeSelect) auditContextModeSelect.value = preset.settings.contextMode || 'all';
+      if (auditContextModeSelect) auditContextModeSelect.value = preset.settings.contextMode || ContextMode.SMART;
       auditTargetWidth.value = preset.settings.targetWidth;
       auditTargetHeight.value = preset.settings.targetHeight;
       auditMinWidth.value = preset.settings.minWidth;
@@ -5810,7 +5826,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         auditSizeEnabled: auditSizeToggle ? auditSizeToggle.checked : true,
         auditColorsEnabled: auditColorsToggle ? auditColorsToggle.checked : true,
         postComments: document.getElementById('auditPostCommentsToggle') ? document.getElementById('auditPostCommentsToggle').checked : false,
-        contextMode: auditContextModeSelect?.value || 'all',
+        contextMode: auditContextModeSelect?.value || ContextMode.SMART,
         language: auditLanguageSelect?.value || 'auto'
       };
 
@@ -5903,7 +5919,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             auditSizeEnabled: auditSizeToggle ? auditSizeToggle.checked : true,
             auditColorsEnabled: auditColorsToggle ? auditColorsToggle.checked : true,
             postComments: document.getElementById('auditPostCommentsToggle') ? document.getElementById('auditPostCommentsToggle').checked : false,
-            contextMode: document.getElementById('auditContextModeSelect')?.value || 'all'
+            contextMode: document.getElementById('auditContextModeSelect')?.value || ContextMode.SMART
           }
         };
 
@@ -5967,7 +5983,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           auditSizeEnabled: auditSizeToggle ? auditSizeToggle.checked : true,
           auditColorsEnabled: auditColorsToggle ? auditColorsToggle.checked : true,
           postComments: document.getElementById('auditPostCommentsToggle') ? document.getElementById('auditPostCommentsToggle').checked : false,
-          contextMode: document.getElementById('auditContextModeSelect')?.value || 'all'
+          contextMode: document.getElementById('auditContextModeSelect')?.value || ContextMode.SMART
         }
       };
 
@@ -7744,7 +7760,7 @@ Rules:
 
     const builtInQuickActionNames = new Set(buildQuickActionsList(baseAgentTasks).map(action => action.name));
     const BUILT_IN_COMMAND_CATEGORIES = Object.keys(baseAgentTasks);
-    const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set(Object.values(ContextMode));
+    const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set(PUBLIC_CONTEXT_MODES);
 
     function cloneAgentTaskMap(taskMap) {
       return Object.fromEntries(
@@ -7782,7 +7798,7 @@ Rules:
           desc: typeof item.desc === 'string' ? item.desc.trim() : '',
           noSelection: item.noSelection === true,
           includeTokens: item.includeTokens === true,
-          requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(item.requiredContext) ? item.requiredContext : ContextMode.ALL,
+          requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(item.requiredContext) ? item.requiredContext : ContextMode.SMART,
           createdAt: Number.isFinite(Number(item.createdAt)) ? Number(item.createdAt) : Date.now(),
           updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : Date.now(),
         });
@@ -7801,7 +7817,7 @@ Rules:
         promptTemplate: action.promptTemplate,
         noSelection: action.noSelection === true,
         includeTokens: action.includeTokens === true,
-        requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action.requiredContext) ? action.requiredContext : ContextMode.ALL,
+        requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action.requiredContext) ? action.requiredContext : ContextMode.SMART,
         askMode: action.mode === 'ask',
         category: action.category,
         isCustomQuickAction: true,
@@ -8211,7 +8227,7 @@ Rules:
       let selectionSizeLabel = tu('actions.chart.autoSelection');
       let selectionSizeValue = '';
       try {
-        const result = await requestSelectionData(true, false, 'layoutOnly');
+            const result = await requestSelectionData(true, false, ContextMode.LAYOUT_ONLY);
         if (result && result.data && result.data.length > 0) {
           // Calculate bounding box of all selected nodes
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -9237,7 +9253,7 @@ Rules:
             recordQuickActionUsage(actionName);
             setMode('agent');
             const includeTokens = task && task.includeTokens === true;
-            const contextMode = (task && task.requiredContext) || 'all';
+            const contextMode = (task && task.requiredContext) || ContextMode.SMART;
 
             // Auto-send the quick action message
             await sendQuickActionMessage(task.prompt, noSelection, { name: actionName, icon: actionIcon }, includeTokens, contextMode);
@@ -14451,7 +14467,7 @@ Generate ONLY the reply text, nothing else.`;
       });
     }
 
-    async function sendQuickActionMessage(prompt, noSelection, actionData, includeTokens = false, contextMode = 'all', metadata = null, callbacks = {}) {
+    async function sendQuickActionMessage(prompt, noSelection, actionData, includeTokens = false, contextMode = ContextMode.SMART, metadata = null, callbacks = {}) {
       if (!guardAiAction(actionData?.name || 'Quick action')) {
         return;
       }
@@ -16639,7 +16655,7 @@ Generate ONLY the reply text, nothing else.`;
       const preservedValues = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
       const mode = currentPromptAction?.directAction === 'randomizeSelectedInstances' ? 'randomizeOnly' : 'duplicate';
       const baseFields = currentPromptAction?.randomizeBaseFields || [];
-      const selectionResult = await requestSelectionData(true, false, 'all');
+      const selectionResult = await requestSelectionData(true, false, ContextMode.ALL);
 
       if (refreshVersion !== randomizeDrawerRefreshVersion) return;
       if (!promptDrawer.classList.contains('open') || !isInstanceRandomizationPromptAction()) return;
@@ -19512,7 +19528,7 @@ Generate ONLY the reply text, nothing else.`;
           if (!input) return;
 
           try {
-            const result = await requestSelectionData(false, false, 'textOnly');
+            const result = await requestSelectionData(false, false, ContextMode.TEXT_ONLY);
             const textNodes = getSelectedTextNodesForSplitPattern(result);
             const candidates = getSplitPatternCandidatesFromTexts(textNodes);
             if (!candidates.length) {
@@ -25207,7 +25223,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runSplitTextAction(values, actionMeta) {
-      const result = await requestSelectionData(false, false, 'textOnly');
+      const result = await requestSelectionData(false, false, ContextMode.TEXT_ONLY);
       const textNodes = (() => {
         const flat = Array.isArray(result?.flattened) ? result.flattened : [];
         if (flat.length > 0) {
@@ -25398,7 +25414,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         return;
       }
 
-      const result = await requestSelectionData(false, false, 'styleOnly');
+      const result = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       if (selection.length === 0) {
         showToast('Please select at least one layer.', 'error');
@@ -25430,7 +25446,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runRemoveAllEffectsAction() {
-      const result = await requestSelectionData(false, false, 'styleOnly');
+      const result = await requestSelectionData(false, false, ContextMode.EFFECTS_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       if (selection.length === 0) {
         showToast('Please select at least one layer.', 'error');
@@ -25451,7 +25467,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runSimulateOklchGradientAction() {
-      const result = await requestSelectionData(false, false, 'styleOnly');
+      const result = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       if (selection.length === 0) {
         showToast('Please select at least one layer.', 'error');
@@ -25486,7 +25502,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       const adjustOptions = hueValues.adjustOptions || {};
       const preserveOptions = hueValues.preserveOptions || {};
 
-      const result = await requestSelectionData(false, false, 'styleOnly');
+      const result = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       if (selection.length === 0) return;
       const topLevelSelection = getTopLevelSelectionEntries(selection);
@@ -25505,7 +25521,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runTextLinkColorAction(values) {
-      const result = await requestSelectionData(false, false, 'textOnly');
+      const result = await requestSelectionData(false, false, ContextMode.TYPOGRAPHY_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       const textNodes = selection.filter(node => node?.type === 'TEXT');
       if (textNodes.length === 0) {
@@ -25602,7 +25618,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runRemoveUnusedPropertiesAction() {
-      const result = await requestSelectionData(false, false, 'hierarchy');
+      const result = await requestSelectionData(false, false, ContextMode.COMPONENT_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       if (selection.length === 0) {
         showToast('Please select a component, component set, instance, or a layer inside one.', 'error');
@@ -25688,7 +25704,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         sendQuickActionMessage(prompt, false, {
           name: 'Fill from Image',
           icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'
-        }, false, 'all', { images: [imageData] }).catch(error => {
+        }, false, ContextMode.ALL, { images: [imageData] }).catch(error => {
           console.error('Failed to fill from image:', error);
           showToast('Failed to fill data from image', 'error');
         });
@@ -25812,7 +25828,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           return;
         }
 
-        const result = await requestSelectionData(false, false, 'styleOnly');
+        const result = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
         const selection = Array.isArray(result?.data) ? result.data : [];
         const imageNodes = selection.filter(node =>
           (Array.isArray(node.fillsDetailed) && node.fillsDetailed.some(paint => paint && paint.type === 'IMAGE')) ||
@@ -27443,7 +27459,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           await sendQuickActionMessage(finalPrompt, action.noSelection || false, {
             name: action.name,
             icon: action.icon
-          }, action.includeTokens || false, action.requiredContext || 'all', Object.keys(currentMetadata).length > 0 ? currentMetadata : null, showEnhancedLoader ? {
+          }, action.includeTokens || false, action.requiredContext || ContextMode.SMART, Object.keys(currentMetadata).length > 0 ? currentMetadata : null, showEnhancedLoader ? {
             onBeforeExecute: () => {
               closePromptDrawer();
               closeCommandsDrawer();
@@ -28026,7 +28042,7 @@ Example structure:
         await sendQuickActionMessage(phase2Prompt, action.noSelection || false, {
           name: action.name,
           icon: action.icon
-        }, action.includeTokens || false, action.requiredContext || 'all', currentMetadata, {
+        }, action.includeTokens || false, action.requiredContext || ContextMode.SMART, currentMetadata, {
           onBeforeExecute: () => {
             closePromptDrawer();
             closeCommandsDrawer();
@@ -36509,7 +36525,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
 Return ONLY a valid JSON object (no markdown, no explanation):
 {
   "intentType": "modify|create|query|generate_image|other",
-  "requiredContext": ["names", "dimensions", "fills", "text", "layout", "tokens", "all"],
+  "requiredContext": ["names", "dimensions", "fills", "text", "typography", "layout", "effects", "tokens", "components", "lookup", "all"],
   "estimatedComplexity": "low|medium|high"
 }
 
@@ -36524,9 +36540,13 @@ Required context fields:
 - "names": Node names only (for rename operations)
 - "dimensions": Width, height, position (for layout/sizing)
 - "fills": Colors, gradients, images (for color changes)
-- "text": Text content and typography (for text edits)
+- "text": Text content only (for copy/content edits)
+- "typography": Text styling and rich text metadata (for font/style/range edits)
 - "layout": Auto-layout, constraints, padding (for layout changes)
+- "effects": Shadows, blur, blend mode, effect styles
 - "tokens": Design tokens, variables, styles (for token-based changes)
+- "components": Component properties, variants, component definitions
+- "lookup": Lightweight node lookup, ordering, and position-only targeting
 - "all": Full context needed (for complex queries)
 
 User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
@@ -36538,12 +36558,14 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
         const jsonMatch = response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
+          const validRequiredContext = new Set(['names', 'dimensions', 'fills', 'text', 'typography', 'layout', 'effects', 'tokens', 'components', 'lookup', 'all']);
           // Validate and normalize
           return {
             intentType: ['modify', 'create', 'query', 'generate_image', 'other'].includes(parsed.intentType)
               ? parsed.intentType : 'other',
             requiredContext: Array.isArray(parsed.requiredContext)
-              ? parsed.requiredContext : ['all'],
+              ? parsed.requiredContext.filter((value) => typeof value === 'string' && validRequiredContext.has(value))
+              : ['all'],
             estimatedComplexity: ['low', 'medium', 'high'].includes(parsed.estimatedComplexity)
               ? parsed.estimatedComplexity : 'medium'
           };
@@ -36636,27 +36658,74 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
      */
     function mapFieldsToContextMode(requiredFields) {
       if (!Array.isArray(requiredFields) || requiredFields.includes('all')) {
-        return 'smart'; // Full context
+        return ContextMode.SMART; // Full context
       }
 
       const fields = new Set(requiredFields);
 
       // Map combinations to optimized context modes
-      if (fields.has('text') && !fields.has('fills') && !fields.has('layout')) {
-        return 'textOnly';
+      if (fields.has('lookup') && fields.size === 1) {
+        return ContextMode.INDEX_ONLY;
       }
-      if ((fields.has('fills') || fields.has('tokens')) && !fields.has('text') && !fields.has('layout')) {
-        return 'styleOnly';
+      if (
+        fields.has('components') &&
+        !fields.has('fills') &&
+        !fields.has('layout') &&
+        !fields.has('effects') &&
+        !fields.has('tokens')
+      ) {
+        return ContextMode.COMPONENT_ONLY;
+      }
+      if (
+        fields.has('typography') &&
+        !fields.has('fills') &&
+        !fields.has('layout') &&
+        !fields.has('effects') &&
+        !fields.has('tokens') &&
+        !fields.has('components')
+      ) {
+        return ContextMode.TYPOGRAPHY_ONLY;
+      }
+      if (
+        fields.has('text') &&
+        !fields.has('typography') &&
+        !fields.has('fills') &&
+        !fields.has('layout') &&
+        !fields.has('effects') &&
+        !fields.has('tokens') &&
+        !fields.has('components')
+      ) {
+        return ContextMode.TEXT_ONLY;
+      }
+      if (
+        fields.has('effects') &&
+        !fields.has('fills') &&
+        !fields.has('layout') &&
+        !fields.has('tokens') &&
+        !fields.has('components') &&
+        !fields.has('typography')
+      ) {
+        return ContextMode.EFFECTS_ONLY;
+      }
+      if (
+        (fields.has('fills') || fields.has('tokens')) &&
+        !fields.has('text') &&
+        !fields.has('typography') &&
+        !fields.has('layout') &&
+        !fields.has('effects') &&
+        !fields.has('components')
+      ) {
+        return ContextMode.STYLE_ONLY;
       }
       if (fields.has('layout') || fields.has('dimensions')) {
-        return 'layoutOnly';
+        return ContextMode.LAYOUT_ONLY;
       }
       if (fields.size === 1 && fields.has('names')) {
-        return 'minimal';
+        return ContextMode.MINIMAL;
       }
 
       // Default to smart for complex combinations
-      return 'smart';
+      return ContextMode.SMART;
     }
 
     /**
@@ -36664,7 +36733,9 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
      */
     async function assembleMinimalContext(contextLock, requiredFields, tokenBudget, forcedMode = null) {
       const contextMode = forcedMode || mapFieldsToContextMode(requiredFields);
-      const includeTokens = forcedMode ? (['all', 'styleOnly', 'smart'].includes(forcedMode)) : (requiredFields.includes('tokens') || requiredFields.includes('all'));
+      const includeTokens = forcedMode
+        ? ([ContextMode.ALL, ContextMode.STYLE_ONLY, ContextMode.SMART].includes(forcedMode))
+        : (requiredFields.includes('tokens') || requiredFields.includes('all'));
 
       // Request selection data with the appropriate context mode
       // Pass locked node IDs to ensure we get data for the original selection
@@ -36904,7 +36975,7 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
       }
     }
 
-    function requestSelectionData(allowEmpty = false, includeTokens = false, contextMode = 'smart') {
+    function requestSelectionData(allowEmpty = false, includeTokens = false, contextMode = ContextMode.SMART) {
       return new Promise((resolve, reject) => {
         pendingSelectionDataResolve = resolve;
         pendingSelectionDataReject = reject;
@@ -36965,7 +37036,7 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
       });
     }
 
-    async function requestSelectionDataWithFallback(allowEmpty = false, includeTokens = false, contextMode = 'smart', forceImage = false) {
+    async function requestSelectionDataWithFallback(allowEmpty = false, includeTokens = false, contextMode = ContextMode.SMART, forceImage = false) {
       let result;
       let needsFallback = false;
 
@@ -36977,7 +37048,16 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
           console.log(`Pre-flight check triggered fallback (${result.nodeCount}+ nodes)`);
           needsFallback = true;
         } else {
-          const isOptimized = contextMode === 'minimal' || contextMode === 'textOnly' || contextMode === 'hierarchy' || contextMode === 'layoutOnly';
+          const isOptimized = [
+            ContextMode.MINIMAL,
+            ContextMode.TEXT_ONLY,
+            ContextMode.HIERARCHY,
+            ContextMode.LAYOUT_ONLY,
+            ContextMode.TYPOGRAPHY_ONLY,
+            ContextMode.EFFECTS_ONLY,
+            ContextMode.INDEX_ONLY,
+            ContextMode.COMPONENT_ONLY,
+          ].includes(contextMode);
           const effectiveLimit = isOptimized ? maxSelectionSize * 1.5 : maxSelectionSize;
 
           if (result.dataSize > effectiveLimit) {
@@ -37009,7 +37089,7 @@ User's message: "${userMessage.replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
           // Request image capture (and pillOnly if we don't have it yet)
           const [images, pillResult] = await Promise.all([
             requestSelectionAsImage(),
-            hasPillData ? Promise.resolve(result) : requestSelectionData(allowEmpty, false, 'pillOnly')
+            hasPillData ? Promise.resolve(result) : requestSelectionData(allowEmpty, false, ContextMode.PILL_ONLY)
           ]);
 
           if (images && images.length > 0) {
@@ -38025,7 +38105,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       setMode('agent');
       const prompt = task.prompt || (typeof task.promptTemplate === 'string' ? task.promptTemplate : '');
-      const contextMode = task.requiredContext || 'all';
+      const contextMode = task.requiredContext || ContextMode.SMART;
       await sendQuickActionMessage(prompt, noSelection, { name: task.name, icon }, includeTokens, contextMode);
     }
 
@@ -38588,7 +38668,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           if (!contextLock) {
             const result = await requestSelectionDataWithFallback(
               true,
-              manualContextMode ? ['all', 'styleOnly', 'smart'].includes(manualContextMode) : (intent.requiredContext.includes('tokens') || intent.requiredContext.includes('all')),
+              manualContextMode ? [ContextMode.ALL, ContextMode.STYLE_ONLY, ContextMode.SMART].includes(manualContextMode) : (intent.requiredContext.includes('tokens') || intent.requiredContext.includes('all')),
               manualContextMode || mapFieldsToContextMode(intent.requiredContext),
               !!window.solvingCommentId
             );
@@ -38767,7 +38847,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
           let selectionData = [];
           let isFallback = false;
           let fallbackImages = null;
-          const auditContextMode = currentAuditSettings.contextMode || 'all';
+          const auditContextMode = currentAuditSettings.contextMode || ContextMode.SMART;
           try {
             const result = await requestSelectionDataWithFallback(true, false, auditContextMode);
             if (result && result.data && result.data.length > 0) {
@@ -39296,9 +39376,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
     const customQuickActionContextOptions = [
       {
+        value: ContextMode.SMART,
+        label: 'Smart',
+        description: 'Adaptive full context with compression for the best default behavior.'
+      },
+      {
         value: ContextMode.ALL,
         label: 'All',
-        description: 'Full selection metadata for the most capable behavior.'
+        description: 'Full selection metadata without smart compression.'
       },
       {
         value: ContextMode.MINIMAL,
@@ -39308,7 +39393,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       {
         value: ContextMode.TEXT_ONLY,
         label: 'Text only',
-        description: 'Just text content and text-node basics.'
+        description: 'Text content only, without rich typography metadata.'
       },
       {
         value: ContextMode.LAYOUT_ONLY,
@@ -39316,14 +39401,29 @@ Based on the user's instruction, generate the appropriate commands to modify the
         description: 'Geometry, size, and position without full styling.'
       },
       {
-        value: ContextMode.STYLE_ONLY,
-        label: 'Style only',
-        description: 'Fills, strokes, and effects without deeper layout data.'
-      },
-      {
         value: ContextMode.HIERARCHY,
         label: 'Hierarchy',
         description: 'Layer structure and nesting relationships.'
+      },
+      {
+        value: ContextMode.STYLE_ONLY,
+        label: 'Paint & Tokens',
+        description: 'Fills, strokes, opacity, and paint token bindings.'
+      },
+      {
+        value: ContextMode.TYPOGRAPHY_ONLY,
+        label: 'Typography only',
+        description: 'Text content plus text styles and rich typography metadata.'
+      },
+      {
+        value: ContextMode.EFFECTS_ONLY,
+        label: 'Effects only',
+        description: 'Shadows, blur, blend mode, and effect styles only.'
+      },
+      {
+        value: ContextMode.INDEX_ONLY,
+        label: 'Index only',
+        description: 'Lookup-focused node index with bounds, order, and short text snippets.'
       }
     ];
 
@@ -39370,7 +39470,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
     function getCustomQuickActionContextValue() {
       return VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(customQuickActionContext?.dataset.value)
         ? customQuickActionContext.dataset.value
-        : ContextMode.ALL;
+        : ContextMode.SMART;
     }
 
     function closeCustomQuickActionContextMenu() {
@@ -39439,7 +39539,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (customQuickActionDescription) customQuickActionDescription.value = action?.desc || '';
       if (customQuickActionPrompt) customQuickActionPrompt.value = action?.promptTemplate || '';
       setCustomQuickActionContextValue(
-        VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action?.requiredContext) ? action.requiredContext : ContextMode.ALL
+        VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action?.requiredContext) ? action.requiredContext : ContextMode.SMART
       );
       if (customQuickActionNoSelection) customQuickActionNoSelection.checked = action?.noSelection === true;
       if (customQuickActionIncludeTokens) customQuickActionIncludeTokens.checked = action?.includeTokens === true;
@@ -40983,7 +41083,7 @@ Update the text content for all selected nodes accordingly.`;
           sendQuickActionMessage(prompt, false, {
             name: 'Apply Reality Data',
             icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>'
-          }, false, 'all').catch(error => {
+          }, false, ContextMode.ALL).catch(error => {
             console.error('Failed to apply reality data:', error);
             showToast('Failed to apply realistic data', 'error');
           });
@@ -41049,7 +41149,7 @@ Update the text content for all selected nodes accordingly.`;
       contextModeMenu.classList.add('show');
       const items = contextModeMenu.querySelectorAll('.context-mode-item');
       items.forEach(item => {
-        item.classList.toggle('active', item.dataset.mode === (manualContextMode || 'smart'));
+        item.classList.toggle('active', item.dataset.mode === (manualContextMode || ContextMode.SMART));
       });
 
       // Close menu on click outside
@@ -41071,7 +41171,7 @@ Update the text content for all selected nodes accordingly.`;
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const mode = item.dataset.mode;
-        manualContextMode = (mode === 'smart') ? null : mode;
+        manualContextMode = (mode === ContextMode.SMART) ? null : mode;
         hideContextModeMenu();
 
         // Visual feedback

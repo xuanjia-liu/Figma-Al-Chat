@@ -94,12 +94,16 @@ interface CustomQuickAction {
 }
 
 const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set([
+  'smart',
   'all',
   'minimal',
   'textOnly',
   'layoutOnly',
   'styleOnly',
-  'hierarchy'
+  'hierarchy',
+  'typographyOnly',
+  'effectsOnly',
+  'indexOnly'
 ]);
 
 const VALID_CUSTOM_QUICK_ACTION_CATEGORIES = new Set([
@@ -148,7 +152,7 @@ function sanitizeCustomQuickActions(rawValue: unknown): CustomQuickAction[] {
     const requiredContext = typeof candidate.requiredContext === 'string' &&
       VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(candidate.requiredContext)
       ? candidate.requiredContext
-      : 'all';
+      : 'smart';
 
     sanitized.push({
       id,
@@ -3866,6 +3870,10 @@ interface SerializedNode {
   strokeBottomWeight?: number;
   strokeLeftWeight?: number;
   strokeRightWeight?: number;
+  effects?: Effect[];
+  effectStyleId?: string;
+  effectStyleName?: string;
+  blendMode?: BlendMode;
   // FigJam Shape properties
   shapeType?: string; // SQUARE, ELLIPSE, DIAMOND, TRIANGLE_UP, etc.
   // Z-order index for sequential operations (1-based, sorted by absolute position: top-to-bottom, left-to-right)
@@ -4027,8 +4035,15 @@ async function resolveBoundVariableNames(boundVariables: any): Promise<any> {
   return resolved;
 }
 
-async function collectResolvedTokens(node: SceneNode): Promise<Record<string, string>> {
+async function collectResolvedTokens(
+  node: SceneNode,
+  options: { includeTextStyle?: boolean; includeEffectStyle?: boolean } = {}
+): Promise<Record<string, string>> {
   const tokens: Record<string, string> = {};
+  const {
+    includeTextStyle = true,
+    includeEffectStyle = true
+  } = options;
 
   // Resolve Styles (Human-readable names for applied styles)
   try {
@@ -4040,11 +4055,11 @@ async function collectResolvedTokens(node: SceneNode): Promise<Record<string, st
       const style = await figma.getStyleByIdAsync(node.strokeStyleId);
       if (style) tokens['stroke'] = style.name;
     }
-    if ('textStyleId' in node && typeof node.textStyleId === 'string' && node.textStyleId) {
+    if (includeTextStyle && 'textStyleId' in node && typeof node.textStyleId === 'string' && node.textStyleId) {
       const style = await figma.getStyleByIdAsync(node.textStyleId);
       if (style) tokens['textStyle'] = style.name;
     }
-    if ('effectStyleId' in node && typeof node.effectStyleId === 'string' && node.effectStyleId) {
+    if (includeEffectStyle && 'effectStyleId' in node && typeof node.effectStyleId === 'string' && node.effectStyleId) {
       const style = await figma.getStyleByIdAsync(node.effectStyleId);
       if (style) tokens['effectStyle'] = style.name;
     }
@@ -4211,6 +4226,21 @@ function stripDefaultProperties(serialized: SerializedNode): SerializedNode {
   return result;
 }
 
+function isComponentTreeNode(node: SceneNode): boolean {
+  let current: BaseNode | null = node;
+  while (current && 'type' in current) {
+    if (
+      current.type === 'COMPONENT' ||
+      current.type === 'COMPONENT_SET' ||
+      current.type === 'INSTANCE'
+    ) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = false, depth: number = 0, contextMode: string = 'all'): Promise<SerializedNode | null> {
   // Max depth limit to prevent performance issues or infinite loops
   if (depth > 20) {
@@ -4227,9 +4257,14 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
   const isLayoutOnly = contextMode === 'layoutOnly';
   const isStyleOnly = contextMode === 'styleOnly';
   const isHierarchy = contextMode === 'hierarchy';
+  const isTypographyOnly = contextMode === 'typographyOnly';
+  const isEffectsOnly = contextMode === 'effectsOnly';
   const isIndexOnly = contextMode === 'indexOnly';
+  const isComponentOnly = contextMode === 'componentOnly';
   const isPillOnly = contextMode === 'pillOnly';
-  const isAll = contextMode === 'all' || contextMode === 'smart';
+  const isSmart = contextMode === 'smart';
+  const isAll = contextMode === 'all' || isSmart;
+  const inComponentTree = isComponentTreeNode(node);
 
   // For pillOnly mode, return absolute minimum for node-pill functionality
   if (isPillOnly) {
@@ -4277,23 +4312,19 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
     serialized.height = 'height' in node ? Math.round(node.height) : 0;
   }
 
-  if (isIndexOnly) {
-    // For indexOnly, we also want characters for quick identification but nothing else
-    if (node.type === 'TEXT') {
-      serialized.characters = (node as TextNode).characters.substring(0, 100); // Limit length
-    }
-  }
-
   if (isAll) {
     serialized.description = typeof (node as any).description === 'string' ? (node as any).description : undefined;
   }
 
   if (isAll || isStyleOnly) {
-    serialized.tokens = await collectResolvedTokens(node);
+    serialized.tokens = await collectResolvedTokens(
+      node,
+      isStyleOnly ? { includeTextStyle: false, includeEffectStyle: false } : undefined
+    );
   }
 
   // Get variant properties if the node is a COMPONENT child of a COMPONENT_SET
-  if ((isAll || isMinimal || isTextOnly || isLayoutOnly || isStyleOnly || isHierarchy) && node.type === 'COMPONENT' && node.parent && node.parent.type === 'COMPONENT_SET') {
+  if ((isAll || isMinimal || isTextOnly || isLayoutOnly || isStyleOnly || isHierarchy || isComponentOnly) && node.type === 'COMPONENT' && node.parent && node.parent.type === 'COMPONENT_SET') {
     serialized.variantProperties = node.variantProperties;
   }
 
@@ -4368,6 +4399,26 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
       serialized.strokeBottomWeight = bottom;
       serialized.strokeLeftWeight = left;
       serialized.strokeRightWeight = right;
+    }
+  }
+
+  if ((isAll || isEffectsOnly) && 'effects' in node && Array.isArray((node as any).effects) && (node as any).effects.length > 0) {
+    serialized.effects = cloneHueShiftEffects((node as any).effects as Effect[]);
+  }
+
+  if ((isAll || isEffectsOnly) && 'effectStyleId' in node && typeof (node as any).effectStyleId === 'string' && (node as any).effectStyleId) {
+    const effectStyleId = (node as any).effectStyleId as string;
+    serialized.effectStyleId = effectStyleId;
+    try {
+      const style = await figma.getStyleByIdAsync(effectStyleId);
+      if (style) serialized.effectStyleName = style.name;
+    } catch (e) { /* ignore */ }
+  }
+
+  if ((isAll || isEffectsOnly) && 'blendMode' in node) {
+    const blendMode = (node as any).blendMode;
+    if (blendMode && blendMode !== 'PASS_THROUGH' && blendMode !== 'NORMAL') {
+      serialized.blendMode = blendMode;
     }
   }
 
@@ -4463,7 +4514,7 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
   }
 
   // Get opacity
-  if ((isAll || isStyleOnly) && 'opacity' in node && node.opacity < 1) {
+  if ((isAll || isStyleOnly || isEffectsOnly) && 'opacity' in node && node.opacity < 1) {
     serialized.opacity = node.opacity;
   }
 
@@ -4473,11 +4524,11 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
   }
 
   // Get text content for TEXT nodes
-  if ((isAll || isTextOnly || isLayoutOnly) && node.type === 'TEXT') {
+  if ((isAll || isTextOnly || isLayoutOnly || isTypographyOnly || isIndexOnly) && node.type === 'TEXT') {
     const textNode = node as TextNode;
-    serialized.characters = textNode.characters;
+    serialized.characters = isIndexOnly ? textNode.characters.substring(0, 100) : textNode.characters;
 
-    if (isAll) {
+    if (isAll || isTypographyOnly) {
       if (typeof textNode.fontSize === 'number') {
         serialized.fontSize = textNode.fontSize;
       }
@@ -4527,15 +4578,15 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
   }
 
   // Handle boundVariables for all nodes that have them
-  if (isAll && !serialized.boundVariables && 'boundVariables' in node && (node as any).boundVariables) {
+  if ((isAll || isTypographyOnly) && !serialized.boundVariables && 'boundVariables' in node && (node as any).boundVariables) {
     serialized.boundVariables = await resolveBoundVariableNames((node as any).boundVariables);
   }
 
   // Get text content for FigJam STICKY nodes
-  if ((isAll || isTextOnly || isLayoutOnly) && node.type === 'STICKY') {
+  if ((isAll || isTextOnly || isLayoutOnly || isTypographyOnly || isIndexOnly) && node.type === 'STICKY') {
     const stickyNode = node as StickyNode;
     if (stickyNode.text && stickyNode.text.characters) {
-      serialized.characters = stickyNode.text.characters;
+      serialized.characters = isIndexOnly ? stickyNode.text.characters.substring(0, 100) : stickyNode.text.characters;
     }
   }
 
@@ -4565,16 +4616,16 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
   }
 
   // Get FigJam SHAPE_WITH_TEXT properties
-  if ((isAll || isTextOnly) && node.type === 'SHAPE_WITH_TEXT') {
+  if ((isAll || isTextOnly || isTypographyOnly || isIndexOnly) && node.type === 'SHAPE_WITH_TEXT') {
     const shapeNode = node as ShapeWithTextNode;
     serialized.shapeType = shapeNode.shapeType;
     if (shapeNode.text && shapeNode.text.characters) {
-      serialized.characters = shapeNode.text.characters;
+      serialized.characters = isIndexOnly ? shapeNode.text.characters.substring(0, 100) : shapeNode.text.characters;
     }
   }
 
   // Get component properties for INSTANCE nodes
-  if (isAll && node.type === 'INSTANCE') {
+  if ((isAll || isComponentOnly) && node.type === 'INSTANCE') {
     const instanceNode = node as InstanceNode;
     serialized.componentProperties = instanceNode.componentProperties;
     let mainComponent: ComponentNode | null = null;
@@ -4594,7 +4645,7 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
 
   // Get component property definitions for COMPONENT and COMPONENT_SET nodes
   // Note: Variant components (children of COMPONENT_SET) do not have their own definitions
-  if (isAll && node.type === 'COMPONENT_SET') {
+  if ((isAll || isComponentOnly) && node.type === 'COMPONENT_SET') {
     serialized.componentPropertyDefinitions = node.componentPropertyDefinitions;
 
     // Calculate variant summary for easier AI consumption
@@ -4622,7 +4673,7 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
       properties: summaryProperties,
       existingCombinations: existingCombinations
     };
-  } else if (isAll && node.type === 'COMPONENT') {
+  } else if ((isAll || isComponentOnly) && node.type === 'COMPONENT') {
     const componentNode = node as ComponentNode;
     if (!componentNode.parent || componentNode.parent.type !== 'COMPONENT_SET') {
       serialized.componentPropertyDefinitions = componentNode.componentPropertyDefinitions;
@@ -4636,10 +4687,18 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
 
   // Recursively serialize children (skip hidden children)
   // Recursion enabled for most modes to allow depth context when needed
-  const shouldRecurse = isAll || isHierarchy || isTextOnly || isLayoutOnly || isStyleOnly || isIndexOnly || contextMode === 'smart';
+  const shouldRecurse =
+    isAll ||
+    isHierarchy ||
+    isTextOnly ||
+    isLayoutOnly ||
+    isStyleOnly ||
+    isTypographyOnly ||
+    isEffectsOnly ||
+    isIndexOnly ||
+    isComponentOnly;
 
   if (shouldRecurse && 'children' in node && node.children.length > 0) {
-    const isSmart = contextMode === 'smart';
     const siblingFingerprints = new Map<string, SerializedNode>();
 
     // Filter hidden children BEFORE creating promises to avoid unnecessary async overhead
@@ -4677,6 +4736,23 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
     if (!hasCharacters && !hasChildrenWithText) {
       return null;
     }
+  } else if (isTypographyOnly) {
+    const hasTypography = serialized.characters !== undefined ||
+      serialized.textStyleId !== undefined ||
+      serialized.textStyleName !== undefined ||
+      serialized.fontSize !== undefined ||
+      serialized.fontName !== undefined ||
+      serialized.lineHeight !== undefined ||
+      serialized.letterSpacing !== undefined ||
+      serialized.paragraphSpacing !== undefined ||
+      serialized.paragraphIndent !== undefined ||
+      serialized.textCase !== undefined ||
+      serialized.textDecoration !== undefined ||
+      serialized.boundVariables !== undefined;
+    const hasChildrenWithTypography = serialized.children && serialized.children.length > 0;
+    if (!hasTypography && !hasChildrenWithTypography) {
+      return null;
+    }
   } else if (isStyleOnly) {
     const hasStyle = (serialized.fillsDetailed && serialized.fillsDetailed.length > 0) ||
       (serialized.strokesDetailed && serialized.strokesDetailed.length > 0) ||
@@ -4697,10 +4773,29 @@ async function serializeNodeForAgent(node: SceneNode, skipHidden: boolean = fals
     if (!hasLayoutInfo && !hasChildrenWithLayout) {
       return null;
     }
+  } else if (isEffectsOnly) {
+    const hasEffects = (serialized.effects && serialized.effects.length > 0) ||
+      serialized.effectStyleId !== undefined ||
+      serialized.effectStyleName !== undefined ||
+      serialized.opacity !== undefined ||
+      serialized.blendMode !== undefined;
+    const hasChildrenWithEffects = serialized.children && serialized.children.length > 0;
+    if (!hasEffects && !hasChildrenWithEffects) {
+      return null;
+    }
+  } else if (isComponentOnly) {
+    const hasComponentData = serialized.variantProperties !== undefined ||
+      serialized.componentProperties !== undefined ||
+      serialized.componentPropertyDefinitions !== undefined ||
+      serialized.variantSummary !== undefined;
+    const hasChildrenWithComponentData = serialized.children && serialized.children.length > 0;
+    if (depth > 0 && !inComponentTree && !hasComponentData && !hasChildrenWithComponentData) {
+      return null;
+    }
   }
 
   // Apply compression for smart mode
-  if (contextMode === 'smart') {
+  if (isSmart) {
     return stripDefaultProperties(serialized);
   }
 
