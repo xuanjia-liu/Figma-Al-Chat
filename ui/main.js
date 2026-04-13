@@ -25791,7 +25791,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       const result = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
       const selection = Array.isArray(result?.data) ? result.data : [];
       if (selection.length === 0) {
-        showToast('Please select at least one layer.', 'error');
+        showToast(tu('actions.common.selectAtLeastOneLayer'), 'error');
         return;
       }
 
@@ -25806,9 +25806,17 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       const success = execResult?.success || 0;
       const failed = execResult?.failed || 0;
       if (success > 0) {
-        showToast(`Simulated OKLCH gradients on ${success} selection${success === 1 ? '' : 's'}${failed > 0 ? ` (${failed} skipped)` : ''}.`, failed > 0 ? 'warning' : 'success');
+        const skippedSuffix = failed > 0 ? tu('actions.simulateOklchGradient.skippedSuffix', { failed }) : '';
+        showToast(
+          tu('actions.simulateOklchGradient.success', {
+            count: success,
+            selectionPlural: success === 1 ? '' : 's',
+            skippedSuffix
+          }),
+          failed > 0 ? 'warning' : 'success'
+        );
       } else if (failed > 0) {
-        showToast('No gradient fills or strokes were found in the selection.', 'warning');
+        showToast(tu('actions.simulateOklchGradient.noGradients'), 'warning');
       }
     }
 

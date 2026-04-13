@@ -59,6 +59,12 @@ const uiTranslations = {
     'actions.quickDetach.hint.instanceDirect': 'Detaches only component instances you selected directly on the canvas.',
     'actions.quickDetach.hint.instanceRecursive':
       'Detaches every component instance inside the current selection, including nested instances.',
+    'actions.common.selectAtLeastOneLayer': 'Please select at least one layer.',
+    'actions.simulateOklchGradient.success':
+      'Simulated OKLCH gradients on {count} selection{selectionPlural}{skippedSuffix}.',
+    'actions.simulateOklchGradient.skippedSuffix': ' ({failed} skipped)',
+    'actions.simulateOklchGradient.noGradients':
+      'No gradient fills or strokes were found in the selection.',
     'actions.prompt.errorOpening': 'Error opening action details: {message}',
     'actions.prompt.clearTitle': 'Clear text',
     'actions.prompt.resetToast': '{name} reset to defaults',
@@ -722,6 +728,12 @@ const uiTranslations = {
     'actions.quickDetach.hint.instanceDirect': 'キャンバス上で直接選択したコンポーネントインスタンスのみデタッチします。',
     'actions.quickDetach.hint.instanceRecursive':
       '現在の選択範囲内のすべてのコンポーネントインスタンス（ネスト含む）をデタッチします。',
+    'actions.common.selectAtLeastOneLayer': '少なくとも 1 つのレイヤーを選択してください。',
+    'actions.simulateOklchGradient.success':
+      '{count} 件の選択に OKLCH グラデーションをシミュレートしました{skippedSuffix}。',
+    'actions.simulateOklchGradient.skippedSuffix': '（{failed} 件スキップ）',
+    'actions.simulateOklchGradient.noGradients':
+      '選択範囲にグラデーションの塗りまたは線が見つかりませんでした。',
     'actions.prompt.errorOpening': 'アクション詳細を開けませんでした: {message}',
     'actions.prompt.clearTitle': 'テキストをクリア',
     'actions.prompt.resetToast': '{name} を初期値に戻しました',
@@ -1384,6 +1396,10 @@ const uiTranslations = {
     'actions.quickDetach.error.generic': '快速分离失败',
     'actions.quickDetach.hint.instanceDirect': '仅分离你在画布上直接选中的组件实例。',
     'actions.quickDetach.hint.instanceRecursive': '分离当前选区内的所有组件实例，包含嵌套实例。',
+    'actions.common.selectAtLeastOneLayer': '请至少选择一个图层。',
+    'actions.simulateOklchGradient.success': '已在 {count} 个所选对象上模拟 OKLCH 渐变{skippedSuffix}。',
+    'actions.simulateOklchGradient.skippedSuffix': '（已跳过 {failed} 个）',
+    'actions.simulateOklchGradient.noGradients': '选区中未找到渐变填充或描边。',
     'actions.prompt.errorOpening': '打开操作详情失败：{message}',
     'actions.prompt.clearTitle': '清空文本',
     'actions.prompt.resetToast': '已将 {name} 恢复为默认值',
@@ -2132,6 +2148,43 @@ const exactTranslations = {
       '現在の選択内にネストされたインスタンスのプロパティもランダム化します',
     'List All Comments': 'すべてのコメントを表示',
     'List All Stickies': 'すべての付箋を表示',
+    'List All Components': 'すべてのコンポーネントを一覧',
+    'Browse components, sets, and instances in selection, page, or file':
+      '選択範囲・ページ・ファイル内のコンポーネント、セット、インスタンスを参照',
+    'Lists local and library-backed components, component sets, and instances with usage counts and grouping tools.':
+      'ローカルとライブラリのコンポーネント、コンポーネントセット、インスタンスを使用数とグループ化ツール付きで一覧表示します。',
+    'Components': 'コンポーネント',
+    'Simulate oklch gradient': 'OKLCH グラデーションをシミュレート',
+    'Approximate OKLCH interpolation by expanding RGB gradient stops':
+      'RGB グラデーションのストップを増やして OKLCH 補間を近似します',
+    'Image to ASCII': '画像を ASCII 化',
+    'Convert an image to ASCII text or an ASCII bitmap result':
+      '画像を ASCII テキストまたは ASCII ビットマップ結果に変換',
+    'Source Image': '元画像',
+    'Width': '幅',
+    'Density': '密度',
+    'Charset': '文字セット',
+    'Standard': '標準',
+    'Blocks': 'ブロック',
+    'Minimal': 'ミニマル',
+    'Emoji': '絵文字',
+    'Custom': 'カスタム',
+    'Custom Charset': 'カスタム文字セット',
+    'Editable. Emoji mode auto-fills this field and Randomize regenerates it.':
+      '編集可能です。絵文字モードでは自動入力され、ランダム化で再生成されます。',
+    'Light to dark, e.g. .:-=+*#%@ or auto-generated emoji':
+      '明るい→暗いの順。例: .:-=+*#%@ または自動生成の絵文字',
+    'Randomize': 'ランダム',
+    'Randomize emoji charset': '絵文字セットをランダム化',
+    'Emoji Count': '絵文字数',
+    'Preview': 'プレビュー',
+    'Apply Result': '結果を適用',
+    'Text': 'テキスト',
+    'Create new result node': '新しい結果ノードを作成',
+    'Replace selected fill': '選択した塗りを置換',
+    'Auto-randomized emoji set based on Color output':
+      'カラー出力に基づき絵文字セットを自動ランダム化',
+    'Use Custom Charset below': '下のカスタム文字セットを使用',
     'Solve Comment': 'コメントを解決',
     'Summarize Comments': 'コメントを要約',
     'Extract Design System': 'デザインシステム抽出',
@@ -2634,6 +2687,42 @@ const exactTranslations = {
       '同时随机化当前所选内容内嵌套实例的属性',
     'List All Comments': '列出全部评论',
     'List All Stickies': '列出全部便签',
+    'List All Components': '列出全部组件',
+    'Browse components, sets, and instances in selection, page, or file':
+      '浏览选择范围、页面或文件中的组件、组件集与实例',
+    'Lists local and library-backed components, component sets, and instances with usage counts and grouping tools.':
+      '列出本地与库中的组件、组件集和实例，含使用次数与分组工具。',
+    'Components': '组件',
+    'Simulate oklch gradient': '模拟 OKLCH 渐变',
+    'Approximate OKLCH interpolation by expanding RGB gradient stops':
+      '通过扩展 RGB 渐变色标近似 OKLCH 插值',
+    'Image to ASCII': '图像转 ASCII',
+    'Convert an image to ASCII text or an ASCII bitmap result':
+      '将图像转换为 ASCII 文本或 ASCII 位图结果',
+    'Source Image': '源图像',
+    'Width': '宽度',
+    'Density': '密度',
+    'Charset': '字符集',
+    'Standard': '标准',
+    'Blocks': '方块',
+    'Minimal': '极简',
+    'Emoji': '表情',
+    'Custom': '自定义',
+    'Custom Charset': '自定义字符集',
+    'Editable. Emoji mode auto-fills this field and Randomize regenerates it.':
+      '可编辑。表情模式下会自动填充，随机可重新生成。',
+    'Light to dark, e.g. .:-=+*#%@ or auto-generated emoji':
+      '从亮到暗，例如 .:-=+*#%@ 或自动生成的表情',
+    'Randomize': '随机',
+    'Randomize emoji charset': '随机表情字符集',
+    'Emoji Count': '表情数量',
+    'Preview': '预览',
+    'Apply Result': '应用结果',
+    'Text': '文本',
+    'Create new result node': '新建结果节点',
+    'Replace selected fill': '替换所选填充',
+    'Auto-randomized emoji set based on Color output': '基于彩色输出自动随机表情字符集',
+    'Use Custom Charset below': '使用下方自定义字符集',
     'Solve Comment': '处理评论',
     'Summarize Comments': '总结评论',
     'Extract Design System': '提取设计系统',
