@@ -32274,8 +32274,148 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       return code;
     }
 
+    const NODE_REF_NORMALIZATION_BOUNDARIES = new Set([
+      ' ', '\t', '\n', '\r',
+      '(', ')', '[', ']', '{', '}', '<', '>',
+      '.', ',', ';', ':', '!', '?', '/', '\\', '|',
+      '。', '、', '，', '；', '：', '！', '？',
+      '"', '\'', '`',
+      '“', '”', '‘', '’',
+      '「', '」', '『', '』',
+      '（', '）', '【', '】'
+    ]);
+
+    const NODE_REF_PRESERVED_PREFIXES = [
+      'および',
+      '及び',
+      'または',
+      'もしくは',
+      'あるいは',
+      'そして',
+      'ならびに',
+      'and ',
+      'or ',
+      '& ',
+      '+ ',
+      '및',
+      '또는',
+      '그리고 ',
+      '以及',
+      '或者',
+      '或'
+    ];
+
+    function normalizeNodeRefMentions(text) {
+      if (typeof text !== 'string' || text.length === 0 || !text.includes(']{')) {
+        return text;
+      }
+
+      const isBoundary = (char) => NODE_REF_NORMALIZATION_BOUNDARIES.has(char);
+      const isStrongBoundary = (char) => isBoundary(char) && !/\s/.test(char);
+      const nodeRefRegex = /\[([^\]]+)\]\{([^\}\n]+)\}/g;
+      let normalized = '';
+      let lastIndex = 0;
+      let match;
+
+      while ((match = nodeRefRegex.exec(text)) !== null) {
+        const [fullMatch] = match;
+        const offset = match.index;
+
+        if (offset <= 0) {
+          normalized += text.slice(lastIndex, offset + fullMatch.length);
+          lastIndex = offset + fullMatch.length;
+          continue;
+        }
+
+        const previousChar = text[offset - 1];
+        if (!previousChar || isBoundary(previousChar)) {
+          normalized += text.slice(lastIndex, offset + fullMatch.length);
+          lastIndex = offset + fullMatch.length;
+          continue;
+        }
+
+        let cursor = offset - 1;
+        while (cursor >= 0 && !isStrongBoundary(text[cursor])) {
+          cursor--;
+        }
+
+        const chunkStart = cursor + 1;
+        const adjacentChunk = text.slice(chunkStart, offset);
+        if (!adjacentChunk || chunkStart < lastIndex) {
+          normalized += text.slice(lastIndex, offset + fullMatch.length);
+          lastIndex = offset + fullMatch.length;
+          continue;
+        }
+
+        const leadingWhitespace = adjacentChunk.match(/^\s*/)?.[0] || '';
+        const trimmedChunk = adjacentChunk.slice(leadingWhitespace.length);
+        if (!trimmedChunk) {
+          normalized += text.slice(lastIndex, offset + fullMatch.length);
+          lastIndex = offset + fullMatch.length;
+          continue;
+        }
+
+        let preservedPrefix = '';
+        for (const prefix of NODE_REF_PRESERVED_PREFIXES) {
+          if (trimmedChunk.startsWith(prefix) && trimmedChunk.length > prefix.length) {
+            preservedPrefix = prefix;
+            break;
+          }
+        }
+
+        const removableLabel = preservedPrefix
+          ? trimmedChunk.slice(preservedPrefix.length).trim()
+          : trimmedChunk.trim();
+        const removableWordCount = removableLabel ? removableLabel.split(/\s+/).filter(Boolean).length : 0;
+
+        if (!removableLabel || removableWordCount > 2) {
+          normalized += text.slice(lastIndex, offset + fullMatch.length);
+          lastIndex = offset + fullMatch.length;
+          continue;
+        }
+
+        normalized += text.slice(lastIndex, chunkStart);
+        normalized += leadingWhitespace;
+        normalized += preservedPrefix;
+        normalized += fullMatch;
+        lastIndex = offset + fullMatch.length;
+      }
+
+      normalized += text.slice(lastIndex);
+      return normalized;
+    }
+
+    function unwrapInlineCodeNodeRefs(text) {
+      if (typeof text !== 'string' || text.length === 0 || !text.includes('`')) {
+        return text;
+      }
+
+      const separatorOnlyPattern = /^[\s,.;:!?、，；：！？()（）[\]{}<>/&+\-|]*$/;
+      const connectorPattern = /^(?:\s|,|\.|;|:|!|\?|、|，|；|：|！|？|\(|\)|（|）|\/|&|\+|-|および|及び|または|もしくは|あるいは|そして|ならびに|and|or|및|또는|그리고|以及|或者|或)+$/i;
+
+      return text.replace(/`([^`\n]+)`/g, (match, code) => {
+        const normalizedCode = normalizeNodeRefMentions(code);
+        const nodeRefMatches = normalizedCode.match(/\[([^\]]+)\]\{([^\}\n]+)\}/g);
+        if (!nodeRefMatches || nodeRefMatches.length === 0) {
+          return match;
+        }
+
+        const remainder = normalizedCode.replace(/\[([^\]]+)\]\{([^\}\n]+)\}/g, '').trim();
+        if (!remainder) {
+          return normalizedCode;
+        }
+
+        if (separatorOnlyPattern.test(remainder) || connectorPattern.test(remainder)) {
+          return normalizedCode;
+        }
+
+        return match;
+      });
+    }
+
     // Parse markdown to HTML
-    function parseMarkdown(text) {
+    function parseMarkdown(text, options = {}) {
+      const { normalizeNodeRefs = false } = options;
       // Escape HTML to prevent XSS
       const escapeHtml = (str) => {
         return str
@@ -32318,6 +32458,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         return `%%%CODEBLOCK${index}%%%`;
       });
 
+      if (normalizeNodeRefs) {
+        result = unwrapInlineCodeNodeRefs(result);
+      }
+
       // Extract inline code (`...`)
       const inlineCodes = [];
       result = result.replace(/`([^`]+)`/g, (match, code) => {
@@ -32325,6 +32469,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         inlineCodes.push(`<code>${escapeHtml(code)}</code>`);
         return `%%%INLINECODE${index}%%%`;
       });
+
+      if (normalizeNodeRefs) {
+        result = normalizeNodeRefMentions(result);
+      }
 
       // Extract node references [Name]{ID} before placeholders or links
       const nodeRefs = [];
@@ -34011,14 +34159,14 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
       // Safety check: if text is very long, skip word-by-word animation to prevent UI freeze
       if (text.length > 4000) {
-        container.innerHTML = parseMarkdown(text);
+        container.innerHTML = parseMarkdown(text, { normalizeNodeRefs: true });
         // Dispatch event so any cleanup/post-processing can happen
         messageDiv.dispatchEvent(new CustomEvent('animationEnd'));
         return;
       }
 
       // Parse markdown to HTML first
-      const htmlContent = parseMarkdown(text);
+      const htmlContent = parseMarkdown(text, { normalizeNodeRefs: true });
 
       // Create a temporary container to hold the parsed HTML
       const tempDiv = document.createElement('div');
