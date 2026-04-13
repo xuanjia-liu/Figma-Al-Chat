@@ -505,6 +505,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         element.innerHTML = tu(element.dataset.i18nActionHtml);
       });
 
+      document.querySelectorAll('[data-i18n-action-contenteditable-placeholder]').forEach((element) => {
+        element.setAttribute('data-placeholder', tu(element.dataset.i18nActionContenteditablePlaceholder));
+      });
+
       customQuickActionContextMenu?.setAttribute('aria-label', tu('actions.customQuickAction.context.label'));
       if (customQuickActionContext) {
         setCustomQuickActionContextValue(getCustomQuickActionContextValue());
@@ -39840,14 +39844,14 @@ Based on the user's instruction, generate the appropriate commands to modify the
       const itemsHtml = customQuickActionDraftInputs.map((input) => `
         <button type="button" class="custom-quick-action-insert-menu-item" data-insert-input-id="${escapeHtml(input.id)}">
           <span class="custom-quick-action-insert-menu-item-title">{${escapeHtml(input.key)}}</span>
-          <span class="custom-quick-action-insert-menu-item-meta">${escapeHtml(input.label)} • ${escapeHtml(input.type)}</span>
+          <span class="custom-quick-action-insert-menu-item-meta">${escapeHtml(input.label)} • ${escapeHtml(tu(`actions.customQuickAction.input.type.${input.type}`))}</span>
         </button>
       `).join('');
       customQuickActionInsertMenu.innerHTML = `
         ${itemsHtml}
         <button type="button" class="custom-quick-action-insert-menu-item" data-insert-new-input="true">
-          <span class="custom-quick-action-insert-menu-item-title">+ New input</span>
-          <span class="custom-quick-action-insert-menu-item-meta">Create and insert a new prompt input</span>
+          <span class="custom-quick-action-insert-menu-item-title">+ ${escapeHtml(tu('actions.customQuickAction.insertMenu.newInput'))}</span>
+          <span class="custom-quick-action-insert-menu-item-meta">${escapeHtml(tu('actions.customQuickAction.insertMenu.newInputHint'))}</span>
         </button>
       `;
     }
@@ -39904,16 +39908,26 @@ Based on the user's instruction, generate the appropriate commands to modify the
     function renderCustomQuickActionInputsList() {
       if (!customQuickActionInputsList) return;
       if (!customQuickActionDraftInputs.length) {
-        customQuickActionInputsList.innerHTML = '<div class="custom-quick-action-input-empty">No inputs yet. Add one, then insert it into the prompt.</div>';
+        customQuickActionInputsList.innerHTML = `<div class="custom-quick-action-input-empty">${escapeHtml(tu('actions.customQuickAction.inputsEmpty'))}</div>`;
         return;
       }
       customQuickActionInputsList.innerHTML = customQuickActionDraftInputs.map((input) => {
         const optionCount = Array.isArray(input.options) ? input.options.length : 0;
         const meta = input.type === 'select'
-          ? `${optionCount} option${optionCount === 1 ? '' : 's'}${input.allowCustomOption ? ' + custom' : ''}`
+          ? tu('actions.customQuickAction.input.card.selectMeta', {
+            count: String(optionCount),
+            suffix: optionCount === 1 ? '' : 's',
+            customSuffix: input.allowCustomOption ? tu('actions.customQuickAction.input.card.customSuffix') : ''
+          })
           : input.type === 'image'
-            ? 'image upload'
-            : (input.placeholder || 'text input');
+            ? tu('actions.customQuickAction.input.card.imageMeta')
+            : (input.placeholder || tu('actions.customQuickAction.input.card.textMeta'));
+        const typeLabel = tu(`actions.customQuickAction.input.type.${input.type}`);
+        const extraFlags = [
+          input.multiple ? tu('actions.customQuickAction.input.card.multiple') : '',
+          input.required ? tu('actions.customQuickAction.input.card.required') : ''
+        ].filter(Boolean).join(' • ');
+        const metaLine = [typeLabel, extraFlags, meta].filter(Boolean).join(' • ');
         return `
           <div class="custom-quick-action-input-card" data-custom-input-id="${escapeHtml(input.id)}">
             <div class="custom-quick-action-input-card-main">
@@ -39921,13 +39935,13 @@ Based on the user's instruction, generate the appropriate commands to modify the
                 <span>${escapeHtml(input.label)}</span>
                 <span class="custom-quick-action-input-card-key">{${escapeHtml(input.key)}}</span>
               </div>
-              <div class="custom-quick-action-input-card-meta">${escapeHtml(input.type)}${input.multiple ? ' • multiple' : ''}${input.required ? ' • required' : ''} • ${escapeHtml(meta)}</div>
+              <div class="custom-quick-action-input-card-meta">${escapeHtml(metaLine)}</div>
             </div>
             <div class="custom-quick-action-input-card-actions">
-              <button type="button" class="custom-quick-action-input-card-btn" data-custom-input-action="edit" data-custom-input-id="${escapeHtml(input.id)}" title="Edit input">
+              <button type="button" class="custom-quick-action-input-card-btn" data-custom-input-action="edit" data-custom-input-id="${escapeHtml(input.id)}" title="${escapeHtml(tu('actions.customQuickAction.input.editTitle'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
               </button>
-              <button type="button" class="custom-quick-action-input-card-btn danger" data-custom-input-action="delete" data-custom-input-id="${escapeHtml(input.id)}" title="Delete input">
+              <button type="button" class="custom-quick-action-input-card-btn danger" data-custom-input-action="delete" data-custom-input-id="${escapeHtml(input.id)}" title="${escapeHtml(tu('actions.customQuickAction.input.deleteTitle'))}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
               </button>
             </div>
@@ -39943,8 +39957,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
       customQuickActionInputDefaultWrap?.classList.toggle('hidden', isImage);
       if (customQuickActionInputDefaultValue) {
         customQuickActionInputDefaultValue.placeholder = isSelect
-          ? (customQuickActionInputMultiple?.checked ? 'Default values, one per line' : 'Default selected value')
-          : 'Optional default value';
+          ? (customQuickActionInputMultiple?.checked
+            ? tu('actions.customQuickAction.input.defaultValueMultiplePlaceholder')
+            : tu('actions.customQuickAction.input.defaultValueSelectPlaceholder'))
+          : tu('actions.customQuickAction.input.defaultValuePlaceholder');
       }
     }
 
@@ -39959,7 +39975,11 @@ Based on the user's instruction, generate the appropriate commands to modify the
       editingCustomQuickActionInputId = input?.id || null;
       pendingInsertAfterInputSave = options.insertAfterSave === true;
       pendingInsertContextAfterInputSave = options.insertContext || null;
-      if (customQuickActionInputEditorTitle) customQuickActionInputEditorTitle.textContent = input ? 'Edit input' : 'Add input';
+      if (customQuickActionInputEditorTitle) {
+        customQuickActionInputEditorTitle.textContent = input
+          ? tu('actions.customQuickAction.inputEditor.editTitle')
+          : tu('actions.customQuickAction.inputEditor.addTitle');
+      }
       if (customQuickActionInputLabel) customQuickActionInputLabel.value = input?.label || '';
       if (customQuickActionInputKey) {
         customQuickActionInputKey.value = input?.key || generateCustomQuickActionInputKey('', customQuickActionDraftInputs, customQuickActionDraftInputs.length + 1);
@@ -40003,12 +40023,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
         ? customQuickActionDraftInputs.find((input) => input.id === editingCustomQuickActionInputId)
         : null;
       if (!label) {
-        showToast('Input label is required.', 'error');
+        showToast(tu('actions.customQuickAction.validation.inputLabelRequired'), 'error');
         return null;
       }
       const keyTaken = customQuickActionDraftInputs.some((input) => input.id !== editingCustomQuickActionInputId && input.key.toLowerCase() === key.toLowerCase());
       if (keyTaken) {
-        showToast('Input key must be unique.', 'error');
+        showToast(tu('actions.customQuickAction.validation.inputKeyUnique'), 'error');
         return null;
       }
       const nextInput = {
@@ -40024,7 +40044,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         defaultValue: null,
       };
       if (type === 'select' && nextInput.options.length === 0) {
-        showToast('Selection inputs need at least one option.', 'error');
+        showToast(tu('actions.customQuickAction.validation.inputOptionsRequired'), 'error');
         return null;
       }
       if (type === 'select') {

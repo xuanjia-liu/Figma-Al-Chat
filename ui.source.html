@@ -839,71 +839,71 @@
         </div>
         <div class="setting-item">
           <div class="custom-quick-action-section-header">
-            <label class="setting-label">Inputs</label>
-            <button type="button" class="setting-btn" id="customQuickActionAddInputBtn">Add input</button>
+            <label class="setting-label" data-i18n-action="actions.customQuickAction.inputsLabel">Inputs</label>
+            <button type="button" class="setting-btn" id="customQuickActionAddInputBtn" data-i18n-action="actions.customQuickAction.addInput">Add input</button>
           </div>
           <div class="custom-quick-action-inputs-list" id="customQuickActionInputsList"></div>
           <div class="custom-quick-action-input-editor hidden" id="customQuickActionInputEditor">
             <div class="custom-quick-action-input-editor-panel">
               <div class="custom-quick-action-section-header">
-                <div class="custom-quick-action-section-title" id="customQuickActionInputEditorTitle">Add input</div>
-                <button type="button" class="custom-quick-action-section-link" id="customQuickActionCancelInputBtn">Cancel</button>
+                <div class="custom-quick-action-section-title" id="customQuickActionInputEditorTitle" data-i18n-action="actions.customQuickAction.inputEditor.addTitle">Add input</div>
+                <button type="button" class="custom-quick-action-section-link" id="customQuickActionCancelInputBtn" data-i18n-action="actions.customQuickAction.cancel">Cancel</button>
               </div>
               <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full">
                 <div class="setting-item">
-                  <label class="setting-label" for="customQuickActionInputLabel">Label</label>
-                  <input type="text" class="setting-input" id="customQuickActionInputLabel" placeholder="e.g. Tone" />
+                  <label class="setting-label" for="customQuickActionInputLabel" data-i18n-action="actions.customQuickAction.input.label">Label</label>
+                  <input type="text" class="setting-input" id="customQuickActionInputLabel" placeholder="e.g. Tone" data-i18n-action-placeholder="actions.customQuickAction.input.labelPlaceholder" />
                 </div>
               </div>
               <div class="custom-quick-action-modal-row">
                 <div class="setting-item">
-                  <label class="setting-label" for="customQuickActionInputKey">Key</label>
-                  <input type="text" class="setting-input" id="customQuickActionInputKey" placeholder="e.g. tone" />
+                  <label class="setting-label" for="customQuickActionInputKey" data-i18n-action="actions.customQuickAction.input.key">Key</label>
+                  <input type="text" class="setting-input" id="customQuickActionInputKey" placeholder="e.g. tone" data-i18n-action-placeholder="actions.customQuickAction.input.keyPlaceholder" />
                 </div>
                 <div class="setting-item">
-                  <label class="setting-label" for="customQuickActionInputType">Type</label>
+                  <label class="setting-label" for="customQuickActionInputType" data-i18n-action="actions.customQuickAction.input.type">Type</label>
                   <select class="setting-input" id="customQuickActionInputType">
-                    <option value="text">Short text</option>
-                    <option value="textarea">Long text</option>
-                    <option value="select">Selection</option>
-                    <option value="image">Image</option>
+                    <option value="text" data-i18n-action="actions.customQuickAction.input.type.text">Short text</option>
+                    <option value="textarea" data-i18n-action="actions.customQuickAction.input.type.textarea">Long text</option>
+                    <option value="select" data-i18n-action="actions.customQuickAction.input.type.select">Selection</option>
+                    <option value="image" data-i18n-action="actions.customQuickAction.input.type.image">Image</option>
                   </select>
                 </div>
               </div>
               <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full" id="customQuickActionInputPlaceholderWrap">
                 <div class="setting-item">
-                  <label class="setting-label" for="customQuickActionInputPlaceholder">Placeholder</label>
-                  <input type="text" class="setting-input" id="customQuickActionInputPlaceholder" placeholder="Optional placeholder" />
+                  <label class="setting-label" for="customQuickActionInputPlaceholder" data-i18n-action="actions.customQuickAction.input.placeholder">Placeholder</label>
+                  <input type="text" class="setting-input" id="customQuickActionInputPlaceholder" placeholder="Optional placeholder" data-i18n-action-placeholder="actions.customQuickAction.input.placeholderPlaceholder" />
                 </div>
               </div>
               <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full" id="customQuickActionInputDefaultWrap">
                 <div class="setting-item">
-                  <label class="setting-label" for="customQuickActionInputDefaultValue">Default value</label>
-                  <textarea class="setting-input" id="customQuickActionInputDefaultValue" style="min-height: 72px; resize: vertical;" placeholder="Optional default value"></textarea>
+                  <label class="setting-label" for="customQuickActionInputDefaultValue" data-i18n-action="actions.customQuickAction.input.defaultValue">Default value</label>
+                  <textarea class="setting-input" id="customQuickActionInputDefaultValue" style="min-height: 72px; resize: vertical;" placeholder="Optional default value" data-i18n-action-placeholder="actions.customQuickAction.input.defaultValuePlaceholder"></textarea>
                 </div>
               </div>
               <div class="custom-quick-action-select-fields hidden" id="customQuickActionSelectOnlyFields">
                 <div class="custom-quick-action-modal-row">
                   <label class="custom-quick-action-toggle">
                     <input type="checkbox" id="customQuickActionInputMultiple" />
-                    <span>Allow multiple selection</span>
+                    <span data-i18n-action="actions.customQuickAction.input.multiple">Allow multiple selection</span>
                   </label>
                   <label class="custom-quick-action-toggle">
                     <input type="checkbox" id="customQuickActionInputAllowCustomOption" />
-                    <span>Allow custom option</span>
+                    <span data-i18n-action="actions.customQuickAction.input.allowCustomOption">Allow custom option</span>
                   </label>
                 </div>
                 <div class="setting-item">
-                  <label class="setting-label" for="customQuickActionInputOptions">Options</label>
-                  <textarea class="setting-input" id="customQuickActionInputOptions" style="min-height: 96px; resize: vertical;" placeholder="One option per line. Use Label|value for custom values."></textarea>
+                  <label class="setting-label" for="customQuickActionInputOptions" data-i18n-action="actions.customQuickAction.input.options">Options</label>
+                  <textarea class="setting-input" id="customQuickActionInputOptions" style="min-height: 96px; resize: vertical;" placeholder="One option per line. Use Label|value for custom values." data-i18n-action-placeholder="actions.customQuickAction.input.optionsPlaceholder"></textarea>
                 </div>
               </div>
               <label class="custom-quick-action-toggle">
                 <input type="checkbox" id="customQuickActionInputRequired" />
-                <span>Required</span>
+                <span data-i18n-action="actions.customQuickAction.input.required">Required</span>
               </label>
               <div class="custom-quick-action-modal-actions">
-                <button class="setting-btn primary" id="customQuickActionSaveInputBtn">Save input</button>
+                <button class="setting-btn primary" id="customQuickActionSaveInputBtn" data-i18n-action="actions.customQuickAction.input.save">Save input</button>
               </div>
             </div>
           </div>
@@ -911,17 +911,17 @@
         <div class="setting-item custom-quick-action-prompt-item">
           <label class="setting-label" for="customQuickActionPrompt" data-i18n-action="actions.customQuickAction.promptLabel">Prompt</label>
           <div class="setting-input custom-quick-action-prompt-shell">
-            <div class="custom-quick-action-chip-editor" id="customQuickActionPromptEditor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write the prompt that should run for this action."></div>
+            <div class="custom-quick-action-chip-editor" id="customQuickActionPromptEditor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Write the prompt that should run for this action." data-i18n-action-contenteditable-placeholder="actions.customQuickAction.promptPlaceholder"></div>
             <textarea class="setting-input hidden" id="customQuickActionPrompt" style="min-height: 120px; resize: vertical;" placeholder="Write the prompt that should run for this action." data-i18n-action-placeholder="actions.customQuickAction.promptPlaceholder"></textarea>
           </div>
           <div class="custom-quick-action-prompt-actions">
-            <button type="button" class="custom-quick-action-insert-btn" id="customQuickActionInsertBtn" title="Insert input">
+            <button type="button" class="custom-quick-action-insert-btn" id="customQuickActionInsertBtn" title="Insert input" data-i18n-action-title="actions.customQuickAction.insertTitle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              <span>Insert</span>
+              <span data-i18n-action="actions.customQuickAction.insert">Insert</span>
             </button>
-            <span class="setting-hint custom-quick-action-prompt-hint">Insert input chips like {input1} into the prompt.</span>
+            <span class="setting-hint custom-quick-action-prompt-hint" data-i18n-action="actions.customQuickAction.promptHint">Insert input chips like {input1} into the prompt.</span>
           </div>
           <div class="custom-quick-action-insert-menu hidden" id="customQuickActionInsertMenu"></div>
         </div>
