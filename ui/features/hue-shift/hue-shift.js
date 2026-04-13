@@ -604,10 +604,9 @@ export function mountHueShift(container, options = {}) {
     }
   }
 
-  function setPopoverInputsEnabled(colorInput, hexInput, applyBtn, enabled) {
+  function setPopoverColorInputsEnabled(colorInput, hexInput, enabled) {
     colorInput.disabled = !enabled;
     hexInput.disabled = !enabled;
-    applyBtn.disabled = !enabled;
     colorInput.closest('.color-input-wrapper')?.classList.toggle('color-input-wrapper--disabled', !enabled);
     hexInput.classList.toggle('hex-input--disabled', !enabled);
   }
@@ -691,6 +690,7 @@ export function mountHueShift(container, options = {}) {
     };
 
     const applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
     applyBtn.className = 'placeholder-popover-btn submit';
     applyBtn.textContent = translate('aux.code.apply', 'Apply');
 
@@ -701,8 +701,9 @@ export function mountHueShift(container, options = {}) {
         if (isLocked) lockedIndices.add(i);
         else lockedIndices.delete(i);
       });
-      setPopoverInputsEnabled(colorInput, hexInput, applyBtn, !isLocked);
+      setPopoverColorInputsEnabled(colorInput, hexInput, !isLocked);
       unlockHint.hidden = !isLocked;
+      applyBtn.title = '';
       refreshSelectionUI();
     };
 
@@ -710,18 +711,16 @@ export function mountHueShift(container, options = {}) {
       syncLock();
     });
 
-    setPopoverInputsEnabled(colorInput, hexInput, applyBtn, !isLocked);
+    setPopoverColorInputsEnabled(colorInput, hexInput, !isLocked);
     unlockHint.hidden = !isLocked;
 
     const submit = () => {
-      if (indices.some((i) => lockedIndices.has(i))) return;
       let finalColor = hexInput.value.trim().toUpperCase();
       if (!finalColor.startsWith('#')) finalColor = '#' + finalColor;
-      if (/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
-        onUpdate(finalColor);
-        closeColorPickerPopover();
-        document.removeEventListener('mousedown', clickOutside);
-      }
+      if (!/^#[0-9A-Fa-f]{6}$/.test(finalColor)) return;
+      onUpdate(finalColor);
+      closeColorPickerPopover();
+      document.removeEventListener('mousedown', clickOutside);
     };
 
     applyBtn.onclick = submit;
@@ -774,11 +773,12 @@ export function mountHueShift(container, options = {}) {
     }, 0);
   }
 
-  function applyColorToIndices(indices, nextHex) {
+  function applyColorToIndices(indices, nextHex, options = {}) {
+    const ignoreLock = options.ignoreLock === true;
     const nextRgb = hexToRgb(nextHex);
     indices.forEach((index) => {
       if (index < 0 || index >= colors.length) return;
-      if (lockedIndices.has(index)) return;
+      if (!ignoreLock && lockedIndices.has(index)) return;
       colors[index].currentRgb = cloneRgb(nextRgb);
     });
     updatePaletteBar();
@@ -1393,7 +1393,7 @@ export function mountHueShift(container, options = {}) {
         const ix = groupIndices;
         selectedColorIndices = new Set(ix);
         openColorPickerPopover(anchorRect, getCurrentHex(color), (nextHex) => {
-          applyColorToIndices(ix, nextHex);
+          applyColorToIndices(ix, nextHex, { ignoreLock: true });
           refreshSelectionUI();
         }, { indices: ix });
       });
@@ -1472,17 +1472,6 @@ export function mountHueShift(container, options = {}) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.putImageData(image, 0, 0);
     ctx.restore();
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-    ctx.lineWidth = 3;
-
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, wheelRadius + 2, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, wheelRadius * INNER_RING - 2, 0, Math.PI * 2);
-    ctx.stroke();
   }
 
   function wheelModelToPos(hue, saturation) {
@@ -1711,7 +1700,7 @@ export function mountHueShift(container, options = {}) {
       bottom: event.clientY,
     };
     openColorPickerPopover(anchorRect, getCurrentHex(colors[handleGroup.representativeIndex]), (nextHex) => {
-      applyColorToIndices(ix, nextHex);
+      applyColorToIndices(ix, nextHex, { ignoreLock: true });
       refreshSelectionUI();
     }, { indices: ix });
   }
