@@ -6401,51 +6401,54 @@ const QUICK_DETACH_CORNER_FIELDS: VariableBindableNodeField[] = [
 function collectQuickDetachTargets(roots: readonly SceneNode[], onlyDirect: boolean): SceneNode[] {
   const out: SceneNode[] = [];
   const seen = new Set<string>();
+
+  const push = (n: SceneNode) => {
+    if (!n || n.removed || seen.has(n.id)) return;
+    seen.add(n.id);
+    out.push(n);
+  };
+
   if (onlyDirect) {
     for (const n of roots) {
-      try {
-        if (n.removed) continue;
-        if (!seen.has(n.id)) {
-          seen.add(n.id);
-          out.push(n);
-        }
-      } catch (e) {
-        console.warn('collectQuickDetachTargets direct root skipped', (n as SceneNode)?.id, e);
-      }
+      push(n);
     }
     return out;
   }
-  const walk = (n: SceneNode) => {
-    try {
-      if (n.removed) return;
-      if (seen.has(n.id)) return;
-      seen.add(n.id);
-      out.push(n);
+
+  // Recursive mode: include roots and all descendants
+  for (const root of roots) {
+    if (root.removed) continue;
+    push(root);
+
+    // Use a manual walk to be absolutely sure we hit everything, including hidden nodes.
+    // Some versions of Figma API might have quirks with findAll right after detachment.
+    const walk = (n: SceneNode) => {
       if (!('children' in n)) return;
-      let children: readonly SceneNode[] = [];
       try {
-        children = [...(n as ChildrenMixin).children] as readonly SceneNode[];
-      } catch (e) {
-        console.warn('collectQuickDetachTargets get children failed', n.id, e);
-        return;
-      }
-      for (const c of children) {
-        try {
-          walk(c as SceneNode);
-        } catch (e) {
-          console.warn('collectQuickDetachTargets walk child failed', (c as SceneNode)?.id, e);
+        const children = (n as ChildrenMixin).children;
+        for (const c of children) {
+          const child = c as SceneNode;
+          if (child && !child.removed && !seen.has(child.id)) {
+            push(child);
+            walk(child);
+          }
         }
+      } catch (err) {
+        /* ignore */
       }
-    } catch (e) {
-      console.warn('collectQuickDetachTargets walk failed', (n as SceneNode)?.id, e);
-    }
-  };
-  for (const r of roots) {
-    try {
-      if (r.removed) continue;
-      walk(r);
-    } catch (e) {
-      console.warn('collectQuickDetachTargets root failed', r?.id, e);
+    };
+    walk(root);
+
+    // Also use findAll as a secondary check to be doubly sure
+    if ('findAll' in root) {
+      try {
+        const descendants = (root as any).findAll(() => true);
+        for (const d of descendants) {
+          push(d as SceneNode);
+        }
+      } catch (e) {
+        /* ignore */
+      }
     }
   }
   return out;
@@ -6494,6 +6497,62 @@ function collectInstancesPostOrder(root: SceneNode): InstanceNode[] {
   return out;
 }
 
+/**
+ * All INSTANCE nodes under root (including root when it is an instance).
+ * Unions manual post-order walk with findAll / findAllWithCriteria so nested instances are not missed
+ * (API paths can disagree when skipInvisibleInstanceChildren was true at handle creation time).
+ * findAll does not include the node it is called on — root is added when it is an INSTANCE.
+ * Requires figma.skipInvisibleInstanceChildren === false while traversing.
+ */
+function collectInstancesInSubtree(root: SceneNode): InstanceNode[] {
+  if (root.removed) return [];
+  const seen = new Set<string>();
+  const out: InstanceNode[] = [];
+  const push = (n: SceneNode) => {
+    if (!n || n.removed || seen.has(n.id)) return;
+    if (n.type === 'INSTANCE') {
+      seen.add(n.id);
+      out.push(n as InstanceNode);
+    }
+  };
+
+  if ('findAll' in root) {
+    try {
+      push(root);
+      const descendants = (root as any).findAll((n: SceneNode) => n.type === 'INSTANCE');
+      for (const d of descendants) {
+        push(d);
+      }
+    } catch (e) {
+      console.warn('collectInstancesInSubtree findAll failed', root.id, e);
+    }
+  }
+
+  const withCrit = root as SceneNode & {
+    findAllWithCriteria?: (c: { types: Array<'INSTANCE'> }) => SceneNode[];
+  };
+  if (typeof withCrit.findAllWithCriteria === 'function') {
+    try {
+      push(root);
+      const nested = withCrit.findAllWithCriteria({ types: ['INSTANCE'] }) as InstanceNode[];
+      for (const inst of nested) {
+        push(inst);
+      }
+    } catch (e) {
+      console.warn('collectInstancesInSubtree findAllWithCriteria failed', root.id, e);
+    }
+  }
+
+  // Always run the manual post-order walk to catch deeply nested instances that
+  // findAll / findAllWithCriteria may miss inside nested instance subtrees.
+  // push() deduplicates via `seen`, so this is safe to run unconditionally.
+  for (const n of collectInstancesPostOrder(root)) {
+    push(n);
+  }
+
+  return out;
+}
+
 function stripSolidColorBinding(paint: SolidPaint): SolidPaint {
   const p = { ...paint } as SolidPaint & { boundVariables?: any };
   if (p.boundVariables && p.boundVariables.color) {
@@ -6511,7 +6570,7 @@ function stripSolidColorBinding(paint: SolidPaint): SolidPaint {
 function stripColorBindingsFromPaints(paints: readonly Paint[]): { paints: Paint[]; changed: boolean } {
   let changed = false;
   const next = paints.map((paint) => {
-    if (!paint || paint.visible === false) return paint;
+    if (!paint) return paint; // Removed paint.visible === false check
     if (paint.type === 'SOLID') {
       const before = JSON.stringify((paint as any).boundVariables);
       const np = stripSolidColorBinding(paint as SolidPaint);
@@ -6753,13 +6812,11 @@ async function quickDetachFontOnNode(node: SceneNode, fields: QuickDetachFontFie
   return touched;
 }
 
-async function runLocalQuickDetach(msg: any): Promise<void> {
-  const selection = figma.currentPage.selection;
-  if (selection.length === 0) {
-    figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer.' });
-    return;
-  }
+function readQuickDetachBool(v: unknown): boolean {
+  return v === true || v === 'true';
+}
 
+async function runLocalQuickDetachBody(msg: any, selectedRoots: readonly SceneNode[]): Promise<void> {
   const detachFontStyle = msg.detachFontStyle === true;
   const fontDetachFields = (Array.isArray(msg.fontDetachFields) ? msg.fontDetachFields : [])
     .map((f: string) => String(f))
@@ -6772,9 +6829,9 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
   const detachLayout = msg.detachLayout === true;
   const detachCornerRadius = msg.detachCornerRadius === true;
   const detachInstance = msg.detachInstance === true;
-  const onlyDirectSelection = msg.onlyDirectSelection === true;
+  const onlyDirectSelection = readQuickDetachBool(msg.onlyDirectSelection);
 
-  const directNodes = [...selection];
+  const directNodes = [...selectedRoots];
   const replaced = new Map<string, SceneNode>();
 
   let detachedInstanceCount = 0;
@@ -6795,45 +6852,93 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
         }
       }
     } else {
-      /** Collect from every selected root before any detach, so later roots are not removed mid-walk. */
-      const merged: InstanceNode[] = [];
-      const seenIds = new Set<string>();
-      for (const root of directNodes) {
-        if (root.removed) continue;
-        for (const inst of collectInstancesPostOrder(root)) {
-          if (seenIds.has(inst.id)) continue;
-          seenIds.add(inst.id);
-          merged.push(inst);
+      // Iterative approach: detach shallowest-first in rounds with fresh handles.
+      // Detaching a parent instance first converts it to a Frame, which makes its
+      // children "real" nodes rather than override proxies.  This avoids stale
+      // references that occur when deeply-nested instances are detached first
+      // (Figma can internally reconstruct the override tree, invalidating sibling
+      // and ancestor handles collected before the detach).
+      const detachedIds = new Set<string>();
+      const MAX_ROUNDS = 64;
+      for (let round = 0; round < MAX_ROUNDS; round++) {
+        // (Re-)collect instance IDs from the current tree so handles are always fresh.
+        const instanceIds: string[] = [];
+        const seenCollect = new Set<string>();
+        for (const root of directNodes) {
+          const rootNode = replaced.get(root.id) || root;
+          if (!rootNode || rootNode.removed) continue;
+          let freshRoot: SceneNode | null = null;
+          try {
+            const n = await figma.getNodeByIdAsync(rootNode.id);
+            if (n && n.type !== 'PAGE' && n.type !== 'DOCUMENT') freshRoot = n as SceneNode;
+          } catch (_) { /* ignore */ }
+          if (!freshRoot || freshRoot.removed) continue;
+
+          for (const inst of collectInstancesInSubtree(freshRoot)) {
+            if (!inst || inst.removed) continue;
+            if (detachedIds.has(inst.id) || seenCollect.has(inst.id)) continue;
+            seenCollect.add(inst.id);
+            instanceIds.push(inst.id);
+          }
         }
-      }
-      merged.sort((a, b) => sceneNodeDepth(b) - sceneNodeDepth(a));
-      for (const inst of merged) {
-        if (inst.removed) continue;
-        try {
-          const oldId = inst.id;
-          const detached = inst.detachInstance();
-          detachedInstanceCount++;
-          replaced.set(oldId, detached);
-        } catch (e) {
-          console.warn('quickDetach: detachInstance failed', e);
+
+        if (instanceIds.length === 0) break;
+
+        // Sort shallowest-first so parent instances are detached before children.
+        const resolved: { id: string; node: InstanceNode; depth: number }[] = [];
+        for (const id of instanceIds) {
+          try {
+            const n = await figma.getNodeByIdAsync(id);
+            if (n && !n.removed && n.type === 'INSTANCE') {
+              resolved.push({ id, node: n as InstanceNode, depth: sceneNodeDepth(n as SceneNode) });
+            }
+          } catch (_) { /* ignore */ }
         }
+        if (resolved.length === 0) break;
+        resolved.sort((a, b) => a.depth - b.depth);
+
+        let detachedThisRound = 0;
+        for (const { id, node: inst } of resolved) {
+          if (inst.removed || detachedIds.has(id)) continue;
+          try {
+            const detached = inst.detachInstance();
+            detachedInstanceCount++;
+            detachedThisRound++;
+            detachedIds.add(id);
+            replaced.set(id, detached);
+          } catch (e) {
+            console.warn('quickDetach: detachInstance failed', id, e);
+          }
+        }
+        if (detachedThisRound === 0) break;
+
+        // Yield so Figma can stabilize the tree before the next round.
+        await new Promise((r) => setTimeout(r, 0));
       }
     }
   }
+
+  // Yield to Figma to let the tree stabilize after potential detaches
+  await new Promise((r) => setTimeout(r, 0));
 
   /** Re-resolve by id after instance detach so we do not walk with stale handles. */
   const roots: SceneNode[] = [];
   for (const n of directNodes) {
     const rep = replaced.get(n.id);
     const node = rep || n;
-    if (node.removed) continue;
+    if (!node || node.removed) continue;
     try {
       const fresh = await figma.getNodeByIdAsync(node.id);
       if (fresh && fresh.type !== 'PAGE' && fresh.type !== 'DOCUMENT') {
         roots.push(fresh as SceneNode);
+      } else if (!node.removed) {
+        roots.push(node);
       }
     } catch (e) {
       console.warn('quickDetach: getNodeByIdAsync root failed', node.id, e);
+      if (!node.removed) {
+        roots.push(node);
+      }
     }
   }
 
@@ -6900,6 +7005,42 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
     figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
   } catch (e) {
     /* ignore */
+  }
+}
+
+async function runLocalQuickDetach(msg: any): Promise<void> {
+  const prevSkipInvisible = figma.skipInvisibleInstanceChildren;
+  figma.skipInvisibleInstanceChildren = false;
+  try {
+    const selection = figma.currentPage.selection;
+    if (selection.length === 0) {
+      figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer.' });
+      return;
+    }
+    /** Re-resolve by id after skip flag so instance children lists are complete (must not read selection before flip). */
+    const directNodes: SceneNode[] = [];
+    for (const sel of selection) {
+      try {
+        const fresh = await figma.getNodeByIdAsync(sel.id);
+        if (fresh && fresh.type !== 'PAGE' && fresh.type !== 'DOCUMENT') {
+          directNodes.push(fresh as SceneNode);
+        } else if (!sel.removed) {
+          directNodes.push(sel);
+        }
+      } catch (e) {
+        console.warn('quickDetach: refresh selection node failed', sel.id, e);
+        if (!sel.removed) {
+          directNodes.push(sel);
+        }
+      }
+    }
+    if (directNodes.length === 0) {
+      figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer.' });
+      return;
+    }
+    await runLocalQuickDetachBody(msg, directNodes);
+  } finally {
+    figma.skipInvisibleInstanceChildren = prevSkipInvisible;
   }
 }
 

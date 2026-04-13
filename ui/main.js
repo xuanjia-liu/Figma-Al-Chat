@@ -26033,21 +26033,34 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     }
 
     async function runQuickDetachAction(values, actionMeta) {
+      const qdFields = Array.isArray(actionMeta?.fields) ? actionMeta.fields : [];
+      const qdDefault = (key) => {
+        const f = qdFields.find((e) => e && e.key === key);
+        return f && Object.prototype.hasOwnProperty.call(f, 'default') ? f.default : undefined;
+      };
+      const boolOrFieldDefault = (key) => {
+        const v = values[key];
+        if (v === true || v === false) return v;
+        if (v === 'true') return true;
+        if (v === 'false') return false;
+        const d = qdDefault(key);
+        return d === true;
+      };
       const fontFieldsRaw = Array.isArray(values.fontDetachFields) ? values.fontDetachFields : [];
       const fontDetachFields = fontFieldsRaw
         .map((f) => String(f))
         .filter((f) => ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing'].includes(f));
       const payload = {
-        detachFontStyle: values.detachFontStyle === true,
+        detachFontStyle: boolOrFieldDefault('detachFontStyle'),
         fontDetachFields:
           fontDetachFields.length > 0
             ? fontDetachFields
             : ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing'],
-        detachColor: values.detachColor === true,
-        detachLayout: values.detachLayout === true,
-        detachCornerRadius: values.detachCornerRadius === true,
-        detachInstance: values.detachInstance === true,
-        onlyDirectSelection: values.onlyDirectSelection === true,
+        detachColor: boolOrFieldDefault('detachColor'),
+        detachLayout: boolOrFieldDefault('detachLayout'),
+        detachCornerRadius: boolOrFieldDefault('detachCornerRadius'),
+        detachInstance: boolOrFieldDefault('detachInstance'),
+        onlyDirectSelection: boolOrFieldDefault('onlyDirectSelection'),
       };
       if (!payload.detachFontStyle) {
         payload.fontDetachFields = [];

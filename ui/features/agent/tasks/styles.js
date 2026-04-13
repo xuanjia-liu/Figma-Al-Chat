@@ -109,7 +109,7 @@ export const stylingTasks = [
               type: 'checkbox',
               label: 'Instance',
               default: false,
-              hint: 'Detaches only directly selected component instances.',
+              hint: 'With “Only direct selection” on, detaches only selected instances. With it off, detaches every instance in the subtree (nested instances included).',
             },
           ],
         },
