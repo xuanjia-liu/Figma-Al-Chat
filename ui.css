@@ -714,11 +714,7 @@
 
     .hue-shift-overlay-canvas {
       z-index: 1;
-      cursor: grab;
-    }
-
-    .hue-shift-overlay-canvas:active {
-      cursor: grabbing;
+      cursor: default;
     }
 
     .hue-shift-link-toggle {
@@ -769,6 +765,20 @@
     .hue-shift-swatch.active{
       border: 2px solid rgba(255, 255, 255, 0.95);
       border-radius: var(--radius-sm);
+    }
+
+    .hue-shift-swatch.hue-shift-swatch--locked::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 4px,
+        rgba(0, 0, 0, 0.22) 4px,
+        rgba(0, 0, 0, 0.22) 6px
+      );
+      pointer-events: none;
     }
 
     .hue-shift-empty {
@@ -5570,6 +5580,49 @@
       justify-content: flex-end;
       gap: var(--space-sm);
       margin-top: var(--space-sm);
+    }
+
+    .color-picker-popover-lock-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .color-picker-popover-lock-input {
+      flex-shrink: 0;
+    }
+
+    .color-picker-popover-lock-label {
+      flex: 1;
+    }
+
+    .color-picker-popover-unlock-hint {
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      line-height: 1.35;
+    }
+
+    .color-picker-popover-unlock-hint[hidden] {
+      display: none !important;
+    }
+
+    .color-picker-popover .color-input-wrapper--disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .color-picker-popover .color-input-wrapper--disabled input[type="color"] {
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .color-picker-popover .hex-input--disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
     }
 
     .detected-placeholder-item {
@@ -12193,13 +12246,14 @@
       left: 2px;
       width: 10px;
       height: 10px;
-      background: #ffffff;
+      background: var(--text-primary);
       border-radius: 50%;
       transition: transform 0.2s;
     }
 
     .camera-toggle-switch input:checked::after {
       transform: translateX(12px);
+      background: var(--text-on-accent);
     }
 
     .camera-toggle-label {

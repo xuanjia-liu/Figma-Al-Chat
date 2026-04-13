@@ -218,6 +218,7 @@ const MAX_HANDLE_RADIUS = 14;
 const INNER_RING = 0.15;
 const MAX_MERGE_NEAR = 100;
 const MAX_MERGE_HUE_DELTA = 48;
+const PALETTE_MULTI_VALUE = '__multi__';
 
 function isNear(value, target, epsilon = 0.0001) {
   return Math.abs(value - target) <= epsilon;
@@ -266,7 +267,9 @@ export function mountHueShift(container, options = {}) {
   let mergeNear = 0;
   let mergeGroupingBasis = [];
   let mergeGroupDefs = [];
-  let activePaletteIndex = -1;
+  let selectedColorIndices = new Set();
+  let lockedIndices = new Set();
+  let lastPaletteAnchorIndex = 0;
   let adjustOptions = { ...DEFAULT_ADJUST_OPTIONS };
   let preserveOptions = { ...DEFAULT_PRESERVE_OPTIONS };
   let dragSession = null;
@@ -281,6 +284,7 @@ export function mountHueShift(container, options = {}) {
   let wheelRadius = 0;
   let centerX = 0;
   let centerY = 0;
+  let lastOverlayPointerLocal = null;
   let controlsWrap = null;
   let settingsPopover = null;
   let settingsBtn = null;
@@ -418,10 +422,15 @@ export function mountHueShift(container, options = {}) {
   paletteSelect.addEventListener('change', () => {
     if (linked) return;
     const nextValue = paletteSelect.value;
+    if (nextValue === PALETTE_MULTI_VALUE) {
+      syncPaletteSelect();
+      return;
+    }
     if (!linked && nextValue === 'all') {
-      activePaletteIndex = colors.length > 0 ? 0 : -1;
+      selectedColorIndices = colors.length > 0 ? new Set([0]) : new Set();
     } else {
-      activePaletteIndex = nextValue === 'all' ? -1 : Number(nextValue);
+      const idx = Number(nextValue);
+      selectedColorIndices = new Set(Number.isFinite(idx) && idx >= 0 ? [idx] : [0]);
     }
     endInteractiveSessions();
     refreshSelectionUI();
@@ -443,8 +452,8 @@ export function mountHueShift(container, options = {}) {
   linkBtn.appendChild(linkLabelText);
   linkInput.addEventListener('change', () => {
     linked = !!linkInput.checked;
-    if (!linked && activePaletteIndex < 0 && colors.length > 0) {
-      activePaletteIndex = 0;
+    if (!linked && colors.length > 0) {
+      clampSelectionNonEmpty([0]);
     }
     endInteractiveSessions();
     refreshSelectionUI();
@@ -484,8 +493,8 @@ export function mountHueShift(container, options = {}) {
   unlockPaletteBtn.textContent = translate('actions.hueShift.unlockSingleSelect', 'Unlock single select');
   unlockPaletteBtn.addEventListener('click', () => {
     linked = false;
-    if (activePaletteIndex < 0 && colors.length > 0) {
-      activePaletteIndex = 0;
+    if (colors.length > 0) {
+      clampSelectionNonEmpty([0]);
     }
     endInteractiveSessions();
     refreshSelectionUI();
@@ -497,6 +506,50 @@ export function mountHueShift(container, options = {}) {
   controlsWrap = document.createElement('div');
   controlsWrap.className = 'hue-shift-sliders';
   container.appendChild(controlsWrap);
+
+  paletteBar.setAttribute('aria-multiselectable', 'true');
+
+  function getMergeGroupIndicesForColorIndex(index) {
+    if (index < 0 || index >= colors.length) return [index];
+    const defs = ensureMergeGroupDefs();
+    for (const def of defs) {
+      if (def.indices.includes(index)) return [...def.indices];
+    }
+    return [index];
+  }
+
+  function filterUnlocked(indices) {
+    return indices.filter((i) => i >= 0 && i < colors.length && !lockedIndices.has(i));
+  }
+
+  function getEditableColorIndices() {
+    if (colors.length === 0) return [];
+    if (linked) {
+      return colors.map((_, i) => i).filter((i) => !lockedIndices.has(i));
+    }
+    const selected = [...selectedColorIndices]
+      .filter((i) => i >= 0 && i < colors.length)
+      .sort((a, b) => a - b);
+    return filterUnlocked(selected);
+  }
+
+  function clampSelectionNonEmpty(fallbackIndices) {
+    if (colors.length === 0) {
+      selectedColorIndices = new Set();
+      return;
+    }
+    if (linked) return;
+    if (selectedColorIndices.size === 0) {
+      selectedColorIndices = new Set(fallbackIndices.length ? fallbackIndices : [0]);
+      return;
+    }
+    const next = new Set([...selectedColorIndices].filter((i) => i >= 0 && i < colors.length));
+    if (next.size === 0) {
+      selectedColorIndices = new Set(fallbackIndices.length ? fallbackIndices : [0]);
+    } else {
+      selectedColorIndices = next;
+    }
+  }
 
   function setSettingsOpen(isOpen) {
     if (!settingsPopover || !settingsBtn) return;
@@ -551,9 +604,18 @@ export function mountHueShift(container, options = {}) {
     }
   }
 
-  function openColorPickerPopover(anchorRect, initialColor, onUpdate) {
+  function setPopoverInputsEnabled(colorInput, hexInput, applyBtn, enabled) {
+    colorInput.disabled = !enabled;
+    hexInput.disabled = !enabled;
+    applyBtn.disabled = !enabled;
+    colorInput.closest('.color-input-wrapper')?.classList.toggle('color-input-wrapper--disabled', !enabled);
+    hexInput.classList.toggle('hex-input--disabled', !enabled);
+  }
+
+  function openColorPickerPopover(anchorRect, initialColor, onUpdate, options = {}) {
     closeColorPickerPopover();
 
+    const { indices = [] } = options;
     const popover = document.createElement('div');
     popover.className = 'color-picker-popover';
 
@@ -561,6 +623,23 @@ export function mountHueShift(container, options = {}) {
     label.className = 'popover-title';
     label.textContent = translate('actions.hueShift.pickColor', 'Pick a color');
     popover.appendChild(label);
+
+    const lockRow = document.createElement('label');
+    lockRow.className = 'color-picker-popover-lock-row';
+    const lockInput = document.createElement('input');
+    lockInput.type = 'checkbox';
+    lockInput.className = 'color-picker-popover-lock-input';
+    const lockText = document.createElement('span');
+    lockText.className = 'color-picker-popover-lock-label';
+    lockText.textContent = translate('actions.hueShift.lockColor', 'Lock color');
+    lockRow.appendChild(lockInput);
+    lockRow.appendChild(lockText);
+    popover.appendChild(lockRow);
+
+    const unlockHint = document.createElement('div');
+    unlockHint.className = 'color-picker-popover-unlock-hint';
+    unlockHint.textContent = translate('actions.hueShift.unlockToEdit', 'Unlock to edit this color');
+    popover.appendChild(unlockHint);
 
     const previewRow = document.createElement('div');
     previewRow.className = 'color-preview-row';
@@ -583,11 +662,16 @@ export function mountHueShift(container, options = {}) {
     previewRow.appendChild(hexInput);
     popover.appendChild(previewRow);
 
+    let isLocked = indices.some((i) => lockedIndices.has(i));
+    lockInput.checked = isLocked;
+
     colorInput.oninput = () => {
+      if (isLocked) return;
       hexInput.value = colorInput.value.toUpperCase();
     };
 
     hexInput.oninput = () => {
+      if (isLocked) return;
       let value = hexInput.value.trim();
       if (!value.startsWith('#')) value = '#' + value;
       if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
@@ -610,7 +694,27 @@ export function mountHueShift(container, options = {}) {
     applyBtn.className = 'placeholder-popover-btn submit';
     applyBtn.textContent = translate('aux.code.apply', 'Apply');
 
+    const syncLock = () => {
+      isLocked = lockInput.checked;
+      indices.forEach((i) => {
+        if (i < 0 || i >= colors.length) return;
+        if (isLocked) lockedIndices.add(i);
+        else lockedIndices.delete(i);
+      });
+      setPopoverInputsEnabled(colorInput, hexInput, applyBtn, !isLocked);
+      unlockHint.hidden = !isLocked;
+      refreshSelectionUI();
+    };
+
+    lockInput.addEventListener('change', () => {
+      syncLock();
+    });
+
+    setPopoverInputsEnabled(colorInput, hexInput, applyBtn, !isLocked);
+    unlockHint.hidden = !isLocked;
+
     const submit = () => {
+      if (indices.some((i) => lockedIndices.has(i))) return;
       let finalColor = hexInput.value.trim().toUpperCase();
       if (!finalColor.startsWith('#')) finalColor = '#' + finalColor;
       if (/^#[0-9A-Fa-f]{6}$/.test(finalColor)) {
@@ -674,6 +778,7 @@ export function mountHueShift(container, options = {}) {
     const nextRgb = hexToRgb(nextHex);
     indices.forEach((index) => {
       if (index < 0 || index >= colors.length) return;
+      if (lockedIndices.has(index)) return;
       colors[index].currentRgb = cloneRgb(nextRgb);
     });
     updatePaletteBar();
@@ -812,8 +917,8 @@ export function mountHueShift(container, options = {}) {
   }
 
   function getSelectedGroupIndex(groups) {
-    if (linked || activePaletteIndex < 0) return -1;
-    return groups.findIndex((group) => group.indices.includes(activePaletteIndex));
+    if (linked) return -1;
+    return groups.findIndex((group) => group.indices.some((i) => selectedColorIndices.has(i)));
   }
 
   function getDisplayHandleGroupAt(x, y) {
@@ -855,21 +960,30 @@ export function mountHueShift(container, options = {}) {
       paletteSelect.appendChild(option);
     });
 
+    if (!linked && selectedColorIndices.size > 1) {
+      const multiOpt = document.createElement('option');
+      multiOpt.value = PALETTE_MULTI_VALUE;
+      multiOpt.textContent = `${translate('actions.hueShift.multipleSelected', 'Multiple')} (${selectedColorIndices.size})`;
+      multiOpt.disabled = true;
+      paletteSelect.appendChild(multiOpt);
+    }
+
     let nextValue = previousValue;
     if (!linked && (nextValue === 'all' || nextValue === '')) {
       nextValue = colors.length > 0 ? '0' : 'all';
     }
-    if (activePaletteIndex >= 0 && activePaletteIndex < colors.length) {
-      nextValue = String(activePaletteIndex);
+    if (!linked && selectedColorIndices.size > 1) {
+      nextValue = PALETTE_MULTI_VALUE;
+    } else if (selectedColorIndices.size === 1) {
+      nextValue = String([...selectedColorIndices][0]);
     }
-    if (activePaletteIndex < 0 && linked) {
+    if (linked) {
       nextValue = 'all';
     }
     if (!Array.from(paletteSelect.options).some((option) => option.value === nextValue)) {
       nextValue = !linked && colors.length > 0 ? '0' : 'all';
     }
     paletteSelect.value = nextValue;
-    activePaletteIndex = paletteSelect.value === 'all' ? -1 : Number(paletteSelect.value);
   }
 
   function updateLinkButton() {
@@ -890,7 +1004,7 @@ export function mountHueShift(container, options = {}) {
   }
 
   function updateSelectionAffordances() {
-    const hasSingleSelection = !linked && activePaletteIndex >= 0 && activePaletteIndex < colors.length;
+    const hasSingleSelection = !linked && selectedColorIndices.size > 0;
     paletteSelect.disabled = linked;
     paletteSelect.classList.toggle('inactive', linked);
     wheelWrap.classList.toggle('single-selected', hasSingleSelection);
@@ -901,6 +1015,9 @@ export function mountHueShift(container, options = {}) {
   }
 
   function refreshSelectionUI() {
+    if (!linked && colors.length > 0) {
+      clampSelectionNonEmpty([0]);
+    }
     updateLinkButton();
     updateResetButtonState();
     syncPaletteSelect();
@@ -908,31 +1025,23 @@ export function mountHueShift(container, options = {}) {
     updateControlDisplayValues();
     drawOverlay();
     updateSelectionAffordances();
+    if (paletteBar) {
+      paletteBar.title = translate(
+        'actions.hueShift.multiSelectHint',
+        '⌘/Ctrl+click to add or remove. Shift+click swatches for a range.'
+      );
+    }
+    if (!dragSession && lastOverlayPointerLocal && overlayCanvas && colorMode !== 'oklch' && colors.length > 0) {
+      updateOverlayCursor(lastOverlayPointerLocal.x, lastOverlayPointerLocal.y);
+    }
   }
 
   function getDisplayColorIndices() {
-    if (colors.length === 0) return [];
-    if (activePaletteIndex >= 0 && activePaletteIndex < colors.length) {
-      return [activePaletteIndex];
-    }
-    return colors.map((_, index) => index);
+    return getEditableColorIndices();
   }
 
-  function getControlTargetIndices(anchorIndex = null) {
-    if (colors.length === 0) return [];
-    if (linked) {
-      return colors.map((_, index) => index);
-    }
-    if (anchorIndex !== null && anchorIndex >= 0 && anchorIndex < colors.length) {
-      activePaletteIndex = anchorIndex;
-      syncPaletteSelect();
-      return [anchorIndex];
-    }
-    if (activePaletteIndex < 0 || activePaletteIndex >= colors.length) {
-      activePaletteIndex = 0;
-      syncPaletteSelect();
-    }
-    return [activePaletteIndex];
+  function getControlTargetIndices() {
+    return getEditableColorIndices();
   }
 
   function getDisplayModel() {
@@ -1010,11 +1119,13 @@ export function mountHueShift(container, options = {}) {
 
     slider.addEventListener('pointerdown', () => {
       if (colors.length === 0) return;
+      if (getControlTargetIndices().length === 0) return;
       beginSession();
     });
 
     slider.addEventListener('input', () => {
       if (colors.length === 0) return;
+      if (getControlTargetIndices().length === 0) return;
       if (!controlSession || controlSession.key !== config.key || controlSession.mode !== colorMode) {
         beginSession();
       }
@@ -1179,13 +1290,15 @@ export function mountHueShift(container, options = {}) {
       originalHex: hex,
       currentRgb: existingByOriginal.get(hex) || hexToRgb(hex),
     }));
+    lockedIndices.clear();
     snapshotMergeGroupingBasis();
 
-    if (!linked && activePaletteIndex < 0 && colors.length > 0) {
-      activePaletteIndex = 0;
-    }
-    if (activePaletteIndex >= colors.length) {
-      activePaletteIndex = linked ? -1 : (colors.length > 0 ? 0 : -1);
+    selectedColorIndices = new Set([...selectedColorIndices].filter((i) => i >= 0 && i < colors.length));
+    if (!linked && colors.length > 0) {
+      clampSelectionNonEmpty([0]);
+      lastPaletteAnchorIndex = Math.min(...[...selectedColorIndices]);
+    } else if (linked) {
+      selectedColorIndices = new Set();
     }
 
     syncPaletteSelect();
@@ -1239,27 +1352,50 @@ export function mountHueShift(container, options = {}) {
       swatch.type = 'button';
       swatch.className = 'hue-shift-swatch';
       swatch.style.backgroundColor = getCurrentHex(color);
+      const groupIndices = getMergeGroupIndicesForColorIndex(index);
       swatch.title = `${color.originalHex} → ${getCurrentHex(color)}`;
-      swatch.classList.toggle('active', activePaletteIndex === index && !linked);
-      swatch.addEventListener('click', () => {
+      swatch.classList.toggle('active', selectedColorIndices.has(index) && !linked);
+      swatch.classList.toggle('hue-shift-swatch--locked', lockedIndices.has(index));
+      swatch.addEventListener('click', (event) => {
         if (linked) return;
-        activePaletteIndex = index;
+        const group = groupIndices;
+        if (event.shiftKey) {
+          const a = Math.min(lastPaletteAnchorIndex, index);
+          const b = Math.max(lastPaletteAnchorIndex, index);
+          selectedColorIndices = new Set();
+          for (let i = a; i <= b; i += 1) selectedColorIndices.add(i);
+        } else if (event.metaKey || event.ctrlKey) {
+          const allIn = group.every((i) => selectedColorIndices.has(i));
+          if (allIn) {
+            group.forEach((i) => selectedColorIndices.delete(i));
+          } else {
+            group.forEach((i) => selectedColorIndices.add(i));
+          }
+          if (selectedColorIndices.size === 0) {
+            group.forEach((i) => selectedColorIndices.add(i));
+          }
+        } else {
+          selectedColorIndices = new Set(group);
+        }
+        lastPaletteAnchorIndex = index;
+        endInteractiveSessions();
         refreshSelectionUI();
       });
       swatch.addEventListener('dblclick', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        activePaletteIndex = index;
         const anchorRect = {
           left: event.clientX,
           right: event.clientX,
           top: event.clientY,
           bottom: event.clientY,
         };
+        const ix = groupIndices;
+        selectedColorIndices = new Set(ix);
         openColorPickerPopover(anchorRect, getCurrentHex(color), (nextHex) => {
-          applyColorToIndices([index], nextHex);
+          applyColorToIndices(ix, nextHex);
           refreshSelectionUI();
-        });
+        }, { indices: ix });
       });
       paletteBar.appendChild(swatch);
     });
@@ -1404,7 +1540,8 @@ export function mountHueShift(container, options = {}) {
 
     handleEntries.forEach(({ group, index }) => {
       const representativeColor = colors[group.representativeIndex];
-      const isSelected = selectedGroupIndex === index && !linked;
+      const isSelected = !linked && group.indices.some((i) => selectedColorIndices.has(i));
+      const isLockedGroup = group.indices.some((i) => lockedIndices.has(i));
 
       ctx.save();
       ctx.shadowColor = isSelected ? 'rgba(0, 0, 0, 0.28)' : 'rgba(0, 0, 0, 0.14)';
@@ -1416,8 +1553,13 @@ export function mountHueShift(container, options = {}) {
       ctx.fillStyle = getCurrentHex(representativeColor);
       ctx.fill();
       ctx.shadowColor = 'transparent';
-      ctx.strokeStyle = isSelected ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = isSelected ? 2 : 1;
+      if (isLockedGroup) {
+        ctx.strokeStyle = 'rgba(255, 200, 90, 0.95)';
+        ctx.lineWidth = isSelected ? 3 : 2;
+      } else {
+        ctx.strokeStyle = isSelected ? 'rgba(255,255,255,1)' : 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = isSelected ? 2 : 1;
+      }
       ctx.stroke();
       ctx.restore();
     });
@@ -1425,6 +1567,39 @@ export function mountHueShift(container, options = {}) {
 
   function findHandleAt(x, y) {
     return getDisplayHandleGroupAt(x, y)?.representativeIndex ?? -1;
+  }
+
+  function isPointInWheelRing(x, y) {
+    if (wheelSize <= 0 || wheelRadius <= 0) return false;
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const innerRadius = wheelRadius * INNER_RING;
+    const outerRadius = wheelRadius;
+    const pad = 2;
+    return distance <= outerRadius + pad && distance >= innerRadius - pad;
+  }
+
+  function updateOverlayCursor(x, y) {
+    if (!overlayCanvas || colorMode === 'oklch' || colors.length === 0 || wheelSize <= 0) {
+      if (overlayCanvas) overlayCanvas.style.cursor = '';
+      return;
+    }
+    if (getDisplayHandleGroupAt(x, y)) {
+      overlayCanvas.style.cursor = 'pointer';
+      return;
+    }
+    if (isPointInWheelRing(x, y) && linked) {
+      overlayCanvas.style.cursor = 'grab';
+      return;
+    }
+    overlayCanvas.style.cursor = 'default';
+  }
+
+  function onOverlayPointerLeave() {
+    if (dragSession) return;
+    lastOverlayPointerLocal = null;
+    overlayCanvas.style.cursor = '';
   }
 
   function onPointerDown(event) {
@@ -1436,8 +1611,40 @@ export function mountHueShift(container, options = {}) {
     if (!handleGroup) return;
     const handleIndex = handleGroup.representativeIndex;
 
+    if (!linked && (event.metaKey || event.ctrlKey)) {
+      const group = handleGroup.indices;
+      const allIn = group.every((i) => selectedColorIndices.has(i));
+      if (allIn) {
+        group.forEach((i) => selectedColorIndices.delete(i));
+      } else {
+        group.forEach((i) => selectedColorIndices.add(i));
+      }
+      if (selectedColorIndices.size === 0) {
+        group.forEach((i) => selectedColorIndices.add(i));
+      }
+      refreshSelectionUI();
+      event.preventDefault();
+      return;
+    }
+
+    if (!linked) {
+      const allInSelected = handleGroup.indices.every((i) => selectedColorIndices.has(i));
+      if (!allInSelected) {
+        selectedColorIndices = new Set(handleGroup.indices);
+      }
+    }
+
     const pointerModel = posToWheelModel(x, y);
-    const targetIndices = linked ? getControlTargetIndices(handleIndex) : [...handleGroup.indices];
+    let targetIndices;
+    if (linked) {
+      targetIndices = filterUnlocked(colors.map((_, index) => index));
+    } else {
+      targetIndices = filterUnlocked([...selectedColorIndices]);
+    }
+    if (targetIndices.length === 0) {
+      event.preventDefault();
+      return;
+    }
     dragSession = {
       pointerId: event.pointerId,
       handleIndex,
@@ -1447,17 +1654,25 @@ export function mountHueShift(container, options = {}) {
         targetIndices.map((index) => [index, { ...getModeModel(colors[index].currentRgb, colorMode) }])
       ),
     };
-    activePaletteIndex = linked ? activePaletteIndex : handleIndex;
+    overlayCanvas.style.cursor = 'grabbing';
     refreshSelectionUI();
     overlayCanvas.setPointerCapture(event.pointerId);
     event.preventDefault();
   }
 
   function onPointerMove(event) {
-    if (!dragSession || colorMode === 'oklch') return;
+    if (colorMode === 'oklch') return;
     const rect = overlayCanvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
+    lastOverlayPointerLocal = { x, y };
+
+    if (!dragSession) {
+      updateOverlayCursor(x, y);
+      return;
+    }
+
+    overlayCanvas.style.cursor = 'grabbing';
     const pointerModel = posToWheelModel(x, y);
     const hueDelta = angularDelta(dragSession.startPointerModel.h, pointerModel.h);
     const satDelta = pointerModel.s - dragSession.startPointerModel.s;
@@ -1487,7 +1702,8 @@ export function mountHueShift(container, options = {}) {
 
     event.preventDefault();
     event.stopPropagation();
-    activePaletteIndex = handleGroup.representativeIndex;
+    const ix = handleGroup.indices;
+    selectedColorIndices = new Set(ix);
     const anchorRect = {
       left: event.clientX,
       right: event.clientX,
@@ -1495,15 +1711,29 @@ export function mountHueShift(container, options = {}) {
       bottom: event.clientY,
     };
     openColorPickerPopover(anchorRect, getCurrentHex(colors[handleGroup.representativeIndex]), (nextHex) => {
-      applyColorToIndices(handleGroup.indices, nextHex);
+      applyColorToIndices(ix, nextHex);
       refreshSelectionUI();
-    });
+    }, { indices: ix });
   }
 
-  function onPointerUp() {
+  function onPointerUp(event) {
     if (!dragSession) return;
     dragSession = null;
     refreshSelectionUI();
+    if (!overlayCanvas) return;
+    if (event && typeof event.clientX === 'number') {
+      const rect = overlayCanvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const over = x >= 0 && x <= rect.width && y >= 0 && y <= rect.height;
+      if (over) {
+        lastOverlayPointerLocal = { x, y };
+        updateOverlayCursor(x, y);
+      } else {
+        overlayCanvas.style.cursor = '';
+        lastOverlayPointerLocal = null;
+      }
+    }
   }
 
   function endInteractiveSessions() {
@@ -1553,7 +1783,8 @@ export function mountHueShift(container, options = {}) {
       clearPluginCache();
       pendingColorRequest = null;
       colors = [];
-      activePaletteIndex = linked ? -1 : 0;
+      lockedIndices.clear();
+      selectedColorIndices = new Set();
       endInteractiveSessions();
       syncPaletteSelect();
       updatePaletteBar();
@@ -1566,6 +1797,7 @@ export function mountHueShift(container, options = {}) {
 
   overlayCanvas.addEventListener('pointerdown', onPointerDown);
   overlayCanvas.addEventListener('pointermove', onPointerMove);
+  overlayCanvas.addEventListener('pointerleave', onOverlayPointerLeave);
   overlayCanvas.addEventListener('pointerup', onPointerUp);
   overlayCanvas.addEventListener('pointercancel', onPointerUp);
   overlayCanvas.addEventListener('dblclick', onOverlayDoubleClick);
@@ -1612,6 +1844,7 @@ export function mountHueShift(container, options = {}) {
     resizeObserver.disconnect();
     overlayCanvas.removeEventListener('pointerdown', onPointerDown);
     overlayCanvas.removeEventListener('pointermove', onPointerMove);
+    overlayCanvas.removeEventListener('pointerleave', onOverlayPointerLeave);
     overlayCanvas.removeEventListener('pointerup', onPointerUp);
     overlayCanvas.removeEventListener('pointercancel', onPointerUp);
     overlayCanvas.removeEventListener('dblclick', onOverlayDoubleClick);
