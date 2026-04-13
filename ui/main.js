@@ -16561,7 +16561,7 @@ Generate ONLY the reply text, nothing else.`;
       if (values.detachFontStyle === true) {
         let fields = Array.isArray(values.fontDetachFields) ? values.fontDetachFields : [];
         if (fields.length === 0 && values.fontDetachFields === undefined) {
-          fields = ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'];
+          fields = ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing'];
         }
         if (fields.length === 0) {
           return { valid: false, message: tu('actions.quickDetach.validation.noFontFields') };
@@ -18343,7 +18343,13 @@ Generate ONLY the reply text, nothing else.`;
         }
         const disabledAttr = (field.disabled || forceDisabled) ? ' disabled' : '';
 
-        if (field.type === 'checkbox') {
+        if (field.type === 'divider') {
+          fieldHtml += `
+            <div class="prompt-field${wrapperClass} prompt-field-divider" role="separator" aria-hidden="true"${conditionalAttrs}>
+              <hr class="prompt-field-divider-line" />
+            </div>
+          `;
+        } else if (field.type === 'checkbox') {
           let isChecked = (preservedValues && preservedValues[field.key] !== undefined)
             ? !!preservedValues[field.key]
             : !!field.default;
@@ -21043,6 +21049,17 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           if (!fieldEl) return;
           fieldEl.style.display = randomizationEnabled && selectedProperties.has(meta.propertyKey) ? '' : 'none';
         });
+      }
+
+      if (currentPromptAction?.directAction === 'quickDetach') {
+        const onlyDirect = getPromptVisibilityValue('onlyDirectSelection') === 'true';
+        const detachInstField = promptDrawerFields.querySelector('[data-field-key="detachInstance"]')?.closest('.prompt-field');
+        const hintEl = detachInstField?.querySelector('.prompt-field-hint.checkbox-hint');
+        if (hintEl) {
+          hintEl.textContent = onlyDirect
+            ? tu('actions.quickDetach.hint.instanceDirect')
+            : tu('actions.quickDetach.hint.instanceRecursive');
+        }
       }
 
       // 2b. Handle Button component set field visibility
@@ -26019,10 +26036,13 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const fontFieldsRaw = Array.isArray(values.fontDetachFields) ? values.fontDetachFields : [];
       const fontDetachFields = fontFieldsRaw
         .map((f) => String(f))
-        .filter((f) => ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'].includes(f));
+        .filter((f) => ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing'].includes(f));
       const payload = {
         detachFontStyle: values.detachFontStyle === true,
-        fontDetachFields: fontDetachFields.length > 0 ? fontDetachFields : ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'],
+        fontDetachFields:
+          fontDetachFields.length > 0
+            ? fontDetachFields
+            : ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing'],
         detachColor: values.detachColor === true,
         detachLayout: values.detachLayout === true,
         detachCornerRadius: values.detachCornerRadius === true,

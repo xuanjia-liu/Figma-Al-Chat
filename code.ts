@@ -6367,7 +6367,12 @@ function isAllowedOllamaProxyUrl(rawUrl: string): boolean {
   return Number(m[2]) === 11434;
 }
 
-type QuickDetachFontFieldKey = 'fontFamily' | 'fontWeight' | 'fontSize' | 'lineHeight';
+type QuickDetachFontFieldKey =
+  | 'fontFamily'
+  | 'fontWeight'
+  | 'fontSize'
+  | 'lineHeight'
+  | 'letterSpacing';
 
 const QUICK_DETACH_LAYOUT_FIELDS: VariableBindableNodeField[] = [
   'width',
@@ -6398,25 +6403,93 @@ function collectQuickDetachTargets(roots: readonly SceneNode[], onlyDirect: bool
   const seen = new Set<string>();
   if (onlyDirect) {
     for (const n of roots) {
-      if (!seen.has(n.id)) {
-        seen.add(n.id);
-        out.push(n);
+      try {
+        if (n.removed) continue;
+        if (!seen.has(n.id)) {
+          seen.add(n.id);
+          out.push(n);
+        }
+      } catch (e) {
+        console.warn('collectQuickDetachTargets direct root skipped', (n as SceneNode)?.id, e);
       }
     }
     return out;
   }
   const walk = (n: SceneNode) => {
-    if (seen.has(n.id)) return;
-    seen.add(n.id);
-    out.push(n);
-    if ('children' in n) {
-      for (const c of (n as ChildrenMixin).children) {
-        walk(c as SceneNode);
+    try {
+      if (n.removed) return;
+      if (seen.has(n.id)) return;
+      seen.add(n.id);
+      out.push(n);
+      if (!('children' in n)) return;
+      let children: readonly SceneNode[] = [];
+      try {
+        children = [...(n as ChildrenMixin).children] as readonly SceneNode[];
+      } catch (e) {
+        console.warn('collectQuickDetachTargets get children failed', n.id, e);
+        return;
       }
+      for (const c of children) {
+        try {
+          walk(c as SceneNode);
+        } catch (e) {
+          console.warn('collectQuickDetachTargets walk child failed', (c as SceneNode)?.id, e);
+        }
+      }
+    } catch (e) {
+      console.warn('collectQuickDetachTargets walk failed', (n as SceneNode)?.id, e);
     }
   };
   for (const r of roots) {
-    walk(r);
+    try {
+      if (r.removed) continue;
+      walk(r);
+    } catch (e) {
+      console.warn('collectQuickDetachTargets root failed', r?.id, e);
+    }
+  }
+  return out;
+}
+
+/** Depth from page (for sorting: detach deeper instances first across overlapping selections). */
+function sceneNodeDepth(node: SceneNode): number {
+  let d = 0;
+  let p: BaseNode | null = node.parent;
+  while (p && p.type !== 'PAGE' && p.type !== 'DOCUMENT') {
+    d++;
+    p = p.parent;
+  }
+  return d;
+}
+
+/**
+ * Post-order: children before parent, so nested instances are listed before ancestors.
+ * Copies the children array before recursing so iteration stays stable if the tree changes elsewhere.
+ */
+function collectInstancesPostOrder(root: SceneNode): InstanceNode[] {
+  const out: InstanceNode[] = [];
+  const visit = (n: SceneNode) => {
+    try {
+      if (n.removed) return;
+      if ('children' in n) {
+        const children = [...(n as ChildrenMixin).children];
+        for (const c of children) {
+          visit(c as SceneNode);
+        }
+      }
+      if (n.type === 'INSTANCE') {
+        out.push(n as InstanceNode);
+      }
+    } catch (e) {
+      console.warn('collectInstancesPostOrder visit failed', (n as SceneNode)?.id, e);
+    }
+  };
+  try {
+    if (!root.removed) {
+      visit(root);
+    }
+  } catch (e) {
+    console.warn('collectInstancesPostOrder root failed', root?.id, e);
   }
   return out;
 }
@@ -6625,31 +6698,56 @@ async function quickDetachFontOnNode(node: SceneNode, fields: QuickDetachFontFie
     /* ignore */
   }
 
-  const needsFontName = fields.some((f) => f === 'fontFamily' || f === 'fontWeight');
-  const tbv =
-    'boundVariables' in target && (target as any).boundVariables && typeof (target as any).boundVariables === 'object'
-      ? ((target as any).boundVariables as Record<string, unknown>)
-      : null;
-  const unbindIfPresent = (field: string) => {
-    if (tbv && !tbv[field]) return;
+  /**
+   * Typography variables use VariableBindableTextField: fontFamily, fontStyle, fontWeight, fontSize,
+   * lineHeight, letterSpacing (not legacy fontName).
+   * Range-bound typography vars require setRangeBoundVariable on TextNode for the full span.
+   */
+  const tryUnbindTypographyField = (apiField: string) => {
     try {
-      if ('setBoundVariable' in (target as any)) {
-        (target as any).setBoundVariable(field, null);
+      if (!('setBoundVariable' in (target as any))) return;
+      const before = JSON.stringify((target as any).boundVariables || {});
+      (target as any).setBoundVariable(apiField, null);
+      let after = JSON.stringify((target as any).boundVariables || {});
+      if (before !== after) {
         touched = true;
       }
+      if ((target as any).type === 'TEXT' && 'setRangeBoundVariable' in (target as TextNode)) {
+        const tn = target as TextNode;
+        const len = tn.characters.length;
+        if (len > 0) {
+          const bRange = after;
+          try {
+            tn.setRangeBoundVariable(0, len, apiField as VariableBindableTextField, null);
+          } catch (e) {
+            /* ignore */
+          }
+          after = JSON.stringify((target as any).boundVariables || {});
+          if (bRange !== after) {
+            touched = true;
+          }
+        }
+      }
     } catch (e) {
-      /* ignore */
+      /* not bound or unsupported field */
     }
   };
 
-  if (needsFontName) {
-    unbindIfPresent('fontName');
+  if (fields.includes('fontFamily')) {
+    tryUnbindTypographyField('fontFamily');
+  }
+  if (fields.includes('fontWeight')) {
+    tryUnbindTypographyField('fontWeight');
+    tryUnbindTypographyField('fontStyle');
   }
   if (fields.includes('fontSize')) {
-    unbindIfPresent('fontSize');
+    tryUnbindTypographyField('fontSize');
   }
   if (fields.includes('lineHeight')) {
-    unbindIfPresent('lineHeight');
+    tryUnbindTypographyField('lineHeight');
+  }
+  if (fields.includes('letterSpacing')) {
+    tryUnbindTypographyField('letterSpacing');
   }
 
   return touched;
@@ -6666,7 +6764,9 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
   const fontDetachFields = (Array.isArray(msg.fontDetachFields) ? msg.fontDetachFields : [])
     .map((f: string) => String(f))
     .filter((f: string): f is QuickDetachFontFieldKey =>
-      (['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'] as const).includes(f as QuickDetachFontFieldKey)
+      (['fontFamily', 'fontWeight', 'fontSize', 'lineHeight', 'letterSpacing'] as const).includes(
+        f as QuickDetachFontFieldKey
+      )
     );
   const detachColor = msg.detachColor === true;
   const detachLayout = msg.detachLayout === true;
@@ -6680,10 +6780,36 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
   let detachedInstanceCount = 0;
 
   if (detachInstance) {
-    for (const n of directNodes) {
-      if (n.type === 'INSTANCE') {
+    if (onlyDirectSelection) {
+      const directInstances = directNodes.filter((n): n is InstanceNode => n.type === 'INSTANCE');
+      directInstances.sort((a, b) => sceneNodeDepth(b) - sceneNodeDepth(a));
+      for (const inst of directInstances) {
+        if (inst.removed) continue;
         try {
-          const inst = n as InstanceNode;
+          const oldId = inst.id;
+          const detached = inst.detachInstance();
+          detachedInstanceCount++;
+          replaced.set(oldId, detached);
+        } catch (e) {
+          console.warn('quickDetach: detachInstance failed', e);
+        }
+      }
+    } else {
+      /** Collect from every selected root before any detach, so later roots are not removed mid-walk. */
+      const merged: InstanceNode[] = [];
+      const seenIds = new Set<string>();
+      for (const root of directNodes) {
+        if (root.removed) continue;
+        for (const inst of collectInstancesPostOrder(root)) {
+          if (seenIds.has(inst.id)) continue;
+          seenIds.add(inst.id);
+          merged.push(inst);
+        }
+      }
+      merged.sort((a, b) => sceneNodeDepth(b) - sceneNodeDepth(a));
+      for (const inst of merged) {
+        if (inst.removed) continue;
+        try {
           const oldId = inst.id;
           const detached = inst.detachInstance();
           detachedInstanceCount++;
@@ -6695,10 +6821,21 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
     }
   }
 
-  const roots: SceneNode[] = directNodes.map((n) => {
+  /** Re-resolve by id after instance detach so we do not walk with stale handles. */
+  const roots: SceneNode[] = [];
+  for (const n of directNodes) {
     const rep = replaced.get(n.id);
-    return rep || n;
-  });
+    const node = rep || n;
+    if (node.removed) continue;
+    try {
+      const fresh = await figma.getNodeByIdAsync(node.id);
+      if (fresh && fresh.type !== 'PAGE' && fresh.type !== 'DOCUMENT') {
+        roots.push(fresh as SceneNode);
+      }
+    } catch (e) {
+      console.warn('quickDetach: getNodeByIdAsync root failed', node.id, e);
+    }
+  }
 
   const targets = collectQuickDetachTargets(roots, onlyDirectSelection);
 

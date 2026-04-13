@@ -12937,6 +12937,21 @@
       gap: 2px;
     }
 
+    .prompt-field-divider {
+      display: block;
+      padding: 4px 0 10px;
+      margin: 0;
+      pointer-events: none;
+    }
+
+    .prompt-field-divider-line {
+      display: block;
+      width: 100%;
+      border: none;
+      border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+      margin: 0;
+    }
+
     .prompt-checkbox-row {
       display: flex;
       align-items: center;

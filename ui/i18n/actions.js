@@ -56,6 +56,9 @@ const uiTranslations = {
     'actions.quickDetach.toastDetached': 'Detached {count} instance(s)',
     'actions.quickDetach.toastSkipped': 'Skipped {count} unsupported',
     'actions.quickDetach.error.generic': 'Quick detach failed',
+    'actions.quickDetach.hint.instanceDirect': 'Detaches only component instances you selected directly on the canvas.',
+    'actions.quickDetach.hint.instanceRecursive':
+      'Detaches every component instance inside the current selection, including nested instances.',
     'actions.prompt.errorOpening': 'Error opening action details: {message}',
     'actions.prompt.clearTitle': 'Clear text',
     'actions.prompt.resetToast': '{name} reset to defaults',
@@ -712,6 +715,9 @@ const uiTranslations = {
     'actions.quickDetach.toastDetached': 'インスタンスを {count} 件デタッチ',
     'actions.quickDetach.toastSkipped': '非対応を {count} 件スキップ',
     'actions.quickDetach.error.generic': 'クイックデタッチに失敗しました',
+    'actions.quickDetach.hint.instanceDirect': 'キャンバス上で直接選択したコンポーネントインスタンスのみデタッチします。',
+    'actions.quickDetach.hint.instanceRecursive':
+      '現在の選択範囲内のすべてのコンポーネントインスタンス（ネスト含む）をデタッチします。',
     'actions.prompt.errorOpening': 'アクション詳細を開けませんでした: {message}',
     'actions.prompt.clearTitle': 'テキストをクリア',
     'actions.prompt.resetToast': '{name} を初期値に戻しました',
@@ -1368,6 +1374,8 @@ const uiTranslations = {
     'actions.quickDetach.toastDetached': '已分离 {count} 个实例',
     'actions.quickDetach.toastSkipped': '已跳过 {count} 个不支持的项',
     'actions.quickDetach.error.generic': '快速分离失败',
+    'actions.quickDetach.hint.instanceDirect': '仅分离你在画布上直接选中的组件实例。',
+    'actions.quickDetach.hint.instanceRecursive': '分离当前选区内的所有组件实例，包含嵌套实例。',
     'actions.prompt.errorOpening': '打开操作详情失败：{message}',
     'actions.prompt.clearTitle': '清空文本',
     'actions.prompt.resetToast': '已将 {name} 恢复为默认值',
@@ -2030,8 +2038,8 @@ const exactTranslations = {
     'Remove all effects': 'すべての効果を削除',
     'Quick detach': 'クイックデタッチ',
     'Detach style links and variable bindings locally': 'スタイルリンクと変数バインドをローカルで解除',
-    'Runs fully on-device (No AI). Detach text/color/layout/corner bindings and optionally selected instances. Recursive mode includes descendants; instance detach only affects directly selected instances.':
-      '完全に端末内（No AI）で実行。テキスト/色/レイアウト/角のバインドと、選択したインスタンスのデタッチが可能です。再帰モードは子孫を含み、インスタンスのデタッチは直接選択のみです。',
+    'Runs fully on-device (No AI). Detach text/color/layout/corner bindings and optionally instances. When “Only direct selection” is off, style and instance detaches include the full subtree of the current selection.':
+      '完全に端末内（No AI）で実行。テキスト/色/レイアウト/角のバインドとインスタンスのデタッチが可能です。「直接選択のみ」がオフのときは、スタイル解除とインスタンスのデタッチが選択範囲のサブツリー全体に含まれます。',
     'Font properties to unbind': 'アンバインドするフォント項目',
     'Font family': 'フォントファミリー',
     'Font weight': 'フォントウェイト',
@@ -2039,8 +2047,11 @@ const exactTranslations = {
     'Line height': '行の高さ',
     'Variable binding for family': 'ファミリーの変数バインド',
     'Variable binding for weight / style': 'ウェイト/スタイルの変数バインド',
+    'Variable binding for weight / style name': 'ウェイト/スタイル名の変数バインド',
     'Size variable binding': 'サイズの変数バインド',
     'Line height variable binding': '行間の変数バインド',
+    'Letter spacing': 'レタースペーシング',
+    'Letter spacing variable binding': 'レタースペーシングの変数バインド',
     'Clears linked text styles and unbinds typography variables while keeping the look.':
       'リンクされたテキストスタイルを外し、見た目は保ったままタイポグラフィ変数を解除します。',
     'Removes paint/effect style links and color variable aliases; keeps visible colors.':
@@ -2050,8 +2061,8 @@ const exactTranslations = {
     'Unbinds corner radius variables; numeric radii stay the same.':
       '角丸の変数バインドを外し、数値の角丸はそのままにします。',
     'Detaches only directly selected component instances.': '直接選択したコンポーネントインスタンスのみデタッチします。',
-    'When off, non-instance detach applies to the selection and all descendants.':
-      'オフのとき、インスタンス以外の解除は選択範囲とすべての子孫に適用されます。',
+    'When off, style detaches and instance detaches apply to the selection and all descendants.':
+      'オフのとき、スタイルの解除とインスタンスのデタッチは選択範囲とすべての子孫に適用されます。',
     'Set image fill': '画像塗りを設定',
     'Fill with stock photos': 'ストック写真で塗りつぶす',
     'Styles and variables': 'スタイルと変数',
@@ -2530,8 +2541,8 @@ const exactTranslations = {
     'Remove all effects': '移除全部效果',
     'Quick detach': '快速分离',
     'Detach style links and variable bindings locally': '在本地解除样式链接与变量绑定',
-    'Runs fully on-device (No AI). Detach text/color/layout/corner bindings and optionally selected instances. Recursive mode includes descendants; instance detach only affects directly selected instances.':
-      '完全在设备本地运行（无需 AI）。可解除文本/颜色/布局/圆角绑定，并可选择分离实例。递归模式包含子级；实例分离仅作用于直接选中的实例。',
+    'Runs fully on-device (No AI). Detach text/color/layout/corner bindings and optionally instances. When “Only direct selection” is off, style and instance detaches include the full subtree of the current selection.':
+      '完全在设备本地运行（无需 AI）。可解除文本/颜色/布局/圆角绑定并分离实例。关闭「仅直接选择」时，样式解除与实例分离会应用到当前选区的完整子树。',
     'Font properties to unbind': '要解除的字体属性',
     'Font family': '字体家族',
     'Font weight': '字重',
@@ -2541,6 +2552,9 @@ const exactTranslations = {
     'Variable binding for weight / style': '字重/样式变量绑定',
     'Size variable binding': '字号变量绑定',
     'Line height variable binding': '行高变量绑定',
+    'Letter spacing': '字间距',
+    'Letter spacing variable binding': '字间距变量绑定',
+    'Variable binding for weight / style name': '字重/样式名称变量绑定',
     'Clears linked text styles and unbinds typography variables while keeping the look.':
       '清除链接的文本样式并解除排版变量，但保留视觉效果。',
     'Removes paint/effect style links and color variable aliases; keeps visible colors.':
@@ -2550,8 +2564,8 @@ const exactTranslations = {
     'Unbinds corner radius variables; numeric radii stay the same.':
       '解除圆角变量绑定；数值圆角保持不变。',
     'Detaches only directly selected component instances.': '仅分离直接选中的组件实例。',
-    'When off, non-instance detach applies to the selection and all descendants.':
-      '关闭时，非实例相关的解除会应用到选区及其所有子级。',
+    'When off, style detaches and instance detaches apply to the selection and all descendants.':
+      '关闭时，样式解除与实例分离会应用到选区及其所有子级。',
     'Set image fill': '设置图像填充',
     'Fill with stock photos': '用图库照片填充',
     'Styles and variables': '样式与变量',
