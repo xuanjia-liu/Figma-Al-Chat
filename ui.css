@@ -691,15 +691,15 @@
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      background: radial-gradient(circle at center, rgba(255,255,255,0.04), transparent 68%);
+      background: var(--bg-tertiary);
       border-radius: var(--radius-lg);
       border: 1px solid var(--border);
-      transition: border-color 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease;
+      transition: all 0.15s ease;
     }
 
     .hue-shift-wheel-wrap.single-selected {
       border: 1px solid var(--border-intense);
-      background: radial-gradient(circle at center, rgba(255,255,255,0.1), transparent 68%);
+      background: var(--bg-tertiary);
       box-shadow: var(--shadow-md);
     }
 
@@ -742,16 +742,30 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
       background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
       backdrop-filter: blur(1px);
     }
 
-    .hue-shift-palette-mask.hidden {
-      display: none;
+    .hue-shift-palette-bar.inactive .hue-shift-palette-mask:not(.hidden) {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
     }
 
-    .hue-shift-palette-mask-btn {
+    .hue-shift-palette-bar.inactive:hover .hue-shift-palette-mask:not(.hidden),
+    .hue-shift-palette-bar.inactive:focus-within .hue-shift-palette-mask:not(.hidden) {
+      opacity: 1;
       pointer-events: auto;
+    }
+
+    .hue-shift-palette-bar.inactive:not(:hover):not(:focus-within) .hue-shift-palette-mask:not(.hidden) * {
+      pointer-events: none !important;
+    }
+
+    .hue-shift-palette-mask.hidden {
+      display: none;
     }
 
     .hue-shift-swatch {
@@ -763,7 +777,7 @@
     }
 
     .hue-shift-swatch.active{
-      border: 2px solid rgba(255, 255, 255, 0.95);
+      border: 2px solid var(--text-on-accent);
       border-radius: var(--radius-sm);
     }
 

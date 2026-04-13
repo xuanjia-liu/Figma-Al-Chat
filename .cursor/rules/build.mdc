@@ -1,0 +1,13 @@
+---
+description: Run npm build after UI or plugin TypeScript changes
+alwaysApply: true
+---
+
+# Build output
+
+This project bundles split UI via `scripts/build-ui.mjs` into `ui.html` and compiles the plugin host with `tsc` into `code.js`.
+
+- From the repository root, run **`npm run build`** after changing anything that affects those outputs, including:
+  - `ui/**/*.js`, `ui.css`, or other inputs used by the UI build
+  - `code.ts` or any file covered by `tsconfig.json`
+- When you finish a task that touches those areas, run the build yourself; do not only tell the user to run it unless the environment cannot execute npm.

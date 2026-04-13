@@ -1471,6 +1471,16 @@ export function mountHueShift(container, options = {}) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.putImageData(image, 0, 0);
+
+    const wrapStyle = wheelWrap ? getComputedStyle(wheelWrap) : null;
+    const ringBorder = (wrapStyle && wrapStyle.borderTopColor) || 'rgba(0, 0, 0, 0.28)';
+    const cDev = (wheelSize * dpr) / 2;
+    const rDev = wheelRadius * dpr;
+    ctx.beginPath();
+    ctx.arc(cDev, cDev, rDev, 0, Math.PI * 2);
+    ctx.strokeStyle = ringBorder;
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -1558,17 +1568,6 @@ export function mountHueShift(container, options = {}) {
     return getDisplayHandleGroupAt(x, y)?.representativeIndex ?? -1;
   }
 
-  function isPointInWheelRing(x, y) {
-    if (wheelSize <= 0 || wheelRadius <= 0) return false;
-    const dx = x - centerX;
-    const dy = y - centerY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const innerRadius = wheelRadius * INNER_RING;
-    const outerRadius = wheelRadius;
-    const pad = 2;
-    return distance <= outerRadius + pad && distance >= innerRadius - pad;
-  }
-
   function updateOverlayCursor(x, y) {
     if (!overlayCanvas || colorMode === 'oklch' || colors.length === 0 || wheelSize <= 0) {
       if (overlayCanvas) overlayCanvas.style.cursor = '';
@@ -1578,7 +1577,7 @@ export function mountHueShift(container, options = {}) {
       overlayCanvas.style.cursor = 'pointer';
       return;
     }
-    if (isPointInWheelRing(x, y) && linked) {
+    if (linked) {
       overlayCanvas.style.cursor = 'grab';
       return;
     }
@@ -1597,32 +1596,31 @@ export function mountHueShift(container, options = {}) {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     const handleGroup = getDisplayHandleGroupAt(x, y);
-    if (!handleGroup) return;
-    const handleIndex = handleGroup.representativeIndex;
-
-    if (!linked && (event.metaKey || event.ctrlKey)) {
-      const group = handleGroup.indices;
-      const allIn = group.every((i) => selectedColorIndices.has(i));
-      if (allIn) {
-        group.forEach((i) => selectedColorIndices.delete(i));
-      } else {
-        group.forEach((i) => selectedColorIndices.add(i));
-      }
-      if (selectedColorIndices.size === 0) {
-        group.forEach((i) => selectedColorIndices.add(i));
-      }
-      refreshSelectionUI();
-      event.preventDefault();
-      return;
-    }
 
     if (!linked) {
+      if (!handleGroup) return;
+      if (event.metaKey || event.ctrlKey) {
+        const group = handleGroup.indices;
+        const allIn = group.every((i) => selectedColorIndices.has(i));
+        if (allIn) {
+          group.forEach((i) => selectedColorIndices.delete(i));
+        } else {
+          group.forEach((i) => selectedColorIndices.add(i));
+        }
+        if (selectedColorIndices.size === 0) {
+          group.forEach((i) => selectedColorIndices.add(i));
+        }
+        refreshSelectionUI();
+        event.preventDefault();
+        return;
+      }
       const allInSelected = handleGroup.indices.every((i) => selectedColorIndices.has(i));
       if (!allInSelected) {
         selectedColorIndices = new Set(handleGroup.indices);
       }
     }
 
+    const handleIndex = handleGroup ? handleGroup.representativeIndex : -1;
     const pointerModel = posToWheelModel(x, y);
     let targetIndices;
     if (linked) {
