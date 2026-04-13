@@ -6,9 +6,11 @@ import {
   smartTextTasks,
   userResearchTasks,
 } from './content.js';
+import { documentTasks } from './documents.js';
 import { quickCreateImageTasks, stylingImageTasks } from './images.js';
 import { stickiesTasks } from './stickies.js';
 import { createQuickCreateUiTasks, uiLayoutTasks } from './ui-layout.js';
+import { designSystemTasks } from './design-system.js';
 import { quickCreateStyleTasks, stylingImageInsertIndex, stylingTasks } from './styles.js';
 
 export function createAgentTasks(deps = {}) {
@@ -44,6 +46,7 @@ export function createAgentTasks(deps = {}) {
       ...stylingImageTasks,
       ...stylingTasks.slice(stylingImageInsertIndex),
     ],
+    'Design System': designSystemTasks,
     'Smart Text': smartTextTasks,
     'Layer Naming': layerNamingTasks,
     'Accessibility & Quality': accessibilityQualityTasks,
@@ -72,6 +75,7 @@ export function createAgentTasks(deps = {}) {
       ...figJamTasks,
     ],
     'User Research': userResearchTasks,
+    'Documents': documentTasks,
     'Comments': commentsTasks,
   };
 }

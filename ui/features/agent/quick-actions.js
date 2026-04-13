@@ -1,6 +1,7 @@
 export const categoryIcons = {
   'UI & Layout': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 3H3v18h18V3zM3 9h18M9 21V9"/></svg>',
   'Styling & Effects': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',
+  'Design System': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z"/><path d="m18.5 8.5 3.5 3.5-3.5 3.5-3.5-3.5 3.5-3.5Z"/><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z"/><path d="m12 15 3.5 3.5-3.5 3.5-3.5-3.5 3.5-3.5Z"/></svg>',
   'Smart Text': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>',
   'Layer Naming': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.41 0l6.59-6.59a1 1 0 0 0 0-1.41L12 2zM7 7h.01"/></svg>',
   'Quick Create': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>',
@@ -8,6 +9,7 @@ export const categoryIcons = {
   'FigJam': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><circle cx="17" cy="17" r="4"/><path d="M17 15v4M15 17h4"/></svg>',
   'Accessibility & Quality': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"/><path stroke="currentColor" stroke-width="2" d="M13.895 7.263a1.895 1.895 0 1 1-3.79 0 1.895 1.895 0 0 1 3.79 0Zm3.789 2.842s-3.35 1.421-5.684 1.421c-2.333 0-5.684-1.42-5.684-1.42M12 12v1.376m0 0c0 .545.156 1.079.451 1.537l2.391 3.719M12 13.376c0 .545-.156 1.079-.45 1.537l-2.392 3.719"/></svg>',
   'User Research': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21l-6-6"/><circle cx="15.5" cy="14.5" r="3.5"/></svg>',
+  'Documents': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h8M8 17h8M8 9h2"/></svg>',
   'Comments': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
 };
 
@@ -32,12 +34,15 @@ export const actionIcons = {
   'Simulate oklch gradient': '<svg viewBox="0 0 24 24" fill="none"><rect width="19" height="15" x="2.5" y="4.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" rx="2"/><path fill="currentColor" d="M6 4a1 1 0 0 1 1 1h2v2H7v2h2v2H7v2h2v2H7v2h2v2H7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm7 15h-2v-2h2zm-2-2H9v-2h2zm4 0h-2v-2h2zm-2-2h-2v-2h2zm-2-2H9v-2h2zm4 0h-2v-2h2zm-2-2h-2V9h2zm-2-2H9V7h2zm4 0h-2V7h2zm-2-2h-2V5h2z"/></svg>',
   'Set image fill': '<svg viewBox="0 0 24 24" fill="none"><rect width="19" height="15" x="2.5" y="4.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" rx="2"/><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 8H6v2m10-2h2v2M8 16H6v-2m10 2h2v-2"/></svg>',
   'Fill with stock photos': '<svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5m10.5-11.25h.008v.008h-.008zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0"/></svg>',
+  'text link/color': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h15.998M4 18h9.998M4 12h4m6 0h6M8 10h6v4H8v-4Z"/></svg>',
+
+  // Design System
   'Styles and variables': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h12M8 12h12M8 18h5M5 5v2m0 4v2m0 4v2"/></svg>',
   'List All Components': '<svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-width="2" d="m5.212 15.111-2.687-2.687a.6.6 0 0 1 0-.848l2.687-2.687a.6.6 0 0 1 .848 0l2.687 2.687a.6.6 0 0 1 0 .848L6.06 15.111a.6.6 0 0 1-.848 0Zm6.364 6.364L8.89 18.788a.6.6 0 0 1 0-.849l2.687-2.687a.6.6 0 0 1 .848 0l2.687 2.687a.6.6 0 0 1 0 .849l-2.687 2.687a.6.6 0 0 1-.848 0Zm0-12.727L8.89 6.06a.6.6 0 0 1 0-.848l2.687-2.687a.6.6 0 0 1 .848 0l2.687 2.687a.6.6 0 0 1 0 .848l-2.687 2.688a.6.6 0 0 1-.848 0Zm6.364 6.363-2.687-2.687a.6.6 0 0 1 0-.848l2.687-2.687a.6.6 0 0 1 .848 0l2.687 2.687a.6.6 0 0 1 0 .848l-2.687 2.687a.6.6 0 0 1-.848 0Z"/></svg>',
   'Font preview': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M13 18 8 6 3 18m8-4H5m16 4v-3m0 0v-3m0 3a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>',
   'Map raw values to tokens': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM20.707 4.707a1 1 0 1 1-1.414-1.414 1 1 0 0 1 1.414 1.414ZM20.707 12.707a1 1 0 1 1-1.414-1.414 1 1 0 0 1 1.414 1.414ZM20.707 20.707a1 1 0 1 1-1.414-1.414 1 1 0 0 1 1.414 1.414Z"/><path stroke-linecap="round" d="M16 4h-6v16h6m-9-8h9"/></svg>',
-  'text link/color': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h15.998M4 18h9.998M4 12h4m6 0h6M8 10h6v4H8v-4Z"/></svg>',
-  'Remove unused properties': '<svg viewBox="0 0 24 24" fill="none"><rect width="18" height="10" x="3" y="11" fill="none" stroke="currentColor" stroke-width="2" rx="2"/><path fill="currentColor" d="M5.583 6.202a1 1 0 1 0 1.834.8l-.917-.4zm2.174-1.445.707.707A5 5 0 0 1 12 4V2a7 7 0 0 0-4.95 2.05zM12 3v1a5 5 0 0 1 3.536 1.464l.707-.707.707-.707A7 7 0 0 0 12 2zm4.243 1.757-.707.707A5 5 0 0 1 17 9h2a7 7 0 0 0-2.05-4.95zM18 9h-1v2h2V9zM6.5 6.602l.917.4a5 5 0 0 1 1.047-1.538l-.707-.707-.707-.707a7 7 0 0 0-1.467 2.152z"/></svg>',
+  'Remove unused properties': '<svg viewBox="0 0 24 24" fill="none"><rect width="18" height="10" x="3" y="11" fill="none" stroke="currentColor" stroke-width="2" rx="2"/><path fill="currentColor" d="M5.583 6.202a1 1 0 1 0 1.834.8l-.917-.4zm2.174-1.445.707.707A5 5 0 0 1 12 4V2a7 7 0 0 0-4.95 2.05zM12 3v1a5 5 0 0 1 3.536 1.464l-.707-.707.707-.707A7 7 0 0 0 12 2zm4.243 1.757-.707.707A5 5 0 0 1 17 9h2a7 7 0 0 0-2.05-4.95zM18 9h-1v2h2V9zM6.5 6.602l.917.4a5 5 0 0 1 1.047-1.538l-.707-.707-.707-.707a7 7 0 0 0-1.467 2.152z"/></svg>',
+  'Extract Design System': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z" /><path d="m18.5 8.5 3.5 3.5-3.5 3.5-3.5-3.5 3.5-3.5Z" /><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z" /><path d="m12 15 3.5 3.5-3.5 3.5-3.5-3.5 3.5-3.5Z" /></svg>',
 
   // Smart Text
   'Translate text': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2v3M22 22l-5-10-5 10M14 18h6"/></svg>',
@@ -98,9 +103,6 @@ export const actionIcons = {
   'Touch Target Validator': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 21v-9.5a5.5 5.5 0 1 1 11 0V21"/><path d="M3 13v-1a9 9 0 1 1 18 0v1"/><path d="M14.5 11.5a2.5 2.5 0 0 0-5 0v1.25c0 .69.56 1.25 1.25 1.25h2.5c.69 0 1.25-.56 1.25-1.25V11.5Z"/></svg>',
   'Spacing Consistency Checker': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/><path d="M4 6h10M4 18h6"/></svg>',
   'Image Optimization Auditor': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/><path d="M15 13l-2-2 2-2"/></svg>',
-
-  // Design System
-  'Extract Design System': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5.5 8.5 9 12l-3.5 3.5L2 12l3.5-3.5Z" /><path d="m18.5 8.5 3.5 3.5-3.5 3.5-3.5-3.5 3.5-3.5Z" /><path d="m12 2 3.5 3.5L12 9 8.5 5.5 12 2Z" /><path d="m12 15 3.5 3.5-3.5 3.5-3.5-3.5 3.5-3.5Z" /></svg>',
 
   // User Research
   'Create persona': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',

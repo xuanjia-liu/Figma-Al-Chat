@@ -129,12 +129,14 @@ const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set([
 const VALID_CUSTOM_QUICK_ACTION_CATEGORIES = new Set([
   'UI & Layout',
   'Styling & Effects',
+  'Design System',
   'Smart Text',
   'Layer Naming',
   'Accessibility & Quality',
   'Quick Create',
   'FigJam',
   'User Research',
+  'Documents',
   'Comments'
 ]);
 
