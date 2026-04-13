@@ -7262,7 +7262,7 @@
     .node-action-btn--custom:not([aria-disabled="true"]):hover,
     .node-action-btn--custom:not([aria-disabled="true"]):focus-within {
       max-width: 220px;
-      padding-right: 36px;
+      padding-right: 16px;
     }
 
     .node-action-custom-actions {
@@ -9978,8 +9978,9 @@
     .audit-modal-content,
     .add-option-modal-content,
     .custom-quick-action-modal-content {
-      width: 100%;
+      width: 84%;
       max-width: 560px;
+      min-width: 360px;
       max-height: 90vh;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
@@ -10025,9 +10026,6 @@
     }
 
     .custom-quick-action-modal-content {
-      width: 100%;
-      max-width: 640px;
-      max-height: min(78vh, 860px);
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
@@ -10036,6 +10034,7 @@
       animation: slideUp 0.25s ease;
       display: flex;
       flex-direction: column;
+      max-height: min(90vh, 860px);
     }
 
     @keyframes slideUp {
@@ -10295,10 +10294,10 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 4px;
-      padding: 10px;
+      padding: var(--space-md);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      background: var(--bg-secondary);
+      background: var(--bg-tertiary);
     }
 
     .custom-quick-action-input-card-main {
@@ -10323,7 +10322,7 @@
       border-radius: 999px;
       background: rgba(99, 102, 241, 0.14);
       color: var(--accent);
-      font-size: var(--text-xs);
+      font-size: var(--text-2xs);
       font-family: 'Space Mono', monospace;
     }
 
@@ -10341,13 +10340,13 @@
     }
 
     .custom-quick-action-input-card-btn {
-      width: 30px;
-      height: 30px;
+      width: 24px;
+      height: 24px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-full);
       background: var(--bg-tertiary);
       color: var(--text-secondary);
       cursor: pointer;
@@ -10409,26 +10408,28 @@
     }
 
     .custom-quick-action-prompt-shell {
-      min-height: 104px;
-      padding: 8px 10px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
+      min-height: 40px;
+      padding: var(--space-sm) var(--space-md);
+      display: flex;
+      align-items: flex-start;
+      cursor: text;
     }
 
     .custom-quick-action-prompt-shell:focus-within {
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
     }
 
     .custom-quick-action-chip-editor {
-      min-height: 86px;
+      min-height: 20px;
+      width: 100%;
       outline: none;
       white-space: pre-wrap;
       word-break: break-word;
       color: var(--text-primary);
-      font-size: var(--text-md);
-      line-height: 1.5;
-      font-family: 'Space Mono', monospace;
+      font-size: var(--text-sm);
+      line-height: 1.45;
+      font-family: inherit;
       cursor: text;
     }
 
@@ -10551,12 +10552,23 @@
       margin: 0;
     }
 
-    .custom-quick-action-modal-actions {
+    .custom-quick-action-input-editor .custom-quick-action-modal-actions {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
       margin-top: 2px;
       padding-top: 4px;
+    }
+
+    .custom-quick-action-modal-content > .custom-quick-action-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+      padding: 10px 12px 12px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-secondary);
+      box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.02);
     }
 
     .custom-quick-action-context-select {

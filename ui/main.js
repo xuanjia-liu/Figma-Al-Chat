@@ -15244,8 +15244,15 @@ Generate ONLY the reply text, nothing else.`;
     // Auto-focus search when typing while drawer is open
     document.addEventListener('keydown', (e) => {
       if (!commandsDrawer.classList.contains('show')) return;
+      if (customQuickActionModal?.classList.contains('show')) return;
       if (document.activeElement === commandsSearch) return;
-      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.target.matches('input, textarea')) {
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      const isEditableTarget = !!target && (
+        target.matches('input, textarea, select') ||
+        target.isContentEditable ||
+        !!target.closest('[contenteditable="true"]')
+      );
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditableTarget) {
         commandsSearch.focus();
         // The key event will naturally propagate to the input now that it's focused
       }
@@ -39644,6 +39651,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
     const customQuickActionDescription = document.getElementById('customQuickActionDescription');
     const customQuickActionPrompt = document.getElementById('customQuickActionPrompt');
     const customQuickActionPromptEditor = document.getElementById('customQuickActionPromptEditor');
+    const customQuickActionPromptShell = customQuickActionPromptEditor?.closest('.custom-quick-action-prompt-shell') || null;
     const customQuickActionInsertBtn = document.getElementById('customQuickActionInsertBtn');
     const customQuickActionInsertMenu = document.getElementById('customQuickActionInsertMenu');
     const customQuickActionContext = document.getElementById('customQuickActionContext');
@@ -40958,6 +40966,13 @@ Based on the user's instruction, generate the appropriate commands to modify the
     customQuickActionPromptEditor?.addEventListener('click', (e) => {
       if (e.target.closest('.custom-quick-action-prompt-chip')) return;
       saveCustomQuickActionSelectionRange();
+    });
+    customQuickActionPromptShell?.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.custom-quick-action-prompt-chip')) return;
+      if (e.target === customQuickActionPromptEditor) return;
+      e.preventDefault();
+      customQuickActionPromptEditor?.focus();
+      placeCustomQuickActionCaretAtEnd();
     });
     customQuickActionInsertBtn?.addEventListener('click', (e) => {
       e.preventDefault();
