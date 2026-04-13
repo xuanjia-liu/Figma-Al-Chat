@@ -6367,6 +6367,405 @@ function isAllowedOllamaProxyUrl(rawUrl: string): boolean {
   return Number(m[2]) === 11434;
 }
 
+type QuickDetachFontFieldKey = 'fontFamily' | 'fontWeight' | 'fontSize' | 'lineHeight';
+
+const QUICK_DETACH_LAYOUT_FIELDS: VariableBindableNodeField[] = [
+  'width',
+  'height',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  'itemSpacing',
+  'counterAxisSpacing',
+  'paddingLeft',
+  'paddingRight',
+  'paddingTop',
+  'paddingBottom',
+  'gridRowGap',
+  'gridColumnGap',
+];
+
+const QUICK_DETACH_CORNER_FIELDS: VariableBindableNodeField[] = [
+  'topLeftRadius',
+  'topRightRadius',
+  'bottomLeftRadius',
+  'bottomRightRadius',
+];
+
+function collectQuickDetachTargets(roots: readonly SceneNode[], onlyDirect: boolean): SceneNode[] {
+  const out: SceneNode[] = [];
+  const seen = new Set<string>();
+  if (onlyDirect) {
+    for (const n of roots) {
+      if (!seen.has(n.id)) {
+        seen.add(n.id);
+        out.push(n);
+      }
+    }
+    return out;
+  }
+  const walk = (n: SceneNode) => {
+    if (seen.has(n.id)) return;
+    seen.add(n.id);
+    out.push(n);
+    if ('children' in n) {
+      for (const c of (n as ChildrenMixin).children) {
+        walk(c as SceneNode);
+      }
+    }
+  };
+  for (const r of roots) {
+    walk(r);
+  }
+  return out;
+}
+
+function stripSolidColorBinding(paint: SolidPaint): SolidPaint {
+  const p = { ...paint } as SolidPaint & { boundVariables?: any };
+  if (p.boundVariables && p.boundVariables.color) {
+    const bv = { ...p.boundVariables };
+    delete bv.color;
+    if (Object.keys(bv).length === 0) {
+      delete (p as any).boundVariables;
+    } else {
+      (p as any).boundVariables = bv;
+    }
+  }
+  return p;
+}
+
+function stripColorBindingsFromPaints(paints: readonly Paint[]): { paints: Paint[]; changed: boolean } {
+  let changed = false;
+  const next = paints.map((paint) => {
+    if (!paint || paint.visible === false) return paint;
+    if (paint.type === 'SOLID') {
+      const before = JSON.stringify((paint as any).boundVariables);
+      const np = stripSolidColorBinding(paint as SolidPaint);
+      if (JSON.stringify((np as any).boundVariables) !== before) changed = true;
+      return np as Paint;
+    }
+    if (
+      paint.type === 'GRADIENT_LINEAR' ||
+      paint.type === 'GRADIENT_RADIAL' ||
+      paint.type === 'GRADIENT_ANGULAR' ||
+      paint.type === 'GRADIENT_DIAMOND'
+    ) {
+      let gChanged = false;
+      const stops = paint.gradientStops.map((stop) => {
+        const s = { ...stop } as ColorStop & { boundVariables?: any };
+        if (s.boundVariables && s.boundVariables.color) {
+          const bv = { ...s.boundVariables };
+          delete bv.color;
+          if (Object.keys(bv).length === 0) delete (s as any).boundVariables;
+          else (s as any).boundVariables = bv;
+          gChanged = true;
+        }
+        return s;
+      });
+      const gp: any = { ...paint, gradientStops: stops };
+      if ((paint as any).boundVariables && (paint as any).boundVariables.color) {
+        const bv = { ...(paint as any).boundVariables };
+        delete bv.color;
+        if (Object.keys(bv).length === 0) delete gp.boundVariables;
+        else gp.boundVariables = bv;
+        gChanged = true;
+      }
+      if (gChanged) changed = true;
+      return gp as Paint;
+    }
+    return paint;
+  });
+  return { paints: next, changed };
+}
+
+function stripColorBindingsFromEffects(effects: readonly Effect[]): { effects: Effect[]; changed: boolean } {
+  let changed = false;
+  const next = effects.map((effect) => {
+    const e = { ...effect } as Effect & { boundVariables?: any };
+    if (e.boundVariables && e.boundVariables.color) {
+      const bv = { ...e.boundVariables };
+      delete bv.color;
+      if (Object.keys(bv).length === 0) delete (e as any).boundVariables;
+      else (e as any).boundVariables = bv;
+      changed = true;
+    }
+    return e;
+  });
+  return { effects: next, changed };
+}
+
+async function quickDetachColorOnNode(node: SceneNode): Promise<boolean> {
+  let touched = false;
+  try {
+    if ('fillStyleId' in node && typeof (node as any).fillStyleId === 'string' && (node as any).fillStyleId) {
+      (node as any).fillStyleId = '';
+      touched = true;
+    }
+    if ('strokeStyleId' in node && typeof (node as any).strokeStyleId === 'string' && (node as any).strokeStyleId) {
+      (node as any).strokeStyleId = '';
+      touched = true;
+    }
+    if ('effectStyleId' in node && typeof (node as any).effectStyleId === 'string' && (node as any).effectStyleId) {
+      (node as any).effectStyleId = '';
+      touched = true;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
+  if ('fills' in node) {
+    const raw = (node as any).fills as Paint[] | typeof figma.mixed;
+    if (raw !== figma.mixed && Array.isArray(raw)) {
+      const { paints, changed } = stripColorBindingsFromPaints(raw);
+      if (changed) {
+        (node as any).fills = paints;
+        touched = true;
+      }
+    }
+  }
+  if ('strokes' in node) {
+    const raw = (node as any).strokes as Paint[] | typeof figma.mixed;
+    if (raw !== figma.mixed && Array.isArray(raw)) {
+      const { paints, changed } = stripColorBindingsFromPaints(raw);
+      if (changed) {
+        (node as any).strokes = paints;
+        touched = true;
+      }
+    }
+  }
+  if ('effects' in node) {
+    const raw = (node as any).effects as Effect[] | typeof figma.mixed;
+    if (raw !== figma.mixed && Array.isArray(raw)) {
+      const { effects, changed } = stripColorBindingsFromEffects(raw);
+      if (changed) {
+        (node as any).effects = effects;
+        touched = true;
+      }
+    }
+  }
+
+  const textTarget = getTextFormattingTarget(node);
+  if (textTarget && 'fills' in textTarget) {
+    const raw = (textTarget as any).fills as Paint[] | typeof figma.mixed;
+    if (raw !== figma.mixed && Array.isArray(raw)) {
+      const { paints, changed } = stripColorBindingsFromPaints(raw);
+      if (changed) {
+        (textTarget as any).fills = paints;
+        touched = true;
+      }
+    }
+    try {
+      if ('fillStyleId' in textTarget && typeof (textTarget as any).fillStyleId === 'string' && (textTarget as any).fillStyleId) {
+        (textTarget as any).fillStyleId = '';
+        touched = true;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  return touched;
+}
+
+function quickDetachLayoutOnNode(node: SceneNode): boolean {
+  if (!('setBoundVariable' in node) || !('boundVariables' in node)) return false;
+  const bv = (node as any).boundVariables as Record<string, unknown> | undefined;
+  if (!bv || typeof bv !== 'object') return false;
+  let touched = false;
+  for (const field of QUICK_DETACH_LAYOUT_FIELDS) {
+    if (!bv[field as string]) continue;
+    try {
+      (node as any).setBoundVariable(field, null);
+      touched = true;
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  return touched;
+}
+
+function quickDetachCornerOnNode(node: SceneNode): boolean {
+  if (!('setBoundVariable' in node) || !('boundVariables' in node)) return false;
+  const bv = (node as any).boundVariables as Record<string, unknown> | undefined;
+  if (!bv || typeof bv !== 'object') return false;
+  let touched = false;
+  for (const field of QUICK_DETACH_CORNER_FIELDS) {
+    if (!bv[field as string]) continue;
+    try {
+      (node as any).setBoundVariable(field, null);
+      touched = true;
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  return touched;
+}
+
+async function quickDetachFontOnNode(node: SceneNode, fields: QuickDetachFontFieldKey[]): Promise<boolean> {
+  const target = getTextFormattingTarget(node);
+  if (!target || fields.length === 0) return false;
+
+  await loadAllFontsForFormattingTarget(target);
+  let touched = false;
+
+  try {
+    if ('textStyleId' in target) {
+      const tsid = (target as any).textStyleId;
+      if (typeof tsid === 'string' && tsid) {
+        if ('setTextStyleIdAsync' in target && typeof (target as any).setTextStyleIdAsync === 'function') {
+          await (target as any).setTextStyleIdAsync('');
+        } else {
+          (target as any).textStyleId = '';
+        }
+        touched = true;
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
+  const needsFontName = fields.some((f) => f === 'fontFamily' || f === 'fontWeight');
+  const tbv =
+    'boundVariables' in target && (target as any).boundVariables && typeof (target as any).boundVariables === 'object'
+      ? ((target as any).boundVariables as Record<string, unknown>)
+      : null;
+  const unbindIfPresent = (field: string) => {
+    if (tbv && !tbv[field]) return;
+    try {
+      if ('setBoundVariable' in (target as any)) {
+        (target as any).setBoundVariable(field, null);
+        touched = true;
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  };
+
+  if (needsFontName) {
+    unbindIfPresent('fontName');
+  }
+  if (fields.includes('fontSize')) {
+    unbindIfPresent('fontSize');
+  }
+  if (fields.includes('lineHeight')) {
+    unbindIfPresent('lineHeight');
+  }
+
+  return touched;
+}
+
+async function runLocalQuickDetach(msg: any): Promise<void> {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({ type: 'error', message: 'Please select at least one layer.' });
+    return;
+  }
+
+  const detachFontStyle = msg.detachFontStyle === true;
+  const fontDetachFields = (Array.isArray(msg.fontDetachFields) ? msg.fontDetachFields : [])
+    .map((f: string) => String(f))
+    .filter((f: string): f is QuickDetachFontFieldKey =>
+      (['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'] as const).includes(f as QuickDetachFontFieldKey)
+    );
+  const detachColor = msg.detachColor === true;
+  const detachLayout = msg.detachLayout === true;
+  const detachCornerRadius = msg.detachCornerRadius === true;
+  const detachInstance = msg.detachInstance === true;
+  const onlyDirectSelection = msg.onlyDirectSelection === true;
+
+  const directNodes = [...selection];
+  const replaced = new Map<string, SceneNode>();
+
+  let detachedInstanceCount = 0;
+
+  if (detachInstance) {
+    for (const n of directNodes) {
+      if (n.type === 'INSTANCE') {
+        try {
+          const inst = n as InstanceNode;
+          const oldId = inst.id;
+          const detached = inst.detachInstance();
+          detachedInstanceCount++;
+          replaced.set(oldId, detached);
+        } catch (e) {
+          console.warn('quickDetach: detachInstance failed', e);
+        }
+      }
+    }
+  }
+
+  const roots: SceneNode[] = directNodes.map((n) => {
+    const rep = replaced.get(n.id);
+    return rep || n;
+  });
+
+  const targets = collectQuickDetachTargets(roots, onlyDirectSelection);
+
+  const changedIds = new Set<string>();
+  let skippedNodeCount = 0;
+
+  const anyNonInstanceOp = detachFontStyle || detachColor || detachLayout || detachCornerRadius;
+
+  for (const node of targets) {
+    let nodeTouched = false;
+
+    if (detachFontStyle && fontDetachFields.length > 0) {
+      try {
+        const ok = await quickDetachFontOnNode(node, fontDetachFields);
+        if (ok) nodeTouched = true;
+      } catch (e) {
+        console.warn('quickDetach font', node.id, e);
+      }
+    }
+
+    if (detachColor) {
+      try {
+        const ok = await quickDetachColorOnNode(node);
+        if (ok) nodeTouched = true;
+      } catch (e) {
+        console.warn('quickDetach color', node.id, e);
+      }
+    }
+
+    if (detachLayout) {
+      try {
+        const ok = quickDetachLayoutOnNode(node);
+        if (ok) nodeTouched = true;
+      } catch (e) {
+        console.warn('quickDetach layout', node.id, e);
+      }
+    }
+
+    if (detachCornerRadius) {
+      try {
+        const ok = quickDetachCornerOnNode(node);
+        if (ok) nodeTouched = true;
+      } catch (e) {
+        console.warn('quickDetach corner', node.id, e);
+      }
+    }
+
+    if (nodeTouched) {
+      changedIds.add(node.id);
+    } else if (anyNonInstanceOp) {
+      skippedNodeCount++;
+    }
+  }
+
+  figma.ui.postMessage({
+    type: 'local-quick-detach-result',
+    changedNodeCount: changedIds.size,
+    detachedInstanceCount,
+    skippedNodeCount: anyNonInstanceOp ? skippedNodeCount : 0,
+  });
+  try {
+    figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+  } catch (e) {
+    /* ignore */
+  }
+}
+
 figma.ui.onmessage = async (msg: {
   type: string,
   cssFormat?: string,
@@ -8131,6 +8530,19 @@ figma.ui.onmessage = async (msg: {
         figma.ui.postMessage({
           type: 'error',
           message: `Case-only rename failed: ${(error as Error)?.message || 'Unknown error'}`
+        });
+      }
+      break;
+    }
+
+    case 'local-quick-detach': {
+      try {
+        await runLocalQuickDetach(msg as any);
+      } catch (error) {
+        console.error('local-quick-detach failed', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: `Quick detach failed: ${(error as Error)?.message || 'Unknown error'}`
         });
       }
       break;

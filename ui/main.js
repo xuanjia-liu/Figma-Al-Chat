@@ -16541,6 +16541,35 @@ Generate ONLY the reply text, nothing else.`;
       return { valid: true, message: '' };
     }
 
+    function isQuickDetachPromptAction(action = currentPromptAction) {
+      return !!action && action.directAction === 'quickDetach';
+    }
+
+    function getQuickDetachValidation(values = {}, action = currentPromptAction) {
+      if (!isQuickDetachPromptAction(action)) {
+        return { valid: true, message: '' };
+      }
+      const anyTop =
+        values.detachFontStyle === true ||
+        values.detachColor === true ||
+        values.detachLayout === true ||
+        values.detachCornerRadius === true ||
+        values.detachInstance === true;
+      if (!anyTop) {
+        return { valid: false, message: tu('actions.quickDetach.validation.noTarget') };
+      }
+      if (values.detachFontStyle === true) {
+        let fields = Array.isArray(values.fontDetachFields) ? values.fontDetachFields : [];
+        if (fields.length === 0 && values.fontDetachFields === undefined) {
+          fields = ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'];
+        }
+        if (fields.length === 0) {
+          return { valid: false, message: tu('actions.quickDetach.validation.noFontFields') };
+        }
+      }
+      return { valid: true, message: '' };
+    }
+
     function updatePromptDrawerSubmitState(values = null) {
       if (!promptDrawerSubmit) return;
       const nextValues = values || (typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {});
@@ -16548,6 +16577,12 @@ Generate ONLY the reply text, nothing else.`;
       if (isAddPropertyPromptAction()) {
         promptDrawerSubmit.disabled = !validation.valid;
         promptDrawerSubmit.title = validation.valid ? '' : validation.message;
+        return;
+      }
+      const qd = getQuickDetachValidation(nextValues);
+      if (isQuickDetachPromptAction()) {
+        promptDrawerSubmit.disabled = !qd.valid;
+        promptDrawerSubmit.title = qd.valid ? '' : qd.message;
         return;
       }
       if (!isSubmittingPrompt) {
@@ -25980,6 +26015,44 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }, 400);
     }
 
+    async function runQuickDetachAction(values, actionMeta) {
+      const fontFieldsRaw = Array.isArray(values.fontDetachFields) ? values.fontDetachFields : [];
+      const fontDetachFields = fontFieldsRaw
+        .map((f) => String(f))
+        .filter((f) => ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'].includes(f));
+      const payload = {
+        detachFontStyle: values.detachFontStyle === true,
+        fontDetachFields: fontDetachFields.length > 0 ? fontDetachFields : ['fontFamily', 'fontWeight', 'fontSize', 'lineHeight'],
+        detachColor: values.detachColor === true,
+        detachLayout: values.detachLayout === true,
+        detachCornerRadius: values.detachCornerRadius === true,
+        detachInstance: values.detachInstance === true,
+        onlyDirectSelection: values.onlyDirectSelection === true,
+      };
+      if (!payload.detachFontStyle) {
+        payload.fontDetachFields = [];
+      }
+      try {
+        const result = await runLocalActionRequest({
+          requestType: 'local-quick-detach',
+          resultType: 'local-quick-detach-result',
+          payload,
+          errorPrefixes: ['Quick detach failed', 'Please select at least one layer'],
+        });
+        const changed = Number(result?.changedNodeCount) || 0;
+        const detached = Number(result?.detachedInstanceCount) || 0;
+        const skipped = Number(result?.skippedNodeCount) || 0;
+        const parts = [tu('actions.quickDetach.toastChanged', { count: changed })];
+        if (detached > 0) parts.push(tu('actions.quickDetach.toastDetached', { count: detached }));
+        if (skipped > 0) parts.push(tu('actions.quickDetach.toastSkipped', { count: skipped }));
+        const toastType = changed === 0 && skipped > 0 ? 'warning' : 'success';
+        showToast(parts.join(' · '), toastType);
+      } catch (error) {
+        console.error('Quick detach failed', error);
+        showToast(error?.message || tu('actions.quickDetach.error.generic'), 'error');
+      }
+    }
+
     async function runDirectAction(actionKey, values, actionMeta) {
       if (isAiOffModeEnabled() && !isDirectActionAllowedInAiOff(actionKey)) {
         showToast(getAiOffBlockedMessage(actionMeta?.name || 'This action'), 'error');
@@ -26066,6 +26139,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'splitTextLocal':
           await runSplitTextAction(values, actionMeta);
+          break;
+        case 'quickDetach':
+          await runQuickDetachAction(values, actionMeta);
           break;
         default:
           showToast('Unknown action', 'error');
