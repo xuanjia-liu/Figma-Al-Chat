@@ -844,65 +844,67 @@
           </div>
           <div class="custom-quick-action-inputs-list" id="customQuickActionInputsList"></div>
           <div class="custom-quick-action-input-editor hidden" id="customQuickActionInputEditor">
-            <div class="custom-quick-action-section-header">
-              <div class="custom-quick-action-section-title" id="customQuickActionInputEditorTitle">Add input</div>
-              <button type="button" class="custom-quick-action-section-link" id="customQuickActionCancelInputBtn">Cancel</button>
-            </div>
-            <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full">
-              <div class="setting-item">
-                <label class="setting-label" for="customQuickActionInputLabel">Label</label>
-                <input type="text" class="setting-input" id="customQuickActionInputLabel" placeholder="e.g. Tone" />
+            <div class="custom-quick-action-input-editor-panel">
+              <div class="custom-quick-action-section-header">
+                <div class="custom-quick-action-section-title" id="customQuickActionInputEditorTitle">Add input</div>
+                <button type="button" class="custom-quick-action-section-link" id="customQuickActionCancelInputBtn">Cancel</button>
               </div>
-            </div>
-            <div class="custom-quick-action-modal-row">
-              <div class="setting-item">
-                <label class="setting-label" for="customQuickActionInputKey">Key</label>
-                <input type="text" class="setting-input" id="customQuickActionInputKey" placeholder="e.g. tone" />
+              <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full">
+                <div class="setting-item">
+                  <label class="setting-label" for="customQuickActionInputLabel">Label</label>
+                  <input type="text" class="setting-input" id="customQuickActionInputLabel" placeholder="e.g. Tone" />
+                </div>
               </div>
-              <div class="setting-item">
-                <label class="setting-label" for="customQuickActionInputType">Type</label>
-                <select class="setting-input" id="customQuickActionInputType">
-                  <option value="text">Short text</option>
-                  <option value="textarea">Long text</option>
-                  <option value="select">Selection</option>
-                  <option value="image">Image</option>
-                </select>
-              </div>
-            </div>
-            <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full" id="customQuickActionInputPlaceholderWrap">
-              <div class="setting-item">
-                <label class="setting-label" for="customQuickActionInputPlaceholder">Placeholder</label>
-                <input type="text" class="setting-input" id="customQuickActionInputPlaceholder" placeholder="Optional placeholder" />
-              </div>
-            </div>
-            <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full" id="customQuickActionInputDefaultWrap">
-              <div class="setting-item">
-                <label class="setting-label" for="customQuickActionInputDefaultValue">Default value</label>
-                <textarea class="setting-input" id="customQuickActionInputDefaultValue" style="min-height: 72px; resize: vertical;" placeholder="Optional default value"></textarea>
-              </div>
-            </div>
-            <div class="custom-quick-action-select-fields hidden" id="customQuickActionSelectOnlyFields">
               <div class="custom-quick-action-modal-row">
-                <label class="custom-quick-action-toggle">
-                  <input type="checkbox" id="customQuickActionInputMultiple" />
-                  <span>Allow multiple selection</span>
-                </label>
-                <label class="custom-quick-action-toggle">
-                  <input type="checkbox" id="customQuickActionInputAllowCustomOption" />
-                  <span>Allow custom option</span>
-                </label>
+                <div class="setting-item">
+                  <label class="setting-label" for="customQuickActionInputKey">Key</label>
+                  <input type="text" class="setting-input" id="customQuickActionInputKey" placeholder="e.g. tone" />
+                </div>
+                <div class="setting-item">
+                  <label class="setting-label" for="customQuickActionInputType">Type</label>
+                  <select class="setting-input" id="customQuickActionInputType">
+                    <option value="text">Short text</option>
+                    <option value="textarea">Long text</option>
+                    <option value="select">Selection</option>
+                    <option value="image">Image</option>
+                  </select>
+                </div>
               </div>
-              <div class="setting-item">
-                <label class="setting-label" for="customQuickActionInputOptions">Options</label>
-                <textarea class="setting-input" id="customQuickActionInputOptions" style="min-height: 96px; resize: vertical;" placeholder="One option per line. Use Label|value for custom values."></textarea>
+              <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full" id="customQuickActionInputPlaceholderWrap">
+                <div class="setting-item">
+                  <label class="setting-label" for="customQuickActionInputPlaceholder">Placeholder</label>
+                  <input type="text" class="setting-input" id="customQuickActionInputPlaceholder" placeholder="Optional placeholder" />
+                </div>
               </div>
-            </div>
-            <label class="custom-quick-action-toggle">
-              <input type="checkbox" id="customQuickActionInputRequired" />
-              <span>Required</span>
-            </label>
-            <div class="custom-quick-action-modal-actions">
-              <button class="setting-btn primary" id="customQuickActionSaveInputBtn">Save input</button>
+              <div class="custom-quick-action-modal-row custom-quick-action-modal-row-full" id="customQuickActionInputDefaultWrap">
+                <div class="setting-item">
+                  <label class="setting-label" for="customQuickActionInputDefaultValue">Default value</label>
+                  <textarea class="setting-input" id="customQuickActionInputDefaultValue" style="min-height: 72px; resize: vertical;" placeholder="Optional default value"></textarea>
+                </div>
+              </div>
+              <div class="custom-quick-action-select-fields hidden" id="customQuickActionSelectOnlyFields">
+                <div class="custom-quick-action-modal-row">
+                  <label class="custom-quick-action-toggle">
+                    <input type="checkbox" id="customQuickActionInputMultiple" />
+                    <span>Allow multiple selection</span>
+                  </label>
+                  <label class="custom-quick-action-toggle">
+                    <input type="checkbox" id="customQuickActionInputAllowCustomOption" />
+                    <span>Allow custom option</span>
+                  </label>
+                </div>
+                <div class="setting-item">
+                  <label class="setting-label" for="customQuickActionInputOptions">Options</label>
+                  <textarea class="setting-input" id="customQuickActionInputOptions" style="min-height: 96px; resize: vertical;" placeholder="One option per line. Use Label|value for custom values."></textarea>
+                </div>
+              </div>
+              <label class="custom-quick-action-toggle">
+                <input type="checkbox" id="customQuickActionInputRequired" />
+                <span>Required</span>
+              </label>
+              <div class="custom-quick-action-modal-actions">
+                <button class="setting-btn primary" id="customQuickActionSaveInputBtn">Save input</button>
+              </div>
             </div>
           </div>
         </div>

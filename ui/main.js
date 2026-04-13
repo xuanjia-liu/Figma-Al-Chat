@@ -40920,6 +40920,11 @@ Based on the user's instruction, generate the appropriate commands to modify the
         insertCustomQuickActionChip(savedResult.input, savedResult.insertContextAfterSave);
       }
     });
+    customQuickActionInputEditor?.addEventListener('click', (e) => {
+      if (e.target === customQuickActionInputEditor) {
+        closeCustomQuickActionInputEditor();
+      }
+    });
     customQuickActionInputType?.addEventListener('change', updateCustomQuickActionInputEditorVisibility);
     customQuickActionInputMultiple?.addEventListener('change', updateCustomQuickActionInputEditorVisibility);
     customQuickActionInputLabel?.addEventListener('input', () => {
