@@ -7854,11 +7854,170 @@ Rules:
     const builtInQuickActionNames = new Set(buildQuickActionsList(baseAgentTasks).map(action => action.name));
     const BUILT_IN_COMMAND_CATEGORIES = Object.keys(baseAgentTasks);
     const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set(PUBLIC_CONTEXT_MODES);
+    const VALID_CUSTOM_QUICK_ACTION_INPUT_TYPES = new Set(['text', 'textarea', 'select', 'image']);
 
     function cloneAgentTaskMap(taskMap) {
       return Object.fromEntries(
         Object.entries(taskMap || {}).map(([category, tasks]) => [category, [...(tasks || [])]])
       );
+    }
+
+    function sanitizeCustomQuickActionInputKey(rawValue) {
+      return typeof rawValue === 'string'
+        ? rawValue.trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+        : '';
+    }
+
+    function generateCustomQuickActionInputKey(baseLabel = '', existingInputs = [], fallbackIndex = null) {
+      const base = sanitizeCustomQuickActionInputKey(baseLabel)
+        || (fallbackIndex ? `input${fallbackIndex}` : 'input');
+      const existingKeys = new Set((existingInputs || []).map((input) => String(input?.key || '').toLowerCase()).filter(Boolean));
+      if (!existingKeys.has(base.toLowerCase())) return base;
+      let counter = fallbackIndex || 1;
+      let candidate = `${base}${counter}`;
+      while (existingKeys.has(candidate.toLowerCase())) {
+        counter += 1;
+        candidate = `${base}${counter}`;
+      }
+      return candidate;
+    }
+
+    function generateCustomQuickActionInputId() {
+      return `qai_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    }
+
+    function generateCustomQuickActionInputOptionId() {
+      return `qaio_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    }
+
+    function sanitizeCustomQuickActionInputOptions(rawOptions) {
+      if (!Array.isArray(rawOptions)) return [];
+
+      const seenIds = new Set();
+      const seenValues = new Set();
+      return rawOptions.reduce((acc, item) => {
+        if (!item || typeof item !== 'object') return acc;
+        const id = typeof item.id === 'string' ? item.id.trim() : '';
+        const label = typeof item.label === 'string' ? item.label.trim() : '';
+        const value = typeof item.value === 'string' ? item.value.trim() : '';
+        const normalizedValue = value.toLowerCase();
+        if (!id || !label || !value) return acc;
+        if (seenIds.has(id) || seenValues.has(normalizedValue)) return acc;
+        seenIds.add(id);
+        seenValues.add(normalizedValue);
+        acc.push({ id, label, value });
+        return acc;
+      }, []);
+    }
+
+    function sanitizeCustomQuickActionInputs(rawInputs) {
+      if (!Array.isArray(rawInputs)) return [];
+
+      const seenIds = new Set();
+      const seenKeys = new Set();
+      return rawInputs.reduce((acc, item) => {
+        if (!item || typeof item !== 'object') return acc;
+        const id = typeof item.id === 'string' ? item.id.trim() : '';
+        const label = typeof item.label === 'string' ? item.label.trim() : '';
+        const key = sanitizeCustomQuickActionInputKey(item.key);
+        const type = typeof item.type === 'string' && VALID_CUSTOM_QUICK_ACTION_INPUT_TYPES.has(item.type) ? item.type : null;
+        const normalizedKey = key.toLowerCase();
+        if (!id || !label || !key || !type) return acc;
+        if (seenIds.has(id) || seenKeys.has(normalizedKey)) return acc;
+
+        const multiple = type === 'select' ? item.multiple === true : false;
+        const sanitizedInput = {
+          id,
+          key,
+          label,
+          type,
+          required: item.required === true,
+          multiple,
+          options: type === 'select' ? sanitizeCustomQuickActionInputOptions(item.options) : [],
+          allowCustomOption: type === 'select' ? item.allowCustomOption === true : false,
+          placeholder: typeof item.placeholder === 'string' ? item.placeholder.trim() : '',
+          defaultValue: null,
+        };
+
+        if (type === 'select' && multiple) {
+          sanitizedInput.defaultValue = Array.isArray(item.defaultValue)
+            ? item.defaultValue.map((entry) => typeof entry === 'string' ? entry.trim() : '').filter(Boolean)
+            : [];
+        } else if (typeof item.defaultValue === 'string') {
+          sanitizedInput.defaultValue = item.defaultValue.trim();
+        }
+
+        seenIds.add(id);
+        seenKeys.add(normalizedKey);
+        acc.push(sanitizedInput);
+        return acc;
+      }, []);
+    }
+
+    function mapCustomQuickActionInputToField(input) {
+      if (!input || !input.key || !input.label || !input.type) return null;
+      const label = input.required ? `${input.label} *` : input.label;
+
+      if (input.type === 'text') {
+        return {
+          key: input.key,
+          type: 'text',
+          label,
+          placeholder: input.placeholder || '',
+          default: typeof input.defaultValue === 'string' ? input.defaultValue : '',
+        };
+      }
+
+      if (input.type === 'textarea') {
+        return {
+          key: input.key,
+          type: 'textarea',
+          label,
+          placeholder: input.placeholder || '',
+          default: typeof input.defaultValue === 'string' ? input.defaultValue : '',
+        };
+      }
+
+      if (input.type === 'select') {
+        const options = Array.isArray(input.options)
+          ? input.options.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))
+          : [];
+        if (input.allowCustomOption) {
+          options.push({
+            value: '__custom__',
+            label: 'Custom option',
+            inputKey: `${input.key}__custom`,
+            inputDefault: '',
+            inputType: 'text',
+            inputPlaceholder: 'Enter custom option',
+          });
+        }
+        return {
+          key: input.key,
+          type: 'select',
+          label,
+          multi: input.multiple === true,
+          searchable: true,
+          options,
+          default: input.multiple === true
+            ? (Array.isArray(input.defaultValue) ? input.defaultValue : [])
+            : (typeof input.defaultValue === 'string' ? input.defaultValue : ''),
+        };
+      }
+
+      if (input.type === 'image') {
+        return {
+          key: input.key,
+          type: 'image',
+          label,
+          hint: input.placeholder || 'Add one or more images',
+        };
+      }
+
+      return null;
     }
 
     function sanitizeCustomQuickActions(rawActions) {
@@ -7888,6 +8047,7 @@ Rules:
           category,
           mode,
           promptTemplate,
+          inputs: sanitizeCustomQuickActionInputs(item.inputs),
           desc: typeof item.desc === 'string' ? item.desc.trim() : '',
           noSelection: item.noSelection === true,
           includeTokens: item.includeTokens === true,
@@ -7903,11 +8063,16 @@ Rules:
     }
 
     function mapCustomQuickActionToTask(action) {
+      const mappedFields = Array.isArray(action.inputs)
+        ? action.inputs.map(mapCustomQuickActionInputToField).filter(Boolean)
+        : [];
       return {
         name: action.name,
         desc: action.desc || '',
         prompt: action.promptTemplate,
         promptTemplate: action.promptTemplate,
+        fields: mappedFields,
+        customQuickActionInputs: sanitizeCustomQuickActionInputs(action.inputs),
         noSelection: action.noSelection === true,
         includeTokens: action.includeTokens === true,
         requiredContext: VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action.requiredContext) ? action.requiredContext : ContextMode.SMART,
@@ -27370,7 +27535,14 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
 
         // Ensure deferred image conversions are ready before collecting field values.
         await flushPendingImageDataConversions();
-        const values = getPromptFieldValues();
+        const rawValues = getPromptFieldValues();
+
+        if (!validateCustomQuickActionRequiredInputs(action, rawValues)) {
+          return;
+        }
+
+        const normalizedCustomQuickAction = normalizeCustomQuickActionFieldValues(action, rawValues);
+        const values = normalizedCustomQuickAction.values;
 
         if (action.directAction === 'generateImage' && values.applyToSelection) {
           try {
@@ -27404,6 +27576,10 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         const imageDataUrls = extractImageDataUrls(values.imageInput);
         if (imageDataUrls.length > 0) {
           currentMetadata = { images: imageDataUrls };
+        }
+        if (normalizedCustomQuickAction.imageDataUrls.length > 0) {
+          currentMetadata = currentMetadata || {};
+          currentMetadata.images = [...(currentMetadata.images || []), ...normalizedCustomQuickAction.imageDataUrls];
         }
 
         currentMetadata = currentMetadata || {};
@@ -27523,11 +27699,15 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
 
         // Add image numbering context if multiple images are provided
         let imageContext = '';
-        const rawImageInput = values.imageInput;
+        const existingImageInputs = Array.isArray(values.imageInput) ? values.imageInput : [];
+        const rawImageInput = [
+          ...existingImageInputs,
+          ...normalizedCustomQuickAction.imageDataUrls.map((data, index) => ({ number: existingImageInputs.length + index + 1, data }))
+        ];
         if (rawImageInput && Array.isArray(rawImageInput) && rawImageInput.length > 1) {
           imageContext = `You have been provided with ${rawImageInput.length} images. Each image is numbered for reference:\n`;
-          rawImageInput.forEach(img => {
-            imageContext += `• Image ${img.number}: Available for reference\n`;
+          rawImageInput.forEach((img, index) => {
+            imageContext += `• Image ${img.number || index + 1}: Available for reference\n`;
           });
           imageContext += '\n';
         }
@@ -39463,17 +39643,44 @@ Based on the user's instruction, generate the appropriate commands to modify the
     const customQuickActionMode = document.getElementById('customQuickActionMode');
     const customQuickActionDescription = document.getElementById('customQuickActionDescription');
     const customQuickActionPrompt = document.getElementById('customQuickActionPrompt');
+    const customQuickActionPromptEditor = document.getElementById('customQuickActionPromptEditor');
+    const customQuickActionInsertBtn = document.getElementById('customQuickActionInsertBtn');
+    const customQuickActionInsertMenu = document.getElementById('customQuickActionInsertMenu');
     const customQuickActionContext = document.getElementById('customQuickActionContext');
     const customQuickActionContextTrigger = document.getElementById('customQuickActionContextTrigger');
     const customQuickActionContextMenu = document.getElementById('customQuickActionContextMenu');
     const customQuickActionNoSelection = document.getElementById('customQuickActionNoSelection');
     const customQuickActionIncludeTokens = document.getElementById('customQuickActionIncludeTokens');
+    const customQuickActionInputsList = document.getElementById('customQuickActionInputsList');
+    const customQuickActionAddInputBtn = document.getElementById('customQuickActionAddInputBtn');
+    const customQuickActionInputEditor = document.getElementById('customQuickActionInputEditor');
+    const customQuickActionInputEditorTitle = document.getElementById('customQuickActionInputEditorTitle');
+    const customQuickActionCancelInputBtn = document.getElementById('customQuickActionCancelInputBtn');
+    const customQuickActionSaveInputBtn = document.getElementById('customQuickActionSaveInputBtn');
+    const customQuickActionInputLabel = document.getElementById('customQuickActionInputLabel');
+    const customQuickActionInputKey = document.getElementById('customQuickActionInputKey');
+    const customQuickActionInputType = document.getElementById('customQuickActionInputType');
+    const customQuickActionInputPlaceholder = document.getElementById('customQuickActionInputPlaceholder');
+    const customQuickActionInputDefaultValue = document.getElementById('customQuickActionInputDefaultValue');
+    const customQuickActionInputRequired = document.getElementById('customQuickActionInputRequired');
+    const customQuickActionInputMultiple = document.getElementById('customQuickActionInputMultiple');
+    const customQuickActionInputAllowCustomOption = document.getElementById('customQuickActionInputAllowCustomOption');
+    const customQuickActionInputOptions = document.getElementById('customQuickActionInputOptions');
+    const customQuickActionSelectOnlyFields = document.getElementById('customQuickActionSelectOnlyFields');
+    const customQuickActionInputPlaceholderWrap = document.getElementById('customQuickActionInputPlaceholderWrap');
+    const customQuickActionInputDefaultWrap = document.getElementById('customQuickActionInputDefaultWrap');
 
     let currentAddingFor = null; // 'tone', 'imagePreset', 'reStylePreset', 'renamePreset', or 'styleCategory'
     let editingOptionOriginalId = null; // Store ID of option being edited
     let editingOptionOriginalValue = null; // Store value of option being edited (fallback for old data)
     let editingCustomQuickActionId = null;
+    let editingCustomQuickActionInputId = null;
     let openCustomActionPopoverId = null;
+    let customQuickActionDraftInputs = [];
+    let customQuickActionPromptSelectionRange = null;
+    let customQuickActionInsertContext = null;
+    let pendingInsertAfterInputSave = false;
+    let pendingInsertContextAfterInputSave = null;
 
     const customQuickActionContextOptions = [
       {
@@ -39532,6 +39739,379 @@ Based on the user's instruction, generate the appropriate commands to modify the
         descriptionKey: 'actions.customQuickAction.context.indexOnly.description'
       }
     ];
+
+    function updateCustomQuickActionPromptTextareaValue() {
+      if (customQuickActionPrompt) {
+        customQuickActionPrompt.value = serializeCustomQuickActionPromptEditor();
+      }
+    }
+
+    function createCustomQuickActionPromptChip(input) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'custom-quick-action-prompt-chip';
+      chip.contentEditable = 'false';
+      chip.dataset.tokenKey = input.key;
+      chip.textContent = `{${input.key}}`;
+      chip.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openCustomQuickActionInsertMenu(chip, { type: 'replace-chip', chip, tokenKey: input.key });
+      });
+      return chip;
+    }
+
+    function appendPromptTemplateSegment(fragment, text, inputsByKey) {
+      if (!text) return;
+      const regex = /\{([a-zA-Z0-9_]+)\}/g;
+      let lastIndex = 0;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const before = text.slice(lastIndex, match.index);
+        if (before) fragment.appendChild(document.createTextNode(before));
+        const input = inputsByKey.get(match[1]);
+        if (input) fragment.appendChild(createCustomQuickActionPromptChip(input));
+        else fragment.appendChild(document.createTextNode(match[0]));
+        lastIndex = regex.lastIndex;
+      }
+      const after = text.slice(lastIndex);
+      if (after) fragment.appendChild(document.createTextNode(after));
+    }
+
+    function renderCustomQuickActionPromptEditor(template = '') {
+      if (!customQuickActionPromptEditor) return;
+      const fragment = document.createDocumentFragment();
+      const inputsByKey = new Map(customQuickActionDraftInputs.map((input) => [input.key, input]));
+      appendPromptTemplateSegment(fragment, template, inputsByKey);
+      customQuickActionPromptEditor.innerHTML = '';
+      customQuickActionPromptEditor.appendChild(fragment);
+      updateCustomQuickActionPromptTextareaValue();
+    }
+
+    function serializeCustomQuickActionPromptEditor() {
+      if (!customQuickActionPromptEditor) return '';
+      const walk = (node) => {
+        if (!node) return '';
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+        if (node.dataset?.tokenKey) return `{${node.dataset.tokenKey}}`;
+        if (node.tagName === 'DIV' || node.tagName === 'P') return `${Array.from(node.childNodes).map(walk).join('')}\n`;
+        if (node.tagName === 'BR') return '\n';
+        return Array.from(node.childNodes).map(walk).join('');
+      };
+      return Array.from(customQuickActionPromptEditor.childNodes).map(walk).join('').replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    function saveCustomQuickActionSelectionRange() {
+      if (!customQuickActionPromptEditor) return;
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (!customQuickActionPromptEditor.contains(range.commonAncestorContainer)) return;
+      customQuickActionPromptSelectionRange = range.cloneRange();
+    }
+
+    function placeCustomQuickActionCaretAtEnd() {
+      if (!customQuickActionPromptEditor) return;
+      const range = document.createRange();
+      range.selectNodeContents(customQuickActionPromptEditor);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      customQuickActionPromptSelectionRange = range.cloneRange();
+    }
+
+    function hideCustomQuickActionInsertMenu() {
+      customQuickActionInsertMenu?.classList.add('hidden');
+      customQuickActionInsertContext = null;
+    }
+
+    function renderCustomQuickActionInsertMenu() {
+      if (!customQuickActionInsertMenu) return;
+      const itemsHtml = customQuickActionDraftInputs.map((input) => `
+        <button type="button" class="custom-quick-action-insert-menu-item" data-insert-input-id="${escapeHtml(input.id)}">
+          <span class="custom-quick-action-insert-menu-item-title">{${escapeHtml(input.key)}}</span>
+          <span class="custom-quick-action-insert-menu-item-meta">${escapeHtml(input.label)} • ${escapeHtml(input.type)}</span>
+        </button>
+      `).join('');
+      customQuickActionInsertMenu.innerHTML = `
+        ${itemsHtml}
+        <button type="button" class="custom-quick-action-insert-menu-item" data-insert-new-input="true">
+          <span class="custom-quick-action-insert-menu-item-title">+ New input</span>
+          <span class="custom-quick-action-insert-menu-item-meta">Create and insert a new prompt input</span>
+        </button>
+      `;
+    }
+
+    function openCustomQuickActionInsertMenu(anchorEl, context = { type: 'insert' }) {
+      if (!customQuickActionInsertMenu) return;
+      customQuickActionInsertContext = context;
+      renderCustomQuickActionInsertMenu();
+      customQuickActionInsertMenu.classList.remove('hidden');
+      const rect = anchorEl?.getBoundingClientRect?.();
+      const top = rect ? rect.bottom + 8 : 120;
+      const left = rect ? Math.max(12, Math.min(rect.left, window.innerWidth - 320)) : 20;
+      customQuickActionInsertMenu.style.top = `${top}px`;
+      customQuickActionInsertMenu.style.left = `${left}px`;
+    }
+
+    function insertCustomQuickActionChip(input, context = customQuickActionInsertContext) {
+      if (!customQuickActionPromptEditor || !input) return;
+      const chip = createCustomQuickActionPromptChip(input);
+      const insertContext = context || {};
+      if (insertContext.type === 'replace-chip') {
+        const targetChip = insertContext.chip?.parentNode
+          ? insertContext.chip
+          : (insertContext.tokenKey
+            ? Array.from(customQuickActionPromptEditor.querySelectorAll('.custom-quick-action-prompt-chip')).find((node) => node.dataset.tokenKey === insertContext.tokenKey)
+            : null);
+        if (targetChip?.parentNode) {
+          targetChip.replaceWith(chip);
+        } else {
+          customQuickActionPromptEditor.appendChild(chip);
+          placeCustomQuickActionCaretAtEnd();
+        }
+      } else {
+        const selection = window.getSelection();
+        const range = customQuickActionPromptSelectionRange ? customQuickActionPromptSelectionRange.cloneRange() : null;
+        if (range && customQuickActionPromptEditor.contains(range.commonAncestorContainer)) {
+          range.deleteContents();
+          range.insertNode(chip);
+          range.setStartAfter(chip);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          customQuickActionPromptSelectionRange = range.cloneRange();
+        } else {
+          customQuickActionPromptEditor.appendChild(chip);
+          placeCustomQuickActionCaretAtEnd();
+        }
+      }
+      updateCustomQuickActionPromptTextareaValue();
+      hideCustomQuickActionInsertMenu();
+      customQuickActionPromptEditor.focus();
+    }
+
+    function renderCustomQuickActionInputsList() {
+      if (!customQuickActionInputsList) return;
+      if (!customQuickActionDraftInputs.length) {
+        customQuickActionInputsList.innerHTML = '<div class="custom-quick-action-input-empty">No inputs yet. Add one, then insert it into the prompt.</div>';
+        return;
+      }
+      customQuickActionInputsList.innerHTML = customQuickActionDraftInputs.map((input) => {
+        const optionCount = Array.isArray(input.options) ? input.options.length : 0;
+        const meta = input.type === 'select'
+          ? `${optionCount} option${optionCount === 1 ? '' : 's'}${input.allowCustomOption ? ' + custom' : ''}`
+          : input.type === 'image'
+            ? 'image upload'
+            : (input.placeholder || 'text input');
+        return `
+          <div class="custom-quick-action-input-card" data-custom-input-id="${escapeHtml(input.id)}">
+            <div class="custom-quick-action-input-card-main">
+              <div class="custom-quick-action-input-card-title">
+                <span>${escapeHtml(input.label)}</span>
+                <span class="custom-quick-action-input-card-key">{${escapeHtml(input.key)}}</span>
+              </div>
+              <div class="custom-quick-action-input-card-meta">${escapeHtml(input.type)}${input.multiple ? ' • multiple' : ''}${input.required ? ' • required' : ''} • ${escapeHtml(meta)}</div>
+            </div>
+            <div class="custom-quick-action-input-card-actions">
+              <button type="button" class="custom-quick-action-input-card-btn" data-custom-input-action="edit" data-custom-input-id="${escapeHtml(input.id)}" title="Edit input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
+              </button>
+              <button type="button" class="custom-quick-action-input-card-btn danger" data-custom-input-action="delete" data-custom-input-id="${escapeHtml(input.id)}" title="Delete input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateCustomQuickActionInputEditorVisibility() {
+      const isSelect = customQuickActionInputType?.value === 'select';
+      const isImage = customQuickActionInputType?.value === 'image';
+      customQuickActionSelectOnlyFields?.classList.toggle('hidden', !isSelect);
+      customQuickActionInputDefaultWrap?.classList.toggle('hidden', isImage);
+      if (customQuickActionInputDefaultValue) {
+        customQuickActionInputDefaultValue.placeholder = isSelect
+          ? (customQuickActionInputMultiple?.checked ? 'Default values, one per line' : 'Default selected value')
+          : 'Optional default value';
+      }
+    }
+
+    function closeCustomQuickActionInputEditor() {
+      editingCustomQuickActionInputId = null;
+      pendingInsertAfterInputSave = false;
+      pendingInsertContextAfterInputSave = null;
+      customQuickActionInputEditor?.classList.add('hidden');
+    }
+
+    function openCustomQuickActionInputEditor(input = null, options = {}) {
+      editingCustomQuickActionInputId = input?.id || null;
+      pendingInsertAfterInputSave = options.insertAfterSave === true;
+      pendingInsertContextAfterInputSave = options.insertContext || null;
+      if (customQuickActionInputEditorTitle) customQuickActionInputEditorTitle.textContent = input ? 'Edit input' : 'Add input';
+      if (customQuickActionInputLabel) customQuickActionInputLabel.value = input?.label || '';
+      if (customQuickActionInputKey) {
+        customQuickActionInputKey.value = input?.key || generateCustomQuickActionInputKey('', customQuickActionDraftInputs, customQuickActionDraftInputs.length + 1);
+      }
+      if (customQuickActionInputType) customQuickActionInputType.value = input?.type || 'text';
+      if (customQuickActionInputPlaceholder) customQuickActionInputPlaceholder.value = input?.placeholder || '';
+      if (customQuickActionInputRequired) customQuickActionInputRequired.checked = input?.required === true;
+      if (customQuickActionInputMultiple) customQuickActionInputMultiple.checked = input?.multiple === true;
+      if (customQuickActionInputAllowCustomOption) customQuickActionInputAllowCustomOption.checked = input?.allowCustomOption === true;
+      if (customQuickActionInputOptions) {
+        customQuickActionInputOptions.value = Array.isArray(input?.options)
+          ? input.options.map((option) => option.label === option.value ? option.label : `${option.label}|${option.value}`).join('\n')
+          : '';
+      }
+      if (customQuickActionInputDefaultValue) {
+        customQuickActionInputDefaultValue.value = Array.isArray(input?.defaultValue)
+          ? input.defaultValue.join('\n')
+          : (input?.defaultValue || '');
+      }
+      customQuickActionInputEditor?.classList.remove('hidden');
+      updateCustomQuickActionInputEditorVisibility();
+      customQuickActionInputLabel?.focus();
+    }
+
+    function parseCustomQuickActionInputOptionsFromTextarea(text) {
+      return String(text || '').split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+        const [labelPart, valuePart] = line.includes('|') ? line.split('|') : [line, line];
+        const label = String(labelPart || '').trim();
+        const value = String(valuePart || '').trim();
+        if (!label || !value) return null;
+        return { id: generateCustomQuickActionInputOptionId(), label, value };
+      }).filter(Boolean);
+    }
+
+    function saveCustomQuickActionInputFromEditor() {
+      const label = customQuickActionInputLabel?.value.trim() || '';
+      const type = customQuickActionInputType?.value || 'text';
+      const key = sanitizeCustomQuickActionInputKey(customQuickActionInputKey?.value || '')
+        || generateCustomQuickActionInputKey(label, customQuickActionDraftInputs, customQuickActionDraftInputs.length + 1);
+      const previousInput = editingCustomQuickActionInputId
+        ? customQuickActionDraftInputs.find((input) => input.id === editingCustomQuickActionInputId)
+        : null;
+      if (!label) {
+        showToast('Input label is required.', 'error');
+        return null;
+      }
+      const keyTaken = customQuickActionDraftInputs.some((input) => input.id !== editingCustomQuickActionInputId && input.key.toLowerCase() === key.toLowerCase());
+      if (keyTaken) {
+        showToast('Input key must be unique.', 'error');
+        return null;
+      }
+      const nextInput = {
+        id: editingCustomQuickActionInputId || generateCustomQuickActionInputId(),
+        key,
+        label,
+        type,
+        required: customQuickActionInputRequired?.checked === true,
+        multiple: type === 'select' ? customQuickActionInputMultiple?.checked === true : false,
+        options: type === 'select' ? parseCustomQuickActionInputOptionsFromTextarea(customQuickActionInputOptions?.value || '') : [],
+        allowCustomOption: type === 'select' ? customQuickActionInputAllowCustomOption?.checked === true : false,
+        placeholder: customQuickActionInputPlaceholder?.value.trim() || '',
+        defaultValue: null,
+      };
+      if (type === 'select' && nextInput.options.length === 0) {
+        showToast('Selection inputs need at least one option.', 'error');
+        return null;
+      }
+      if (type === 'select') {
+        nextInput.defaultValue = nextInput.multiple
+          ? String(customQuickActionInputDefaultValue?.value || '').split('\n').map((entry) => entry.trim()).filter(Boolean)
+          : (customQuickActionInputDefaultValue?.value.trim() || '');
+      } else if (type !== 'image') {
+        nextInput.defaultValue = customQuickActionInputDefaultValue?.value || '';
+      }
+      const shouldInsertAfterSave = pendingInsertAfterInputSave === true;
+      const insertContextAfterSave = pendingInsertContextAfterInputSave;
+      let currentTemplate = serializeCustomQuickActionPromptEditor();
+      if (previousInput?.key && previousInput.key !== nextInput.key) {
+        const tokenRegex = new RegExp(`\\{${previousInput.key}\\}`, 'g');
+        currentTemplate = currentTemplate.replace(tokenRegex, `{${nextInput.key}}`);
+      }
+      const existingIndex = customQuickActionDraftInputs.findIndex((input) => input.id === nextInput.id);
+      if (existingIndex >= 0) customQuickActionDraftInputs[existingIndex] = nextInput;
+      else customQuickActionDraftInputs.push(nextInput);
+      customQuickActionDraftInputs = sanitizeCustomQuickActionInputs(customQuickActionDraftInputs);
+      renderCustomQuickActionInputsList();
+      renderCustomQuickActionPromptEditor(currentTemplate);
+      closeCustomQuickActionInputEditor();
+      return { input: nextInput, shouldInsertAfterSave, insertContextAfterSave };
+    }
+
+    function deleteCustomQuickActionInput(inputId) {
+      customQuickActionDraftInputs = customQuickActionDraftInputs.filter((input) => input.id !== inputId);
+      renderCustomQuickActionInputsList();
+      renderCustomQuickActionPromptEditor(serializeCustomQuickActionPromptEditor());
+      hideCustomQuickActionInsertMenu();
+    }
+
+    function normalizeCustomQuickActionFieldValues(action, rawValues = {}) {
+      if (!action?.customQuickActionInputs?.length) return { values: rawValues, imageDataUrls: [] };
+      const nextValues = { ...rawValues };
+      const imageDataUrls = [];
+      const initialImageOffset = Array.isArray(rawValues.imageInput) ? rawValues.imageInput.length : 0;
+      action.customQuickActionInputs.forEach((input) => {
+        if (!input?.key) return;
+        if (input.type === 'select') {
+          const customKey = `${input.key}__custom`;
+          const customValue = String(nextValues[customKey] || '').trim();
+          if (input.multiple) {
+            const selectedValues = Array.isArray(nextValues[input.key]) ? nextValues[input.key].filter(Boolean) : [];
+            const normalizedValues = selectedValues.filter((value) => value !== '__custom__');
+            if (selectedValues.includes('__custom__') && customValue) normalizedValues.push(customValue);
+            nextValues[input.key] = normalizedValues.join(', ');
+          } else if (nextValues[input.key] === '__custom__') {
+            nextValues[input.key] = customValue;
+          }
+        } else if (input.type === 'image') {
+          const images = Array.isArray(nextValues[input.key]) ? nextValues[input.key] : [];
+          const refs = [];
+          images.forEach((image) => {
+            if (!image?.data) return;
+            imageDataUrls.push(image.data);
+            refs.push(`@Image ${initialImageOffset + imageDataUrls.length}`);
+          });
+          nextValues[input.key] = refs.join(', ');
+        }
+      });
+      return { values: nextValues, imageDataUrls };
+    }
+
+    function validateCustomQuickActionRequiredInputs(action, values = {}) {
+      if (!action?.customQuickActionInputs?.length) return true;
+      for (const input of action.customQuickActionInputs) {
+        if (!input.required) continue;
+        const value = values[input.key];
+        const customValue = String(values[`${input.key}__custom`] || '').trim();
+        if (input.type === 'image') {
+          if (!Array.isArray(value) || value.length === 0) {
+            showToast(`"${input.label}" is required.`, 'error');
+            return false;
+          }
+        } else if (input.type === 'select' && input.multiple) {
+          const selectedValues = Array.isArray(value) ? value.filter(Boolean) : [];
+          const onlyCustomMarker = selectedValues.length === 1 && selectedValues[0] === '__custom__';
+          if (selectedValues.length === 0 || (onlyCustomMarker && !customValue)) {
+            showToast(`"${input.label}" is required.`, 'error');
+            return false;
+          }
+        } else if (input.type === 'select') {
+          if (!String(value || '').trim() || (value === '__custom__' && !customValue)) {
+            showToast(`"${input.label}" is required.`, 'error');
+            return false;
+          }
+        } else if (!String(value || '').trim()) {
+          showToast(`"${input.label}" is required.`, 'error');
+          return false;
+        }
+      }
+      return true;
+    }
 
     function generateCustomQuickActionId() {
       return `qa_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -39621,6 +40201,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (!customQuickActionModal) return;
       customQuickActionModal.classList.remove('show');
       closeCustomQuickActionContextMenu();
+      closeCustomQuickActionInputEditor();
+      hideCustomQuickActionInsertMenu();
+      customQuickActionDraftInputs = [];
+      customQuickActionPromptSelectionRange = null;
       editingCustomQuickActionId = null;
     }
 
@@ -39640,6 +40224,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         : '';
 
       editingCustomQuickActionId = isEdit ? action.id : null;
+      customQuickActionDraftInputs = sanitizeCustomQuickActionInputs(action?.inputs || []);
       if (customQuickActionModalTitle) customQuickActionModalTitle.textContent = title;
       if (saveCustomQuickActionBtn) saveCustomQuickActionBtn.textContent = isEdit
         ? tu('actions.customQuickAction.update')
@@ -39647,7 +40232,10 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (customQuickActionName) customQuickActionName.value = nextName;
       if (customQuickActionMode) customQuickActionMode.value = action?.mode === 'ask' ? 'ask' : 'agent';
       if (customQuickActionDescription) customQuickActionDescription.value = action?.desc || '';
-      if (customQuickActionPrompt) customQuickActionPrompt.value = action?.promptTemplate || '';
+      renderCustomQuickActionInputsList();
+      renderCustomQuickActionPromptEditor(action?.promptTemplate || '');
+      closeCustomQuickActionInputEditor();
+      hideCustomQuickActionInsertMenu();
       setCustomQuickActionContextValue(
         VALID_CUSTOM_QUICK_ACTION_CONTEXTS.has(action?.requiredContext) ? action.requiredContext : ContextMode.SMART
       );
@@ -39655,6 +40243,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       if (customQuickActionIncludeTokens) customQuickActionIncludeTokens.checked = action?.includeTokens === true;
       populateCustomQuickActionCategoryOptions(action?.category || defaultCategory);
       customQuickActionModal.classList.add('show');
+      customQuickActionPromptSelectionRange = null;
       customQuickActionName?.focus();
       customQuickActionName?.select();
     }
@@ -39693,7 +40282,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
       const category = customQuickActionCategory?.value || '';
       const mode = customQuickActionMode?.value === 'ask' ? 'ask' : 'agent';
       const desc = customQuickActionDescription?.value.trim() || '';
-      const promptTemplate = customQuickActionPrompt?.value.trim() || '';
+      const promptTemplate = serializeCustomQuickActionPromptEditor();
       const requiredContext = getCustomQuickActionContextValue();
 
       if (!name) {
@@ -39728,6 +40317,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         category,
         mode,
         promptTemplate,
+        inputs: sanitizeCustomQuickActionInputs(customQuickActionDraftInputs),
         desc,
         noSelection: customQuickActionNoSelection?.checked === true,
         includeTokens: customQuickActionIncludeTokens?.checked === true,
@@ -40312,6 +40902,80 @@ Based on the user's instruction, generate the appropriate commands to modify the
       setCustomQuickActionContextValue(option.dataset.contextValue);
       closeCustomQuickActionContextMenu();
     });
+    customQuickActionAddInputBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openCustomQuickActionInputEditor(null);
+    });
+    customQuickActionCancelInputBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      closeCustomQuickActionInputEditor();
+    });
+    customQuickActionSaveInputBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const savedResult = saveCustomQuickActionInputFromEditor();
+      if (savedResult?.input && savedResult.shouldInsertAfterSave) {
+        insertCustomQuickActionChip(savedResult.input, savedResult.insertContextAfterSave);
+      }
+    });
+    customQuickActionInputType?.addEventListener('change', updateCustomQuickActionInputEditorVisibility);
+    customQuickActionInputMultiple?.addEventListener('change', updateCustomQuickActionInputEditorVisibility);
+    customQuickActionInputLabel?.addEventListener('input', () => {
+      if (!customQuickActionInputKey) return;
+      const currentKey = sanitizeCustomQuickActionInputKey(customQuickActionInputKey.value || '');
+      if (!currentKey || currentKey.startsWith('input')) {
+        customQuickActionInputKey.value = generateCustomQuickActionInputKey(customQuickActionInputLabel.value, customQuickActionDraftInputs, customQuickActionDraftInputs.length + 1);
+      }
+    });
+    customQuickActionInputsList?.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-custom-input-action]');
+      if (!button) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const inputId = button.dataset.customInputId;
+      if (!inputId) return;
+      if (button.dataset.customInputAction === 'edit') {
+        const input = customQuickActionDraftInputs.find((entry) => entry.id === inputId);
+        if (input) openCustomQuickActionInputEditor(input);
+      } else if (button.dataset.customInputAction === 'delete') {
+        deleteCustomQuickActionInput(inputId);
+      }
+    });
+    customQuickActionPromptEditor?.addEventListener('mouseup', saveCustomQuickActionSelectionRange);
+    customQuickActionPromptEditor?.addEventListener('keyup', saveCustomQuickActionSelectionRange);
+    customQuickActionPromptEditor?.addEventListener('focus', saveCustomQuickActionSelectionRange);
+    customQuickActionPromptEditor?.addEventListener('input', () => {
+      updateCustomQuickActionPromptTextareaValue();
+      saveCustomQuickActionSelectionRange();
+    });
+    customQuickActionPromptEditor?.addEventListener('click', (e) => {
+      if (e.target.closest('.custom-quick-action-prompt-chip')) return;
+      saveCustomQuickActionSelectionRange();
+    });
+    customQuickActionInsertBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      saveCustomQuickActionSelectionRange();
+      openCustomQuickActionInsertMenu(customQuickActionInsertBtn, { type: 'insert' });
+    });
+    customQuickActionInsertMenu?.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-insert-input-id], [data-insert-new-input]');
+      if (!item) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (item.dataset.insertNewInput === 'true') {
+        openCustomQuickActionInputEditor(null, {
+          insertAfterSave: true,
+          insertContext: customQuickActionInsertContext,
+        });
+        hideCustomQuickActionInsertMenu();
+        return;
+      }
+      const input = customQuickActionDraftInputs.find((entry) => entry.id === item.dataset.insertInputId);
+      if (input) insertCustomQuickActionChip(input);
+    });
     closeCustomQuickActionBtn.onclick = closeCustomQuickActionModal;
     cancelCustomQuickActionBtn.onclick = closeCustomQuickActionModal;
     saveCustomQuickActionBtn.onclick = handleSaveCustomQuickAction;
@@ -40324,6 +40988,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
       }
       if (!e.target.closest('.custom-quick-action-context-select')) {
         closeCustomQuickActionContextMenu();
+      }
+      if (!e.target.closest('.custom-quick-action-insert-menu') && !e.target.closest('.custom-quick-action-insert-btn') && !e.target.closest('.custom-quick-action-prompt-chip')) {
+        hideCustomQuickActionInsertMenu();
       }
     });
 

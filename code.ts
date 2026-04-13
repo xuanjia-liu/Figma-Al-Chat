@@ -85,12 +85,32 @@ interface CustomQuickAction {
   category: string;
   mode: 'ask' | 'agent';
   promptTemplate: string;
+  inputs?: CustomQuickActionInput[];
   desc?: string;
   noSelection?: boolean;
   includeTokens?: boolean;
   requiredContext?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+interface CustomQuickActionInputOption {
+  id: string;
+  label: string;
+  value: string;
+}
+
+interface CustomQuickActionInput {
+  id: string;
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'select' | 'image';
+  required?: boolean;
+  multiple?: boolean;
+  options?: CustomQuickActionInputOption[];
+  allowCustomOption?: boolean;
+  placeholder?: string;
+  defaultValue?: string | string[] | null;
 }
 
 const VALID_CUSTOM_QUICK_ACTION_CONTEXTS = new Set([
@@ -117,6 +137,98 @@ const VALID_CUSTOM_QUICK_ACTION_CATEGORIES = new Set([
   'User Research',
   'Comments'
 ]);
+
+const VALID_CUSTOM_QUICK_ACTION_INPUT_TYPES = new Set(['text', 'textarea', 'select', 'image']);
+
+function sanitizeCustomQuickActionInputKey(rawValue: unknown): string {
+  return typeof rawValue === 'string'
+    ? rawValue.trim().replace(/[^a-zA-Z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+    : '';
+}
+
+function sanitizeCustomQuickActionInputOptions(rawValue: unknown): CustomQuickActionInputOption[] {
+  if (!Array.isArray(rawValue)) return [];
+
+  const seenIds = new Set<string>();
+  const seenValues = new Set<string>();
+  const sanitized: CustomQuickActionInputOption[] = [];
+
+  for (const item of rawValue) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as Record<string, unknown>;
+    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+    const label = typeof candidate.label === 'string' ? candidate.label.trim() : '';
+    const value = typeof candidate.value === 'string' ? candidate.value.trim() : '';
+    const normalizedValue = value.toLocaleLowerCase();
+
+    if (!id || !label || !value) continue;
+    if (seenIds.has(id) || seenValues.has(normalizedValue)) continue;
+
+    sanitized.push({ id, label, value });
+    seenIds.add(id);
+    seenValues.add(normalizedValue);
+  }
+
+  return sanitized;
+}
+
+function sanitizeCustomQuickActionInputs(rawValue: unknown): CustomQuickActionInput[] {
+  if (!Array.isArray(rawValue)) return [];
+
+  const seenIds = new Set<string>();
+  const seenKeys = new Set<string>();
+  const sanitized: CustomQuickActionInput[] = [];
+
+  for (const item of rawValue) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as Record<string, unknown>;
+    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+    const label = typeof candidate.label === 'string' ? candidate.label.trim() : '';
+    const key = sanitizeCustomQuickActionInputKey(candidate.key);
+    const type = typeof candidate.type === 'string' && VALID_CUSTOM_QUICK_ACTION_INPUT_TYPES.has(candidate.type)
+      ? candidate.type as CustomQuickActionInput['type']
+      : null;
+    const normalizedKey = key.toLocaleLowerCase();
+
+    if (!id || !label || !key || !type) continue;
+    if (seenIds.has(id) || seenKeys.has(normalizedKey)) continue;
+
+    const options = type === 'select'
+      ? sanitizeCustomQuickActionInputOptions(candidate.options)
+      : [];
+    const defaultValueRaw = candidate.defaultValue;
+    let defaultValue: string | string[] | null = null;
+    if (type === 'select' && candidate.multiple === true) {
+      if (Array.isArray(defaultValueRaw)) {
+        defaultValue = defaultValueRaw
+          .map((entry) => typeof entry === 'string' ? entry.trim() : '')
+          .filter(Boolean);
+      }
+    } else if (typeof defaultValueRaw === 'string') {
+      defaultValue = defaultValueRaw.trim();
+    } else if (defaultValueRaw == null) {
+      defaultValue = null;
+    }
+
+    sanitized.push({
+      id,
+      key,
+      label,
+      type,
+      required: candidate.required === true,
+      multiple: type === 'select' ? candidate.multiple === true : false,
+      options,
+      allowCustomOption: type === 'select' ? candidate.allowCustomOption === true : false,
+      placeholder: typeof candidate.placeholder === 'string' ? candidate.placeholder.trim() : '',
+      defaultValue,
+    });
+
+    seenIds.add(id);
+    seenKeys.add(normalizedKey);
+  }
+
+  return sanitized;
+}
 
 function sanitizeCustomQuickActions(rawValue: unknown): CustomQuickAction[] {
   if (!Array.isArray(rawValue)) return [];
@@ -160,6 +272,7 @@ function sanitizeCustomQuickActions(rawValue: unknown): CustomQuickAction[] {
       category,
       mode,
       promptTemplate,
+      inputs: sanitizeCustomQuickActionInputs(candidate.inputs),
       desc: typeof candidate.desc === 'string' ? candidate.desc.trim() : '',
       noSelection: candidate.noSelection === true,
       includeTokens: candidate.includeTokens === true,
