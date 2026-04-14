@@ -2533,39 +2533,117 @@ function fontMappingHexToRgb(hexRaw: string): { r: number; g: number; b: number;
   };
 }
 
-function classifyScriptBucket(codePoint: number): 'japanese' | 'latin' | 'numbers' {
-  // CJK Symbols and Punctuation (、。〈〉《》・ U+3000 space, etc.) — not Latin
-  if (codePoint >= 0x3000 && codePoint <= 0x303f) return 'japanese';
-  // Hiragana
-  if (codePoint >= 0x3040 && codePoint <= 0x309f) return 'japanese';
-  // Katakana
-  if (codePoint >= 0x30a0 && codePoint <= 0x30ff) return 'japanese';
-  // Katakana Phonetic Extensions
-  if (codePoint >= 0x31f0 && codePoint <= 0x31ff) return 'japanese';
-  // CJK Unified Ideographs (Kanji)
-  if (codePoint >= 0x4e00 && codePoint <= 0x9faf) return 'japanese';
-  // CJK Extension A
-  if (codePoint >= 0x3400 && codePoint <= 0x4dbf) return 'japanese';
-  // CJK Compatibility (square symbols, etc.)
-  if (codePoint >= 0x3300 && codePoint <= 0x33ff) return 'japanese';
-  // CJK Compatibility Ideographs
-  if (codePoint >= 0xf900 && codePoint <= 0xfaff) return 'japanese';
-  // Halfwidth and Fullwidth Forms: full-width punctuation/symbols (全角記号) and half-width
-  // katakana — treat as Japanese. Exclude only full-width ASCII letters/digits (handled below).
+/** Fine buckets for font-mapping script targets (Hangul / kana / Han are distinct where Unicode allows). */
+type FontMappingFineBucket = 'hangul' | 'kana' | 'han' | 'bopomofo' | 'cjk_sym' | 'latin' | 'numbers';
+
+/** Map legacy UI target strings to current ones. */
+function normalizeFontMappingTarget(t: string): string {
+  if (t === 'japanese') return 'japanese_all';
+  if (t === 'chinese') return 'han_jp_cn';
+  return t;
+}
+
+function classifyFontMappingFineBucket(codePoint: number): FontMappingFineBucket {
+  // Korean Hangul (syllables + jamo)
+  if (codePoint >= 0xac00 && codePoint <= 0xd7a3) return 'hangul';
+  if (codePoint >= 0x1100 && codePoint <= 0x11ff) return 'hangul';
+  if (codePoint >= 0x3130 && codePoint <= 0x318f) return 'hangul';
+  if (codePoint >= 0xa960 && codePoint <= 0xa97f) return 'hangul';
+  if (codePoint >= 0xd7b0 && codePoint <= 0xd7ff) return 'hangul';
+
+  // ASCII digits / Latin (before FF block)
+  if (codePoint >= 0x0030 && codePoint <= 0x0039) return 'numbers';
+  if (codePoint >= 0x0041 && codePoint <= 0x005a) return 'latin';
+  if (codePoint >= 0x0061 && codePoint <= 0x007a) return 'latin';
+
+  // Halfwidth and Fullwidth Forms
   if (codePoint >= 0xff00 && codePoint <= 0xffef) {
     if (codePoint >= 0xff10 && codePoint <= 0xff19) return 'numbers';
     if ((codePoint >= 0xff21 && codePoint <= 0xff3a) || (codePoint >= 0xff41 && codePoint <= 0xff5a)) {
       return 'latin';
     }
-    return 'japanese';
+    if (codePoint >= 0xff65 && codePoint <= 0xff9f) return 'kana';
+    return 'cjk_sym';
   }
-  // ASCII digits
-  if (codePoint >= 0x0030 && codePoint <= 0x0039) return 'numbers';
-  // ASCII Latin
-  if (codePoint >= 0x0041 && codePoint <= 0x005a) return 'latin';
-  if (codePoint >= 0x0061 && codePoint <= 0x007a) return 'latin';
-  // Default: punctuation/spaces outside CJK blocks (e.g. ASCII parens) → latin
+
+  // Bopomofo (Chinese)
+  if (codePoint >= 0x3100 && codePoint <= 0x312f) return 'bopomofo';
+
+  // Hiragana / Katakana / small kana extensions
+  if (codePoint >= 0x3040 && codePoint <= 0x309f) return 'kana';
+  if (codePoint >= 0x30a0 && codePoint <= 0x30ff) return 'kana';
+  if (codePoint >= 0x31f0 && codePoint <= 0x31ff) return 'kana';
+
+  // CJK strokes (often Chinese/Japanese typography)
+  if (codePoint >= 0x31c0 && codePoint <= 0x31ef) return 'cjk_sym';
+
+  // CJK Symbols and Punctuation, enclosed, compatibility symbols
+  if (codePoint >= 0x3000 && codePoint <= 0x303f) return 'cjk_sym';
+  if (codePoint >= 0x3200 && codePoint <= 0x32ff) return 'cjk_sym';
+  if (codePoint >= 0x3300 && codePoint <= 0x33ff) return 'cjk_sym';
+
+  // CJK Unified Ideographs + Extension A + Compatibility Ideographs (Han — shared by JP/CN; both targets include "han")
+  if (codePoint >= 0x4e00 && codePoint <= 0x9fff) return 'han';
+  if (codePoint >= 0x3400 && codePoint <= 0x4dbf) return 'han';
+  if (codePoint >= 0xf900 && codePoint <= 0xfaff) return 'han';
+
   return 'latin';
+}
+
+function fontMappingWantSetForTarget(
+  target: string
+): Set<FontMappingFineBucket> | null {
+  const t = normalizeFontMappingTarget(target);
+  switch (t) {
+    case 'japanese_all':
+      // Hiragana / Katakana + Kanji + CJK punctuation (full Japanese typography)
+      return new Set(['kana', 'han', 'cjk_sym']);
+    case 'han_jp_cn':
+      // Shared Han + Bopomofo + CJK symbols (Kanji in JP / Chinese; Unicode cannot split Han by locale)
+      return new Set(['han', 'bopomofo', 'cjk_sym']);
+    case 'kana_only':
+      return new Set(['kana']);
+    case 'korean':
+      return new Set(['hangul']);
+    case 'latin':
+      return new Set(['latin']);
+    case 'numbers':
+      return new Set(['numbers']);
+    case 'latin_and_numbers':
+      return new Set(['latin', 'numbers']);
+    default:
+      return null;
+  }
+}
+
+function segmentTextByFontMappingTarget(
+  text: string,
+  target: string
+): Array<{ start: number; end: number }> {
+  const want = fontMappingWantSetForTarget(target);
+  if (!want || want.size === 0) return [];
+
+  const segs: Array<{ start: number; end: number; b: FontMappingFineBucket }> = [];
+  let segStart = 0;
+  let cur: FontMappingFineBucket | null = null;
+  let i = 0;
+  while (i < text.length) {
+    const cp = text.codePointAt(i)!;
+    const b = classifyFontMappingFineBucket(cp);
+    if (cur === null) {
+      cur = b;
+      segStart = i;
+    } else if (cur !== b) {
+      segs.push({ start: segStart, end: i, b: cur });
+      cur = b;
+      segStart = i;
+    }
+    i += cp > 0xffff ? 2 : 1;
+  }
+  if (cur !== null) {
+    segs.push({ start: segStart, end: text.length, b: cur });
+  }
+  return segs.filter(s => want.has(s.b)).map(({ start, end }) => ({ start, end }));
 }
 
 async function resolveFontStyleForRange(
@@ -2679,40 +2757,6 @@ async function applyFontMappingRangeOps(
   }
 }
 
-function segmentTextByScript(
-  text: string,
-  wantJp: boolean,
-  wantLatin: boolean,
-  wantNum: boolean
-): Array<{ start: number; end: number; bucket: 'japanese' | 'latin' | 'numbers' }> {
-  type Bucket = 'japanese' | 'latin' | 'numbers';
-  const segs: Array<{ start: number; end: number; bucket: Bucket }> = [];
-  let segStart = 0;
-  let cur: Bucket | null = null;
-  let i = 0;
-  while (i < text.length) {
-    const cp = text.codePointAt(i)!;
-    const b = classifyScriptBucket(cp);
-    if (cur === null) {
-      cur = b;
-      segStart = i;
-    } else if (cur !== b) {
-      segs.push({ start: segStart, end: i, bucket: cur });
-      cur = b;
-      segStart = i;
-    }
-    i += cp > 0xffff ? 2 : 1;
-  }
-  if (cur !== null) {
-    segs.push({ start: segStart, end: text.length, bucket: cur });
-  }
-  const wanted = new Set<string>();
-  if (wantJp) wanted.add('japanese');
-  if (wantLatin) wanted.add('latin');
-  if (wantNum) wanted.add('numbers');
-  return segs.filter(s => wanted.has(s.bucket));
-}
-
 async function applyFontMappingFromUiPayload(payload: any): Promise<{ ok: boolean; message?: string; updated: number }> {
   const nodeIds: string[] = Array.isArray(payload?.nodeIds) ? payload.nodeIds.filter((x: any) => typeof x === 'string') : [];
   const rules: any[] = Array.isArray(payload?.rules) ? payload.rules : [];
@@ -2741,16 +2785,23 @@ async function applyFontMappingFromUiPayload(payload: any): Promise<{ ok: boolea
     if (fullText.length === 0) continue;
 
     for (const rule of rules) {
-      const tgt: string = typeof rule?.target === 'string' ? rule.target : 'whole';
+      const tgt: string = normalizeFontMappingTarget(
+        typeof rule?.target === 'string' ? rule.target : 'whole'
+      );
       const ranges: Array<{ start: number; end: number }> = [];
 
       if (tgt === 'whole') {
         ranges.push({ start: 0, end: fullText.length });
-      } else if (tgt === 'japanese' || tgt === 'latin' || tgt === 'numbers' || tgt === 'latin_and_numbers') {
-        const wantJp = tgt === 'japanese';
-        const wantLat = tgt === 'latin' || tgt === 'latin_and_numbers';
-        const wantNum = tgt === 'numbers' || tgt === 'latin_and_numbers';
-        ranges.push(...segmentTextByScript(fullText, wantJp, wantLat, wantNum));
+      } else if (
+        tgt === 'japanese_all' ||
+        tgt === 'han_jp_cn' ||
+        tgt === 'kana_only' ||
+        tgt === 'korean' ||
+        tgt === 'latin' ||
+        tgt === 'numbers' ||
+        tgt === 'latin_and_numbers'
+      ) {
+        ranges.push(...segmentTextByFontMappingTarget(fullText, tgt));
       } else if (tgt === 'substring') {
         const sub = typeof rule?.substring === 'string' ? rule.substring.trim() : '';
         if (!sub) continue;
@@ -9097,6 +9148,9 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'list-font-preview-local-fonts': {
+      const anyMsg = msg as any;
+      const requestId = typeof anyMsg.requestId === 'string' ? anyMsg.requestId : undefined;
+      const resultExtras = requestId ? { requestId } : {};
       try {
         const listed = await figma.listAvailableFontsAsync();
         const byFamily = new Map<string, Set<string>>();
@@ -9118,12 +9172,13 @@ figma.ui.onmessage = async (msg: {
             styles: [...styles].sort((a, b) => a.localeCompare(b)),
           }))
           .sort((a, b) => a.family.localeCompare(b.family));
-        figma.ui.postMessage({ type: 'font-preview-local-fonts-result', families });
+        figma.ui.postMessage({ type: 'font-preview-local-fonts-result', families, ...resultExtras });
       } catch (error: any) {
         figma.ui.postMessage({
           type: 'font-preview-local-fonts-result',
           families: [],
           error: error?.message || 'listAvailableFonts failed',
+          ...resultExtras
         });
       }
       break;

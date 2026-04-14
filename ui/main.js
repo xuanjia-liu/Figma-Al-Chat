@@ -18057,6 +18057,7 @@ Generate ONLY the reply text, nothing else.`;
               tu,
               showToast,
               requestLocalStyles: requestLocalStylesForFontMapping,
+              requestFontFamilies: requestFontFamiliesForFontMapping,
             });
           }
 
@@ -18077,6 +18078,7 @@ Generate ONLY the reply text, nothing else.`;
                   tu,
                   showToast,
                   requestLocalStyles: requestLocalStylesForFontMapping,
+                  requestFontFamilies: requestFontFamiliesForFontMapping,
                 });
               }
             };
@@ -23323,6 +23325,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         const handler = (event) => {
           const msg = event.data?.pluginMessage;
           if (!msg || msg.type !== 'font-preview-local-fonts-result') return;
+          if (msg.requestId) return;
           clearTimeout(timeout);
           window.removeEventListener('message', handler);
           const availabilityMap = buildIconFontAvailabilityMap(msg.families);
@@ -26323,6 +26326,29 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         };
         window.addEventListener('message', handler);
         parent.postMessage({ pluginMessage: { type: 'getLocalStyles', source: 'font-mapping' } }, '*');
+      });
+    }
+
+    function requestFontFamiliesForFontMapping() {
+      const requestId = `fm-fonts-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timed out loading fonts'));
+        }, 25000);
+        const handler = (event) => {
+          const msg = event.data && event.data.pluginMessage;
+          if (!msg || msg.type !== 'font-preview-local-fonts-result') return;
+          if (msg.requestId !== requestId) return;
+          clearTimeout(timeout);
+          window.removeEventListener('message', handler);
+          resolve(msg);
+        };
+        window.addEventListener('message', handler);
+        parent.postMessage(
+          { pluginMessage: { type: 'list-font-preview-local-fonts', requestId } },
+          '*'
+        );
       });
     }
 

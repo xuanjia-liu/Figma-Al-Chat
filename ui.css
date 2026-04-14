@@ -692,6 +692,81 @@
       gap: 4px;
     }
 
+    .fm-font-family-wrap {
+      position: relative;
+      min-width: 0;
+    }
+
+    .fm-font-family-wrap--open {
+      z-index: 10040;
+    }
+
+    /* Custom list (replaces native datalist — matches plugin theme, anchors under field). */
+    .fm-fam-suggest {
+      position: fixed;
+      box-sizing: border-box;
+      margin: 0;
+      padding: 2px 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      list-style: none;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+      font-size: var(--text-sm);
+      z-index: 10050;
+    }
+
+    .fm-fam-suggest-item {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: left;
+      padding: 6px 8px;
+      margin: 0;
+      border: none;
+      border-radius: var(--radius-xs);
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      line-height: 1.35;
+      cursor: pointer;
+    }
+
+    .fm-fam-suggest-item:hover,
+    .fm-fam-suggest-item:focus-visible {
+      background: var(--bg-primary);
+      outline: none;
+    }
+
+    .fm-fam-suggest-empty {
+      padding: 8px 10px;
+      font-size: var(--text-2xs);
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .fm-font-style-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .fm-font-style-row .fm-style-preset-select {
+      flex: 0 1 46%;
+      max-width: 12em;
+      min-width: 0;
+    }
+
+    .fm-font-style-row .fm-style-text-input {
+      flex: 1;
+      min-width: 0;
+    }
+
     .fm-preset-row {
       display: flex;
       align-items: center;
