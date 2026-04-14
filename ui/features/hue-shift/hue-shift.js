@@ -1545,6 +1545,7 @@ export function mountHueShift(container, options = {}) {
       mergeNear = Number(slider.value);
       snapshotMergeGroupingBasis();
       valueEl.textContent = `${Math.round(mergeNear)}`;
+      updatePaletteBar();
       drawOverlay();
       updateResetButtonState();
     });
