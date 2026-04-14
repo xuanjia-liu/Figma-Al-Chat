@@ -670,12 +670,47 @@
       background: transparent;
     }
 
-    .fm-rule-section summary {
+    .fm-rule-section > summary {
+      list-style: none;
       cursor: pointer;
       font-weight: 600;
       font-size: var(--text-xs);
       color: var(--text-secondary);
       padding: 4px 0;
+    }
+
+    .fm-rule-section > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .fm-rule-section-summary {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      user-select: none;
+    }
+
+    .fm-rule-section-summary .fm-rule-summary-cb {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: var(--accent-agent, #6366f1);
+    }
+
+    .fm-rule-section-summary .fm-rule-summary-title {
+      flex: 1;
+      min-width: 0;
+      line-height: 1.35;
+    }
+
+    .fm-rule-section--locked > summary .fm-rule-summary-title {
+      color: var(--text-muted);
+    }
+
+    .fm-rule-section-body {
+      padding-top: 2px;
     }
 
     .fm-rule-grid {
@@ -751,6 +786,7 @@
     .fm-font-style-row {
       display: flex;
       flex-direction: row;
+      flex-wrap: wrap;
       align-items: center;
       gap: 6px;
       min-width: 0;
@@ -763,8 +799,15 @@
     }
 
     .fm-font-style-row .fm-style-text-input {
-      flex: 1;
+      flex: 1 1 6em;
       min-width: 0;
+    }
+
+    .fm-font-style-row .fm-match-weight-inline {
+      flex: 1 1 auto;
+      margin: 0;
+      min-width: 0;
+      justify-content: flex-end;
     }
 
     .fm-preset-row {
@@ -6225,6 +6268,25 @@
       border: 1px solid var(--border-intense);
       vertical-align: middle;
       transform: translateY(-1px);
+    }
+
+    .message-content code.inline-code-copyable {
+      cursor: pointer;
+    }
+
+    .message-content code.inline-code-copyable:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    body.light-mode .message-content code.inline-code-copyable:hover {
+      background: rgba(0, 0, 0, 0.06);
+      border-color: rgba(0, 0, 0, 0.12);
+    }
+
+    .message.user .message-content code.inline-code-copyable:hover {
+      background: rgba(0, 0, 0, 0.12);
+      border-color: rgba(0, 0, 0, 0.18);
     }
 
     .message.bot .message-content pre {

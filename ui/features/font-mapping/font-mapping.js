@@ -24,15 +24,15 @@ const PRESETS = {
   iosDefault: {
     label: 'iOS (Hiragino Sans + SF Pro Display)',
     rules: [
-      { target: 'japanese_all', fontFamily: 'Hiragino Sans', fontStyle: 'W4', matchWeight: true },
-      { target: 'latin_and_numbers', fontFamily: 'SF Pro Display', fontStyle: 'Regular', matchWeight: true },
+      { target: 'japanese_all', fontFamily: 'Hiragino Sans', fontStyle: 'W4', matchWeight: true, styleEnabled: false },
+      { target: 'latin_and_numbers', fontFamily: 'SF Pro Display', fontStyle: 'Regular', matchWeight: true, styleEnabled: false },
     ],
   },
   androidDefault: {
     label: 'Android (Noto Sans CJK JP + Roboto)',
     rules: [
-      { target: 'japanese_all', fontFamily: 'Noto Sans CJK JP', fontStyle: 'Regular', matchWeight: true },
-      { target: 'latin_and_numbers', fontFamily: 'Roboto', fontStyle: 'Regular', matchWeight: true },
+      { target: 'japanese_all', fontFamily: 'Noto Sans CJK JP', fontStyle: 'Regular', matchWeight: true, styleEnabled: false },
+      { target: 'latin_and_numbers', fontFamily: 'Roboto', fontStyle: 'Regular', matchWeight: true, styleEnabled: false },
     ],
   },
 };
@@ -61,6 +61,51 @@ const TARGET_SCRIPT_VALUES = [
 ];
 
 let ruleIdCounter = 0;
+
+function wireFmRuleSectionLocks(container) {
+  const sections = [
+    { section: 'typography', checkboxAttr: 'fontEnabled' },
+    { section: 'styles', checkboxAttr: 'styleEnabled' },
+    { section: 'deco', checkboxAttr: 'decoEnabled' },
+  ];
+
+  container.querySelectorAll('.fm-rule-card').forEach(card => {
+    for (const { section, checkboxAttr } of sections) {
+      const details = card.querySelector(`details.fm-rule-section[data-fm-section="${section}"]`);
+      const cb = details?.querySelector(`[data-fm-r="${checkboxAttr}"]`);
+      const summary = details?.querySelector('summary.fm-rule-section-summary');
+      if (!details || !cb || !summary) continue;
+
+      const syncLocked = () => {
+        details.classList.toggle('fm-rule-section--locked', !cb.checked);
+      };
+
+      const onCbChange = () => {
+        if (cb.checked) details.open = true;
+        else details.open = false;
+        syncLocked();
+      };
+
+      const onSummaryClick = (e) => {
+        if (!cb.checked) e.preventDefault();
+      };
+
+      const onDetailsToggle = () => {
+        if (!cb.checked && details.open) details.open = false;
+      };
+
+      cb.addEventListener('click', e => {
+        e.stopPropagation();
+      });
+      cb.addEventListener('change', onCbChange);
+      summary.addEventListener('click', onSummaryClick);
+      details.addEventListener('toggle', onDetailsToggle);
+
+      syncLocked();
+      if (!cb.checked) details.open = false;
+    }
+  });
+}
 
 function buildTargetSelectHtml(rule, tu) {
   const byVal = new Map(TARGET_OPTIONS.map(x => [x.value, x]));
@@ -331,6 +376,10 @@ function buildRuleHtml(rule, tu, cache, displayIndex) {
 
   const famPlaceholder = escapeHtml(tu('actions.fontMapping.fontTypeOrPick'));
 
+  const fontOn = rule.fontEnabled !== false;
+  const styleOn = rule.styleEnabled !== false;
+  const decoOn = !!rule.decoEnabled;
+
   return `
   <div class="fm-rule-card" data-fm-rule-id="${id}">
     <div class="fm-rule-header">
@@ -346,9 +395,12 @@ function buildRuleHtml(rule, tu, cache, displayIndex) {
       <label class="font-mapping-check"><input type="checkbox" data-fm-r="allOcc"${rule.allOccurrences ? ' checked' : ''} /> ${escapeHtml(tu('actions.fontMapping.allOccurrences'))}</label>
     </div>
 
-    <details class="fm-rule-section" open>
-      <summary>${escapeHtml(tu('actions.fontMapping.sectionFont'))}</summary>
-      <label class="font-mapping-check"><input type="checkbox" data-fm-r="fontEnabled"${rule.fontEnabled !== false ? ' checked' : ''} /> ${escapeHtml(tu('actions.fontMapping.enableFont'))}</label>
+    <details class="fm-rule-section${fontOn ? '' : ' fm-rule-section--locked'}" data-fm-section="typography"${fontOn ? ' open' : ''}>
+      <summary class="fm-rule-section-summary">
+        <input type="checkbox" class="fm-rule-summary-cb" data-fm-r="fontEnabled"${fontOn ? ' checked' : ''} />
+        <span class="fm-rule-summary-title">${escapeHtml(tu('actions.fontMapping.enableFont'))}</span>
+      </summary>
+      <div class="fm-rule-section-body">
       <div class="fm-rule-font-fields">
         <div class="fm-rule-grid">
           <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.fontFamily'))}</label>
@@ -360,10 +412,8 @@ function buildRuleHtml(rule, tu, cache, displayIndex) {
           <div class="fm-font-style-row">
             <select class="font-mapping-select fm-style-preset-select" data-fm-r="fontStyleSelect" aria-label="${escapeHtml(tu('actions.fontMapping.stylePresetAria'))}" style="display:none"></select>
             <input type="text" class="font-mapping-input fm-style-text-input" data-fm-r="fontStyle" value="${escapeHtml(rule.fontStyle || '')}" placeholder="Regular" />
+            <label class="font-mapping-check fm-match-weight-inline"><input type="checkbox" data-fm-r="matchWeight"${rule.matchWeight ? ' checked' : ''} /> ${escapeHtml(tu('actions.fontMapping.matchWeight'))}</label>
           </div>
-        </div>
-        <label class="font-mapping-check"><input type="checkbox" data-fm-r="matchWeight"${rule.matchWeight ? ' checked' : ''} /> ${escapeHtml(tu('actions.fontMapping.matchWeight'))}</label>
-        <div class="fm-rule-grid">
           <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.fontSize'))}</label>
           <input type="number" class="font-mapping-input" data-fm-r="fontSize" min="1" step="0.5" value="${rule.fontSize != null ? rule.fontSize : ''}" />
           <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.lineHeight'))}</label>
@@ -377,10 +427,15 @@ function buildRuleHtml(rule, tu, cache, displayIndex) {
           </div>
         </div>
       </div>
+      </div>
     </details>
 
-    <details class="fm-rule-section">
-      <summary>${escapeHtml(tu('actions.fontMapping.sectionStyles'))}</summary>
+    <details class="fm-rule-section${styleOn ? '' : ' fm-rule-section--locked'}" data-fm-section="styles"${styleOn ? ' open' : ''}>
+      <summary class="fm-rule-section-summary">
+        <input type="checkbox" class="fm-rule-summary-cb" data-fm-r="styleEnabled"${styleOn ? ' checked' : ''} />
+        <span class="fm-rule-summary-title">${escapeHtml(tu('actions.fontMapping.applyStyles'))}</span>
+      </summary>
+      <div class="fm-rule-section-body">
       <div class="fm-rule-grid">
         <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.textStyle'))}</label>
         <select class="font-mapping-select" data-fm-r="textStyleId">${styleOpts(cache.textStyles, rule.textStyleId)}</select>
@@ -391,11 +446,15 @@ function buildRuleHtml(rule, tu, cache, displayIndex) {
         <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.colorVariable'))}</label>
         <select class="font-mapping-select" data-fm-r="fillVariableId">${varOpts}</select>
       </div>
+      </div>
     </details>
 
-    <details class="fm-rule-section">
-      <summary>${escapeHtml(tu('actions.fontMapping.sectionDeco'))}</summary>
-      <label class="font-mapping-check"><input type="checkbox" data-fm-r="decoEnabled"${rule.decoEnabled ? ' checked' : ''} /> ${escapeHtml(tu('actions.fontMapping.enableDeco'))}</label>
+    <details class="fm-rule-section${decoOn ? '' : ' fm-rule-section--locked'}" data-fm-section="deco"${decoOn ? ' open' : ''}>
+      <summary class="fm-rule-section-summary">
+        <input type="checkbox" class="fm-rule-summary-cb" data-fm-r="decoEnabled"${decoOn ? ' checked' : ''} />
+        <span class="fm-rule-summary-title">${escapeHtml(tu('actions.fontMapping.enableDeco'))}</span>
+      </summary>
+      <div class="fm-rule-section-body">
       <div class="fm-rule-grid">
         <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.textDecoration'))}</label>
         <select class="font-mapping-select" data-fm-r="textDecoration">
@@ -405,6 +464,7 @@ function buildRuleHtml(rule, tu, cache, displayIndex) {
         </select>
         <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.decoColor'))}</label>
         <input type="text" class="font-mapping-input" data-fm-r="decoHex" value="${escapeHtml(rule.decorationColorHex || '')}" placeholder="#000000" />
+      </div>
       </div>
     </details>
   </div>`;
@@ -420,7 +480,18 @@ export function mountFontMapping(container, options = {}) {
   let cache = { textStyles: [], paintStyles: [], effectStyles: [], variables: [] };
   /** @type {Map<string, string[]>} */
   let familyStylesMap = buildFontMappingFamilyStyleMap(null);
-  let rules = [{ _id: ++ruleIdCounter, target: 'whole', fontEnabled: true, fontFamily: '', fontStyle: '', matchWeight: false }];
+  let rules = [
+    {
+      _id: ++ruleIdCounter,
+      target: 'whole',
+      fontEnabled: true,
+      styleEnabled: true,
+      decoEnabled: false,
+      fontFamily: '',
+      fontStyle: '',
+      matchWeight: false,
+    },
+  ];
 
   function render() {
     const noneOpt = `<option value="">${escapeHtml(tu('actions.fontMapping.none'))}</option>`;
@@ -469,7 +540,12 @@ export function mountFontMapping(container, options = {}) {
       presetEl.addEventListener('change', () => {
         const def = PRESETS[presetEl.value];
         if (def) {
-          rules = def.rules.map(r => ({ ...r, _id: ++ruleIdCounter, fontEnabled: true }));
+          rules = def.rules.map(r => ({
+            ...r,
+            _id: ++ruleIdCounter,
+            fontEnabled: r.fontEnabled !== false,
+            styleEnabled: r.styleEnabled !== false,
+          }));
         }
         render();
         if (presetEl) {
@@ -480,7 +556,16 @@ export function mountFontMapping(container, options = {}) {
     }
 
     container.querySelector('[data-fm-add-rule]')?.addEventListener('click', () => {
-      rules.push({ _id: ++ruleIdCounter, target: 'whole', fontEnabled: true, fontFamily: '', fontStyle: '', matchWeight: false });
+      rules.push({
+        _id: ++ruleIdCounter,
+        target: 'whole',
+        fontEnabled: true,
+        styleEnabled: true,
+        decoEnabled: false,
+        fontFamily: '',
+        fontStyle: '',
+        matchWeight: false,
+      });
       render();
     });
 
@@ -501,6 +586,8 @@ export function mountFontMapping(container, options = {}) {
         if (row) row.style.display = sel.value === 'substring' ? '' : 'none';
       });
     });
+
+    wireFmRuleSectionLocks(container);
   }
 
   function readRuleFromCard(card) {
@@ -513,6 +600,7 @@ export function mountFontMapping(container, options = {}) {
       substring: val('substring'),
       allOccurrences: checked('allOcc'),
       fontEnabled: checked('fontEnabled'),
+      styleEnabled: checked('styleEnabled'),
       fontFamily: val('fontFamily'),
       fontStyle: val('fontStyle'),
       matchWeight: checked('matchWeight'),

@@ -2840,11 +2840,18 @@ async function applyFontMappingFromUiPayload(payload: any): Promise<{ ok: boolea
           fontStyle = resolved.style;
         }
 
+        const stylesOn = rule?.styleEnabled !== false;
         const slice = {
-          textStyleId: typeof rule?.textStyleId === 'string' && rule.textStyleId ? rule.textStyleId : undefined,
-          fillStyleId: typeof rule?.fillStyleId === 'string' && rule.fillStyleId ? rule.fillStyleId : undefined,
-          fillHex: typeof rule?.fillHex === 'string' && rule.fillHex.trim() ? rule.fillHex.trim() : undefined,
-          fillVariableId: typeof rule?.fillVariableId === 'string' && rule.fillVariableId ? rule.fillVariableId : undefined,
+          textStyleId:
+            stylesOn && typeof rule?.textStyleId === 'string' && rule.textStyleId ? rule.textStyleId : undefined,
+          fillStyleId:
+            stylesOn && typeof rule?.fillStyleId === 'string' && rule.fillStyleId ? rule.fillStyleId : undefined,
+          fillHex:
+            stylesOn && typeof rule?.fillHex === 'string' && rule.fillHex.trim() ? rule.fillHex.trim() : undefined,
+          fillVariableId:
+            stylesOn && typeof rule?.fillVariableId === 'string' && rule.fillVariableId
+              ? rule.fillVariableId
+              : undefined,
           applyFont: rule?.fontEnabled === true,
           fontFamily,
           fontStyle: fontStyle || 'Regular',
