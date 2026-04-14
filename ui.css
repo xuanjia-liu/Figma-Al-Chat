@@ -1062,6 +1062,30 @@
       background: var(--bg-tertiary);
     }
 
+    .hue-shift-palette-bar[data-palette-chunked='true'] {
+      gap: 5px;
+      padding: 4px 5px;
+      overflow: visible;
+    }
+
+    .hue-shift-palette-merge-chunk {
+      display: flex;
+      flex-direction: row;
+      min-width: 0;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-tertiary) 12%);
+    }
+
+    .hue-shift-palette-merge-chunk--merged {
+      border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+      box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+        inset 0 1px 0 0 color-mix(in srgb, #fff 12%, transparent);
+    }
+
+
     .hue-shift-palette-bar.inactive .hue-shift-swatch {
       pointer-events: none;
     }
@@ -1110,6 +1134,7 @@
     .hue-shift-swatch.active{
       border: 2px solid var(--text-on-accent);
       border-radius: var(--radius-sm);
+      z-index: 2;
     }
 
     .hue-shift-swatch.hue-shift-swatch--locked::after {
@@ -5896,7 +5921,7 @@
       display: flex;
       flex-direction: column;
       gap: var(--space-md);
-      min-width: 220px;
+      min-width: 180px;
       animation: popIn 0.2s ease-out;
     }
 
@@ -5907,8 +5932,51 @@
       margin-bottom: 4px;
     }
 
-    .color-picker-popover--multi {
-      min-width: 240px;
+    .color-picker-popover-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      cursor: grab;
+      touch-action: none;
+      border-radius: var(--radius-sm);
+      margin: calc(-1 * var(--space-xs)) calc(-1 * var(--space-xs)) 0;
+      padding: var(--space-xs) var(--space-xs) var(--space-sm);
+    }
+
+    .color-picker-popover-title-row--dragging {
+      cursor: grabbing;
+    }
+
+    .color-picker-popover-title-row .popover-title {
+      margin-bottom: 0;
+      flex: 1;
+      min-width: 0;
+      user-select: none;
+    }
+
+    .color-picker-popover-title-row .color-picker-popover-lock-row {
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .color-picker-popover-title-row .color-picker-popover-lock-label {
+      flex: 0 0 auto;
+    }
+
+    .color-picker-popover-sliders {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+
+    .color-picker-popover .color-picker-popover-slider-row {
+      gap: var(--space-xs);
+    }
+
+    .color-picker-popover-slider-row--disabled {
+      opacity: 0.45;
+      pointer-events: none;
     }
 
     .color-picker-popover-entries {
@@ -5941,48 +6009,48 @@
 
     .color-picker-popover .color-input-wrapper {
       position: relative;
-      width: 36px;
-      height: 36px;
-      border-radius: var(--radius-md);
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-full);
       overflow: hidden;
-      border: 2px solid var(--border);
+      border: 1px solid var(--border);
       cursor: pointer;
     }
 
     .color-picker-popover .color-input-wrapper input[type="color"] {
       position: absolute;
-      top: -8px;
-      left: -8px;
-      width: calc(100% + 16px);
-      height: calc(100% + 16px);
+      top: -4px;
+      left: -4px;
+      width: calc(100% + 8px);
+      height: calc(100% + 8px);
       border: none;
       cursor: pointer;
     }
 
     .color-picker-popover .hex-input {
       flex: 1;
-      height: 36px;
+      height: 24px;
       padding: var(--space-sm);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       background: var(--bg-secondary);
       color: var(--text-primary);
       font-family: var(--font-mono);
-      font-size: var(--text-lg);
+      font-size: var(--text-sm);
       text-transform: uppercase;
     }
 
     .color-picker-popover .color-picker-actions {
       display: flex;
       justify-content: flex-end;
-      gap: var(--space-sm);
+      gap: var(--space-md);
       margin-top: var(--space-sm);
     }
 
     .color-picker-popover-lock-row {
       display: flex;
       align-items: center;
-      gap: var(--space-sm);
+      gap: var(--space-md);
       font-size: var(--text-xs);
       color: var(--text-secondary);
       cursor: pointer;
