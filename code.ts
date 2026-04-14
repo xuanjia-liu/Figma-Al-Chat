@@ -2534,29 +2534,37 @@ function fontMappingHexToRgb(hexRaw: string): { r: number; g: number; b: number;
 }
 
 function classifyScriptBucket(codePoint: number): 'japanese' | 'latin' | 'numbers' {
+  // CJK Symbols and Punctuation (、。〈〉《》・ U+3000 space, etc.) — not Latin
+  if (codePoint >= 0x3000 && codePoint <= 0x303f) return 'japanese';
   // Hiragana
   if (codePoint >= 0x3040 && codePoint <= 0x309f) return 'japanese';
   // Katakana
   if (codePoint >= 0x30a0 && codePoint <= 0x30ff) return 'japanese';
+  // Katakana Phonetic Extensions
+  if (codePoint >= 0x31f0 && codePoint <= 0x31ff) return 'japanese';
   // CJK Unified Ideographs (Kanji)
   if (codePoint >= 0x4e00 && codePoint <= 0x9faf) return 'japanese';
   // CJK Extension A
   if (codePoint >= 0x3400 && codePoint <= 0x4dbf) return 'japanese';
-  // Half-width Katakana
-  if (codePoint >= 0xff65 && codePoint <= 0xff9f) return 'japanese';
+  // CJK Compatibility (square symbols, etc.)
+  if (codePoint >= 0x3300 && codePoint <= 0x33ff) return 'japanese';
   // CJK Compatibility Ideographs
   if (codePoint >= 0xf900 && codePoint <= 0xfaff) return 'japanese';
-  // Full-width digits
-  if (codePoint >= 0xff10 && codePoint <= 0xff19) return 'numbers';
+  // Halfwidth and Fullwidth Forms: full-width punctuation/symbols (全角記号) and half-width
+  // katakana — treat as Japanese. Exclude only full-width ASCII letters/digits (handled below).
+  if (codePoint >= 0xff00 && codePoint <= 0xffef) {
+    if (codePoint >= 0xff10 && codePoint <= 0xff19) return 'numbers';
+    if ((codePoint >= 0xff21 && codePoint <= 0xff3a) || (codePoint >= 0xff41 && codePoint <= 0xff5a)) {
+      return 'latin';
+    }
+    return 'japanese';
+  }
   // ASCII digits
   if (codePoint >= 0x0030 && codePoint <= 0x0039) return 'numbers';
-  // Full-width Latin
-  if (codePoint >= 0xff21 && codePoint <= 0xff3a) return 'latin';
-  if (codePoint >= 0xff41 && codePoint <= 0xff5a) return 'latin';
   // ASCII Latin
   if (codePoint >= 0x0041 && codePoint <= 0x005a) return 'latin';
   if (codePoint >= 0x0061 && codePoint <= 0x007a) return 'latin';
-  // Default: treat as latin (punctuation, spaces, etc.)
+  // Default: punctuation/spaces outside CJK blocks (e.g. ASCII parens) → latin
   return 'latin';
 }
 
@@ -3633,6 +3641,43 @@ function numericPreviewWeightToFigmaStyle(weight: number): string {
   return normalizeFontStyle(best);
 }
 
+/**
+ * Japanese UI fonts (e.g. Hiragino Sans) use style names W0–W9 instead of Regular/Medium.
+ * Approximate CSS weight for each step so "match existing weight" maps 400 → ~W4, not W0.
+ */
+const W_STYLE_WEIGHT_HINTS = [100, 200, 300, 350, 400, 500, 600, 700, 800, 900];
+
+function pickNearestWStyle(available: string[], weightNum: number): string | null {
+  const wStyles: Array<{ label: string; idx: number }> = [];
+  for (const s of available) {
+    const m = /^W(\d+)$/i.exec(s.trim());
+    if (m) {
+      wStyles.push({ label: s, idx: parseInt(m[1], 10) });
+    }
+  }
+  if (wStyles.length === 0) return null;
+
+  let bestLabel = wStyles[0].label;
+  let bestDist = Infinity;
+  let bestHint = -1;
+
+  for (const { label, idx } of wStyles) {
+    const hint =
+      idx >= 0 && idx < W_STYLE_WEIGHT_HINTS.length
+        ? W_STYLE_WEIGHT_HINTS[idx]
+        : idx < 0
+          ? 100
+          : 900;
+    const d = Math.abs(weightNum - hint);
+    if (d < bestDist || (d === bestDist && hint > bestHint)) {
+      bestDist = d;
+      bestLabel = label;
+      bestHint = hint;
+    }
+  }
+  return bestLabel;
+}
+
 function pickBestLocalStyle(available: string[], weightNum: number, preferred?: string): string {
   if (available.length === 0) {
     throw new Error('No font styles available');
@@ -3643,6 +3688,10 @@ function pickBestLocalStyle(available: string[], weightNum: number, preferred?: 
   const want = numericPreviewWeightToFigmaStyle(weightNum);
   if (available.includes(want)) {
     return want;
+  }
+  const wPick = pickNearestWStyle(available, weightNum);
+  if (wPick) {
+    return wPick;
   }
   const wLower = want.toLowerCase().replace(/\s+/g, '');
   for (const s of available) {

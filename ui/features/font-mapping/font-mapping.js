@@ -42,7 +42,7 @@ const TARGET_OPTIONS = [
 
 let ruleIdCounter = 0;
 
-function buildRuleHtml(rule, tu, cache) {
+function buildRuleHtml(rule, tu, cache, displayIndex) {
   const id = rule._id;
   const noneOpt = `<option value="">${escapeHtml(tu('actions.fontMapping.none'))}</option>`;
 
@@ -61,7 +61,7 @@ function buildRuleHtml(rule, tu, cache) {
   return `
   <div class="fm-rule-card" data-fm-rule-id="${id}">
     <div class="fm-rule-header">
-      <span class="fm-rule-badge">#${id}</span>
+      <span class="fm-rule-badge">#${displayIndex}</span>
       <select class="font-mapping-select fm-rule-target" data-fm-r="target" style="flex:1">
         ${targetOpts}
       </select>
@@ -154,16 +154,17 @@ export function mountFontMapping(container, options = {}) {
         <p class="font-mapping-hint">${escapeHtml(tu('actions.fontMapping.intro'))}</p>
 
         <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.preset'))}</label>
-        <select class="font-mapping-select" data-fm="preset">
-          <option value="none">${escapeHtml(tu('actions.fontMapping.presetNone'))}</option>
-          ${Object.entries(PRESETS).map(([k, v]) => `<option value="${escapeHtml(k)}">${escapeHtml(v.label)}</option>`).join('')}
-        </select>
-
-        <div class="fm-rules-list" data-fm-rules-list>
-          ${rules.map(r => buildRuleHtml(r, tu, cache)).join('')}
+        <div class="fm-preset-row">
+          <select class="font-mapping-select" data-fm="preset">
+            <option value="none">${escapeHtml(tu('actions.fontMapping.presetNone'))}</option>
+            ${Object.entries(PRESETS).map(([k, v]) => `<option value="${escapeHtml(k)}">${escapeHtml(v.label)}</option>`).join('')}
+          </select>
+          <button type="button" class="fm-add-rule-btn" data-fm-add-rule>+ ${escapeHtml(tu('actions.fontMapping.addRule'))}</button>
         </div>
 
-        <button type="button" class="fm-add-rule-btn" data-fm-add-rule>+ ${escapeHtml(tu('actions.fontMapping.addRule'))}</button>
+        <div class="fm-rules-list" data-fm-rules-list>
+          ${rules.map((r, i) => buildRuleHtml(r, tu, cache, i + 1)).join('')}
+        </div>
 
         <details class="fm-rule-section fm-layer-section">
           <summary>${escapeHtml(tu('actions.fontMapping.layerStyles'))}</summary>
