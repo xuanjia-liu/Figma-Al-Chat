@@ -33277,7 +33277,9 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const inlineCodes = [];
       result = result.replace(/`([^`]+)`/g, (match, code) => {
         const index = inlineCodes.length;
-        inlineCodes.push(`<code>${escapeHtml(code)}</code>`);
+        inlineCodes.push(
+          `<code class="inline-code-copyable" title="${escapeHtmlAttr(t('settings.messages.commands.clickToCopyInlineCode'))}">${escapeHtml(code)}</code>`
+        );
         return `%%%INLINECODE${index}%%%`;
       });
 
@@ -40372,6 +40374,32 @@ Based on the user's instruction, generate the appropriate commands to modify the
         if (container) {
           openCodeEditor(container);
         }
+        return;
+      }
+
+      const inlineCodeCopy = e.target.closest('code.inline-code-copyable');
+      if (inlineCodeCopy) {
+        e.stopPropagation();
+        const textToCopy = inlineCodeCopy.textContent || '';
+        if (!textToCopy) return;
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+        } catch (err) {
+          const textArea = document.createElement('textarea');
+          textArea.value = textToCopy;
+          textArea.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+          document.body.appendChild(textArea);
+          textArea.select();
+          try {
+            document.execCommand('copy');
+          } catch (copyErr) {
+            showToast('Failed to copy', 'error');
+            document.body.removeChild(textArea);
+            return;
+          }
+          document.body.removeChild(textArea);
+        }
+        showToast(t('settings.messages.copied'), 'success');
         return;
       }
 
