@@ -12493,9 +12493,11 @@ Requirements:
       // Convert @username to Figma mention format
       const message = convertMentionsToFigmaFormat(rawMessage);
 
-      const sendBtn = replyInput.querySelector('button');
-      sendBtn.disabled = true;
-      sendBtn.textContent = tu('actions.comments.drawer.sending');
+      const sendBtn = replyInput.querySelector(':scope > .comment-action-btn');
+      if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.classList.add('loading');
+      }
 
       try {
         const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
@@ -12531,8 +12533,11 @@ Requirements:
       } catch (error) {
         showToast(tu('actions.comments.drawer.failedToPostReply', { message: error.message }), 'error');
       } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = tu('actions.comments.drawer.send');
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.classList.remove('loading');
+          sendBtn.textContent = tu('actions.comments.drawer.send');
+        }
       }
     }
 
@@ -13801,9 +13806,11 @@ Requirements:
       // Convert @username to Figma mention format
       const message = convertMentionsToFigmaFormat(rawMessage);
 
-      const sendBtn = replyInput.querySelector('button');
-      sendBtn.disabled = true;
-      sendBtn.textContent = tu('actions.comments.drawer.sending');
+      const sendBtn = replyInput.querySelector(':scope > .comment-action-btn');
+      if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.classList.add('loading');
+      }
 
       try {
         const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
@@ -13833,8 +13840,11 @@ Requirements:
       } catch (error) {
         showToast(tu('actions.comments.drawer.failedToPostReply', { message: error.message }), 'error');
       } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = tu('actions.comments.drawer.send');
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.classList.remove('loading');
+          sendBtn.textContent = tu('actions.comments.drawer.send');
+        }
       }
     }
 
@@ -30797,9 +30807,11 @@ Example structure:
       // Convert @username to Figma mention format
       const message = convertMentionsToFigmaFormat(rawMessage);
 
-      const sendBtn = replyInput.querySelector('button');
-      sendBtn.disabled = true;
-      sendBtn.textContent = 'Sending...';
+      const sendBtn = replyInput.querySelector(':scope > .comment-action-btn');
+      if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.classList.add('loading');
+      }
 
       try {
         const response = await fetch(`https://api.figma.com/v1/files/${fileKey}/comments`, {
@@ -30828,8 +30840,11 @@ Example structure:
       } catch (error) {
         showToast(`Failed to post reply: ${error.message}`, 'error');
       } finally {
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'Send';
+        if (sendBtn) {
+          sendBtn.disabled = false;
+          sendBtn.classList.remove('loading');
+          sendBtn.textContent = 'Send';
+        }
       }
     }
 
