@@ -37008,8 +37008,24 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
 
     // Execute commands via plugin
     let pendingCommandsResolve = null;
+    /** Serialize command batches so `pendingCommandsResolve` is never overwritten mid-flight (fixes wedged realtime HUE shift when another execute-commands overlaps). */
+    let commandExecutionChain = Promise.resolve();
 
     async function executeCommands(commands, metadata = null) {
+      const previousTurn = commandExecutionChain;
+      let releaseTurn;
+      commandExecutionChain = new Promise((resolve) => {
+        releaseTurn = resolve;
+      });
+      await previousTurn;
+      try {
+        return await executeCommandsUnlocked(commands, metadata);
+      } finally {
+        releaseTurn();
+      }
+    }
+
+    async function executeCommandsUnlocked(commands, metadata = null) {
       commands = sanitizeGraphLayoutCommands(commands, metadata);
 
       // Pre-process createIconifyIcon commands
@@ -37089,7 +37105,8 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
       let commandsExecutionResult = null;
       if (regularCommands.length > 0) {
         commandsExecutionResult = await new Promise((resolve, reject) => {
-          pendingCommandsResolve = resolve;
+          const slotResolve = resolve;
+          pendingCommandsResolve = slotResolve;
           parent.postMessage({
             pluginMessage: {
               type: 'execute-commands',
@@ -37104,7 +37121,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
           // Scale timeout based on command count: 60s base + 2s per command, max 5 minutes
           const timeoutMs = Math.min(60000 + regularCommands.length * 2000, 300000);
           setTimeout(() => {
-            if (pendingCommandsResolve) {
+            if (pendingCommandsResolve === slotResolve) {
               pendingCommandsResolve = null;
               // Tell the plugin to stop processing remaining commands
               parent.postMessage({ pluginMessage: { type: 'cancel-execution' } }, '*');
@@ -37135,7 +37152,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
         }
       }
 
-      return Promise.resolve(commandsExecutionResult);
+      return commandsExecutionResult;
     }
 
     // Handle generateImage command from agent mode
