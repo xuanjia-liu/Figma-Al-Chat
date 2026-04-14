@@ -17440,8 +17440,7 @@ Generate ONLY the reply text, nothing else.`;
           actionData.name === 'Font preview' ||
           actionData.name === 'HUE shift' ||
           actionData.directAction === 'listAllComponents' ||
-          actionData.directAction === 'randomizeSelectedInstances' ||
-          actionData.directAction === 'fontMapping';
+          actionData.directAction === 'randomizeSelectedInstances';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
@@ -29731,7 +29730,9 @@ Example structure:
           currentPromptAction.directAction === 'listAllComponents' ||
           currentPromptAction.directAction === 'randomizeSelectedInstances';
         if (!shouldHidePromptDrawerHelp && currentPromptAction.help && currentPromptAction.help.trim()) {
-          promptDrawerHelpText.textContent = currentPromptAction.help.trim();
+          const _localizedHelp = getLocalizedTask(currentPromptAction);
+          promptDrawerHelpText.textContent =
+            (_localizedHelp && _localizedHelp.displayHelp) || currentPromptAction.help.trim();
           promptDrawerHelp.classList.remove('hidden');
         } else if (promptDrawerHelp) {
           promptDrawerHelpText.textContent = '';

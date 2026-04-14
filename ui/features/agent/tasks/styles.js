@@ -130,7 +130,8 @@ export const stylingTasks = [
 {
           name: 'Font mapping',
           desc: 'Parse text ranges and apply styles, typography, and presets without splitting layers',
-          help: 'Match substrings (one per line) or whole text. Styles and typography use Figma range APIs. Stroke and effect styles apply to the entire text layer only. Presets split Japanese vs Latin numerals and map font weights.',
+          help:
+            'Add one or more rules. Each rule targets whole text, a script (Japanese, Latin, numbers, or Latin+numbers), or a substring. Typography, text/fill styles, variables, and decorations apply to matching character ranges. Effect and stroke styles apply to the entire text layer only (Figma API). Presets add two script rules; use Match existing weight so W-style families map to the closest weight.',
           isTextAction: true,
           prompt: '',
           requiredContext: ContextMode.TYPOGRAPHY_ONLY,

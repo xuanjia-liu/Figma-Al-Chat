@@ -4,6 +4,7 @@
  * Each rule has its own target (script type / substring / whole) and its own
  * typography + style + decoration settings. Presets auto-populate two rules
  * (Japanese + Latin/Numbers). Users can add/remove rules freely.
+ * Long-form help is shown in promptDrawerHelp (not duplicated here).
  */
 
 function escapeHtml(s) {
@@ -151,8 +152,6 @@ export function mountFontMapping(container, options = {}) {
 
     container.innerHTML = `
       <div class="font-mapping-scroll">
-        <p class="font-mapping-hint">${escapeHtml(tu('actions.fontMapping.intro'))}</p>
-
         <label class="font-mapping-label">${escapeHtml(tu('actions.fontMapping.preset'))}</label>
         <div class="fm-preset-row">
           <select class="font-mapping-select" data-fm="preset">
