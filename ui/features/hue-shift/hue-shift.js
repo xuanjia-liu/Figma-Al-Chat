@@ -611,16 +611,29 @@ export function mountHueShift(container, options = {}) {
     hexInput.classList.toggle('hex-input--disabled', !enabled);
   }
 
+  /**
+   * @param {DOMRect | { left: number, right: number, top: number, bottom: number }} anchorRect
+   * @param {string} initialColor hex for single-editor mode
+   * @param {(hexByIndex: Map<number, string>) => void} onUpdate one hex per palette index
+   * @param {{ indices?: number[], perIndexEntries?: Array<{ index: number, hex: string }> }} options
+   */
   function openColorPickerPopover(anchorRect, initialColor, onUpdate, options = {}) {
     closeColorPickerPopover();
 
-    const { indices = [] } = options;
+    const { indices: optionIndices = [], perIndexEntries } = options;
+    const perIndexMode = Array.isArray(perIndexEntries) && perIndexEntries.length > 1;
+    const indices = perIndexMode ? perIndexEntries.map((e) => e.index) : optionIndices;
+    let isLocked = indices.some((i) => lockedIndices.has(i));
+
     const popover = document.createElement('div');
     popover.className = 'color-picker-popover';
+    if (perIndexMode) popover.classList.add('color-picker-popover--multi');
 
     const label = document.createElement('div');
     label.className = 'popover-title';
-    label.textContent = translate('actions.hueShift.pickColor', 'Pick a color');
+    label.textContent = perIndexMode
+      ? translate('actions.hueShift.pickColors', 'Pick colors')
+      : translate('actions.hueShift.pickColor', 'Pick a color');
     popover.appendChild(label);
 
     const lockRow = document.createElement('label');
@@ -634,49 +647,82 @@ export function mountHueShift(container, options = {}) {
     lockRow.appendChild(lockInput);
     lockRow.appendChild(lockText);
     popover.appendChild(lockRow);
+    lockInput.checked = isLocked;
 
     const unlockHint = document.createElement('div');
     unlockHint.className = 'color-picker-popover-unlock-hint';
-    unlockHint.textContent = translate('actions.hueShift.unlockToEdit', 'Unlock to edit this color');
+    unlockHint.textContent = perIndexMode
+      ? translate('actions.hueShift.unlockToEditColors', 'Unlock to edit these colors')
+      : translate('actions.hueShift.unlockToEdit', 'Unlock to edit this color');
     popover.appendChild(unlockHint);
 
-    const previewRow = document.createElement('div');
-    previewRow.className = 'color-preview-row';
+    /** @type {Array<{ index: number, colorInput: HTMLInputElement, hexInput: HTMLInputElement }>} */
+    const editorRows = [];
 
-    const colorWrapper = document.createElement('div');
-    colorWrapper.className = 'color-input-wrapper';
+    function appendSyncedColorRow(hexValue, colorIndex) {
+      const previewRow = document.createElement('div');
+      previewRow.className = 'color-preview-row';
 
-    const colorInput = document.createElement('input');
-    colorInput.type = 'color';
-    colorInput.value = initialColor;
-    colorWrapper.appendChild(colorInput);
+      const colorWrapper = document.createElement('div');
+      colorWrapper.className = 'color-input-wrapper';
 
-    const hexInput = document.createElement('input');
-    hexInput.type = 'text';
-    hexInput.className = 'hex-input';
-    hexInput.value = initialColor;
-    hexInput.maxLength = 7;
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      colorInput.value = hexValue;
+      colorWrapper.appendChild(colorInput);
 
-    previewRow.appendChild(colorWrapper);
-    previewRow.appendChild(hexInput);
-    popover.appendChild(previewRow);
+      const hexInput = document.createElement('input');
+      hexInput.type = 'text';
+      hexInput.className = 'hex-input';
+      hexInput.value = hexValue;
+      hexInput.maxLength = 7;
 
-    let isLocked = indices.some((i) => lockedIndices.has(i));
-    lockInput.checked = isLocked;
+      previewRow.appendChild(colorWrapper);
+      previewRow.appendChild(hexInput);
+      editorRows.push({ index: colorIndex, colorInput, hexInput });
 
-    colorInput.oninput = () => {
-      if (isLocked) return;
-      hexInput.value = colorInput.value.toUpperCase();
-    };
+      colorInput.addEventListener('input', () => {
+        if (isLocked) return;
+        hexInput.value = colorInput.value.toUpperCase();
+      });
 
-    hexInput.oninput = () => {
-      if (isLocked) return;
-      let value = hexInput.value.trim();
-      if (!value.startsWith('#')) value = '#' + value;
-      if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
-        colorInput.value = value;
+      hexInput.addEventListener('input', () => {
+        if (isLocked) return;
+        let value = hexInput.value.trim();
+        if (!value.startsWith('#')) value = '#' + value;
+        if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+          colorInput.value = value;
+        }
+      });
+
+      hexInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') submit();
+        if (event.key === 'Escape') {
+          closeColorPickerPopover();
+          document.removeEventListener('mousedown', clickOutside);
+        }
+      });
+
+      return previewRow;
+    }
+
+    if (perIndexMode) {
+      const entriesWrap = document.createElement('div');
+      entriesWrap.className = 'color-picker-popover-entries';
+      for (const entry of perIndexEntries) {
+        const entryWrap = document.createElement('div');
+        entryWrap.className = 'color-picker-popover-entry';
+        const rowLabel = document.createElement('div');
+        rowLabel.className = 'color-picker-popover-entry-label';
+        rowLabel.textContent = `${translate('actions.hueShift.color', 'Color')} ${entry.index + 1}`;
+        entryWrap.appendChild(rowLabel);
+        entryWrap.appendChild(appendSyncedColorRow(entry.hex, entry.index));
+        entriesWrap.appendChild(entryWrap);
       }
-    };
+      popover.appendChild(entriesWrap);
+    } else {
+      popover.appendChild(appendSyncedColorRow(initialColor, indices[0] ?? 0));
+    }
 
     const actions = document.createElement('div');
     actions.className = 'color-picker-actions';
@@ -701,7 +747,9 @@ export function mountHueShift(container, options = {}) {
         if (isLocked) lockedIndices.add(i);
         else lockedIndices.delete(i);
       });
-      setPopoverColorInputsEnabled(colorInput, hexInput, !isLocked);
+      for (const { colorInput, hexInput } of editorRows) {
+        setPopoverColorInputsEnabled(colorInput, hexInput, !isLocked);
+      }
       unlockHint.hidden = !isLocked;
       applyBtn.title = '';
       refreshSelectionUI();
@@ -711,26 +759,35 @@ export function mountHueShift(container, options = {}) {
       syncLock();
     });
 
-    setPopoverColorInputsEnabled(colorInput, hexInput, !isLocked);
+    for (const { colorInput, hexInput } of editorRows) {
+      setPopoverColorInputsEnabled(colorInput, hexInput, !isLocked);
+    }
     unlockHint.hidden = !isLocked;
 
-    const submit = () => {
-      let finalColor = hexInput.value.trim().toUpperCase();
-      if (!finalColor.startsWith('#')) finalColor = '#' + finalColor;
-      if (!/^#[0-9A-Fa-f]{6}$/.test(finalColor)) return;
-      onUpdate(finalColor);
+    function submit() {
+      const hexByIndex = new Map();
+      if (perIndexMode) {
+        for (const { index: rowIndex, hexInput } of editorRows) {
+          let finalColor = hexInput.value.trim().toUpperCase();
+          if (!finalColor.startsWith('#')) finalColor = '#' + finalColor;
+          if (!/^#[0-9A-Fa-f]{6}$/.test(finalColor)) return;
+          hexByIndex.set(rowIndex, finalColor);
+        }
+      } else {
+        const { hexInput } = editorRows[0];
+        let finalColor = hexInput.value.trim().toUpperCase();
+        if (!finalColor.startsWith('#')) finalColor = '#' + finalColor;
+        if (!/^#[0-9A-Fa-f]{6}$/.test(finalColor)) return;
+        indices.forEach((i) => {
+          if (i >= 0 && i < colors.length) hexByIndex.set(i, finalColor);
+        });
+      }
+      onUpdate(hexByIndex);
       closeColorPickerPopover();
       document.removeEventListener('mousedown', clickOutside);
-    };
+    }
 
     applyBtn.onclick = submit;
-    hexInput.onkeydown = (event) => {
-      if (event.key === 'Enter') submit();
-      if (event.key === 'Escape') {
-        closeColorPickerPopover();
-        document.removeEventListener('mousedown', clickOutside);
-      }
-    };
 
     actions.appendChild(cancelBtn);
     actions.appendChild(applyBtn);
@@ -758,8 +815,10 @@ export function mountHueShift(container, options = {}) {
     popover.style.top = `${top}px`;
     popover.style.left = `${left}px`;
 
-    hexInput.focus();
-    hexInput.select();
+    if (editorRows[0]) {
+      editorRows[0].hexInput.focus();
+      editorRows[0].hexInput.select();
+    }
 
     function clickOutside(event) {
       if (!popover.contains(event.target)) {
@@ -1391,11 +1450,43 @@ export function mountHueShift(container, options = {}) {
           bottom: event.clientY,
         };
         const ix = groupIndices;
-        selectedColorIndices = new Set(ix);
-        openColorPickerPopover(anchorRect, getCurrentHex(color), (nextHex) => {
-          applyColorToIndices(ix, nextHex, { ignoreLock: true });
-          refreshSelectionUI();
-        }, { indices: ix });
+        const useMultiColorPopover =
+          !linked &&
+          selectedColorIndices.size > 1 &&
+          selectedColorIndices.has(index);
+
+        if (useMultiColorPopover) {
+          const targetIndices = [...selectedColorIndices].sort((a, b) => a - b);
+          selectedColorIndices = new Set(targetIndices);
+          const perIndexEntries = targetIndices.map((ci) => ({
+            index: ci,
+            hex: getCurrentHex(colors[ci]),
+          }));
+          openColorPickerPopover(
+            anchorRect,
+            perIndexEntries[0].hex,
+            (hexByIndex) => {
+              hexByIndex.forEach((hex, ci) => {
+                applyColorToIndices([ci], hex, { ignoreLock: true });
+              });
+              refreshSelectionUI();
+            },
+            { indices: targetIndices, perIndexEntries },
+          );
+        } else {
+          selectedColorIndices = new Set(ix);
+          openColorPickerPopover(
+            anchorRect,
+            getCurrentHex(color),
+            (hexByIndex) => {
+              hexByIndex.forEach((hex, ci) => {
+                applyColorToIndices([ci], hex, { ignoreLock: true });
+              });
+              refreshSelectionUI();
+            },
+            { indices: ix },
+          );
+        }
       });
       paletteBar.appendChild(swatch);
     });
@@ -1697,8 +1788,10 @@ export function mountHueShift(container, options = {}) {
       top: event.clientY,
       bottom: event.clientY,
     };
-    openColorPickerPopover(anchorRect, getCurrentHex(colors[handleGroup.representativeIndex]), (nextHex) => {
-      applyColorToIndices(ix, nextHex, { ignoreLock: true });
+    openColorPickerPopover(anchorRect, getCurrentHex(colors[handleGroup.representativeIndex]), (hexByIndex) => {
+      hexByIndex.forEach((hex, ci) => {
+        applyColorToIndices([ci], hex, { ignoreLock: true });
+      });
       refreshSelectionUI();
     }, { indices: ix });
   }

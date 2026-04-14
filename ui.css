@@ -5907,6 +5907,32 @@
       margin-bottom: 4px;
     }
 
+    .color-picker-popover--multi {
+      min-width: 240px;
+    }
+
+    .color-picker-popover-entries {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+      max-height: min(360px, 55vh);
+      overflow-y: auto;
+      padding-right: 2px;
+      margin-bottom: 2px;
+    }
+
+    .color-picker-popover-entry {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .color-picker-popover-entry-label {
+      font-size: var(--text-xs);
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
     .color-picker-popover .color-preview-row {
       display: flex;
       align-items: center;
