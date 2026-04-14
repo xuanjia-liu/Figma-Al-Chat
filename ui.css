@@ -12275,6 +12275,39 @@
       opacity: 1;
     }
 
+    .icon-render-kind-badge {
+      position: absolute;
+      right: -2px;
+      bottom: -2px;
+      min-width: 12px;
+      height: 12px;
+      padding: 0 3px;
+      box-sizing: border-box;
+      font-size: 7px;
+      font-weight: 700;
+      line-height: 12px;
+      text-align: center;
+      border-radius: 3px;
+      pointer-events: none;
+      letter-spacing: -0.02em;
+      background: rgba(0, 0, 0, 0.52);
+      color: rgba(255, 255, 255, 0.96);
+      z-index: 1;
+    }
+
+    body.light-mode .icon-render-kind-badge {
+      background: rgba(255, 255, 255, 0.9);
+      color: rgba(30, 30, 30, 0.85);
+      border: 1px solid var(--border);
+    }
+
+    .icon-preview-card .icon-render-kind-badge {
+      top: 4px;
+      right: 4px;
+      bottom: auto;
+      z-index: 2;
+    }
+
     .icon-browse-selection-bar {
       position: sticky;
       bottom: -12px;

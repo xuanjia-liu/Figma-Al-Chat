@@ -22266,6 +22266,66 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     const iconPreviewCache = new Map();
     const noImagePlaceholderCache = new Map();
 
+    /**
+     * Rough SVG classifier: stroke/outline vs filled vs both. Not parsed as DOM — heuristic only.
+     */
+    function classifySvgIconRenderKind(svg) {
+      if (!svg || typeof svg !== 'string') return 'unknown';
+      const s = svg;
+      const strokeAttr = /\bstroke\s*=\s*["'](?!none\b)[^"']*["']/i.test(s);
+      const strokeInStyle = /\bstroke\s*:\s*(?!none\b)[^;}]+/i.test(s);
+      const strokeWidthMeansStroke = /\bstroke-width\s*=\s*["'](?!0(?:\.0+)?\b)[^"']*["']/i.test(s) ||
+        /\bstroke-width\s*:\s*(?!0(?:\.0+)?\b)/i.test(s);
+      const hasStroke = strokeAttr || strokeInStyle || strokeWidthMeansStroke;
+
+      const filledAttr = /\bfill\s*=\s*["'](?!none\b)[^"']*["']/i.test(s);
+      const fillInStyle = /\bfill\s*:\s*(?!none\b)[^;}]+/i.test(s);
+      const hasPositiveFill = filledAttr || fillInStyle;
+
+      if (hasStroke && hasPositiveFill) return 'mixed';
+      if (hasStroke && !hasPositiveFill) return 'stroke';
+      if (!hasStroke && hasPositiveFill) return 'fill';
+
+      const pathOrShape = /<(?:path|circle|rect|polygon|polyline|ellipse)\b/i.test(s);
+      if (!hasStroke && pathOrShape) return 'fill';
+      return 'unknown';
+    }
+
+    function applyIconRenderKindBadge(rootEl, kind) {
+      if (!rootEl || !kind || kind === 'unknown') return;
+      rootEl.querySelectorAll('.icon-render-kind-badge').forEach(el => el.remove());
+      const badge = document.createElement('span');
+      badge.className = `icon-render-kind-badge icon-render-kind-${kind}`;
+      badge.setAttribute('data-kind', kind);
+      const labels = { stroke: 'Stroke (outline)', fill: 'Filled', mixed: 'Mixed stroke & fill' };
+      const label = labels[kind] || kind;
+      badge.title = label;
+      badge.setAttribute('aria-label', label);
+      badge.textContent = kind === 'stroke' ? 'S' : kind === 'fill' ? 'F' : 'M';
+      rootEl.appendChild(badge);
+    }
+
+    async function fetchAndApplyBrowseItemKindBadge(itemEl, match) {
+      if (!itemEl || !match || match.id === '__generate__') return;
+      const key = match.id;
+      let raw = null;
+      try {
+        const cached = iconPreviewCache.get(key);
+        if (cached && cached.svg) {
+          raw = cached.svg;
+        } else if (match.source === 'antv' || String(match.id || '').startsWith('http')) {
+          const res = await fetch(match.id, { cache: 'force-cache' });
+          raw = res.ok ? await res.text() : null;
+        } else {
+          raw = await fetchIconifySvgTextRaw(match.id, 24, null);
+        }
+        const kind = raw ? classifySvgIconRenderKind(raw) : 'unknown';
+        applyIconRenderKindBadge(itemEl, kind);
+      } catch (e) {
+        /* ignore badge failures */
+      }
+    }
+
     function getNoImagePlaceholderDataUrl(size = 48) {
       const safeSize = Math.max(20, Math.min(256, Number(size) || 48));
       if (noImagePlaceholderCache.has(safeSize)) {
@@ -22307,9 +22367,28 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     async function loadPreviewForOption(opt, color = '#FFFFFF') {
       if (!opt || !opt.id) return null;
       if (opt.previewSvg) {
-        return { preview: opt.previewSvg, svg: opt.previewSvg.startsWith('data:image/svg+xml') ? atob(opt.previewSvg.split(',')[1]) : null };
+        let rawSvg = null;
+        if (opt.previewSvg.startsWith('data:image/svg+xml')) {
+          try {
+            const payload = opt.previewSvg.split(',')[1];
+            rawSvg = opt.previewSvg.includes('base64')
+              ? atob(payload)
+              : decodeURIComponent(payload);
+          } catch (e) {
+            rawSvg = null;
+          }
+        }
+        const renderKind = rawSvg ? classifySvgIconRenderKind(rawSvg) : 'unknown';
+        return { preview: opt.previewSvg, svg: rawSvg, renderKind };
       }
-      if (iconPreviewCache.has(opt.id)) return iconPreviewCache.get(opt.id);
+      if (iconPreviewCache.has(opt.id)) {
+        const hit = iconPreviewCache.get(opt.id);
+        if (hit && hit.svg && (!hit.renderKind || hit.renderKind === 'unknown')) {
+          hit.renderKind = classifySvgIconRenderKind(hit.svg);
+          iconPreviewCache.set(opt.id, hit);
+        }
+        return iconPreviewCache.get(opt.id);
+      }
 
       // Optimization: For Iconify icons, use direct API URLs which are more reliable
       if (opt.source !== 'antv' && typeof opt.id === 'string' && !opt.id.startsWith('http')) {
@@ -22317,21 +22396,28 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         // We still need the raw SVG for direct insertion
         const res = await fetch(url, { cache: 'force-cache' });
         const raw = res.ok ? await res.text() : null;
-        const result = { preview: url, svg: raw };
+        const renderKind = raw ? classifySvgIconRenderKind(raw) : 'unknown';
+        const result = { preview: url, svg: raw, renderKind };
         iconPreviewCache.set(opt.id, result);
         return result;
       }
 
       let raw = null;
       if (opt.source === 'antv' || (typeof opt.id === 'string' && opt.id.startsWith('http'))) {
-        raw = await fetchAntVIconSvg(opt.id, 24, color);
+        try {
+          const res = await fetch(opt.id, { cache: 'force-cache' });
+          raw = res.ok ? await res.text() : null;
+        } catch (e) {
+          raw = null;
+        }
       } else {
-        raw = await fetchIconifySvg(opt.id, 24, color);
+        raw = await fetchIconifySvgTextRaw(opt.id, 24, color);
       }
 
+      const renderKind = raw ? classifySvgIconRenderKind(raw) : 'unknown';
       const svg = raw ? prepareSvgForFigma(raw, 24, color) : null;
       const preview = svg ? svgToDataUrl(svg) : null;
-      const result = { preview, svg };
+      const result = { preview, svg: raw, renderKind };
       if (preview) iconPreviewCache.set(opt.id, result);
       return result;
     }
@@ -22478,6 +22564,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           }
         });
         grid.appendChild(item);
+        fetchAndApplyBrowseItemKindBadge(item, match).catch(() => {});
       });
 
       promptDrawerCustomContent.classList.remove('hidden');
@@ -22930,7 +23017,8 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return fixed;
     }
 
-    async function fetchIconifySvg(iconId, size, color) {
+    async function fetchIconifySvgTextRaw(iconId, size, color) {
+      if (!iconId) return null;
       try {
         const url = new URL(`https://api.iconify.design/${iconId}.svg`);
         if (size) {
@@ -22942,12 +23030,16 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         }
         const res = await fetch(url.toString(), { cache: 'no-store' });
         if (!res.ok) return null;
-        const svg = await res.text();
-        return prepareSvgForFigma(svg, size, color);
+        return await res.text();
       } catch (err) {
         console.error('Iconify fetch failed', err);
         return null;
       }
+    }
+
+    async function fetchIconifySvg(iconId, size, color) {
+      const svg = await fetchIconifySvgTextRaw(iconId, size, color);
+      return svg ? prepareSvgForFigma(svg, size, color) : null;
     }
 
     async function fetchIconifyWithSearchFallback(iconId, size, color) {
@@ -24874,6 +24966,7 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
           item.appendChild(img);
           grid.appendChild(item);
+          fetchAndApplyBrowseItemKindBadge(item, { id: `${collectionData.prefix}:${iconName}` }).catch(() => {});
           if (window._currentBrowseObserver) {
             window._currentBrowseObserver.observe(item);
           }
@@ -32339,6 +32432,7 @@ Example structure:
               if (result.svg) {
                 card.dataset.svg = result.svg;
               }
+              applyIconRenderKindBadge(card, result.renderKind);
             }
           };
 
