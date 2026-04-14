@@ -27,6 +27,7 @@ import { createCommentsActionHandlers } from './features/comments/actions.js';
 import { createCommentsApi } from './features/comments/api.js';
 import { createCommentsDrawerHelpers } from './features/comments/drawer.js';
 import { commentsInlineHandlerNames } from './features/comments/index.js';
+import { stylesInlineHandlerNames } from './features/styles/index.js';
 import { createStickiesActionHandlers } from './features/stickies/actions.js';
 import { createStickiesApi } from './features/stickies/api.js';
 import { createStickiesDrawerHelpers } from './features/stickies/drawer.js';
@@ -3599,6 +3600,18 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const settingsCheckBadge = document.getElementById('settingsCheckBadge');
     const chatMessages = document.getElementById('chatMessages');
     let lastLocalStylesPayload = null;
+    /** browseStyles: search / sort / filter state */
+    let stylesSearchQuery = '';
+    let stylesSearchTimer = null;
+    let isComposingStylesSearch = false;
+    let stylesSortBy = 'nameAsc';
+    let stylesShowPaint = true;
+    let stylesShowText = true;
+    let stylesShowEffect = true;
+    let stylesShowVariables = true;
+    let stylesVariableTypeFilter = 'all';
+    const selectedStylesCollectionNames = new Set();
+    let stylesCollectionFilterExpanded = false;
     const chatInput = document.getElementById('chatInput');
 
     function refreshChatInputPlaceholder() {
@@ -4050,12 +4063,355 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       });
     }
 
+    function resetStylesBrowserFilters() {
+      stylesSearchQuery = '';
+      stylesSortBy = 'nameAsc';
+      stylesShowPaint = true;
+      stylesShowText = true;
+      stylesShowEffect = true;
+      stylesShowVariables = true;
+      stylesVariableTypeFilter = 'all';
+      selectedStylesCollectionNames.clear();
+      stylesCollectionFilterExpanded = false;
+      const searchEl = document.getElementById('stylesSearchInput');
+      if (searchEl) searchEl.value = '';
+    }
+
+    function getUniqueVariableCollectionNames(payload) {
+      const names = new Set();
+      (payload?.variables || []).forEach((v) => {
+        if (v.collectionName) names.add(v.collectionName);
+      });
+      return Array.from(names);
+    }
+
+    function pruneStylesCollectionSelection(payload) {
+      const valid = new Set(getUniqueVariableCollectionNames(payload));
+      Array.from(selectedStylesCollectionNames).forEach((n) => {
+        if (!valid.has(n)) selectedStylesCollectionNames.delete(n);
+      });
+    }
+
+    function paintStyleSearchBlob(s) {
+      const parts = [s.name || ''];
+      const first = Array.isArray(s.paints) ? s.paints[0] : null;
+      if (first?.type === 'SOLID' && first.color) {
+        parts.push(rgbToHex(first.color.r, first.color.g, first.color.b));
+      }
+      if (first?.type) parts.push(String(first.type));
+      return parts.join(' ').toLowerCase();
+    }
+
+    function textStyleSearchBlob(s) {
+      const parts = [s.name || '', s.fontFamily || '', s.fontStyle || ''];
+      if (s.fontSize != null) parts.push(String(s.fontSize));
+      if (s.lineHeight && typeof s.lineHeight === 'object') {
+        parts.push(String(s.lineHeight.value ?? ''), String(s.lineHeight.unit ?? ''));
+      }
+      return parts.join(' ').toLowerCase();
+    }
+
+    function effectStyleSearchBlob(s) {
+      const parts = [s.name || ''];
+      const e = Array.isArray(s.effects) && s.effects[0];
+      if (e?.type) parts.push(String(e.type));
+      return parts.join(' ').toLowerCase();
+    }
+
+    function variableSearchBlob(v) {
+      const parts = [
+        v.name || '',
+        v.collectionName || '',
+        String(v.resolvedType || v.type || ''),
+      ];
+      if (v.displayValue !== null && v.displayValue !== undefined) {
+        parts.push(typeof v.displayValue === 'object' ? JSON.stringify(v.displayValue) : String(v.displayValue));
+      }
+      return parts.join(' ').toLowerCase();
+    }
+
+    function stylesSearchMatches(q, blob) {
+      if (!q) return true;
+      return blob.includes(q);
+    }
+
+    function getFilteredStylesPayload() {
+      const p = lastLocalStylesPayload;
+      if (!p) {
+        return {
+          paintStyles: [],
+          textStyles: [],
+          effectStyles: [],
+          variables: [],
+          collections: [],
+        };
+      }
+      const q = (stylesSearchQuery || '').toLowerCase().trim();
+
+      let paint = [...(p.paintStyles || [])];
+      let text = [...(p.textStyles || [])];
+      let effect = [...(p.effectStyles || [])];
+      let variables = [...(p.variables || [])];
+
+      if (q) {
+        paint = paint.filter((s) => stylesSearchMatches(q, paintStyleSearchBlob(s)));
+        text = text.filter((s) => stylesSearchMatches(q, textStyleSearchBlob(s)));
+        effect = effect.filter((s) => stylesSearchMatches(q, effectStyleSearchBlob(s)));
+        variables = variables.filter((v) => stylesSearchMatches(q, variableSearchBlob(v)));
+      }
+
+      if (stylesVariableTypeFilter !== 'all') {
+        const want = stylesVariableTypeFilter.toUpperCase();
+        variables = variables.filter((v) => String(v.resolvedType || '').toUpperCase() === want);
+      }
+
+      if (selectedStylesCollectionNames.size > 0) {
+        variables = variables.filter(
+          (v) => v.collectionName && selectedStylesCollectionNames.has(v.collectionName)
+        );
+      }
+
+      return {
+        paintStyles: paint,
+        textStyles: text,
+        effectStyles: effect,
+        variables,
+        collections: p.collections || [],
+      };
+    }
+
+    function sortStyleArray(arr, kind) {
+      const list = [...arr];
+      if (stylesSortBy === 'nameDesc') {
+        list.sort((a, b) => String(b.name || '').localeCompare(String(a.name || ''), undefined, { sensitivity: 'base' }));
+        return list;
+      }
+      if (stylesSortBy === 'collection' && kind === 'variables') {
+        list.sort((a, b) => {
+          const ca = String(a.collectionName || '').localeCompare(String(b.collectionName || ''), undefined, { sensitivity: 'base' });
+          if (ca !== 0) return ca;
+          return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+        });
+        return list;
+      }
+      list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+      return list;
+    }
+
+    /** Filtered + sorted payload; respects category visibility toggles for AI parity with visible lists. */
+    function getStylesPayloadForDisplayAndAI() {
+      const f = getFilteredStylesPayload();
+      const out = {
+        paintStyles: stylesShowPaint ? sortStyleArray(f.paintStyles, 'paint') : [],
+        textStyles: stylesShowText ? sortStyleArray(f.textStyles, 'text') : [],
+        effectStyles: stylesShowEffect ? sortStyleArray(f.effectStyles, 'effect') : [],
+        variables: stylesShowVariables ? sortStyleArray(f.variables, 'variables') : [],
+        collections: lastLocalStylesPayload?.collections || [],
+      };
+      return out;
+    }
+
+    function totalStylesCountFromPayload(payload) {
+      if (!payload) return 0;
+      return (
+        (payload.paintStyles?.length || 0) +
+        (payload.textStyles?.length || 0) +
+        (payload.effectStyles?.length || 0) +
+        (payload.variables?.length || 0)
+      );
+    }
+
+    function visibleStylesCountFromPayload(payload) {
+      if (!payload) return 0;
+      let n = 0;
+      if (stylesShowPaint) n += payload.paintStyles?.length || 0;
+      if (stylesShowText) n += payload.textStyles?.length || 0;
+      if (stylesShowEffect) n += payload.effectStyles?.length || 0;
+      if (stylesShowVariables) n += payload.variables?.length || 0;
+      return n;
+    }
+
+    function updateStylesBrowserChrome(visible, total) {
+      const countEl = document.getElementById('stylesCountDisplay');
+      if (countEl) {
+        countEl.textContent = `${visible}/${total}`;
+      }
+      const toggle = document.getElementById('stylesCollectionFilterToggle');
+      if (toggle) {
+        const n = selectedStylesCollectionNames.size;
+        toggle.classList.toggle('expanded', stylesCollectionFilterExpanded);
+        const badge = toggle.querySelector('.styles-collection-filter-count');
+        if (badge) badge.textContent = n > 0 ? String(n) : '';
+      }
+      const section = document.getElementById('stylesCollectionFilterSection');
+      if (section) {
+        section.classList.toggle('expanded', stylesCollectionFilterExpanded);
+      }
+      const menu = document.getElementById('stylesDropdownMenu');
+      if (menu) {
+        menu.querySelectorAll('[data-styles-sort]').forEach((el) => {
+          el.classList.toggle('active', el.getAttribute('data-styles-sort') === stylesSortBy);
+        });
+        const vf = stylesVariableTypeFilter;
+        menu.querySelectorAll('[data-styles-vfilter]').forEach((el) => {
+          const da = el.getAttribute('data-styles-vfilter');
+          const active = da === 'all' ? vf === 'all' : vf !== 'all' && da === vf.toUpperCase();
+          el.classList.toggle('active', active);
+        });
+        menu.querySelectorAll('[data-styles-cat]').forEach((el) => {
+          const cat = el.getAttribute('data-styles-cat');
+          const on =
+            (cat === 'paint' && stylesShowPaint) ||
+            (cat === 'text' && stylesShowText) ||
+            (cat === 'effect' && stylesShowEffect) ||
+            (cat === 'variables' && stylesShowVariables);
+          el.classList.toggle('active', on);
+        });
+      }
+    }
+
+    function renderStylesCollectionChips() {
+      const container = document.getElementById('stylesCollectionChips');
+      if (!container || !lastLocalStylesPayload) return;
+      const names = getUniqueVariableCollectionNames(lastLocalStylesPayload);
+      names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      container.innerHTML = '';
+      names.forEach((name) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `people-chip${selectedStylesCollectionNames.has(name) ? ' selected' : ''}`;
+        btn.textContent = name;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (selectedStylesCollectionNames.has(name)) selectedStylesCollectionNames.delete(name);
+          else selectedStylesCollectionNames.add(name);
+          refreshStylesBrowserView();
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function refreshStylesBrowserView() {
+      if (currentPromptAction?.directAction !== 'browseStyles' || !lastLocalStylesPayload) return;
+      pruneStylesCollectionSelection(lastLocalStylesPayload);
+      const display = getStylesPayloadForDisplayAndAI();
+      const total = totalStylesCountFromPayload(lastLocalStylesPayload);
+      const visible = visibleStylesCountFromPayload(display);
+
+      const emptyFiltered = tu('actions.styles.drawer.emptyFiltered');
+      const paintEmptyMsg =
+        stylesShowPaint && (display.paintStyles?.length || 0) === 0 && (lastLocalStylesPayload.paintStyles?.length || 0) > 0
+          ? emptyFiltered
+          : tu('actions.styles.drawer.noPaint');
+      const textEmptyMsg =
+        stylesShowText && (display.textStyles?.length || 0) === 0 && (lastLocalStylesPayload.textStyles?.length || 0) > 0
+          ? emptyFiltered
+          : tu('actions.styles.drawer.noText');
+      const effectEmptyMsg =
+        stylesShowEffect && (display.effectStyles?.length || 0) === 0 && (lastLocalStylesPayload.effectStyles?.length || 0) > 0
+          ? emptyFiltered
+          : tu('actions.styles.drawer.noEffect');
+      const varEmptyMsg =
+        stylesShowVariables && (display.variables?.length || 0) === 0 && (lastLocalStylesPayload.variables?.length || 0) > 0
+          ? emptyFiltered
+          : tu('actions.styles.drawer.noVariables');
+
+      renderGroupedStyleList(
+        document.getElementById('paintStylesList'),
+        display.paintStyles || [],
+        describePaintStyle,
+        paintEmptyMsg
+      );
+      renderGroupedStyleList(
+        document.getElementById('textStylesList'),
+        display.textStyles || [],
+        describeTextStyle,
+        textEmptyMsg
+      );
+      renderGroupedStyleList(
+        document.getElementById('effectStylesList'),
+        display.effectStyles || [],
+        describeEffectStyle,
+        effectEmptyMsg
+      );
+      renderGroupedStyleList(
+        document.getElementById('variablesList'),
+        display.variables || [],
+        describeVariable,
+        varEmptyMsg
+      );
+
+      ['stylesSectionPaint', 'stylesSectionText', 'stylesSectionEffect', 'stylesSectionVariables'].forEach((id, i) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const show = [stylesShowPaint, stylesShowText, stylesShowEffect, stylesShowVariables][i];
+        el.style.display = show ? '' : 'none';
+      });
+
+      renderStylesCollectionChips();
+      updateStylesBrowserChrome(visible, total);
+    }
+
     function renderLocalStyles(payload) {
       lastLocalStylesPayload = payload;
-      renderGroupedStyleList(document.getElementById('paintStylesList'), payload?.paintStyles || [], describePaintStyle, 'No paint styles');
-      renderGroupedStyleList(document.getElementById('textStylesList'), payload?.textStyles || [], describeTextStyle, 'No text styles');
-      renderGroupedStyleList(document.getElementById('effectStylesList'), payload?.effectStyles || [], describeEffectStyle, 'No effect styles');
-      renderGroupedStyleList(document.getElementById('variablesList'), payload?.variables || [], describeVariable, 'No variables');
+      pruneStylesCollectionSelection(payload);
+      refreshStylesBrowserView();
+    }
+
+    function handleStylesSearchInput(value) {
+      if (isComposingStylesSearch) return;
+      if (stylesSearchTimer) clearTimeout(stylesSearchTimer);
+      stylesSearchTimer = setTimeout(() => {
+        stylesSearchQuery = String(value || '').toLowerCase().trim();
+        refreshStylesBrowserView();
+      }, 300);
+    }
+
+    function handleStylesSearchCompositionStart() {
+      isComposingStylesSearch = true;
+    }
+
+    function handleStylesSearchCompositionEnd(e) {
+      isComposingStylesSearch = false;
+      if (stylesSearchTimer) clearTimeout(stylesSearchTimer);
+      stylesSearchTimer = setTimeout(() => {
+        stylesSearchQuery = e.target.value.toLowerCase().trim();
+        refreshStylesBrowserView();
+      }, 100);
+    }
+
+    function toggleStylesDropdown(event) {
+      if (event) event.stopPropagation();
+      const menu = document.getElementById('stylesDropdownMenu');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    function handleStylesSort(value) {
+      stylesSortBy = value;
+      refreshStylesBrowserView();
+    }
+
+    function handleStylesVariableTypeFilter(value) {
+      stylesVariableTypeFilter = value === 'all' ? 'all' : String(value).toLowerCase();
+      refreshStylesBrowserView();
+    }
+
+    function handleStylesCategoryToggle(cat) {
+      if (cat === 'paint') stylesShowPaint = !stylesShowPaint;
+      else if (cat === 'text') stylesShowText = !stylesShowText;
+      else if (cat === 'effect') stylesShowEffect = !stylesShowEffect;
+      else if (cat === 'variables') stylesShowVariables = !stylesShowVariables;
+      refreshStylesBrowserView();
+    }
+
+    function toggleStylesCollectionFilter() {
+      stylesCollectionFilterExpanded = !stylesCollectionFilterExpanded;
+      refreshStylesBrowserView();
+    }
+
+    function clearStylesCollectionFilter() {
+      selectedStylesCollectionNames.clear();
+      refreshStylesBrowserView();
     }
 
     // Group items by name using "/" as separator
@@ -9831,39 +10187,59 @@ CRITICAL RULES:
     };
 
     function formatStylesForAI(payload) {
-      if (!payload) return "No styles loaded.";
-      let text = "### Local Styles and Variables\n\n";
+      const p = payload || lastLocalStylesPayload;
+      if (!p) return 'No styles loaded.';
+      let text = '### Local Styles and Variables\n\n';
 
-      if (payload.paintStyles?.length > 0) {
-        text += "#### Paint Styles\n";
-        payload.paintStyles.forEach(s => {
-          text += `- ${s.name}: ${s.displayValue || 'N/A'}\n`;
+      const paintLine = (s) => {
+        const first = Array.isArray(s.paints) ? s.paints[0] : null;
+        if (first?.type === 'SOLID' && first.color) {
+          return rgbToHex(first.color.r, first.color.g, first.color.b);
+        }
+        return first?.type || 'N/A';
+      };
+      const textLine = (s) => {
+        const parts = [s.fontFamily, s.fontStyle, s.fontSize != null ? `${s.fontSize}px` : ''].filter(Boolean);
+        return parts.join(' ') || 'N/A';
+      };
+      const effectLine = (s) => {
+        const e = Array.isArray(s.effects) && s.effects[0];
+        return e?.type || 'N/A';
+      };
+
+      if (p.paintStyles?.length > 0) {
+        text += '#### Paint Styles\n';
+        p.paintStyles.forEach((s) => {
+          text += `- ${s.name}: ${paintLine(s)}\n`;
         });
-        text += "\n";
+        text += '\n';
       }
 
-      if (payload.textStyles?.length > 0) {
-        text += "#### Text Styles\n";
-        payload.textStyles.forEach(s => {
-          text += `- ${s.name}: ${s.displayValue || 'N/A'}\n`;
+      if (p.textStyles?.length > 0) {
+        text += '#### Text Styles\n';
+        p.textStyles.forEach((s) => {
+          text += `- ${s.name}: ${textLine(s)}\n`;
         });
-        text += "\n";
+        text += '\n';
       }
 
-      if (payload.effectStyles?.length > 0) {
-        text += "#### Effect Styles\n";
-        payload.effectStyles.forEach(s => {
-          text += `- ${s.name}: ${s.displayValue || 'N/A'}\n`;
+      if (p.effectStyles?.length > 0) {
+        text += '#### Effect Styles\n';
+        p.effectStyles.forEach((s) => {
+          text += `- ${s.name}: ${effectLine(s)}\n`;
         });
-        text += "\n";
+        text += '\n';
       }
 
-      if (payload.variables?.length > 0) {
-        text += "#### Variables\n";
-        payload.variables.forEach(v => {
-          text += `- ${v.name} (${v.type}): ${v.displayValue || 'N/A'}\n`;
+      if (p.variables?.length > 0) {
+        text += '#### Variables\n';
+        p.variables.forEach((v) => {
+          const t = v.resolvedType || v.type || 'variable';
+          const dv = v.displayValue !== null && v.displayValue !== undefined ? String(v.displayValue) : 'N/A';
+          const coll = v.collectionName ? ` [${v.collectionName}]` : '';
+          text += `- ${v.name} (${t})${coll}: ${dv}\n`;
         });
-        text += "\n";
+        text += '\n';
       }
 
       return text;
@@ -9873,7 +10249,7 @@ CRITICAL RULES:
       if (!lastLocalStylesPayload) return;
       closePromptDrawer();
       setMode('ask');
-      const stylesText = formatStylesForAI(lastLocalStylesPayload);
+      const stylesText = formatStylesForAI(getStylesPayloadForDisplayAndAI());
       const prompt = `Please analyze these Figma local variables and styles. Provide suggestions on how to better organize them (e.g., grouping, naming conventions, token structure). Identify any redundancies or inconsistent naming patterns.\n\nStyles Data:\n${stylesText}`;
       chatInput.value = prompt;
       await sendMessage();
@@ -9883,7 +10259,7 @@ CRITICAL RULES:
       if (!lastLocalStylesPayload) return;
       closePromptDrawer();
       setMode('ask');
-      const stylesText = formatStylesForAI(lastLocalStylesPayload);
+      const stylesText = formatStylesForAI(getStylesPayloadForDisplayAndAI());
       const prompt = `Please perform a consistency audit on these Figma local variables and styles. Look for value duplicates (same color/value with different names), naming inconsistencies, and potential violations of design system best practices.\n\nStyles Data:\n${stylesText}`;
       chatInput.value = prompt;
       await sendMessage();
@@ -9893,7 +10269,7 @@ CRITICAL RULES:
       if (!lastLocalStylesPayload) return;
       closePromptDrawer();
       setMode('ask');
-      const stylesText = formatStylesForAI(lastLocalStylesPayload);
+      const stylesText = formatStylesForAI(getStylesPayloadForDisplayAndAI());
       const prompt = `Summarize these Figma styles and variables into a concise system overview prompt that I can use to instruct an AI about the design system's tokens and constraints.\n\nStyles Data:\n${stylesText}`;
       chatInput.value = prompt;
       await sendMessage();
@@ -9945,7 +10321,7 @@ CRITICAL RULES:
         closePromptDrawer();
         setMode('ask');
 
-        const stylesText = formatStylesForAI(lastLocalStylesPayload);
+        const stylesText = formatStylesForAI(getStylesPayloadForDisplayAndAI());
         const fullPrompt = `${userPrompt}\n\nContext (Styles & Variables):\n${stylesText}`;
 
         chatInput.value = fullPrompt;
@@ -17425,22 +17801,78 @@ Generate ONLY the reply text, nothing else.`;
             submitBtn.style.display = 'none';
           }
 
+          resetStylesBrowserFilters();
+
           promptDrawerFields.innerHTML = `
-            <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">${tu('actions.styles.paint')}</div>
-              <div class="styles-list" id="paintStylesList"></div>
+            <div class="styles-browser-sticky-header">
+              <div class="prompt-comments-toolbar styles-browser-toolbar">
+                <input type="text" id="stylesSearchInput" class="prompt-comments-search" placeholder="${escapeHtml(tu('actions.styles.drawer.search'))}"
+                  value="" autocomplete="off"
+                  oninput="handleStylesSearchInput(this.value)"
+                  oncompositionstart="handleStylesSearchCompositionStart()"
+                  oncompositionend="handleStylesSearchCompositionEnd(event)" />
+                <div class="comments-dropdown-container">
+                  <button type="button" class="comments-dropdown-btn" id="stylesDropdownBtn" onclick="toggleStylesDropdown(event)" title="${escapeHtml(tu('actions.styles.drawer.sortFilterTitle'))}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18M6 12h12M10 18h4" />
+                    </svg>
+                    <span>${escapeHtml(tu('actions.styles.drawer.options'))}</span>
+                  </button>
+                  <div class="comments-dropdown-menu hidden" id="stylesDropdownMenu">
+                    <div class="dropdown-section">${escapeHtml(tu('actions.styles.drawer.sort'))}</div>
+                    <button type="button" class="dropdown-item active" data-styles-sort="nameAsc" onclick="handleStylesSort('nameAsc')">${escapeHtml(tu('actions.styles.drawer.sortNameAsc'))}</button>
+                    <button type="button" class="dropdown-item" data-styles-sort="nameDesc" onclick="handleStylesSort('nameDesc')">${escapeHtml(tu('actions.styles.drawer.sortNameDesc'))}</button>
+                    <button type="button" class="dropdown-item" data-styles-sort="collection" onclick="handleStylesSort('collection')">${escapeHtml(tu('actions.styles.drawer.sortCollection'))}</button>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-section">${escapeHtml(tu('actions.styles.drawer.variableType'))}</div>
+                    <button type="button" class="dropdown-item active" data-styles-vfilter="all" onclick="handleStylesVariableTypeFilter('all')">${escapeHtml(tu('actions.styles.drawer.varTypeAll'))}</button>
+                    <button type="button" class="dropdown-item" data-styles-vfilter="COLOR" onclick="handleStylesVariableTypeFilter('color')">${escapeHtml(tu('actions.styles.drawer.varTypeColor'))}</button>
+                    <button type="button" class="dropdown-item" data-styles-vfilter="FLOAT" onclick="handleStylesVariableTypeFilter('float')">${escapeHtml(tu('actions.styles.drawer.varTypeFloat'))}</button>
+                    <button type="button" class="dropdown-item" data-styles-vfilter="STRING" onclick="handleStylesVariableTypeFilter('string')">${escapeHtml(tu('actions.styles.drawer.varTypeString'))}</button>
+                    <button type="button" class="dropdown-item" data-styles-vfilter="BOOLEAN" onclick="handleStylesVariableTypeFilter('boolean')">${escapeHtml(tu('actions.styles.drawer.varTypeBoolean'))}</button>
+                    <div class="dropdown-divider"></div>
+                    <div class="dropdown-section">${escapeHtml(tu('actions.styles.drawer.showCategories'))}</div>
+                    <button type="button" class="dropdown-item active" data-styles-cat="paint" onclick="handleStylesCategoryToggle('paint')">${escapeHtml(tu('actions.styles.drawer.catPaint'))}</button>
+                    <button type="button" class="dropdown-item active" data-styles-cat="text" onclick="handleStylesCategoryToggle('text')">${escapeHtml(tu('actions.styles.drawer.catText'))}</button>
+                    <button type="button" class="dropdown-item active" data-styles-cat="effect" onclick="handleStylesCategoryToggle('effect')">${escapeHtml(tu('actions.styles.drawer.catEffect'))}</button>
+                    <button type="button" class="dropdown-item active" data-styles-cat="variables" onclick="handleStylesCategoryToggle('variables')">${escapeHtml(tu('actions.styles.drawer.catVariables'))}</button>
+                  </div>
+                </div>
+                <button type="button" class="people-filter-toggle" id="stylesCollectionFilterToggle" onclick="toggleStylesCollectionFilter()" title="${escapeHtml(tu('actions.styles.drawer.collectionsFilterTitle'))}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <path d="M4 22V4a2 2 0 0 1 2-2h8.5L20 7.5V20a2 2 0 0 1-2 2H4Z"/>
+                    <path d="M14 2v6h6"/>
+                  </svg>
+                  <span class="people-filter-count styles-collection-filter-count"></span>
+                </button>
+                <span id="stylesCountDisplay" class="comments-count-display">0/0</span>
+              </div>
+              <div class="people-filter-section styles-collection-filter-section" id="stylesCollectionFilterSection">
+                <div class="people-filter-header">
+                  <span>${escapeHtml(tu('actions.styles.drawer.collections'))}</span>
+                  <button type="button" class="people-filter-clear" onclick="clearStylesCollectionFilter()">${escapeHtml(tu('actions.styles.drawer.clearCollections'))}</button>
+                </div>
+                <div class="people-chips-container" id="stylesCollectionChips"></div>
+              </div>
             </div>
-            <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">${tu('actions.styles.text')}</div>
-              <div class="styles-list" id="textStylesList"></div>
-            </div>
-            <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">${tu('actions.styles.effect')}</div>
-              <div class="styles-list" id="effectStylesList"></div>
-            </div>
-            <div class="prompt-drawer-fields" style="padding: 0; gap: 0;">
-              <div class="prompt-field-label">${tu('actions.styles.variables')}</div>
-              <div class="styles-list" id="variablesList"></div>
+            <div class="styles-browser-wrap">
+              <div class="prompt-drawer-fields styles-section-block" style="padding: 0; gap: 0;" id="stylesSectionPaint">
+                <div class="prompt-field-label">${tu('actions.styles.paint')}</div>
+                <div class="styles-list" id="paintStylesList"></div>
+              </div>
+              <div class="prompt-drawer-fields styles-section-block" style="padding: 0; gap: 0;" id="stylesSectionText">
+                <div class="prompt-field-label">${tu('actions.styles.text')}</div>
+                <div class="styles-list" id="textStylesList"></div>
+              </div>
+              <div class="prompt-drawer-fields styles-section-block" style="padding: 0; gap: 0;" id="stylesSectionEffect">
+                <div class="prompt-field-label">${tu('actions.styles.effect')}</div>
+                <div class="styles-list" id="effectStylesList"></div>
+              </div>
+              <div class="prompt-drawer-fields styles-section-block" style="padding: 0; gap: 0;" id="stylesSectionVariables">
+                <div class="prompt-field-label">${tu('actions.styles.variables')}</div>
+                <div class="styles-list" id="variablesList"></div>
+              </div>
             </div>
           `;
           promptDrawerFields.classList.remove('hidden');
@@ -42294,6 +42726,11 @@ Update the text content for all selected nodes accordingly.`;
       if (componentsBrowserMenu && !componentsBrowserMenu.classList.contains('hidden') && !componentsBrowserMenu.contains(e.target) && !(componentsBrowserBtn && componentsBrowserBtn.contains(e.target))) {
         componentsBrowserMenu.classList.add('hidden');
       }
+      const stylesMenu = document.getElementById('stylesDropdownMenu');
+      const stylesBtn = document.getElementById('stylesDropdownBtn');
+      if (stylesMenu && !stylesMenu.classList.contains('hidden') && !stylesMenu.contains(e.target) && !(stylesBtn && stylesBtn.contains(e.target))) {
+        stylesMenu.classList.add('hidden');
+      }
       const moreBtn = e.target.closest('.comment-more-container button') || e.target.closest('.comment-reply-chevron-btn');
       const moreMenu = e.target.closest('.comment-more-menu');
       if (!moreBtn && !moreMenu) {
@@ -42604,6 +43041,7 @@ Update the text content for all selected nodes accordingly.`;
       ...commentsInlineHandlerNames,
       ...stickiesInlineHandlerNames,
       ...historyInlineHandlerNames,
+      ...stylesInlineHandlerNames,
       'switchComponentsScope',
       'handleComponentsSearchInput',
       'toggleComponentsBrowserDropdown',
