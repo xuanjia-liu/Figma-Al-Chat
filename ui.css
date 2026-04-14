@@ -6630,8 +6630,8 @@
       width: 34px;
       height: 20px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.16);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
       flex: 0 0 auto;
       transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
     }
@@ -6643,7 +6643,7 @@
       width: 16px;
       height: 16px;
       border-radius: 50%;
-      background: white;
+      background: var(--text-secondary);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
       transition: transform 0.15s ease;
     }
@@ -6655,6 +6655,7 @@
 
     .code-editor-option-toggle-input:checked + .code-editor-option-toggle .code-editor-option-toggle-knob {
       transform: translateX(14px);
+      background: var(--text-on-accent);
     }
 
     .code-editor-option-row.disabled .code-editor-option-toggle {
