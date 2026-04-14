@@ -45,6 +45,7 @@ import { createPromptDrawerHelpers } from './features/agent/prompt-drawer/helper
 import { createAgentTasks } from './features/agent/tasks/index.js';
 import { mountGoogleFontPreview } from './features/font-preview/google-font-preview.js';
 import { mountHueShift } from './features/hue-shift/hue-shift.js';
+import { mountFontMapping } from './features/font-mapping/font-mapping.js';
 import { AUDIT_COMMON_RULES, defaultAuditPresets } from './config/audit-config.js';
 import {
   CHART_PRESETS,
@@ -9810,7 +9811,7 @@ Rules:
             recordQuickActionUsage(actionName);
             closeCommandsDrawer();
             await handleExtractImagePrompt(actionName, actionIcon);
-          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllComponents' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview' || task.directAction === 'hueShift')) {
+          } else if (task && (task.directAction === 'listAllComments' || task.directAction === 'listAllComponents' || task.directAction === 'listAllStickies' || task.directAction === 'browseStyles' || task.directAction === 'googleFontPreview' || task.directAction === 'hueShift' || task.directAction === 'fontMapping')) {
             // Handle actions that open in prompt drawer
             if (task.directAction === 'listAllComments') {
               ensureCommentsLoadedCached();
@@ -16734,6 +16735,7 @@ Generate ONLY the reply text, nothing else.`;
     let currentPromptAction = null; // Store current action data for submission
     let disposeGoogleFontPreview = null;
     let disposeHueShift = null;
+    let disposeFontMapping = null;
     let isPromptComposing = false;  // Track IME composition in prompt drawer inputs
     let isApplyingPreset = false;   // Track if we are currently applying a preset
     let randomizeDrawerRefreshVersion = 0;
@@ -17438,7 +17440,8 @@ Generate ONLY the reply text, nothing else.`;
           actionData.name === 'Font preview' ||
           actionData.name === 'HUE shift' ||
           actionData.directAction === 'listAllComponents' ||
-          actionData.directAction === 'randomizeSelectedInstances';
+          actionData.directAction === 'randomizeSelectedInstances' ||
+          actionData.directAction === 'fontMapping';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
@@ -17477,12 +17480,17 @@ Generate ONLY the reply text, nothing else.`;
           disposeHueShift();
           disposeHueShift = null;
         }
+        if (typeof disposeFontMapping === 'function') {
+          disposeFontMapping();
+          disposeFontMapping = null;
+        }
 
-        // Restore submit button text/state
+        // Restore submit button visibility/text/state (always reset display — other drawers hide it with display:none)
         const submitBtn = document.getElementById('promptDrawerSubmit');
-        if (submitBtn && submitBtn.dataset.originalText) {
-          submitBtn.textContent = submitBtn.dataset.originalText;
+        if (submitBtn) {
+          submitBtn.style.display = '';
           submitBtn.disabled = false;
+          submitBtn.textContent = submitBtn.dataset.originalText || tu('actions.prompt.run');
         }
 
         // --- Direct UI Creation: Phase initialization ---
@@ -18041,6 +18049,50 @@ Generate ONLY the reply text, nothing else.`;
             const existingGroup = footer2.querySelector('.ai-action-group');
             if (existingGroup) existingGroup.remove();
           }
+        } else if (actionData.directAction === 'fontMapping') {
+          promptDrawerFields.innerHTML = '<div class="font-mapping-mount-root"></div>';
+          promptDrawerFields.classList.remove('hidden');
+          const fmMount = promptDrawerFields.querySelector('.font-mapping-mount-root');
+          if (fmMount) {
+            disposeFontMapping = mountFontMapping(fmMount, {
+              tu,
+              showToast,
+              requestLocalStyles: requestLocalStylesForFontMapping,
+            });
+          }
+
+          const resetBtnFm = document.getElementById('promptDrawerReset');
+          if (resetBtnFm) {
+            resetBtnFm.textContent = tu('actions.prompt.reset');
+            resetBtnFm.title = tu('actions.prompt.resetTitle');
+            resetBtnFm.style.display = '';
+            resetBtnFm.onclick = (e) => {
+              e.preventDefault();
+              if (typeof disposeFontMapping === 'function') {
+                disposeFontMapping();
+                disposeFontMapping = null;
+              }
+              const mountEl = promptDrawerFields.querySelector('.font-mapping-mount-root');
+              if (mountEl) {
+                disposeFontMapping = mountFontMapping(mountEl, {
+                  tu,
+                  showToast,
+                  requestLocalStyles: requestLocalStylesForFontMapping,
+                });
+              }
+            };
+          }
+
+          const cancelBtnFm = document.getElementById('promptDrawerCancel');
+          if (cancelBtnFm) {
+            cancelBtnFm.textContent = tu('actions.prompt.close');
+          }
+
+          const footerFm = document.querySelector('.prompt-drawer-footer');
+          if (footerFm) {
+            const existingGroupFm = footerFm.querySelector('.ai-action-group');
+            if (existingGroupFm) existingGroupFm.remove();
+          }
         } else {
           // Show submit button for other actions
           const submitBtn = document.getElementById('promptDrawerSubmit');
@@ -18086,6 +18138,10 @@ Generate ONLY the reply text, nothing else.`;
       if (typeof disposeHueShift === 'function') {
         disposeHueShift();
         disposeHueShift = null;
+      }
+      if (typeof disposeFontMapping === 'function') {
+        disposeFontMapping();
+        disposeFontMapping = null;
       }
       teardownImageToAsciiPreview();
       promptDrawer.classList.remove('open', 'minimized', 'maximized');
@@ -26252,6 +26308,87 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    function requestLocalStylesForFontMapping() {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timed out loading styles'));
+        }, 25000);
+        const handler = (event) => {
+          const msg = event.data && event.data.pluginMessage;
+          if (!msg || msg.type !== 'local-styles') return;
+          if (msg.source !== 'font-mapping') return;
+          clearTimeout(timeout);
+          window.removeEventListener('message', handler);
+          resolve(msg);
+        };
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: { type: 'getLocalStyles', source: 'font-mapping' } }, '*');
+      });
+    }
+
+    async function runFontMappingAction() {
+      const fieldsEl = document.getElementById('promptDrawerFields');
+      const mount =
+        fieldsEl?.querySelector?.('.font-mapping-mount-root') ||
+        fieldsEl?.querySelector?.('.font-mapping-mount') ||
+        document.querySelector('.font-mapping-mount-root') ||
+        document.querySelector('.font-mapping-mount');
+      const getPayload = mount && mount._fontMappingGetPayload;
+      if (typeof getPayload !== 'function') {
+        showToast(tu('actions.fontMapping.notReady'), 'error');
+        return;
+      }
+
+      const result = await requestSelectionData(false, false, ContextMode.TYPOGRAPHY_ONLY);
+      const selection = Array.isArray(result?.data) ? result.data : [];
+      const textNodes = selection.filter(node => node?.type === 'TEXT');
+      if (textNodes.length === 0) {
+        showToast(tu('actions.fontMapping.needText'), 'error');
+        return;
+      }
+
+      const payload = getPayload();
+      payload.nodeIds = textNodes.map(n => n.id);
+
+      if (!Array.isArray(payload.rules) || payload.rules.length === 0) {
+        showToast(tu('actions.fontMapping.needRules'), 'error');
+        return;
+      }
+
+      for (const rule of payload.rules) {
+        if (rule.target === 'substring' && !(rule.substring || '').trim()) {
+          showToast(tu('actions.fontMapping.needSubstr'), 'error');
+          return;
+        }
+      }
+
+      try {
+        const msg = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            window.removeEventListener('message', onMsg);
+            reject(new Error('Timed out'));
+          }, 120000);
+          const onMsg = (event) => {
+            const m = event.data && event.data.pluginMessage;
+            if (!m || m.type !== 'font-mapping-result') return;
+            clearTimeout(timeout);
+            window.removeEventListener('message', onMsg);
+            resolve(m);
+          };
+          window.addEventListener('message', onMsg);
+          parent.postMessage({ pluginMessage: { type: 'font-mapping-apply', payload } }, '*');
+        });
+        if (msg.ok) {
+          showToast(msg.message || tu('actions.fontMapping.done'), 'success');
+        } else {
+          showToast(msg.message || tu('actions.fontMapping.failed'), 'error');
+        }
+      } catch (e) {
+        showToast(e?.message || tu('actions.fontMapping.failed'), 'error');
+      }
+    }
+
     async function runHueShiftAction() {
       const mount = document.querySelector('.hue-shift-mount');
       const getValues = mount && mount._hueShiftGetValues;
@@ -26579,6 +26716,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'hueShift':
           await runHueShiftAction(values, actionMeta);
+          break;
+        case 'fontMapping':
+          await runFontMappingAction(values, actionMeta);
           break;
         case 'textLinkColor':
           await runTextLinkColorAction(values, actionMeta);
@@ -28222,7 +28362,8 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           const keepDrawerOpenForImageToAscii = action.directAction === 'imageToAscii';
           const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
           const keepDrawerOpenForAddProperty = action.directAction === 'addProperty';
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty) {
+          const keepDrawerOpenForFontMapping = action.directAction === 'fontMapping';
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForFontMapping) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -28240,7 +28381,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             promptDrawerSubmit.textContent = 'Run Action';
@@ -39046,7 +39187,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
         task.directAction === 'listAllComponents' ||
         task.directAction === 'browseStyles' ||
         task.directAction === 'googleFontPreview' ||
-        task.directAction === 'hueShift') {
+        task.directAction === 'hueShift' ||
+        task.directAction === 'fontMapping') {
         let hydratedFields = task.fields || [];
         if (task.directAction === 'browseIconSet') {
           const excludeAnyIconifySet = true;

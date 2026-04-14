@@ -2306,6 +2306,103 @@ function splitTextWithIndices(
   return segments;
 }
 
+/**
+ * Find substring range for matching user-entered substrings against full text.
+ * Priority: exact match > case-insensitive > normalized (NFKC) > trimmed.
+ */
+function findSubstringTextRange(
+  fullText: string,
+  query: string,
+  occurrence: number = 0
+): { start: number; end: number } | null {
+  if (!query || !fullText) return null;
+
+  const stripQuotes = (s: string) =>
+    s.replace(/^[\"'""''「『【（(﹁]+/, '').replace(/[\"'""''」』】）)﹂]+$/, '');
+
+  const findNth = (haystack: string, needle: string, n: number): { start: number; end: number } | null => {
+    let from = 0;
+    let idx = -1;
+    for (let i = 0; i <= n; i++) {
+      idx = haystack.indexOf(needle, from);
+      if (idx === -1) return null;
+      from = idx + 1;
+    }
+    return { start: idx, end: idx + needle.length };
+  };
+
+  const candidates = [query, stripQuotes(query), query.trim(), stripQuotes(query).trim()].filter(
+    (c, i, arr) => c && arr.indexOf(c) === i
+  );
+
+  for (const cand of candidates) {
+    const match = findNth(fullText, cand, occurrence);
+    if (match) return match;
+  }
+
+  const fullTextLower = fullText.toLowerCase();
+  for (const cand of candidates) {
+    const candLower = cand.toLowerCase();
+    const matchLower = findNth(fullTextLower, candLower, occurrence);
+    if (matchLower) return matchLower;
+  }
+
+  const fullTextNFKC = fullText.normalize('NFKC');
+  const nfkcToOriginal: number[] = [];
+  {
+    const origChars = [...fullText];
+    for (let i = 0; i < origChars.length; i++) {
+      const origChar = origChars[i];
+      const normChar = origChar.normalize('NFKC');
+      const normLen = [...normChar].length;
+      for (let j = 0; j < normLen; j++) {
+        nfkcToOriginal.push(i);
+      }
+    }
+  }
+
+  for (const cand of candidates) {
+    const candNFKC = cand.normalize('NFKC');
+    const matchNFKC = findNth(fullTextNFKC, candNFKC, occurrence);
+    if (matchNFKC) {
+      const origStart = nfkcToOriginal[matchNFKC.start] ?? 0;
+      const lastMatchedNFKCIdx = matchNFKC.end - 1;
+      const origLastChar = nfkcToOriginal[lastMatchedNFKCIdx] ?? (fullText.length - 1);
+      const origEnd = origLastChar + 1;
+      return { start: origStart, end: origEnd };
+    }
+  }
+
+  const fullTextNFKCLower = fullTextNFKC.toLowerCase();
+  for (const cand of candidates) {
+    const candNFKCLower = cand.normalize('NFKC').toLowerCase();
+    const matchNFKCLower = findNth(fullTextNFKCLower, candNFKCLower, occurrence);
+    if (matchNFKCLower) {
+      const origStart = nfkcToOriginal[matchNFKCLower.start] ?? 0;
+      const lastMatchedNFKCIdx = matchNFKCLower.end - 1;
+      const origLastChar = nfkcToOriginal[lastMatchedNFKCIdx] ?? (fullText.length - 1);
+      const origEnd = origLastChar + 1;
+      return { start: origStart, end: origEnd };
+    }
+  }
+
+  return null;
+}
+
+function findAllSubstringTextRanges(
+  fullText: string,
+  query: string,
+  maxMatches: number = 200
+): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (let occ = 0; occ < maxMatches; occ++) {
+    const m = findSubstringTextRange(fullText, query, occ);
+    if (!m) break;
+    ranges.push(m);
+  }
+  return ranges;
+}
+
 /** Line gap for split-text auto layout: max(0, lineHeight − fontSize), with AUTO line-height ≈ 1.2× font size. */
 function splitTextLeadingGapPx(textNode: TextNode): number {
   const fs = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
@@ -2406,6 +2503,325 @@ async function applyStyleSegmentsToTextNode(
       }
     }
   }
+}
+
+function fontMappingHexToRgb(hexRaw: string): { r: number; g: number; b: number; a: number } {
+  let hex = hexRaw.trim().replace(/^#/, '');
+  if (hex.length === 3) {
+    hex = hex
+      .split('')
+      .map(c => c + c)
+      .join('');
+  }
+  if (hex.length === 8) {
+    const n = parseInt(hex, 16);
+    const a = ((n >> 24) & 0xff) / 255;
+    const r = ((n >> 16) & 0xff) / 255;
+    const g = ((n >> 8) & 0xff) / 255;
+    const b = (n & 0xff) / 255;
+    return { r, g, b, a };
+  }
+  const n = parseInt(hex.slice(0, 6), 16);
+  if (Number.isNaN(n)) {
+    return { r: 0, g: 0, b: 0, a: 1 };
+  }
+  return {
+    r: ((n >> 16) & 255) / 255,
+    g: ((n >> 8) & 255) / 255,
+    b: (n & 255) / 255,
+    a: 1
+  };
+}
+
+function classifyScriptBucket(codePoint: number): 'japanese' | 'latin' | 'numbers' {
+  // Hiragana
+  if (codePoint >= 0x3040 && codePoint <= 0x309f) return 'japanese';
+  // Katakana
+  if (codePoint >= 0x30a0 && codePoint <= 0x30ff) return 'japanese';
+  // CJK Unified Ideographs (Kanji)
+  if (codePoint >= 0x4e00 && codePoint <= 0x9faf) return 'japanese';
+  // CJK Extension A
+  if (codePoint >= 0x3400 && codePoint <= 0x4dbf) return 'japanese';
+  // Half-width Katakana
+  if (codePoint >= 0xff65 && codePoint <= 0xff9f) return 'japanese';
+  // CJK Compatibility Ideographs
+  if (codePoint >= 0xf900 && codePoint <= 0xfaff) return 'japanese';
+  // Full-width digits
+  if (codePoint >= 0xff10 && codePoint <= 0xff19) return 'numbers';
+  // ASCII digits
+  if (codePoint >= 0x0030 && codePoint <= 0x0039) return 'numbers';
+  // Full-width Latin
+  if (codePoint >= 0xff21 && codePoint <= 0xff3a) return 'latin';
+  if (codePoint >= 0xff41 && codePoint <= 0xff5a) return 'latin';
+  // ASCII Latin
+  if (codePoint >= 0x0041 && codePoint <= 0x005a) return 'latin';
+  if (codePoint >= 0x0061 && codePoint <= 0x007a) return 'latin';
+  // Default: treat as latin (punctuation, spaces, etc.)
+  return 'latin';
+}
+
+async function resolveFontStyleForRange(
+  target: TextNode | TextSublayerNode,
+  family: string,
+  requestedStyle: string,
+  matchWeight: boolean,
+  segStart: number,
+  segEnd: number
+): Promise<FontName> {
+  if (!matchWeight || !family) return { family, style: requestedStyle || 'Regular' };
+
+  const listed = await figma.listAvailableFontsAsync();
+  const styles: string[] = [];
+  for (const entry of listed) {
+    if (entry.fontName.family === family && !styles.includes(entry.fontName.style)) {
+      styles.push(entry.fontName.style);
+    }
+  }
+  if (styles.length === 0) return { family, style: requestedStyle || 'Regular' };
+
+  let weightNum = 400;
+  if ('getRangeFontWeight' in target && typeof (target as TextNode).getRangeFontWeight === 'function') {
+    const w = (target as TextNode).getRangeFontWeight(segStart, segEnd);
+    if (typeof w === 'number' && !Number.isNaN(w)) weightNum = w;
+  }
+  return { family, style: pickBestLocalStyle(styles, weightNum) };
+}
+
+async function applyFontMappingRangeOps(
+  target: TextNode | TextSublayerNode,
+  start: number,
+  end: number,
+  slice: {
+    textStyleId?: string;
+    fillStyleId?: string;
+    fillHex?: string;
+    fillVariableId?: string;
+    applyFont?: boolean;
+    fontFamily?: string;
+    fontStyle?: string;
+    fontSize?: number | null;
+    lineHeight?: LineHeight | null | undefined;
+    applyDecoration?: boolean;
+    textDecoration?: 'NONE' | 'UNDERLINE' | 'STRIKETHROUGH' | '';
+    decorationColorHex?: string;
+  }
+): Promise<void> {
+  const tn = target as any;
+
+  if (slice.textStyleId) {
+    if ('setRangeTextStyleIdAsync' in tn && typeof tn.setRangeTextStyleIdAsync === 'function') {
+      await tn.setRangeTextStyleIdAsync(start, end, slice.textStyleId);
+    } else {
+      tn.setRangeTextStyleId(start, end, slice.textStyleId);
+    }
+  }
+
+  if (slice.fillStyleId) {
+    if ('setRangeFillStyleIdAsync' in tn && typeof tn.setRangeFillStyleIdAsync === 'function') {
+      await tn.setRangeFillStyleIdAsync(start, end, slice.fillStyleId);
+    } else {
+      tn.setRangeFillStyleId(start, end, slice.fillStyleId);
+    }
+  }
+
+  if (slice.fillVariableId && figma.variables) {
+    try {
+      const variable = await figma.variables.getVariableByIdAsync(slice.fillVariableId);
+      if (variable) {
+        tn.setRangeBoundVariable(start, end, 'fills', variable);
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+  } else if (slice.fillHex && typeof slice.fillHex === 'string' && slice.fillHex.trim() && !slice.fillStyleId) {
+    const rgb = fontMappingHexToRgb(slice.fillHex);
+    const paints: Paint[] = [{ type: 'SOLID', color: { r: rgb.r, g: rgb.g, b: rgb.b }, opacity: rgb.a }];
+    if ('setRangeFillsAsync' in tn && typeof tn.setRangeFillsAsync === 'function') {
+      await tn.setRangeFillsAsync(start, end, paints);
+    } else {
+      tn.setRangeFills(start, end, paints);
+    }
+  }
+
+  if (slice.applyFont && slice.fontFamily && slice.fontStyle) {
+    await smartLoadFont({ family: slice.fontFamily, style: slice.fontStyle });
+    tn.setRangeFontName(start, end, { family: slice.fontFamily, style: slice.fontStyle });
+  }
+  if (slice.applyFont && slice.fontSize != null && typeof slice.fontSize === 'number') {
+    tn.setRangeFontSize(start, end, slice.fontSize);
+  }
+  if (slice.applyFont && slice.lineHeight !== null && slice.lineHeight !== undefined) {
+    tn.setRangeLineHeight(start, end, slice.lineHeight as LineHeight);
+  }
+
+  if (slice.applyDecoration && slice.textDecoration) {
+    tn.setRangeTextDecoration(start, end, slice.textDecoration as 'NONE' | 'UNDERLINE' | 'STRIKETHROUGH');
+    if (
+      slice.textDecoration !== 'NONE' &&
+      slice.decorationColorHex &&
+      slice.decorationColorHex.trim()
+    ) {
+      const d = fontMappingHexToRgb(slice.decorationColorHex);
+      try {
+        tn.setRangeTextDecorationColor(start, end, { type: 'SOLID', color: { r: d.r, g: d.g, b: d.b } });
+      } catch (_e) {
+        /* TextSublayer may omit some decoration color APIs */
+      }
+    }
+  }
+}
+
+function segmentTextByScript(
+  text: string,
+  wantJp: boolean,
+  wantLatin: boolean,
+  wantNum: boolean
+): Array<{ start: number; end: number; bucket: 'japanese' | 'latin' | 'numbers' }> {
+  type Bucket = 'japanese' | 'latin' | 'numbers';
+  const segs: Array<{ start: number; end: number; bucket: Bucket }> = [];
+  let segStart = 0;
+  let cur: Bucket | null = null;
+  let i = 0;
+  while (i < text.length) {
+    const cp = text.codePointAt(i)!;
+    const b = classifyScriptBucket(cp);
+    if (cur === null) {
+      cur = b;
+      segStart = i;
+    } else if (cur !== b) {
+      segs.push({ start: segStart, end: i, bucket: cur });
+      cur = b;
+      segStart = i;
+    }
+    i += cp > 0xffff ? 2 : 1;
+  }
+  if (cur !== null) {
+    segs.push({ start: segStart, end: text.length, bucket: cur });
+  }
+  const wanted = new Set<string>();
+  if (wantJp) wanted.add('japanese');
+  if (wantLatin) wanted.add('latin');
+  if (wantNum) wanted.add('numbers');
+  return segs.filter(s => wanted.has(s.bucket));
+}
+
+async function applyFontMappingFromUiPayload(payload: any): Promise<{ ok: boolean; message?: string; updated: number }> {
+  const nodeIds: string[] = Array.isArray(payload?.nodeIds) ? payload.nodeIds.filter((x: any) => typeof x === 'string') : [];
+  const rules: any[] = Array.isArray(payload?.rules) ? payload.rules : [];
+  if (rules.length === 0) return { ok: false, message: 'No rules defined.', updated: 0 };
+
+  const roots: SceneNode[] = [];
+  if (nodeIds.length > 0) {
+    for (const id of nodeIds) {
+      try {
+        const n = await figma.getNodeByIdAsync(id);
+        if (n && 'type' in n) roots.push(n as SceneNode);
+      } catch (_e) { /* skip */ }
+    }
+  } else {
+    roots.push(...figma.currentPage.selection);
+  }
+  if (roots.length === 0) return { ok: false, message: 'No layers selected.', updated: 0 };
+
+  let updated = 0;
+
+  for (const node of roots) {
+    const target = getTextFormattingTarget(node);
+    if (!target) continue;
+    await loadAllFontsForFormattingTarget(target);
+    const fullText = target.characters;
+    if (fullText.length === 0) continue;
+
+    for (const rule of rules) {
+      const tgt: string = typeof rule?.target === 'string' ? rule.target : 'whole';
+      const ranges: Array<{ start: number; end: number }> = [];
+
+      if (tgt === 'whole') {
+        ranges.push({ start: 0, end: fullText.length });
+      } else if (tgt === 'japanese' || tgt === 'latin' || tgt === 'numbers' || tgt === 'latin_and_numbers') {
+        const wantJp = tgt === 'japanese';
+        const wantLat = tgt === 'latin' || tgt === 'latin_and_numbers';
+        const wantNum = tgt === 'numbers' || tgt === 'latin_and_numbers';
+        ranges.push(...segmentTextByScript(fullText, wantJp, wantLat, wantNum));
+      } else if (tgt === 'substring') {
+        const sub = typeof rule?.substring === 'string' ? rule.substring.trim() : '';
+        if (!sub) continue;
+        if (rule?.allOccurrences === true) {
+          ranges.push(...findAllSubstringTextRanges(fullText, sub));
+        } else {
+          const m = findSubstringTextRange(fullText, sub, 0);
+          if (m) ranges.push(m);
+        }
+      }
+
+      if (ranges.length === 0) continue;
+
+      let resolvedLineHeight: LineHeight | null = null;
+      if (rule?.fontEnabled === true) {
+        const lhUnit = typeof rule?.lhUnit === 'string' ? rule.lhUnit : 'AUTO';
+        const lhVal = typeof rule?.lhVal === 'number' ? rule.lhVal : null;
+        if (lhUnit === 'PIXELS' && lhVal !== null && Number.isFinite(lhVal)) {
+          resolvedLineHeight = { unit: 'PIXELS', value: lhVal };
+        } else if (lhUnit === 'PERCENT' && lhVal !== null && Number.isFinite(lhVal)) {
+          resolvedLineHeight = { unit: 'PERCENT', value: lhVal };
+        } else {
+          resolvedLineHeight = { unit: 'AUTO' };
+        }
+      }
+
+      for (const rng of ranges) {
+        if (rng.start >= rng.end || rng.start < 0 || rng.end > fullText.length) continue;
+
+        let fontFamily = typeof rule?.fontFamily === 'string' ? rule.fontFamily.trim() : '';
+        let fontStyle = typeof rule?.fontStyle === 'string' ? rule.fontStyle.trim() : '';
+
+        if (rule?.fontEnabled && fontFamily && rule?.matchWeight) {
+          const resolved = await resolveFontStyleForRange(target, fontFamily, fontStyle, true, rng.start, rng.end);
+          fontFamily = resolved.family;
+          fontStyle = resolved.style;
+        }
+
+        const slice = {
+          textStyleId: typeof rule?.textStyleId === 'string' && rule.textStyleId ? rule.textStyleId : undefined,
+          fillStyleId: typeof rule?.fillStyleId === 'string' && rule.fillStyleId ? rule.fillStyleId : undefined,
+          fillHex: typeof rule?.fillHex === 'string' && rule.fillHex.trim() ? rule.fillHex.trim() : undefined,
+          fillVariableId: typeof rule?.fillVariableId === 'string' && rule.fillVariableId ? rule.fillVariableId : undefined,
+          applyFont: rule?.fontEnabled === true,
+          fontFamily,
+          fontStyle: fontStyle || 'Regular',
+          fontSize: rule?.fontSize != null && rule?.fontSize !== '' ? Number(rule.fontSize) : null,
+          lineHeight: resolvedLineHeight,
+          applyDecoration: rule?.decoEnabled === true,
+          textDecoration: (rule?.textDecoration === 'UNDERLINE' || rule?.textDecoration === 'STRIKETHROUGH' || rule?.textDecoration === 'NONE') ? rule.textDecoration : '',
+          decorationColorHex: typeof rule?.decorationColorHex === 'string' ? rule.decorationColorHex.trim() : '',
+        };
+
+        await applyFontMappingRangeOps(target, rng.start, rng.end, slice);
+      }
+    }
+
+    if (node.type === 'TEXT') {
+      const t = node as TextNode;
+      if (typeof payload?.layerEffectStyleId === 'string' && payload.layerEffectStyleId) {
+        if ('setEffectStyleIdAsync' in t && typeof (t as any).setEffectStyleIdAsync === 'function') {
+          await (t as any).setEffectStyleIdAsync(payload.layerEffectStyleId);
+        } else {
+          (t as any).effectStyleId = payload.layerEffectStyleId;
+        }
+      }
+      if (typeof payload?.layerStrokeStyleId === 'string' && payload.layerStrokeStyleId) {
+        if ('setStrokeStyleIdAsync' in t && typeof (t as any).setStrokeStyleIdAsync === 'function') {
+          await (t as any).setStrokeStyleIdAsync(payload.layerStrokeStyleId);
+        } else {
+          (t as any).strokeStyleId = payload.layerStrokeStyleId;
+        }
+      }
+    }
+
+    updated++;
+  }
+
+  return { ok: true, updated, message: updated ? `Updated ${updated} text layer(s).` : 'No matching text ranges.' };
 }
 
 // Helper function to format numbers with minimal decimal places
@@ -10073,6 +10489,7 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'getLocalStyles': {
+      const stylesRequestSource = typeof (msg as any).source === 'string' ? (msg as any).source : '';
       try {
         const paintStyles = await figma.getLocalPaintStylesAsync();
         const textStyles = await figma.getLocalTextStylesAsync();
@@ -10125,6 +10542,7 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'local-styles',
+          source: stylesRequestSource || undefined,
           paintStyles: serializedPaintStyles,
           textStyles: serializedTextStyles,
           effectStyles: serializedEffectStyles,
@@ -10136,6 +10554,24 @@ figma.ui.onmessage = async (msg: {
         console.error('getLocalStyles failed', error);
         figma.ui.postMessage({ type: 'error', message: 'Failed to load local styles' });
       }
+      break;
+    }
+
+    case 'font-mapping-apply': {
+      void (async () => {
+        try {
+          const res = await applyFontMappingFromUiPayload((msg as any).payload || msg);
+          figma.ui.postMessage({ type: 'font-mapping-result', ...res });
+        } catch (error) {
+          console.error('font-mapping-apply failed', error);
+          figma.ui.postMessage({
+            type: 'font-mapping-result',
+            ok: false,
+            message: error instanceof Error ? error.message : String(error),
+            updated: 0
+          });
+        }
+      })();
       break;
     }
 
@@ -14147,106 +14583,6 @@ figma.ui.onmessage = async (msg: {
         }
 
         return { removed };
-      };
-
-      // Find substring range with simple and reliable matching
-      // Priority: exact match > case-insensitive > normalized (NFKC) > trimmed
-      const findTextRange = (
-        fullText: string,
-        query: string,
-        occurrence: number = 0
-      ): { start: number; end: number } | null => {
-        if (!query || !fullText) return null;
-
-        // Strip common surrounding quotes from query
-        const stripQuotes = (s: string) =>
-          s.replace(/^[\"'""''「『【（(﹁]+/, '').replace(/[\"'""''」』】）)﹂]+$/, '');
-
-        // Helper: find nth occurrence of needle in haystack, return { start, end } or null
-        const findNth = (haystack: string, needle: string, n: number): { start: number; end: number } | null => {
-          let from = 0;
-          let idx = -1;
-          for (let i = 0; i <= n; i++) {
-            idx = haystack.indexOf(needle, from);
-            if (idx === -1) return null;
-            from = idx + 1; // move past this match for next iteration
-          }
-          return { start: idx, end: idx + needle.length };
-        };
-
-        // Candidate queries: original, quote-stripped, trimmed
-        const candidates = [
-          query,
-          stripQuotes(query),
-          query.trim(),
-          stripQuotes(query).trim()
-        ].filter((c, i, arr) => c && arr.indexOf(c) === i); // unique non-empty
-
-        // Attempt 1: Exact match (fastest and most reliable)
-        for (const cand of candidates) {
-          const match = findNth(fullText, cand, occurrence);
-          if (match) return match;
-        }
-
-        // Attempt 2: Case-insensitive match (for mixed EN/JP with Latin chars)
-        const fullTextLower = fullText.toLowerCase();
-        for (const cand of candidates) {
-          const candLower = cand.toLowerCase();
-          const matchLower = findNth(fullTextLower, candLower, occurrence);
-          if (matchLower) {
-            // Return indices into original fullText (same positions since toLowerCase preserves length for BMP chars)
-            return matchLower;
-          }
-        }
-
-        // Attempt 3: NFKC normalized match (handles full/half width: ０１２ vs 012, Ａ vs A)
-        const fullTextNFKC = fullText.normalize('NFKC');
-        // Build a mapping from NFKC positions back to original positions
-        // This handles cases where NFKC might change character lengths
-        const nfkcToOriginal: number[] = [];
-        {
-          let origIdx = 0;
-          const origChars = [...fullText];
-          for (let i = 0; i < origChars.length; i++) {
-            const origChar = origChars[i];
-            const normChar = origChar.normalize('NFKC');
-            const normLen = [...normChar].length; // count codepoints in normalized form
-            for (let j = 0; j < normLen; j++) {
-              nfkcToOriginal.push(i);
-            }
-            origIdx++;
-          }
-        }
-
-        for (const cand of candidates) {
-          const candNFKC = cand.normalize('NFKC');
-          const matchNFKC = findNth(fullTextNFKC, candNFKC, occurrence);
-          if (matchNFKC) {
-            // Map back to original positions
-            const origStart = nfkcToOriginal[matchNFKC.start] ?? 0;
-            // For end, we need the character AFTER the last matched char
-            const lastMatchedNFKCIdx = matchNFKC.end - 1;
-            const origLastChar = nfkcToOriginal[lastMatchedNFKCIdx] ?? (fullText.length - 1);
-            const origEnd = origLastChar + 1;
-            return { start: origStart, end: origEnd };
-          }
-        }
-
-        // Attempt 4: Case-insensitive NFKC
-        const fullTextNFKCLower = fullTextNFKC.toLowerCase();
-        for (const cand of candidates) {
-          const candNFKCLower = cand.normalize('NFKC').toLowerCase();
-          const matchNFKCLower = findNth(fullTextNFKCLower, candNFKCLower, occurrence);
-          if (matchNFKCLower) {
-            const origStart = nfkcToOriginal[matchNFKCLower.start] ?? 0;
-            const lastMatchedNFKCIdx = matchNFKCLower.end - 1;
-            const origLastChar = nfkcToOriginal[lastMatchedNFKCIdx] ?? (fullText.length - 1);
-            const origEnd = origLastChar + 1;
-            return { start: origStart, end: origEnd };
-          }
-        }
-
-        return null;
       };
 
       // Decode base64 (with optional data URL prefix) to bytes for image APIs
@@ -22503,7 +22839,7 @@ figma.ui.onmessage = async (msg: {
                     ? cmd.textSubstring
                     : (typeof cmd.substring === 'string' ? cmd.substring : '');
                   if (substring) {
-                    const match = findTextRange(fullText, substring, cmd.occurrence ?? 0);
+                    const match = findSubstringTextRange(fullText, substring, cmd.occurrence ?? 0);
                     if (match) {
                       rangeStart = match.start;
                       rangeEnd = match.end;
@@ -22601,7 +22937,7 @@ figma.ui.onmessage = async (msg: {
                     ? cmd.textSubstring
                     : (typeof cmd.substring === 'string' ? cmd.substring : '');
                   if (substring) {
-                    const match = findTextRange(fullText, substring, cmd.occurrence ?? 0);
+                    const match = findSubstringTextRange(fullText, substring, cmd.occurrence ?? 0);
                     if (match) {
                       rangeStart = match.start;
                       rangeEnd = match.end;

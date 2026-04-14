@@ -128,6 +128,15 @@ export const stylingTasks = [
           directAction: 'hueShift',
         },
 {
+          name: 'Font mapping',
+          desc: 'Parse text ranges and apply styles, typography, and presets without splitting layers',
+          help: 'Match substrings (one per line) or whole text. Styles and typography use Figma range APIs. Stroke and effect styles apply to the entire text layer only. Presets split Japanese vs Latin numerals and map font weights.',
+          isTextAction: true,
+          prompt: '',
+          requiredContext: ContextMode.TYPOGRAPHY_ONLY,
+          directAction: 'fontMapping',
+        },
+{
           name: 'text link/color',
           desc: 'Add link or recolor text substrings (one per line)',
           isTextAction: true,

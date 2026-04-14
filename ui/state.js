@@ -52,6 +52,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'removeAllEffects',
   'simulateOklchGradient',
   'hueShift',
+  'fontMapping',
   'textLinkColor',
   'removeUnusedProperties',
   'createIcon',
