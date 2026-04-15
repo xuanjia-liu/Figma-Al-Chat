@@ -11145,6 +11145,45 @@ figma.ui.onmessage = async (msg: {
       break;
     }
 
+    case 'get-selection-quad-info': {
+      if (selection.length !== 1) {
+        figma.ui.postMessage({ type: 'error', message: 'Please select exactly one target layer.' });
+        break;
+      }
+      const node = selection[0] as SceneNode & { width?: number; height?: number; vectorNetwork?: any };
+      if (!('fills' in node) || !('width' in node) || !('height' in node)) {
+        figma.ui.postMessage({ type: 'error', message: 'Selected layer does not support image fill mapping.' });
+        break;
+      }
+      const width = Number(node.width) || 0;
+      const height = Number(node.height) || 0;
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        figma.ui.postMessage({ type: 'error', message: 'Selected layer has invalid dimensions.' });
+        break;
+      }
+
+      const networkVertices = Array.isArray((node as any)?.vectorNetwork?.vertices)
+        ? (node as any).vectorNetwork.vertices
+        : null;
+      const localQuad = networkVertices && networkVertices.length === 4
+        ? networkVertices.map((v: any) => ({ x: Number(v.x), y: Number(v.y) }))
+        : [
+            { x: 0, y: 0 },
+            { x: width, y: 0 },
+            { x: width, y: height },
+            { x: 0, y: height }
+          ];
+
+      figma.ui.postMessage({
+        type: 'selection-quad-info',
+        nodeId: node.id,
+        width,
+        height,
+        localQuad
+      });
+      break;
+    }
+
     case 'extract-design-system': {
       try {
         const source: string = (msg as any).source || 'selection';
@@ -20440,6 +20479,102 @@ figma.ui.onmessage = async (msg: {
                     action: cmd.action,
                     nodeId: node.id,
                     message: `setImageFill failed: ${(error as Error)?.message} (node type: ${(node as any).type})`
+                  };
+                  failed++;
+                }
+              } else {
+                if (!firstError) firstError = {
+                  action: cmd.action,
+                  nodeId: node?.id || 'unknown',
+                  message: `Node does not support fills (node type: ${(node as any)?.type || 'unknown'})`
+                };
+                failed++;
+              }
+              break;
+
+            case 'setImageFillToVectorQuad':
+              if (node && 'fills' in node) {
+                try {
+                  const anyNode = node as any;
+                  const t = node.absoluteTransform;
+                  const toWorldPoint = (x: number, y: number) => ({
+                    x: t[0][0] * x + t[0][1] * y + t[0][2],
+                    y: t[1][0] * x + t[1][1] * y + t[1][2]
+                  });
+                  const getQuadPoints = () => {
+                    if ((node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') && Array.isArray(anyNode?.vectorNetwork?.vertices)) {
+                      const vertices = anyNode.vectorNetwork.vertices;
+                      if (vertices.length !== 4) return null;
+                      return vertices.map((v: any) => toWorldPoint(Number(v.x), Number(v.y)));
+                    }
+                    if ('width' in node && 'height' in node) {
+                      const w = Number((node as any).width);
+                      const h = Number((node as any).height);
+                      if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+                      return [
+                        toWorldPoint(0, 0),
+                        toWorldPoint(w, 0),
+                        toWorldPoint(w, h),
+                        toWorldPoint(0, h)
+                      ];
+                    }
+                    return null;
+                  };
+                  const points = getQuadPoints();
+                  if (!points || points.length !== 4) {
+                    throw new Error('Target must be a 4-point shape (e.g. rectangle/vector quad)');
+                  }
+                  if (points.some((p: any) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
+                    throw new Error('Invalid target point coordinates');
+                  }
+
+                  const signedArea = points.reduce((acc: number, point: any, index: number) => {
+                    const next = points[(index + 1) % points.length];
+                    return acc + point.x * next.y - next.x * point.y;
+                  }, 0) * 0.5;
+                  if (!Number.isFinite(signedArea) || Math.abs(signedArea) < 1e-3) {
+                    throw new Error('Target quad is degenerate (near-zero area)');
+                  }
+
+                  if (!cmd.imageData && !cmd.imageHash) {
+                    throw new Error('Missing image source');
+                  }
+                  const bytes = cmd.imageHash ? null : base64ToBytes(cmd.imageData);
+                  const image = cmd.imageHash ? figma.getImageByHash(cmd.imageHash) : figma.createImage(bytes as Uint8Array);
+                  if (!image) {
+                    throw new Error(cmd.imageHash ? 'Image not found by hash' : 'Failed to create image from data');
+                  }
+
+                  const currentFills = anyNode.fills;
+                  if (currentFills === figma.mixed) {
+                    throw new Error('Mixed fills are not supported for this action');
+                  }
+                  const fills = Array.isArray(currentFills) ? [...currentFills] : [];
+                  const imageFillIndex = fills.findIndex((paint) => paint?.type === 'IMAGE');
+                  const imageFill: ImagePaint = {
+                    type: 'IMAGE',
+                    imageHash: image.hash,
+                    scaleMode: 'FIT'
+                  };
+
+                  if (imageFillIndex === -1) {
+                    fills.push(imageFill);
+                  } else {
+                    const existing = fills[imageFillIndex] as ImagePaint;
+                    fills[imageFillIndex] = {
+                      ...existing,
+                      ...imageFill
+                    };
+                  }
+
+                  anyNode.fills = fills;
+                  success++;
+                } catch (error) {
+                  console.error(`setImageFillToVectorQuad failed on node ${node.id} (${(node as any).type}):`, error);
+                  if (!firstError) firstError = {
+                    action: cmd.action,
+                    nodeId: node.id,
+                    message: `setImageFillToVectorQuad failed: ${(error as Error)?.message} (node type: ${(node as any).type})`
                   };
                   failed++;
                 }

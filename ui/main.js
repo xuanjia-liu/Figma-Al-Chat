@@ -19536,7 +19536,9 @@ Generate ONLY the reply text, nothing else.`;
                 value="${escapeHtml(String(numberInputDisplay))}" 
                 placeholder="${field.placeholder || ''}"
                 ${field.min !== undefined ? `min="${field.min}"` : ''}
-                ${!withSlider && field.max !== undefined ? `max="${field.max}"` : ''}
+                ${(withSlider
+                  ? (field.inputMax !== undefined ? `max="${field.inputMax}"` : '')
+                  : (field.max !== undefined ? `max="${field.max}"` : ''))}
                 ${field.step !== undefined ? `step="${field.step}"` : ''}
                 ${disabledAttr}`;
           const controlsHtml = withSlider ? `
@@ -26996,6 +26998,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         case 'fillFromOnlineImage':
           await runFillFromOnlineImageAction(values, actionMeta);
           break;
+        case 'imageTo4PointVector':
+          await runImageTo4PointVectorAction(values, actionMeta);
+          break;
         case 'imageToAscii':
           await runImageToAsciiAction(values, actionMeta);
           break;
@@ -27091,6 +27096,338 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       } catch (error) {
         console.error('Set image fill failed:', error);
         showToast(error.message || `Failed to run ${actionMeta?.name || 'Set image fill'}`, 'error');
+      }
+    }
+
+    async function requestSelectionQuadInfo() {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          reject(new Error('Timed out while reading selected quad.'));
+        }, 8000);
+
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (!msg) return;
+          if (msg.type === 'selection-quad-info') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(msg);
+            return;
+          }
+          if (msg.type === 'error' && typeof msg.message === 'string') {
+            if (msg.message.includes('target layer') || msg.message.includes('image fill mapping') || msg.message.includes('invalid dimensions')) {
+              clearTimeout(timeout);
+              window.removeEventListener('message', handler);
+              reject(new Error(msg.message));
+            }
+          }
+        };
+
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: { type: 'get-selection-quad-info' } }, '*');
+      });
+    }
+
+    function toDataUrlFromImageFieldValue(value) {
+      if (typeof value !== 'string' || !value.trim()) return '';
+      const trimmed = value.trim();
+      if (trimmed.startsWith('data:')) return trimmed;
+      return `data:image/png;base64,${trimmed}`;
+    }
+
+    function normalizeDegrees(value) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return 0;
+      const normalized = ((parsed % 360) + 360) % 360;
+      return normalized;
+    }
+
+    function clampOutputScale(value) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return 1;
+      return Math.max(0.5, Math.min(3, parsed));
+    }
+
+    async function preprocessImageDataUrl(imageDataUrl, { rotateDegrees = 0, flipHorizontal = false, flipVertical = false } = {}) {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Failed to load source image.'));
+        el.src = imageDataUrl;
+      });
+      const rot = normalizeDegrees(rotateDegrees);
+      const swapAxes = rot === 90 || rot === 270;
+      const outW = swapAxes ? img.height : img.width;
+      const outH = swapAxes ? img.width : img.height;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(outW));
+      canvas.height = Math.max(1, Math.round(outH));
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.scale(flipHorizontal ? -1 : 1, flipVertical ? -1 : 1);
+      ctx.rotate((rot * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      return canvas.toDataURL('image/png');
+    }
+
+    function solveLinearSystem8x8(matrix, vector) {
+      const n = 8;
+      const a = matrix.map((row, i) => [...row, vector[i]]);
+      for (let col = 0; col < n; col++) {
+        let pivot = col;
+        for (let row = col + 1; row < n; row++) {
+          if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) pivot = row;
+        }
+        if (Math.abs(a[pivot][col]) < 1e-12) return null;
+        if (pivot !== col) {
+          const tmp = a[col];
+          a[col] = a[pivot];
+          a[pivot] = tmp;
+        }
+        const pivotVal = a[col][col];
+        for (let j = col; j <= n; j++) a[col][j] /= pivotVal;
+        for (let row = 0; row < n; row++) {
+          if (row === col) continue;
+          const factor = a[row][col];
+          if (Math.abs(factor) < 1e-12) continue;
+          for (let j = col; j <= n; j++) {
+            a[row][j] -= factor * a[col][j];
+          }
+        }
+      }
+      return a.map((row) => row[n]);
+    }
+
+    function computeHomographyFromPoints(srcPoints, dstPoints) {
+      const m = [];
+      const b = [];
+      for (let i = 0; i < 4; i++) {
+        const sx = srcPoints[i].x;
+        const sy = srcPoints[i].y;
+        const dx = dstPoints[i].x;
+        const dy = dstPoints[i].y;
+        m.push([sx, sy, 1, 0, 0, 0, -sx * dx, -sy * dx]);
+        b.push(dx);
+        m.push([0, 0, 0, sx, sy, 1, -sx * dy, -sy * dy]);
+        b.push(dy);
+      }
+      const x = solveLinearSystem8x8(m, b);
+      if (!x) return null;
+      return [
+        [x[0], x[1], x[2]],
+        [x[3], x[4], x[5]],
+        [x[6], x[7], 1]
+      ];
+    }
+
+    function invert3x3(m) {
+      const a = m[0][0], b = m[0][1], c = m[0][2];
+      const d = m[1][0], e = m[1][1], f = m[1][2];
+      const g = m[2][0], h = m[2][1], i = m[2][2];
+      const A = e * i - f * h;
+      const B = c * h - b * i;
+      const C = b * f - c * e;
+      const D = f * g - d * i;
+      const E = a * i - c * g;
+      const F = c * d - a * f;
+      const G = d * h - e * g;
+      const H = b * g - a * h;
+      const I = a * e - b * d;
+      const det = a * A + b * D + c * G;
+      if (Math.abs(det) < 1e-12) return null;
+      const inv = 1 / det;
+      return [
+        [A * inv, B * inv, C * inv],
+        [D * inv, E * inv, F * inv],
+        [G * inv, H * inv, I * inv]
+      ];
+    }
+
+    function pointInQuad(x, y, quad) {
+      let inside = false;
+      for (let i = 0, j = quad.length - 1; i < quad.length; j = i++) {
+        const xi = quad[i].x, yi = quad[i].y;
+        const xj = quad[j].x, yj = quad[j].y;
+        const intersects = ((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);
+        if (intersects) inside = !inside;
+      }
+      return inside;
+    }
+
+    async function warpImageToQuadCanvas(imageDataUrl, outputWidth, outputHeight, quadPoints) {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error('Failed to load source image.'));
+        el.src = imageDataUrl;
+      });
+
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width = img.width;
+      srcCanvas.height = img.height;
+      const srcCtx = srcCanvas.getContext('2d');
+      srcCtx.drawImage(img, 0, 0);
+      const src = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = Math.max(1, Math.round(outputWidth));
+      outCanvas.height = Math.max(1, Math.round(outputHeight));
+      const outCtx = outCanvas.getContext('2d');
+      const out = outCtx.createImageData(outCanvas.width, outCanvas.height);
+
+      const srcCorners = [
+        { x: 0, y: 0 },
+        { x: srcCanvas.width - 1, y: 0 },
+        { x: srcCanvas.width - 1, y: srcCanvas.height - 1 },
+        { x: 0, y: srcCanvas.height - 1 }
+      ];
+      const homography = computeHomographyFromPoints(srcCorners, quadPoints);
+      if (!homography) {
+        throw new Error('Could not compute perspective mapping from source to target.');
+      }
+      const inv = invert3x3(homography);
+      if (!inv) {
+        throw new Error('Could not invert perspective mapping matrix.');
+      }
+
+      const srcData = src.data;
+      const outData = out.data;
+      const sw = srcCanvas.width;
+      const sh = srcCanvas.height;
+      const maxX = sw - 1;
+      const maxY = sh - 1;
+
+      for (let y = 0; y < outCanvas.height; y++) {
+        for (let x = 0; x < outCanvas.width; x++) {
+          const outIndex = (y * outCanvas.width + x) * 4;
+          if (!pointInQuad(x + 0.5, y + 0.5, quadPoints)) {
+            outData[outIndex + 3] = 0;
+            continue;
+          }
+          const nx = inv[0][0] * x + inv[0][1] * y + inv[0][2];
+          const ny = inv[1][0] * x + inv[1][1] * y + inv[1][2];
+          const nw = inv[2][0] * x + inv[2][1] * y + inv[2][2];
+          if (!Number.isFinite(nw) || Math.abs(nw) < 1e-12) continue;
+          const sx = Math.max(0, Math.min(maxX, nx / nw));
+          const sy = Math.max(0, Math.min(maxY, ny / nw));
+
+          const x0 = Math.floor(sx);
+          const y0 = Math.floor(sy);
+          const x1 = Math.min(maxX, x0 + 1);
+          const y1 = Math.min(maxY, y0 + 1);
+          const tx = sx - x0;
+          const ty = sy - y0;
+
+          const i00 = (y0 * sw + x0) * 4;
+          const i10 = (y0 * sw + x1) * 4;
+          const i01 = (y1 * sw + x0) * 4;
+          const i11 = (y1 * sw + x1) * 4;
+          for (let c = 0; c < 4; c++) {
+            const v00 = srcData[i00 + c];
+            const v10 = srcData[i10 + c];
+            const v01 = srcData[i01 + c];
+            const v11 = srcData[i11 + c];
+            const v0 = v00 + (v10 - v00) * tx;
+            const v1 = v01 + (v11 - v01) * tx;
+            outData[outIndex + c] = Math.max(0, Math.min(255, Math.round(v0 + (v1 - v0) * ty)));
+          }
+        }
+      }
+
+      outCtx.putImageData(out, 0, 0);
+      return outCanvas.toDataURL('image/png');
+    }
+
+    async function runImageTo4PointVectorAction(values, actionMeta) {
+      try {
+        const uploadedImages = extractImageDataUrls(values.imageInput);
+        if (!uploadedImages.length) {
+          showToast('Upload a source image first.', 'error');
+          return;
+        }
+        const sourceImageDataUrl = toDataUrlFromImageFieldValue(uploadedImages[0]);
+        if (!sourceImageDataUrl) {
+          showToast('Invalid source image data.', 'error');
+          return;
+        }
+        const rotateDegrees = normalizeDegrees(values.rotateSteps ?? 0);
+        const flipHorizontal = values.flipHorizontal === true || values.flipHorizontal === 'true' || values.flipHorizontal === 'on';
+        const flipVertical = values.flipVertical === true || values.flipVertical === 'true' || values.flipVertical === 'on';
+        const outputScale = clampOutputScale(values.outputScale ?? 1);
+        const processedImageDataUrl = await preprocessImageDataUrl(sourceImageDataUrl, {
+          rotateDegrees,
+          flipHorizontal,
+          flipVertical
+        });
+        const selectionResult = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
+        const selection = Array.isArray(selectionResult?.data) ? selectionResult.data : [];
+        if (selection.length !== 1) {
+          showToast('Select exactly one target 4-point layer.', 'error');
+          return;
+        }
+
+        const target = selection[0];
+        const quadInfo = await requestSelectionQuadInfo();
+        const width = Number(quadInfo?.width) || Number(target.width) || 0;
+        const height = Number(quadInfo?.height) || Number(target.height) || 0;
+        const localQuadRaw = Array.isArray(quadInfo?.localQuad) ? quadInfo.localQuad : null;
+        if (!localQuadRaw || localQuadRaw.length !== 4 || width <= 0 || height <= 0) {
+          showToast('Could not read a valid 4-point target quad.', 'error');
+          return;
+        }
+        const maxOutputDimension = 4096;
+        const scaleByDimensionCap = Math.min(maxOutputDimension / width, maxOutputDimension / height, 1);
+        const effectiveScale = Math.max(0.5, Math.min(outputScale, scaleByDimensionCap > 0 ? scaleByDimensionCap : outputScale));
+        const scaledWidth = Math.max(1, Math.round(width * effectiveScale));
+        const scaledHeight = Math.max(1, Math.round(height * effectiveScale));
+        const scaledQuad = localQuadRaw.map((p) => ({
+          x: Number(p.x) * effectiveScale,
+          y: Number(p.y) * effectiveScale
+        }));
+        const warpedDataUrl = await warpImageToQuadCanvas(processedImageDataUrl, scaledWidth, scaledHeight, scaledQuad);
+        const warpedBase64 = warpedDataUrl.split(',')[1] || '';
+        if (!warpedBase64) {
+          throw new Error('Failed to produce warped image.');
+        }
+
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            reject(new Error('Timeout fitting image to vector'));
+          }, 20000);
+
+          const handler = (event) => {
+            const msg = event.data.pluginMessage;
+            if (!msg) return;
+            if (msg.type === 'commands-executed') {
+              clearTimeout(timeout);
+              window.removeEventListener('message', handler);
+              if (msg.success > 0) {
+                resolve(msg);
+              } else {
+                reject(new Error(msg.error || msg.message || 'Failed to fit image to vector'));
+              }
+            }
+          };
+
+          window.addEventListener('message', handler);
+          parent.postMessage({
+            pluginMessage: {
+              type: 'execute-commands',
+              commands: [{
+                action: 'setImageFillToVectorQuad',
+                nodeId: target.id,
+                imageData: base64ToBytes(warpedBase64)
+              }]
+            }
+          }, '*');
+        });
+
+        showToast('Image mapped to selected 4-point target.', 'success');
+      } catch (error) {
+        console.error('Image to 4-point vector failed:', error);
+        showToast(error?.message || `Failed to run ${actionMeta?.name || 'Image to 4-point vector'}`, 'error');
       }
     }
 

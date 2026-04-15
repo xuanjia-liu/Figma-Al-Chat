@@ -69,6 +69,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'extractDesignSystem',
   'setImageFillFromSelection',
   'fillFromOnlineImage',
+  'imageTo4PointVector',
   'imageToAscii',
   'listAllComments',
   'listAllComponents',

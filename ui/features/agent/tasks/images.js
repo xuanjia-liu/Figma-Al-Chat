@@ -353,6 +353,63 @@ export const quickCreateImageTasks = [
           ]
         },
 {
+          name: 'Image to 4-point vector',
+          desc: 'Map uploaded image corners to a selected 4-point vector',
+          directAction: 'imageTo4PointVector',
+          fields: [
+            {
+              key: 'imageInput',
+              type: 'image',
+              label: 'Source Image',
+              maxImages: 1
+            },
+            {
+              key: 'rotateSteps',
+              type: 'select',
+              label: 'Rotate',
+              default: '0',
+              options: [
+                { value: '-90', label: 'Left 90°' },
+                { value: '0', label: 'None' },
+                { value: '90', label: 'Right 90°' },
+                { value: '180', label: '180°' }
+              ]
+            },
+            {
+              key: 'flipHorizontal',
+              type: 'select',
+              label: 'Flip Horizontal',
+              default: 'off',
+              options: [
+                { value: 'off', label: 'Off' },
+                { value: 'on', label: 'On' }
+              ]
+            },
+            {
+              key: 'flipVertical',
+              type: 'select',
+              label: 'Flip Vertical',
+              default: 'off',
+              options: [
+                { value: 'off', label: 'Off' },
+                { value: 'on', label: 'On' }
+              ]
+            },
+            {
+              key: 'outputScale',
+              type: 'number',
+              label: 'Output Scale',
+              default: 1,
+              min: 0.5,
+              max: 10,
+              inputMax: 50,
+              step: 0.5,
+              sliderStep: 0.5,
+              numberWithSlider: true
+            }
+          ]
+        },
+{
           name: 'Re-style',
           desc: 'Transform / restyle an image into a new style using AI',
           promptTemplate: 'Re-style image: {imageStyle}{aspectRatio ? \" [Aspect Ratio: {aspectRatio}]\" : \"\"}{imageResolution ? \" [Resolution: {imageResolution}]\" : \"\"}{imageVariations ? \" [Variations: {imageVariations}]\" : \"\"}',
