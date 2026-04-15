@@ -7954,24 +7954,35 @@
       flex-direction: column;
       gap: var(--space-md);
       padding: var(--space-md) var(--space-lg);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border);
+      background: var(--bg-tertiary);
       flex-shrink: 0;
       box-sizing: border-box;
+      /* Inset from plugin edges: md when narrow, 2xl when wide (see min-width: 720px). */
       width: 100%;
       max-width: 720px;
       margin-top: 0;
       margin-bottom: var(--space-md);
       margin-left: auto;
       margin-right: auto;
-      border-radius: var(--radius-xl);
+      border-radius: var(--radius-lg);
+      width: calc(100% - 2 * var(--space-md));
       box-shadow: var(--shadow-lg);
       transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         margin 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         gap 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 0.2s ease-in-out;
       overflow: visible;
+    }
+
+    @media (min-width: 720px) {
+      .chat-input-container {
+        width: calc(100% - 2 * var(--space-2xl));
+        margin-bottom: var(--space-2xl);
+        border-radius: var(--radius-xl);
+        padding: var(--space-lg) var(--space-xl);
+      }
     }
 
     @media (max-width: 480px) {
@@ -7981,8 +7992,10 @@
       }
 
       .chat-input-container {
-        padding: var(--space-sm) var(--space-md);
         gap: var(--space-sm);
+        width: 100%;
+        border-radius: calc(var(--radius-lg) + 4px) calc(var(--radius-lg) + 4px) 0 0;
+        margin-bottom: 0;
       }
     }
 
@@ -11431,8 +11444,11 @@
       bottom: 8px;
       left: 8px;
       right: 8px;
+      margin-left: auto;
+      margin-right: auto;
       height: 75vh;
       min-height: 300px;
+      max-width: 720px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
