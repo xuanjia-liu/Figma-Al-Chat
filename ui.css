@@ -1242,6 +1242,115 @@
       flex-shrink: 0;
     }
 
+    .hue-shift-contrast-panel {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+      margin-top: var(--space-sm);
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-tertiary);
+    }
+
+    .hue-shift-contrast-header {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .hue-shift-contrast-actions {
+      display: flex;
+      gap: var(--space-xs);
+      flex-wrap: wrap;
+    }
+
+    .hue-shift-contrast-status {
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .hue-shift-contrast-value {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .hue-shift-contrast-value--pass {
+      color: var(--success);
+    }
+
+    .hue-shift-contrast-value--fail {
+      color: var(--danger);
+    }
+
+    .hue-shift-contrast-details {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 120px;
+      overflow: auto;
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+
+    .hue-shift-contrast-detail-row {
+      font-size: var(--text-xs);
+      color: var(--text-primary);
+      line-height: 1.35;
+      word-break: break-word;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hue-shift-contrast-detail-icon {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hue-shift-contrast-detail-icon svg {
+      width: 14px;
+      height: 14px;
+      display: block;
+    }
+
+    .hue-shift-contrast-detail-icon--pass {
+      color: var(--success);
+    }
+
+    .hue-shift-contrast-detail-icon--fail {
+      color: var(--danger);
+    }
+
+    .hue-shift-contrast-detail-preview {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex: 0 0 auto;
+    }
+
+    .hue-shift-contrast-detail-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-intense);
+      box-sizing: border-box;
+    }
+
+    .hue-shift-contrast-detail-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-primary);
+    }
+
     .gfp-sidebar {
       width: 24vw;
       min-width: 160px;

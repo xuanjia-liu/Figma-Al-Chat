@@ -303,6 +303,25 @@ export function mountHueShift(container, options = {}) {
   let targetButtons = {};
   let preserveButtons = {};
   let controlEls = {};
+  let contrastPanel = null;
+  let contrastStatusEl = null;
+  let contrastValueEl = null;
+  let contrastDetailsEl = null;
+  let contrastMarkBtn = null;
+  let contrastAddBtn = null;
+  let contrastClearBtn = null;
+  let contrastSelectedTextNodeIds = [];
+  let contrastBoundTextNodeIds = [];
+  let contrastAutoTextNodeIds = [];
+  let contrastLatestResult = null;
+  let contrastAutoSelectionRequestId = 0;
+  let pendingContrastAutoSelectionRequestId = 0;
+  let contrastMarkSelectionRequestId = 0;
+  let pendingContrastMarkSelectionRequestId = 0;
+  let pendingContrastMarkAction = null;
+  let contrastComputeRequestId = 0;
+  let pendingContrastComputeRequestId = 0;
+  let contrastComputeTimer = null;
 
   container.innerHTML = '';
 
@@ -509,6 +528,52 @@ export function mountHueShift(container, options = {}) {
   controlsWrap.className = 'hue-shift-sliders';
   container.appendChild(controlsWrap);
 
+  contrastPanel = document.createElement('div');
+  contrastPanel.className = 'hue-shift-contrast-panel';
+
+  const contrastHeader = document.createElement('div');
+  contrastHeader.className = 'hue-shift-contrast-header';
+  contrastHeader.textContent = translate('actions.hueShift.wcagContrast', 'WCAG Contrast');
+  contrastPanel.appendChild(contrastHeader);
+
+  const contrastActions = document.createElement('div');
+  contrastActions.className = 'hue-shift-contrast-actions';
+
+  contrastMarkBtn = document.createElement('button');
+  contrastMarkBtn.type = 'button';
+  contrastMarkBtn.className = 'hue-shift-btn';
+  contrastMarkBtn.textContent = translate('actions.hueShift.markOutputTextNode', 'Mark output text node');
+  contrastActions.appendChild(contrastMarkBtn);
+
+  contrastAddBtn = document.createElement('button');
+  contrastAddBtn.type = 'button';
+  contrastAddBtn.className = 'hue-shift-btn';
+  contrastAddBtn.textContent = translate('actions.hueShift.addToMarkedTexts', 'Add to marked texts');
+  contrastAddBtn.style.display = 'none';
+  contrastActions.appendChild(contrastAddBtn);
+
+  contrastClearBtn = document.createElement('button');
+  contrastClearBtn.type = 'button';
+  contrastClearBtn.className = 'hue-shift-btn';
+  contrastClearBtn.textContent = translate('actions.hueShift.clearSelection', 'Clear');
+  contrastActions.appendChild(contrastClearBtn);
+
+  contrastPanel.appendChild(contrastActions);
+
+  contrastStatusEl = document.createElement('div');
+  contrastStatusEl.className = 'hue-shift-contrast-status';
+  contrastPanel.appendChild(contrastStatusEl);
+
+  contrastValueEl = document.createElement('div');
+  contrastValueEl.className = 'hue-shift-contrast-value';
+  contrastPanel.appendChild(contrastValueEl);
+
+  contrastDetailsEl = document.createElement('div');
+  contrastDetailsEl.className = 'hue-shift-contrast-details';
+  contrastPanel.appendChild(contrastDetailsEl);
+
+  container.appendChild(contrastPanel);
+
   paletteBar.setAttribute('aria-multiselectable', 'true');
 
   function getMergeGroupIndicesForColorIndex(index) {
@@ -574,6 +639,170 @@ export function mountHueShift(container, options = {}) {
     if (typeof onValuesChanged === 'function') {
       onValuesChanged();
     }
+    requestContrastComputation();
+  }
+
+  function getContrastTargetNodeIds() {
+    if (contrastBoundTextNodeIds.length > 0) return [...contrastBoundTextNodeIds];
+    if (contrastAutoTextNodeIds.length > 0) return [...contrastAutoTextNodeIds];
+    return [];
+  }
+
+  function refreshContrastUI() {
+    if (!contrastStatusEl || !contrastValueEl || !contrastDetailsEl) return;
+    const selectedCount = contrastSelectedTextNodeIds.length;
+    const boundCount = contrastBoundTextNodeIds.length;
+    if (boundCount > 0) {
+      contrastStatusEl.textContent = translate('actions.hueShift.boundNodeCount', 'Bound text nodes: {{count}}').replace('{{count}}', String(boundCount));
+    } else if (contrastAutoTextNodeIds.length > 0) {
+      contrastStatusEl.textContent = translate('actions.hueShift.selectionNodeCount', 'Selected text nodes: {{count}}').replace('{{count}}', String(contrastAutoTextNodeIds.length));
+    } else {
+      contrastStatusEl.textContent = translate('actions.hueShift.noBoundTextNodes', 'No text nodes bound.');
+    }
+
+    const ratio = contrastLatestResult?.worstRatio;
+    const aaPass = contrastLatestResult?.aaPass;
+    if (typeof ratio === 'number' && Number.isFinite(ratio) && boundCount > 0) {
+      const ratioText = `${ratio.toFixed(2)}:1`;
+      const aaText = aaPass
+        ? translate('actions.hueShift.aaPass', 'AA Pass')
+        : translate('actions.hueShift.aaFail', 'AA Fail');
+      contrastValueEl.textContent = `${translate('actions.hueShift.contrastRatio', 'Contrast')}: ${ratioText} · ${aaText}`;
+      contrastValueEl.classList.toggle('hue-shift-contrast-value--pass', !!aaPass);
+      contrastValueEl.classList.toggle('hue-shift-contrast-value--fail', !aaPass);
+    } else {
+      contrastValueEl.textContent = translate('actions.hueShift.contrastUnavailable', 'Contrast: --');
+      contrastValueEl.classList.remove('hue-shift-contrast-value--pass');
+      contrastValueEl.classList.remove('hue-shift-contrast-value--fail');
+    }
+
+    const entries = Array.isArray(contrastLatestResult?.entries) ? contrastLatestResult.entries : [];
+    contrastDetailsEl.innerHTML = '';
+    if (entries.length > 0) {
+      entries
+        .slice()
+        .sort((a, b) => Number(a.ratio) - Number(b.ratio))
+        .forEach((entry, idx) => {
+          const row = document.createElement('div');
+          row.className = 'hue-shift-contrast-detail-row';
+          const ratioText = Number.isFinite(entry?.ratio) ? `${Number(entry.ratio).toFixed(2)}:1` : '--';
+          const shortId = String(entry?.nodeId || '').slice(-6);
+
+          const icon = document.createElement('span');
+          icon.className = `hue-shift-contrast-detail-icon ${entry?.aaPass ? 'hue-shift-contrast-detail-icon--pass' : 'hue-shift-contrast-detail-icon--fail'}`;
+          icon.setAttribute('aria-hidden', 'true');
+          if (entry?.aaPass) {
+            icon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3.2 8.6 6.4 11.8 12.8 4.8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+          } else {
+            icon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 5.5 10.5 10.5M10.5 5.5 5.5 10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+          }
+          row.appendChild(icon);
+
+          const preview = document.createElement('span');
+          preview.className = 'hue-shift-contrast-detail-preview';
+          const textSwatch = document.createElement('span');
+          textSwatch.className = 'hue-shift-contrast-detail-swatch';
+          textSwatch.title = `Text ${entry?.textHex || ''}`;
+          textSwatch.style.backgroundColor = entry?.textHex || 'transparent';
+          const bgSwatch = document.createElement('span');
+          bgSwatch.className = 'hue-shift-contrast-detail-swatch';
+          bgSwatch.title = `BG ${entry?.bgHex || ''}`;
+          bgSwatch.style.backgroundColor = entry?.bgHex || 'transparent';
+          preview.appendChild(textSwatch);
+          preview.appendChild(bgSwatch);
+          row.appendChild(preview);
+
+          const label = document.createElement('span');
+          label.className = 'hue-shift-contrast-detail-label';
+          label.textContent = `${translate('actions.hueShift.color', 'Color')} ${idx + 1} (${shortId}) · ${ratioText}`;
+          row.appendChild(label);
+
+          contrastDetailsEl.appendChild(row);
+        });
+      const unresolved = Math.max(0, boundCount - entries.length);
+      if (unresolved > 0) {
+        const unresolvedRow = document.createElement('div');
+        unresolvedRow.className = 'hue-shift-contrast-detail-row';
+        unresolvedRow.textContent = `${translate('actions.hueShift.unresolvedContrastNodes', 'Unresolved nodes')}: ${unresolved}`;
+        contrastDetailsEl.appendChild(unresolvedRow);
+      }
+    }
+
+    const hasSelection = selectedCount > 0;
+    const selectedSet = new Set(contrastSelectedTextNodeIds);
+    const sameAsBound = boundCount > 0 &&
+      boundCount === selectedSet.size &&
+      contrastBoundTextNodeIds.every((id) => selectedSet.has(id));
+
+    if (contrastMarkBtn) {
+      const labelKey = boundCount > 0 ? 'actions.hueShift.updateMarkedTexts' : 'actions.hueShift.markOutputTextNode';
+      const fallback = boundCount > 0 ? 'Update the marked texts' : 'Mark output text node';
+      contrastMarkBtn.textContent = translate(labelKey, fallback);
+      const disabled = !hasSelection || (boundCount > 0 && sameAsBound);
+      contrastMarkBtn.disabled = disabled;
+      contrastMarkBtn.classList.toggle('inactive', disabled);
+    }
+    if (contrastAddBtn) {
+      const canAdd = boundCount > 0 && hasSelection;
+      contrastAddBtn.style.display = canAdd ? '' : 'none';
+      const anyNew = canAdd && contrastSelectedTextNodeIds.some((id) => !contrastBoundTextNodeIds.includes(id));
+      contrastAddBtn.disabled = !anyNew;
+      contrastAddBtn.classList.toggle('inactive', !anyNew);
+    }
+    if (contrastClearBtn) {
+      const disableClear = boundCount === 0;
+      contrastClearBtn.disabled = disableClear;
+      contrastClearBtn.classList.toggle('inactive', disableClear);
+    }
+  }
+
+  function requestAutoContrastTextSelection() {
+    contrastAutoSelectionRequestId += 1;
+    pendingContrastAutoSelectionRequestId = contrastAutoSelectionRequestId;
+    sendMessage({
+      type: 'hueshift-get-current-text-selection',
+      requestId: contrastAutoSelectionRequestId,
+    });
+  }
+
+  function requestMarkSelection(action) {
+    pendingContrastMarkAction = action;
+    contrastMarkSelectionRequestId += 1;
+    pendingContrastMarkSelectionRequestId = contrastMarkSelectionRequestId;
+    sendMessage({
+      type: 'hueshift-get-current-text-selection',
+      requestId: contrastMarkSelectionRequestId,
+    });
+  }
+
+  function requestContrastComputation() {
+    if (contrastComputeTimer !== null) {
+      clearTimeout(contrastComputeTimer);
+      contrastComputeTimer = null;
+    }
+    contrastComputeTimer = setTimeout(() => {
+      contrastComputeTimer = null;
+      requestContrastComputationNow();
+    }, 120);
+  }
+
+  function requestContrastComputationNow() {
+    const targetNodeIds = getContrastTargetNodeIds();
+    if (targetNodeIds.length === 0) {
+      if (contrastBoundTextNodeIds.length === 0) {
+        requestAutoContrastTextSelection();
+      }
+      contrastLatestResult = null;
+      refreshContrastUI();
+      return;
+    }
+    contrastComputeRequestId += 1;
+    pendingContrastComputeRequestId = contrastComputeRequestId;
+    sendMessage({
+      type: 'hueshift-compute-wcag-contrast',
+      requestId: contrastComputeRequestId,
+      textNodeIds: targetNodeIds,
+    });
   }
 
   function clearPluginCache() {
@@ -2216,7 +2445,21 @@ export function mountHueShift(container, options = {}) {
     renderModeControls();
     drawWheel();
     refreshSelectionUI();
+    refreshContrastUI();
   }
+
+  contrastMarkBtn?.addEventListener('click', () => {
+    requestMarkSelection('replace');
+  });
+  contrastAddBtn?.addEventListener('click', () => {
+    requestMarkSelection('add');
+  });
+  contrastClearBtn?.addEventListener('click', () => {
+    contrastBoundTextNodeIds = [];
+    contrastLatestResult = null;
+    requestAutoContrastTextSelection();
+    refreshContrastUI();
+  });
 
   function handlePluginMessage(event) {
     const msg = event.data?.pluginMessage;
@@ -2255,6 +2498,61 @@ export function mountHueShift(container, options = {}) {
       drawOverlay();
       updateControlDisplayValues();
       requestColors({ preserveExisting: false, notifyAfterLoad: false, quiet: true });
+      requestAutoContrastTextSelection();
+      if (contrastBoundTextNodeIds.length > 0) {
+        requestContrastComputationNow();
+      } else {
+        contrastLatestResult = null;
+      }
+      refreshContrastUI();
+      return;
+    }
+
+    if (msg.type === 'hueshift-current-text-selection') {
+      const ids = Array.isArray(msg.textNodeIds)
+        ? msg.textNodeIds.map((id) => String(id)).filter(Boolean)
+        : [];
+      if (msg.requestId === pendingContrastMarkSelectionRequestId) {
+        pendingContrastMarkSelectionRequestId = 0;
+        const action = pendingContrastMarkAction;
+        pendingContrastMarkAction = null;
+        contrastSelectedTextNodeIds = ids;
+        if (action === 'replace') {
+          if (ids.length > 0) {
+            contrastBoundTextNodeIds = [...new Set(ids)];
+            contrastLatestResult = null;
+            requestContrastComputationNow();
+          }
+        } else if (action === 'add') {
+          if (ids.length > 0 && contrastBoundTextNodeIds.length > 0) {
+            const union = new Set([...contrastBoundTextNodeIds, ...ids]);
+            if (union.size !== contrastBoundTextNodeIds.length) {
+              contrastBoundTextNodeIds = [...union];
+              contrastLatestResult = null;
+              requestContrastComputationNow();
+            }
+          }
+        }
+      }
+      if (msg.requestId === pendingContrastAutoSelectionRequestId) {
+        contrastSelectedTextNodeIds = ids;
+        contrastAutoTextNodeIds = ids;
+        if (contrastBoundTextNodeIds.length === 0) {
+          requestContrastComputationNow();
+        }
+      }
+      refreshContrastUI();
+      return;
+    }
+
+    if (msg.type === 'hueshift-wcag-contrast-result') {
+      if (msg.requestId !== pendingContrastComputeRequestId) return;
+      if (msg.ok !== true) {
+        contrastLatestResult = null;
+      } else {
+        contrastLatestResult = msg.data || null;
+      }
+      refreshContrastUI();
     }
   }
 
@@ -2300,6 +2598,8 @@ export function mountHueShift(container, options = {}) {
     initWheel();
     syncModeUI();
     requestColors({ preserveExisting: false, notifyAfterLoad: false, quiet: false });
+    requestAutoContrastTextSelection();
+    refreshContrastUI();
   });
 
   return function dispose() {
@@ -2316,6 +2616,10 @@ export function mountHueShift(container, options = {}) {
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointerdown', handleOutsidePointerDown);
     container._hueShiftGetValues = null;
+    if (contrastComputeTimer !== null) {
+      clearTimeout(contrastComputeTimer);
+      contrastComputeTimer = null;
+    }
     closeColorPickerPopover();
     clearPluginCache();
   };

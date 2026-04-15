@@ -6396,6 +6396,172 @@ function isHueShiftPreservedHex(
   return false;
 }
 
+type HueShiftCompositeColor = { r: number; g: number; b: number; a: number };
+
+function srgbChannelToLinear(channel: number): number {
+  if (channel <= 0.04045) return channel / 12.92;
+  return Math.pow((channel + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminanceFromRgb(rgb: { r: number; g: number; b: number }): number {
+  const r = srgbChannelToLinear(Math.max(0, Math.min(1, rgb.r)));
+  const g = srgbChannelToLinear(Math.max(0, Math.min(1, rgb.g)));
+  const b = srgbChannelToLinear(Math.max(0, Math.min(1, rgb.b)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function wcagContrastRatio(
+  fg: { r: number; g: number; b: number },
+  bg: { r: number; g: number; b: number }
+): number {
+  const l1 = relativeLuminanceFromRgb(fg);
+  const l2 = relativeLuminanceFromRgb(bg);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function compositeOver(
+  over: HueShiftCompositeColor,
+  under: HueShiftCompositeColor
+): HueShiftCompositeColor {
+  const outA = over.a + under.a * (1 - over.a);
+  if (outA <= 0.000001) return { r: 0, g: 0, b: 0, a: 0 };
+  return {
+    r: (over.r * over.a + under.r * under.a * (1 - over.a)) / outA,
+    g: (over.g * over.a + under.g * under.a * (1 - over.a)) / outA,
+    b: (over.b * over.a + under.b * under.a * (1 - over.a)) / outA,
+    a: outA,
+  };
+}
+
+function averageGradientStopColor(stops: readonly ColorStop[]): HueShiftCompositeColor | null {
+  if (!Array.isArray(stops) || stops.length === 0) return null;
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  let sumA = 0;
+  for (const stop of stops) {
+    const alpha = Math.max(0, Math.min(1, stop.color.a ?? 1));
+    sumR += stop.color.r * alpha;
+    sumG += stop.color.g * alpha;
+    sumB += stop.color.b * alpha;
+    sumA += alpha;
+  }
+  if (sumA <= 0.000001) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+  return {
+    r: sumR / sumA,
+    g: sumG / sumA,
+    b: sumB / sumA,
+    a: Math.max(0, Math.min(1, sumA / stops.length)),
+  };
+}
+
+function paintToCompositeColor(paint: Paint): HueShiftCompositeColor | null {
+  if (paint.visible === false) return null;
+  if (paint.type === 'SOLID') {
+    const solid = paint as SolidPaint;
+    const opacity = typeof solid.opacity === 'number' ? solid.opacity : 1;
+    return {
+      r: solid.color.r,
+      g: solid.color.g,
+      b: solid.color.b,
+      a: Math.max(0, Math.min(1, opacity)),
+    };
+  }
+  if (isGradientPaintForHueShift(paint)) {
+    const gradient = paint as GradientPaint;
+    const avg = averageGradientStopColor(gradient.gradientStops);
+    if (!avg) return null;
+    const opacity = typeof gradient.opacity === 'number' ? gradient.opacity : 1;
+    return {
+      r: avg.r,
+      g: avg.g,
+      b: avg.b,
+      a: Math.max(0, Math.min(1, avg.a * opacity)),
+    };
+  }
+  return null;
+}
+
+function resolveCompositeFillColorFromPaintArray(
+  paints: readonly Paint[] | PluginAPI['mixed']
+): HueShiftCompositeColor | null {
+  if (!Array.isArray(paints) || paints.length === 0) return null;
+  let composite: HueShiftCompositeColor = { r: 0, g: 0, b: 0, a: 0 };
+  for (let i = paints.length - 1; i >= 0; i -= 1) {
+    const color = paintToCompositeColor(paints[i]);
+    if (!color) continue;
+    composite = compositeOver(color, composite);
+  }
+  if (composite.a <= 0.000001) return null;
+  return composite;
+}
+
+function resolveNodeCompositeFillColor(node: SceneNode): HueShiftCompositeColor | null {
+  if (!('fills' in node)) return null;
+  const paints = (node as any).fills as Paint[] | PluginAPI['mixed'];
+  return resolveCompositeFillColorFromPaintArray(paints);
+}
+
+function resolveTextNodeCompositeFillColor(textNode: TextNode): HueShiftCompositeColor | null {
+  const direct = resolveNodeCompositeFillColor(textNode);
+  if (direct) return direct;
+  // Mixed text fills can happen with range styling; sample first painted character.
+  const chars = textNode.characters || '';
+  for (let i = 0; i < chars.length; i += 1) {
+    const rangePaints = textNode.getRangeFills(i, i + 1) as Paint[] | PluginAPI['mixed'];
+    const resolved = resolveCompositeFillColorFromPaintArray(rangePaints);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+function resolveBackgroundForTextNode(textNode: TextNode, selectedTopLevelNodes: SceneNode[]): HueShiftCompositeColor | null {
+  const selectedTopLevelIds = new Set(selectedTopLevelNodes.map((n) => n.id));
+  let selectedAncestor: SceneNode | null = null;
+  let cursor: BaseNode | null = textNode;
+  while (cursor && 'id' in cursor) {
+    if (selectedTopLevelIds.has(cursor.id)) {
+      selectedAncestor = cursor as SceneNode;
+      break;
+    }
+    cursor = cursor.parent;
+  }
+
+  let parent = textNode.parent as BaseNode | null;
+  while (parent && 'type' in parent) {
+    if (selectedAncestor && 'id' in parent && (parent as SceneNode).id === selectedAncestor.id) {
+      const selectedBg = resolveNodeCompositeFillColor(selectedAncestor);
+      if (selectedBg) return selectedBg;
+      break;
+    }
+    if ('fills' in (parent as SceneNode)) {
+      const bg = resolveNodeCompositeFillColor(parent as SceneNode);
+      if (bg) return bg;
+    }
+    parent = parent.parent;
+  }
+
+  if (selectedAncestor) {
+    const selectedBg = resolveNodeCompositeFillColor(selectedAncestor);
+    if (selectedBg) return selectedBg;
+  }
+
+  let fallback: BaseNode | null = textNode.parent;
+  while (fallback && 'type' in fallback) {
+    if ('fills' in (fallback as SceneNode)) {
+      const bg = resolveNodeCompositeFillColor(fallback as SceneNode);
+      if (bg) return bg;
+    }
+    fallback = fallback.parent;
+  }
+
+  return null;
+}
+
 // Helper to get only the top-level nodes from a selection (filters out children if their parent is also selected)
 function getTopLevelSelection(nodes: readonly SceneNode[]): SceneNode[] {
   const nodeIds = new Set(nodes.map(n => n.id));
@@ -12198,6 +12364,94 @@ figma.ui.onmessage = async (msg: {
         !isHueShiftPreservedHex(hex, preserveWhite, preserveBlack, preserveGrayscale)
       );
       figma.ui.postMessage({ type: 'hueshift-colors', requestId, data: uniqueHueColors });
+      break;
+    }
+
+    case 'hueshift-get-current-text-selection': {
+      const requestId = (msg as any).requestId;
+      const textNodeIds: string[] = [];
+      const topLevel = getTopLevelSelection(selection);
+      for (const node of topLevel) {
+        if (node.type === 'TEXT') {
+          textNodeIds.push(node.id);
+          continue;
+        }
+        if (!('findAll' in node)) continue;
+        const textNodes = node.findAll((child) => child.type === 'TEXT') as TextNode[];
+        for (const textNode of textNodes) {
+          textNodeIds.push(textNode.id);
+        }
+      }
+      figma.ui.postMessage({
+        type: 'hueshift-current-text-selection',
+        requestId,
+        textNodeIds: [...new Set(textNodeIds)],
+      });
+      break;
+    }
+
+    case 'hueshift-compute-wcag-contrast': {
+      const requestId = (msg as any).requestId;
+      const requestedIds: string[] = Array.isArray((msg as any).textNodeIds)
+        ? (msg as any).textNodeIds.map((id: any) => String(id)).filter(Boolean)
+        : [];
+      if (requestedIds.length === 0) {
+        figma.ui.postMessage({
+          type: 'hueshift-wcag-contrast-result',
+          requestId,
+          ok: false,
+          error: 'No text nodes provided',
+        });
+        break;
+      }
+
+      const selectedTopLevel = getTopLevelSelection(selection);
+      const entries: Array<{
+        nodeId: string;
+        ratio: number;
+        aaPass: boolean;
+        textHex: string;
+        bgHex: string;
+      }> = [];
+
+      for (const nodeId of requestedIds) {
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (!node || node.type !== 'TEXT') continue;
+        const textColor = resolveTextNodeCompositeFillColor(node);
+        const bgColor = resolveBackgroundForTextNode(node, selectedTopLevel);
+        if (!textColor || !bgColor) continue;
+        const ratio = wcagContrastRatio(textColor, bgColor);
+        entries.push({
+          nodeId: node.id,
+          ratio,
+          aaPass: ratio >= 4.5,
+          textHex: rgbToHex(textColor.r, textColor.g, textColor.b).toUpperCase(),
+          bgHex: rgbToHex(bgColor.r, bgColor.g, bgColor.b).toUpperCase(),
+        });
+      }
+
+      if (entries.length === 0) {
+        figma.ui.postMessage({
+          type: 'hueshift-wcag-contrast-result',
+          requestId,
+          ok: false,
+          error: 'Unable to resolve contrast for bound text nodes',
+        });
+        break;
+      }
+
+      const worst = entries.reduce((acc, item) => (item.ratio < acc.ratio ? item : acc), entries[0]);
+      figma.ui.postMessage({
+        type: 'hueshift-wcag-contrast-result',
+        requestId,
+        ok: true,
+        data: {
+          worstRatio: worst.ratio,
+          aaPass: worst.aaPass,
+          evaluatedCount: entries.length,
+          entries,
+        },
+      });
       break;
     }
 
