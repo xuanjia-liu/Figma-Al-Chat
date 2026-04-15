@@ -12983,6 +12983,50 @@
       vertical-align: top;
     }
 
+    .prompt-field-quad-target-preview .quad-target-preview-viewport {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-secondary);
+      padding: var(--space-sm);
+      box-sizing: border-box;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-xs);
+      justify-content: center;
+    }
+
+    .prompt-field-quad-target-preview .quad-target-preview-canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--radius-sm);
+      flex-shrink: 0;
+    }
+
+    .prompt-field-quad-target-preview .quad-target-preview-status {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      margin-top: 0;
+      line-height: 1.35;
+      width: 100%;
+      align-self: stretch;
+    }
+
+    .prompt-field-quad-target-preview .quad-target-preview-status.quad-target-preview-status--ok {
+      color: var(--text-secondary);
+    }
+
+    .prompt-field-quad-target-preview .quad-target-preview-status.quad-target-preview-status--warn {
+      color: var(--text-muted);
+    }
+
+    .prompt-field-quad-target-preview .quad-target-preview-status.quad-target-preview-status--error {
+      color: var(--error, #f87171);
+    }
+
     .prompt-field-ascii-preview .ascii-preview-foot {
       font-size: var(--text-xs);
       color: var(--text-muted);

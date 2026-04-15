@@ -3522,6 +3522,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         }, 200);
       }
 
+      if (promptDrawer.classList.contains('open') && currentPromptAction?.directAction === 'imageTo4PointVector') {
+        if (imageTo4PointQuadPreviewTimeout) clearTimeout(imageTo4PointQuadPreviewTimeout);
+        imageTo4PointQuadPreviewTimeout = setTimeout(() => {
+          imageTo4PointQuadPreviewTimeout = null;
+          refreshImageTo4PointQuadPreview();
+        }, 120);
+      }
+
       // Trigger a background update of selection data size for the token counter
       // Caching: Only request if selection IDs have changed to avoid freezing on simple drags
       const currentIds = items.map(i => i.id).join(',');
@@ -18276,6 +18284,7 @@ Generate ONLY the reply text, nothing else.`;
         disposeFontMapping = null;
       }
       teardownImageToAsciiPreview();
+      teardownImageTo4PointQuadPreview();
       promptDrawer.classList.remove('open', 'minimized', 'maximized');
       promptDrawerOverlay.classList.remove('open');
       currentPromptAction = null;
@@ -18633,6 +18642,213 @@ Generate ONLY the reply text, nothing else.`;
     let imageToAsciiPreviewTimer = null;
     let imageToAsciiPreviewRaf = null;
     let imageToAsciiPreviewCleanup = null;
+
+    let imageTo4PointQuadPreviewTimeout = null;
+    let imageTo4PointQuadPreviewListener = null;
+
+    function teardownImageTo4PointQuadPreview() {
+      if (imageTo4PointQuadPreviewTimeout) {
+        clearTimeout(imageTo4PointQuadPreviewTimeout);
+        imageTo4PointQuadPreviewTimeout = null;
+      }
+      if (typeof imageTo4PointQuadPreviewListener === 'function') {
+        imageTo4PointQuadPreviewListener();
+        imageTo4PointQuadPreviewListener = null;
+      }
+    }
+
+    function drawQuadTargetPreviewCanvas(canvas, statusEl, payload) {
+      if (!canvas) return;
+      const msg = payload || {};
+      const status = msg.status;
+      const line1 = msg.message || '';
+      const meta = [msg.nodeName, msg.nodeType].filter(Boolean).join(' · ');
+      const isOk = status === 'ok';
+      const isErrorShape = status === 'notFourPointVector' || status === 'degenerate';
+
+      if (statusEl) {
+        statusEl.classList.remove('quad-target-preview-status--ok', 'quad-target-preview-status--warn', 'quad-target-preview-status--error');
+        if (isOk) {
+          statusEl.classList.add('quad-target-preview-status--ok');
+          statusEl.textContent = meta ? `Ready — ${meta}` : 'Ready to map.';
+        } else if (isErrorShape) {
+          statusEl.classList.add('quad-target-preview-status--error');
+          statusEl.textContent = line1 + (meta ? ` — ${meta}` : '');
+        } else {
+          statusEl.classList.add('quad-target-preview-status--warn');
+          statusEl.textContent = line1 + (meta ? ` — ${meta}` : '');
+        }
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const viewport = canvas.closest('.quad-target-preview-viewport');
+      const cssW = Math.min(360, (viewport && viewport.clientWidth) ? viewport.clientWidth : 360);
+      const cssH = 160;
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      const panel = canvas.closest('.prompt-drawer') || document.body;
+      const bg = getComputedStyle(panel).getPropertyValue('--bg-secondary').trim() || '#27272a';
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      const previewVertices = Array.isArray(msg.previewVertices) ? msg.previewVertices : null;
+      const previewSegments = Array.isArray(msg.previewSegments) ? msg.previewSegments : null;
+      const localQuad = Array.isArray(msg.localQuad) ? msg.localQuad : null;
+
+      const boundsFromPoints = (points) => {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const p of points) {
+          const x = Number(p.x);
+          const y = Number(p.y);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          minX = Math.min(minX, x);
+          minY = Math.min(minY, y);
+          maxX = Math.max(maxX, x);
+          maxY = Math.max(maxY, y);
+        }
+        if (!Number.isFinite(minX)) return null;
+        return { minX, minY, maxX, maxY };
+      };
+
+      let pointsForBounds = [];
+      if (isOk && localQuad && localQuad.length === 4) {
+        pointsForBounds = localQuad.map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+      } else if (previewVertices && previewVertices.length > 0) {
+        pointsForBounds = previewVertices.map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+      } else if (localQuad && localQuad.length > 0) {
+        pointsForBounds = localQuad.map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+      }
+
+      if (pointsForBounds.length === 0) {
+        return;
+      }
+
+      const b = boundsFromPoints(pointsForBounds);
+      if (!b) return;
+      const qw = Math.max(1e-6, b.maxX - b.minX);
+      const qh = Math.max(1e-6, b.maxY - b.minY);
+      const pad = 14;
+      const scale = Math.min((cssW - pad * 2) / qw, (cssH - pad * 2) / qh);
+      const ox = pad + (cssW - pad * 2 - qw * scale) * 0.5 - b.minX * scale;
+      const oy = pad + (cssH - pad * 2 - qh * scale) * 0.5 - b.minY * scale;
+
+      const strokeMuted = getComputedStyle(panel).getPropertyValue('--text-muted').trim() || '#a1a1aa';
+
+      if (isOk && localQuad && localQuad.length === 4) {
+        ctx.beginPath();
+        localQuad.forEach((p, i) => {
+          const x = ox + Number(p.x) * scale;
+          const y = oy + Number(p.y) * scale;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.15)';
+        ctx.fill();
+        ctx.strokeStyle = strokeMuted || '#71717a';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        return;
+      }
+
+      if (!isErrorShape) {
+        return;
+      }
+
+      const strokeRed = '#ef4444';
+      const fillRed = 'rgba(239, 68, 68, 0.12)';
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = strokeRed;
+      ctx.fillStyle = fillRed;
+
+      if (previewSegments && previewSegments.length > 0 && previewVertices && previewVertices.length > 0) {
+        ctx.beginPath();
+        previewSegments.forEach((seg) => {
+          const a = previewVertices[seg.start];
+          const b = previewVertices[seg.end];
+          if (!a || !b) return;
+          const ax = ox + Number(a.x) * scale;
+          const ay = oy + Number(a.y) * scale;
+          const bx = ox + Number(b.x) * scale;
+          const by = oy + Number(b.y) * scale;
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+        });
+        ctx.stroke();
+      } else if (localQuad && localQuad.length === 4) {
+        ctx.beginPath();
+        localQuad.forEach((p, i) => {
+          const x = ox + Number(p.x) * scale;
+          const y = oy + Number(p.y) * scale;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (previewVertices && previewVertices.length >= 2) {
+        ctx.beginPath();
+        previewVertices.forEach((p, i) => {
+          const x = ox + Number(p.x) * scale;
+          const y = oy + Number(p.y) * scale;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+    }
+
+    function refreshImageTo4PointQuadPreview() {
+      if (currentPromptAction?.directAction !== 'imageTo4PointVector') return;
+      const panel = promptDrawerFields && promptDrawerFields.querySelector('.prompt-field-quad-target-preview');
+      if (!panel) return;
+      const canvas = panel.querySelector('.quad-target-preview-canvas');
+      const statusEl = panel.querySelector('.quad-target-preview-status');
+      if (!canvas || !statusEl) return;
+
+      if (typeof imageTo4PointQuadPreviewListener === 'function') {
+        imageTo4PointQuadPreviewListener();
+        imageTo4PointQuadPreviewListener = null;
+      }
+
+      let timeoutId = null;
+      const cleanup = () => {
+        window.removeEventListener('message', handler);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      };
+      const handler = (event) => {
+        const msg = event.data.pluginMessage;
+        if (!msg || msg.type !== 'selection-quad-info') return;
+        cleanup();
+        drawQuadTargetPreviewCanvas(canvas, statusEl, msg);
+      };
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        cleanup();
+      }, 4000);
+      imageTo4PointQuadPreviewListener = cleanup;
+      window.addEventListener('message', handler);
+      parent.postMessage({ pluginMessage: { type: 'get-selection-quad-info' } }, '*');
+    }
+
+    function setupImageTo4PointQuadPreview() {
+      teardownImageTo4PointQuadPreview();
+      refreshImageTo4PointQuadPreview();
+    }
 
     function teardownImageToAsciiPreview() {
       lastAsciiPreviewLayoutResult = null;
@@ -19716,6 +19932,16 @@ Generate ONLY the reply text, nothing else.`;
               <div class="ascii-preview-foot" aria-live="polite"></div>
             </div>
           `;
+        } else if (field.type === 'quadTargetPreview') {
+          fieldHtml += `
+            <div class="prompt-field prompt-field-quad-target-preview${wrapperClass}"${conditionalAttrs}>
+              <label class="prompt-field-label">${escapeHtml(field.label || 'Target shape')}</label>
+              <div class="quad-target-preview-viewport">
+                <canvas class="quad-target-preview-canvas" id="${fieldId}-quad-canvas" width="560" height="320" aria-hidden="true"></canvas>
+                <div class="quad-target-preview-status" id="${fieldId}-quad-status" aria-live="polite"></div>
+              </div>
+            </div>
+          `;
         } else if (field.type === 'comments') {
           // Comments list field - lazy loaded with cached data
           fieldHtml += `
@@ -19931,6 +20157,12 @@ Generate ONLY the reply text, nothing else.`;
         setupImageToAsciiPreview();
       } else {
         teardownImageToAsciiPreview();
+      }
+
+      if (currentPromptAction?.directAction === 'imageTo4PointVector') {
+        setupImageTo4PointQuadPreview();
+      } else {
+        teardownImageTo4PointQuadPreview();
       }
 
       // Setup indicator delete button listeners
@@ -27113,14 +27345,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             clearTimeout(timeout);
             window.removeEventListener('message', handler);
             resolve(msg);
-            return;
-          }
-          if (msg.type === 'error' && typeof msg.message === 'string') {
-            if (msg.message.includes('target layer') || msg.message.includes('image fill mapping') || msg.message.includes('invalid dimensions')) {
-              clearTimeout(timeout);
-              window.removeEventListener('message', handler);
-              reject(new Error(msg.message));
-            }
           }
         };
 
@@ -27360,20 +27584,16 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           flipHorizontal,
           flipVertical
         });
-        const selectionResult = await requestSelectionData(false, false, ContextMode.STYLE_ONLY);
-        const selection = Array.isArray(selectionResult?.data) ? selectionResult.data : [];
-        if (selection.length !== 1) {
-          showToast('Select exactly one target 4-point layer.', 'error');
+        const quadInfo = await requestSelectionQuadInfo();
+        if (quadInfo.status !== 'ok') {
+          refreshImageTo4PointQuadPreview();
           return;
         }
-
-        const target = selection[0];
-        const quadInfo = await requestSelectionQuadInfo();
-        const width = Number(quadInfo?.width) || Number(target.width) || 0;
-        const height = Number(quadInfo?.height) || Number(target.height) || 0;
-        const localQuadRaw = Array.isArray(quadInfo?.localQuad) ? quadInfo.localQuad : null;
+        const width = Number(quadInfo.width) || 0;
+        const height = Number(quadInfo.height) || 0;
+        const localQuadRaw = Array.isArray(quadInfo.localQuad) ? quadInfo.localQuad : null;
         if (!localQuadRaw || localQuadRaw.length !== 4 || width <= 0 || height <= 0) {
-          showToast('Could not read a valid 4-point target quad.', 'error');
+          refreshImageTo4PointQuadPreview();
           return;
         }
         const maxOutputDimension = 4096;
@@ -27422,7 +27642,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               type: 'execute-commands',
               commands: [{
                 action: 'setImageFillToVectorQuad',
-                nodeId: target.id,
+                nodeId: quadInfo.nodeId,
                 imageData: base64ToBytes(warpedBase64)
               }]
             }

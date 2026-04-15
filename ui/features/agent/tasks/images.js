@@ -364,6 +364,10 @@ export const quickCreateImageTasks = [
               maxImages: 1
             },
             {
+              type: 'quadTargetPreview',
+              label: 'Target shape'
+            },
+            {
               key: 'rotateSteps',
               type: 'select',
               label: 'Rotate',
@@ -376,23 +380,28 @@ export const quickCreateImageTasks = [
               ]
             },
             {
-              key: 'flipHorizontal',
-              type: 'select',
-              label: 'Flip Horizontal',
-              default: 'off',
-              options: [
-                { value: 'off', label: 'Off' },
-                { value: 'on', label: 'On' }
-              ]
-            },
-            {
-              key: 'flipVertical',
-              type: 'select',
-              label: 'Flip Vertical',
-              default: 'off',
-              options: [
-                { value: 'off', label: 'Off' },
-                { value: 'on', label: 'On' }
+              type: 'row',
+              fields: [
+                {
+                  key: 'flipHorizontal',
+                  type: 'select',
+                  label: 'Flip Horizontal',
+                  default: 'off',
+                  options: [
+                    { value: 'off', label: 'Off' },
+                    { value: 'on', label: 'On' }
+                  ]
+                },
+                {
+                  key: 'flipVertical',
+                  type: 'select',
+                  label: 'Flip Vertical',
+                  default: 'off',
+                  options: [
+                    { value: 'off', label: 'Off' },
+                    { value: 'on', label: 'On' }
+                  ]
+                }
               ]
             },
             {

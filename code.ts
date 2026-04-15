@@ -11146,37 +11146,156 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'get-selection-quad-info': {
-      if (selection.length !== 1) {
-        figma.ui.postMessage({ type: 'error', message: 'Please select exactly one target layer.' });
+      const postQuadInfo = (payload: Record<string, unknown>) => {
+        figma.ui.postMessage({ type: 'selection-quad-info', ...payload });
+      };
+
+      if (selection.length === 0) {
+        postQuadInfo({
+          status: 'empty',
+          message: 'Nothing selected. Select one rectangle or a vector path with exactly 4 points.'
+        });
         break;
       }
+      if (selection.length > 1) {
+        postQuadInfo({
+          status: 'multiple',
+          message: `Select one layer only (${selection.length} selected).`
+        });
+        break;
+      }
+
       const node = selection[0] as SceneNode & { width?: number; height?: number; vectorNetwork?: any };
+      const nodeName = node.name || '';
+      const nodeType = node.type || '';
+
       if (!('fills' in node) || !('width' in node) || !('height' in node)) {
-        figma.ui.postMessage({ type: 'error', message: 'Selected layer does not support image fill mapping.' });
+        postQuadInfo({
+          status: 'noFills',
+          nodeId: node.id,
+          nodeName,
+          nodeType,
+          message: 'This layer cannot receive an image fill.'
+        });
         break;
       }
+
+      if ((node as any).fills === figma.mixed) {
+        postQuadInfo({
+          status: 'mixedFills',
+          nodeId: node.id,
+          nodeName,
+          nodeType,
+          message: 'Mixed fills are not supported. Use a single fill mode.'
+        });
+        break;
+      }
+
       const width = Number(node.width) || 0;
       const height = Number(node.height) || 0;
       if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-        figma.ui.postMessage({ type: 'error', message: 'Selected layer has invalid dimensions.' });
+        postQuadInfo({
+          status: 'badDimensions',
+          nodeId: node.id,
+          nodeName,
+          nodeType,
+          message: 'Invalid layer size for mapping.'
+        });
         break;
       }
 
-      const networkVertices = Array.isArray((node as any)?.vectorNetwork?.vertices)
-        ? (node as any).vectorNetwork.vertices
-        : null;
-      const localQuad = networkVertices && networkVertices.length === 4
-        ? networkVertices.map((v: any) => ({ x: Number(v.x), y: Number(v.y) }))
-        : [
-            { x: 0, y: 0 },
-            { x: width, y: 0 },
-            { x: width, y: height },
-            { x: 0, y: height }
-          ];
+      const vn = (node as any).vectorNetwork;
+      const networkVertices = Array.isArray(vn?.vertices) ? vn.vertices : null;
+      const rawSegments = Array.isArray(vn?.segments) ? vn.segments : [];
 
-      figma.ui.postMessage({
-        type: 'selection-quad-info',
+      if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
+        const n = networkVertices?.length ?? 0;
+        const previewVertices = n > 0
+          ? networkVertices!.map((v: any) => ({ x: Number(v.x), y: Number(v.y) }))
+          : [];
+        const previewSegments = rawSegments.map((s: any) => ({
+          start: Number(s.start),
+          end: Number(s.end)
+        })).filter((s: { start: number; end: number }) => Number.isFinite(s.start) && Number.isFinite(s.end));
+
+        if (n === 0) {
+          postQuadInfo({
+            status: 'notFourPointVector',
+            nodeId: node.id,
+            nodeName,
+            nodeType,
+            width,
+            height,
+            vertexCount: 0,
+            previewVertices: [],
+            previewSegments: [],
+            message: 'This vector has no points to map. Use a 4-point path.'
+          });
+          break;
+        }
+
+        if (n !== 4) {
+          postQuadInfo({
+            status: 'notFourPointVector',
+            nodeId: node.id,
+            nodeName,
+            nodeType,
+            width,
+            height,
+            vertexCount: n,
+            previewVertices,
+            previewSegments,
+            message: `This path has ${n} points; need exactly 4 corners for this action.`
+          });
+          break;
+        }
+
+        const localQuad = previewVertices;
+        const signedArea = localQuad.reduce((acc: number, point: { x: number; y: number }, index: number) => {
+          const next = localQuad[(index + 1) % localQuad.length];
+          return acc + point.x * next.y - next.x * point.y;
+        }, 0) * 0.5;
+        if (!Number.isFinite(signedArea) || Math.abs(signedArea) < 1e-3) {
+          postQuadInfo({
+            status: 'degenerate',
+            nodeId: node.id,
+            nodeName,
+            nodeType,
+            width,
+            height,
+            vertexCount: n,
+            localQuad,
+            previewVertices,
+            previewSegments,
+            message: 'Shape is too flat to map (zero area).'
+          });
+          break;
+        }
+        postQuadInfo({
+          status: 'ok',
+          nodeId: node.id,
+          nodeName,
+          nodeType,
+          width,
+          height,
+          localQuad,
+          previewVertices,
+          previewSegments
+        });
+        break;
+      }
+
+      const localQuad = [
+        { x: 0, y: 0 },
+        { x: width, y: 0 },
+        { x: width, y: height },
+        { x: 0, y: height }
+      ];
+      postQuadInfo({
+        status: 'ok',
         nodeId: node.id,
+        nodeName,
+        nodeType,
         width,
         height,
         localQuad
