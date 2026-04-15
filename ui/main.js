@@ -9139,6 +9139,7 @@ Rules:
     const QUICK_ACTION_USAGE_KEY = 'quickActionUsage';
     const LAST_USED_ACTION_KEY = 'lastUsedQuickAction';
     const HIDDEN_PROMPT_COMMENTS_KEY = 'hiddenPromptCommentsByFile';
+    const BOOKMARKED_PROMPT_COMMENTS_KEY = 'bookmarkedPromptCommentsByFile';
     const MAX_LAST_USED_ACTIONS = 3;
     let quickActionUsage = sanitizeQuickActionUsageMap(loadQuickActionUsageFromLocal());
     let lastUsedQuickActions = loadLastUsedQuickActionsFromLocal();
@@ -9211,7 +9212,35 @@ Rules:
       }
     }
 
+    function loadBookmarkedPromptCommentsByFileFromLocal() {
+      try {
+        const stored = localStorage.getItem(BOOKMARKED_PROMPT_COMMENTS_KEY);
+        if (!stored) return {};
+        const parsed = JSON.parse(stored);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+
+        const sanitized = {};
+        Object.entries(parsed).forEach(([fileKey, commentMap]) => {
+          if (!fileKey || !commentMap || typeof commentMap !== 'object' || Array.isArray(commentMap)) return;
+          const sanitizedComments = {};
+          Object.entries(commentMap).forEach(([commentId, marked]) => {
+            if (commentId && marked === true) {
+              sanitizedComments[commentId] = true;
+            }
+          });
+          if (Object.keys(sanitizedComments).length > 0) {
+            sanitized[fileKey] = sanitizedComments;
+          }
+        });
+
+        return sanitized;
+      } catch (e) {
+        return {};
+      }
+    }
+
     let hiddenPromptCommentsByFile = loadHiddenPromptCommentsByFileFromLocal();
+    let bookmarkedPromptCommentsByFile = loadBookmarkedPromptCommentsByFileFromLocal();
 
     function saveHiddenPromptCommentsByFileToLocal() {
       try {
@@ -9278,6 +9307,58 @@ Rules:
 
       saveHiddenPromptCommentsByFileToLocal();
       syncHiddenPromptCommentsToPluginStorage();
+
+      const container = document.getElementById('promptCommentsContainer');
+      if (container && container.offsetParent !== null) {
+        renderCommentsInDrawerPreservingScroll(container);
+      }
+    }
+
+    function saveBookmarkedPromptCommentsByFileToLocal() {
+      try {
+        localStorage.setItem(BOOKMARKED_PROMPT_COMMENTS_KEY, JSON.stringify(bookmarkedPromptCommentsByFile));
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    function syncBookmarkedPromptCommentsToPluginStorage() {
+      parent.postMessage({
+        pluginMessage: {
+          type: 'save-bookmarked-prompt-comments',
+          bookmarkedPromptCommentsByFile,
+        }
+      }, '*');
+    }
+
+    function isPromptCommentBookmarked(commentId) {
+      const fileKey = getPromptCommentsStorageFileKey();
+      return !!bookmarkedPromptCommentsByFile[fileKey]?.[commentId];
+    }
+
+    function togglePromptCommentBookmarked(commentId) {
+      const fileKey = getPromptCommentsStorageFileKey();
+      const currentMap = { ...(bookmarkedPromptCommentsByFile[fileKey] || {}) };
+
+      if (currentMap[commentId]) {
+        delete currentMap[commentId];
+      } else {
+        currentMap[commentId] = true;
+      }
+
+      if (Object.keys(currentMap).length > 0) {
+        bookmarkedPromptCommentsByFile = {
+          ...bookmarkedPromptCommentsByFile,
+          [fileKey]: currentMap,
+        };
+      } else {
+        const nextState = { ...bookmarkedPromptCommentsByFile };
+        delete nextState[fileKey];
+        bookmarkedPromptCommentsByFile = nextState;
+      }
+
+      saveBookmarkedPromptCommentsByFileToLocal();
+      syncBookmarkedPromptCommentsToPluginStorage();
 
       const container = document.getElementById('promptCommentsContainer');
       if (container && container.offsetParent !== null) {
@@ -10729,6 +10810,7 @@ CRITICAL RULES:
         peopleFilterIncludeRepliesFrom,
         peopleFilterIncludeRepliesMentions,
         isPromptCommentHidden,
+        isPromptCommentBookmarked,
       };
     }
 
@@ -11054,6 +11136,10 @@ CRITICAL RULES:
         });
       }
 
+      if (commentsFilterBy === 'bookmarked') {
+        filteredComments = filteredComments.filter(c => isPromptCommentBookmarked(c.id));
+      }
+
       // Sort comments
       const sortFn = {
         'activity': (a, b) => {
@@ -11125,6 +11211,13 @@ CRITICAL RULES:
     // Handle filter change
     function handleCommentsFilter(value) {
       commentsFilterBy = value;
+      if (value === 'bookmarked') {
+        showResolvedComments = true;
+        const resolvedBtn = document.getElementById('showResolvedToggle');
+        if (resolvedBtn) {
+          resolvedBtn.classList.add('active');
+        }
+      }
       const container = document.getElementById('promptCommentsContainer');
       if (container && figmaComments.length > 0) {
         renderCommentsInDrawer(container);
@@ -11816,6 +11909,22 @@ Generate a suitable, professional response.
 
       // Filter by search query (with AND/OR logic and reply search)
       filteredComments = filterCommentsBySearch(filteredComments, commentsSearchQuery, threads);
+
+      if (commentsFilterBy === 'pending') {
+        filteredComments = filteredComments.filter(c => {
+          const replies = threads.get(c.id) || [];
+          if (replies.length > 0) {
+            const sortedReplies = [...replies].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            const lastReply = sortedReplies[sortedReplies.length - 1];
+            return lastReply.user.id !== figmaCurrentUser?.id;
+          }
+          return c.user.id !== figmaCurrentUser?.id;
+        });
+      }
+
+      if (commentsFilterBy === 'bookmarked') {
+        filteredComments = filteredComments.filter(c => isPromptCommentBookmarked(c.id));
+      }
 
       return { filteredComments, threads };
     }
@@ -30018,6 +30127,9 @@ Example structure:
         hiddenPromptCommentsByFile = settings?.hiddenPromptCommentsByFile && typeof settings.hiddenPromptCommentsByFile === 'object'
           ? settings.hiddenPromptCommentsByFile
           : loadHiddenPromptCommentsByFileFromLocal();
+        bookmarkedPromptCommentsByFile = settings?.bookmarkedPromptCommentsByFile && typeof settings.bookmarkedPromptCommentsByFile === 'object'
+          ? settings.bookmarkedPromptCommentsByFile
+          : loadBookmarkedPromptCommentsByFileFromLocal();
         rebuildAgentTasks();
         if (settings?.lastCommandsCategory && agentTasks[settings.lastCommandsCategory]) {
           selectedCategory = settings.lastCommandsCategory;

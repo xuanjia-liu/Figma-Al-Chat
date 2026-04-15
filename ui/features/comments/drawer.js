@@ -53,6 +53,7 @@ export function createCommentsDrawerHelpers({
       commentsWithReplyMatches,
       commentsWithPeopleReplyMatches,
       isPromptCommentHidden,
+      isPromptCommentBookmarked,
     } = getState();
 
     const replies = threads.get(comment.id) || [];
@@ -70,6 +71,20 @@ export function createCommentsDrawerHelpers({
     if (isResolved) itemClasses.push('resolved');
     else itemClasses.push('unresolved');
     if (isHidden) itemClasses.push('is-hidden');
+
+    const isBookmarked = typeof isPromptCommentBookmarked === 'function' ? isPromptCommentBookmarked(comment.id) : false;
+
+    const bookmarkButton = `
+      <button
+        type="button"
+        class="comment-action-btn icon-only comment-bookmark-toggle${isBookmarked ? ' is-bookmarked' : ''}"
+        onclick="event.stopPropagation(); togglePromptCommentBookmarked('${comment.id}')"
+        title="${escapeHtml(isBookmarked ? tu('actions.comments.drawer.bookmarkRemoveTitle') : tu('actions.comments.drawer.bookmarkAddTitle'))}">
+        <svg viewBox="0 0 24 24" fill="${isBookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>
+        </svg>
+      </button>
+    `;
 
     const visibilityButton = `
       <button
@@ -187,7 +202,7 @@ export function createCommentsDrawerHelpers({
                 ${hasReplyMatch ? `<span class="reply-match-indicator">${replyMatchLabel}</span>` : ''}
               </button>
             ` : ''}
-            <span class="comment-header-trailing comment-header-trailing--toggle">${hiddenNavigateButton}${visibilityButton}</span>
+            <span class="comment-header-trailing comment-header-trailing--toggle">${hiddenNavigateButton}${bookmarkButton}${visibilityButton}</span>
           </div>
           ${repliesListHTML}
         </div>
@@ -260,6 +275,7 @@ export function createCommentsDrawerHelpers({
                 ` : ''}
               </div>
             </div>
+            ${bookmarkButton}
             ${visibilityButton}
           </div>
       <div class="comment-reply-input" id="drawer-reply-input-${comment.id}" style="display: none;">
@@ -405,6 +421,15 @@ export function createCommentsDrawerHelpers({
       });
     }
 
+    if (commentsFilterBy === 'bookmarked') {
+      const { isPromptCommentBookmarked: isBookmarkedFn } = getState();
+      if (typeof isBookmarkedFn === 'function') {
+        filteredComments = filteredComments.filter(c => isBookmarkedFn(c.id));
+      } else {
+        filteredComments = [];
+      }
+    }
+
     const sortFn = {
       activity: (a, b) => {
         const getLatest = (c) => {
@@ -487,6 +512,7 @@ export function createCommentsDrawerHelpers({
             <div class="dropdown-section">${escapeHtml(tu('actions.comments.drawer.filter'))}</div>
             <button class="dropdown-item ${commentsFilterBy === 'all' ? 'active' : ''}" onclick="handleCommentsFilter('all')">${escapeHtml(tu('actions.comments.drawer.filterAll'))}</button>
             <button class="dropdown-item ${commentsFilterBy === 'pending' ? 'active' : ''}" onclick="handleCommentsFilter('pending')">${escapeHtml(tu('actions.comments.drawer.filterPending'))}</button>
+            <button class="dropdown-item ${commentsFilterBy === 'bookmarked' ? 'active' : ''}" onclick="handleCommentsFilter('bookmarked')">${escapeHtml(tu('actions.comments.drawer.filterBookmarked'))}</button>
           </div>
         </div>
         <button class="people-filter-toggle${peopleFilterExpanded ? ' expanded' : ''}" id="peopleFilterToggle" onclick="togglePeopleFilter()" title="${escapeHtml(tu('actions.comments.drawer.peopleFilter'))}">

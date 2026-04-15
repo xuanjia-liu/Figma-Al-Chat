@@ -57,6 +57,7 @@ export const commentsInlineHandlerNames = [
   'toggleCommentSelection',
   'toggleCommentsDropdown',
   'togglePromptCommentHidden',
+  'togglePromptCommentBookmarked',
   'toggleDrawerReplyInput',
   'toggleDrawerReplyItemInput',
   'toggleMultiSelect',

@@ -4573,10 +4573,16 @@
     }
 
     .prompt-comment-item.resolved {
-      opacity: 0.6;
+      opacity: 0.8;
       background: var(--bg-tertiary);
+      border-left: 2px solid var(--text-disabled);
     }
-
+    .prompt-comment-item.resolved .comment-header-text::after {
+      content: '✓ Resolved';
+      font-size: var(--text-xs);
+      color: var(--success);
+      margin-left: var(--space-sm);
+    }
 
     .prompt-comment-item.selected-node {
       border-left: 3px solid var(--accent);
