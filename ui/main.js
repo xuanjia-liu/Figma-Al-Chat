@@ -27228,6 +27228,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               startIndex: values.startIndex ?? 1,
               order: values.order || 'zOrder',
               padLength: values.padLength ?? 0,
+              autoExpand: values.autoExpand === true,
               replaceSubstring: values.replaceSubstring === true
             },
             errorPrefixes: ['Sequential naming failed', 'Please select at least one layer to rename.']
@@ -27260,6 +27261,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               formatPattern: values.formatPattern || 'Task {n}: {original}',
               startIndex: values.startIndex ?? 1,
               order: values.order || 'zOrder',
+              padLength: values.padLength ?? 0,
+              autoExpand: values.autoExpand === true,
               replaceSubstring: values.replaceSubstring === true
             },
             errorPrefixes: ['Format sequencer failed', 'Please select at least one text layer.']

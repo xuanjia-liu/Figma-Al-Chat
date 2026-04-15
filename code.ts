@@ -983,9 +983,11 @@ function getSequencePaddingDigits(
   tokenLength: number,
   sequenceNumber: number,
   maxSequenceNumber: number,
-  explicitPadLength: number = 0
+  explicitPadLength: number = 0,
+  autoExpand: boolean = true
 ): number {
   if (explicitPadLength > 0) return explicitPadLength;
+  if (!autoExpand) return Math.max(tokenLength, 1);
   const autoDigits = Math.max(String(Math.max(sequenceNumber, maxSequenceNumber, 0)).length, 1);
   return Math.max(tokenLength, autoDigits);
 }
@@ -995,13 +997,14 @@ function replaceSequenceTokens(
   original: string,
   sequenceNumber: number,
   maxSequenceNumber: number,
-  explicitPadLength: number = 0
+  explicitPadLength: number = 0,
+  autoExpand: boolean = true
 ): string {
   const input = template || '';
   return input
     .replace(/\{original\}/g, original)
     .replace(/\{(n+)\}/g, (_, token: string) => {
-      const digits = getSequencePaddingDigits(token.length, sequenceNumber, maxSequenceNumber, explicitPadLength);
+      const digits = getSequencePaddingDigits(token.length, sequenceNumber, maxSequenceNumber, explicitPadLength, autoExpand);
       return String(sequenceNumber).padStart(digits, '0');
     });
 }
@@ -9547,6 +9550,7 @@ figma.ui.onmessage = async (msg: {
         const startIndex = typeof msg.startIndex === 'number' ? msg.startIndex : 1;
         const order = msg.order || 'zOrder';
         const padLength = typeof msg.padLength === 'number' ? msg.padLength : 0;
+        const autoExpand = (msg as any).autoExpand === true;
         const targets = sortSceneNodesByOrder(selection.filter(isRenameableSceneNode), order);
         const maxSequenceNumber = startIndex + Math.max(targets.length - 1, 0);
 
@@ -9554,7 +9558,7 @@ figma.ui.onmessage = async (msg: {
         let skipped = 0;
 
         targets.forEach((node, index) => {
-          const nextName = replaceSequenceTokens(formatPattern, node.name, startIndex + index, maxSequenceNumber, padLength);
+          const nextName = replaceSequenceTokens(formatPattern, node.name, startIndex + index, maxSequenceNumber, padLength, autoExpand);
           if (!nextName || nextName === node.name) {
             skipped++;
             return;
@@ -9649,6 +9653,8 @@ figma.ui.onmessage = async (msg: {
         const formatPattern = msg.formatPattern || 'Item {n}';
         const startIndex = typeof msg.startIndex === 'number' ? msg.startIndex : 1;
         const order = msg.order || 'zOrder';
+        const padLength = typeof msg.padLength === 'number' ? msg.padLength : 0;
+        const autoExpand = (msg as any).autoExpand === true;
         const targets = sortSceneNodesByOrder(selection, order);
         const maxSequenceNumber = startIndex + Math.max(targets.length - 1, 0);
 
@@ -9665,7 +9671,7 @@ figma.ui.onmessage = async (msg: {
           }
 
           const original = getEditableTextTargetContent(target);
-          const nextText = replaceSequenceTokens(formatPattern, original, startIndex + index, maxSequenceNumber);
+          const nextText = replaceSequenceTokens(formatPattern, original, startIndex + index, maxSequenceNumber, padLength, autoExpand);
           if (nextText === original) {
             skipped++;
             continue;

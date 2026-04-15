@@ -205,9 +205,9 @@ export const smartTextTasks = [
           prompt: '',
           isTextAction: true,
           requiredContext: ContextMode.TEXT_ONLY,
-          examples: ['{n}', '{nn}', '{original}'],
+          examples: ['{n}', '{nn}', '{nnn}', '{original}'],
           fields: [
-            { key: 'formatPattern', type: 'text', label: 'Format Pattern', placeholder: 'Task {n}: {original}', default: 'Task {n}: {original}', hint: 'Use {n} for number, {original} for existing text' },
+            { key: 'formatPattern', type: 'text', label: 'Format Pattern', placeholder: 'Task {n}: {original}', default: 'Task {n}: {original}', hint: 'Use {n}/{nn}/{nnn} for number (auto-padded), {original} for existing text' },
             { key: 'startIndex', type: 'number', label: 'Start Number', default: 1, min: 0 },
             {
               key: 'order', type: 'select', label: 'Order', default: 'zOrder', options: [
@@ -216,6 +216,8 @@ export const smartTextTasks = [
                 { value: 'alphabetical', label: 'Alphabetical by content' },
               ]
             },
+            { key: 'autoExpand', type: 'checkbox', label: 'Auto expand digits', default: false, hint: 'When on, {n} expands to fit the largest sequence number.' },
+            { key: 'padLength', type: 'number', label: 'Zero-pad digits', default: 0, min: 0, hint: '0 = auto based on count; 2 forces 01, 02, ...' },
             { key: 'replaceSubstring', type: 'checkbox', label: 'Replace only a substring (keep rest)', default: false },
           ],
           // Note: If the user omits {original} in the formatPattern, we must not mention it in the prompt to avoid LLM confusion.
@@ -326,6 +328,7 @@ export const layerNamingTasks = [
                 { value: 'alphabetical', label: 'Alphabetical by content' },
               ]
             },
+            { key: 'autoExpand', type: 'checkbox', label: 'Auto expand digits', default: false, hint: 'When on, {n} expands to fit the largest sequence number.' },
             { key: 'padLength', type: 'number', label: 'Zero-pad digits', default: 0, min: 0, hint: '0 = auto based on count; 2 forces 01, 02, ...' },
             { key: 'replaceSubstring', type: 'checkbox', label: 'Replace only a substring (keep rest)', default: false },
           ],
