@@ -27146,7 +27146,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     function clampOutputScale(value) {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) return 1;
-      return Math.max(0.5, Math.min(3, parsed));
+      return Math.max(0.5, Math.min(50, parsed));
     }
 
     async function preprocessImageDataUrl(imageDataUrl, { rotateDegrees = 0, flipHorizontal = false, flipVertical = false } = {}) {
@@ -27377,8 +27377,13 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           return;
         }
         const maxOutputDimension = 4096;
-        const scaleByDimensionCap = Math.min(maxOutputDimension / width, maxOutputDimension / height, 1);
-        const effectiveScale = Math.max(0.5, Math.min(outputScale, scaleByDimensionCap > 0 ? scaleByDimensionCap : outputScale));
+        const scaleByDimensionCap = Math.min(maxOutputDimension / width, maxOutputDimension / height);
+        const safeDimensionCap = Number.isFinite(scaleByDimensionCap) && scaleByDimensionCap > 0 ? scaleByDimensionCap : outputScale;
+        const effectiveScale = Math.min(outputScale, safeDimensionCap);
+        if (!Number.isFinite(effectiveScale) || effectiveScale <= 0) {
+          showToast('Could not compute a safe output scale for this target size.', 'error');
+          return;
+        }
         const scaledWidth = Math.max(1, Math.round(width * effectiveScale));
         const scaledHeight = Math.max(1, Math.round(height * effectiveScale));
         const scaledQuad = localQuadRaw.map((p) => ({
