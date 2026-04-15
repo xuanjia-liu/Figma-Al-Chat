@@ -12400,6 +12400,7 @@ figma.ui.onmessage = async (msg: {
       const requestedIds: string[] = Array.isArray((msg as any).textNodeIds)
         ? (msg as any).textNodeIds.map((id: any) => String(id)).filter(Boolean)
         : [];
+      const writeToTextNodes = (msg as any).writeToTextNodes === true;
       if (requestedIds.length === 0) {
         figma.ui.postMessage({
           type: 'hueshift-wcag-contrast-result',
@@ -12429,6 +12430,7 @@ figma.ui.onmessage = async (msg: {
         // WCAG for translucent text should use effective rendered foreground over background.
         const effectiveFg = textColor.a < 0.999 ? compositeOver(textColor, bgColor) : textColor;
         const ratio = wcagContrastRatio(effectiveFg, bgColor);
+        const ratioText = `${ratio.toFixed(2)}:1`;
         entries.push({
           nodeId: node.id,
           ratio,
@@ -12437,6 +12439,14 @@ figma.ui.onmessage = async (msg: {
           bgHex: rgbToHex(bgColor.r, bgColor.g, bgColor.b).toUpperCase(),
           textContent: String(node.characters || ''),
         });
+        if (writeToTextNodes) {
+          try {
+            await loadAllFontsForTextNode(node);
+            node.characters = ratioText;
+          } catch (_error) {
+            // Ignore write failures for locked or mixed-font text nodes.
+          }
+        }
       }
 
       if (entries.length === 0) {

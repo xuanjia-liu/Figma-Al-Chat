@@ -310,9 +310,11 @@ export function mountHueShift(container, options = {}) {
   let contrastMarkBtn = null;
   let contrastAddBtn = null;
   let contrastClearBtn = null;
+  let contrastWriteBackCheckbox = null;
   let contrastSelectedTextNodeIds = [];
   let contrastBoundTextNodeIds = [];
   let contrastAutoTextNodeIds = [];
+  let contrastWriteBackEnabled = true;
   let contrastLatestResult = null;
   let contrastAutoSelectionRequestId = 0;
   let pendingContrastAutoSelectionRequestId = 0;
@@ -567,6 +569,25 @@ export function mountHueShift(container, options = {}) {
   contrastActions.appendChild(contrastClearBtn);
 
   contrastPanel.appendChild(contrastActions);
+
+  const contrastWriteBackRow = document.createElement('label');
+  contrastWriteBackRow.className = 'camera-toggle-switch';
+  contrastWriteBackCheckbox = document.createElement('input');
+  contrastWriteBackCheckbox.type = 'checkbox';
+  contrastWriteBackCheckbox.checked = contrastWriteBackEnabled;
+  const contrastWriteBackLabel = document.createElement('span');
+  contrastWriteBackLabel.className = 'camera-toggle-label';
+  contrastWriteBackLabel.textContent = translate(
+    'actions.hueShift.writeBackMarkedText',
+    'Change marked text to contrast value'
+  );
+  contrastWriteBackRow.appendChild(contrastWriteBackCheckbox);
+  contrastWriteBackRow.appendChild(contrastWriteBackLabel);
+  contrastPanel.appendChild(contrastWriteBackRow);
+
+  contrastWriteBackCheckbox.addEventListener('change', () => {
+    contrastWriteBackEnabled = !!contrastWriteBackCheckbox.checked;
+  });
 
   contrastDetailsEl = document.createElement('div');
   contrastDetailsEl.className = 'hue-shift-contrast-details';
@@ -850,6 +871,8 @@ export function mountHueShift(container, options = {}) {
 
   function requestContrastComputationNow() {
     const targetNodeIds = getContrastTargetNodeIds();
+    const shouldWriteToMarkedTextNodes =
+      contrastWriteBackEnabled && contrastBoundTextNodeIds.length > 0;
     if (targetNodeIds.length === 0) {
       if (contrastBoundTextNodeIds.length === 0) {
         requestAutoContrastTextSelection();
@@ -864,6 +887,7 @@ export function mountHueShift(container, options = {}) {
       type: 'hueshift-compute-wcag-contrast',
       requestId: contrastComputeRequestId,
       textNodeIds: targetNodeIds,
+      writeToTextNodes: shouldWriteToMarkedTextNodes,
     });
   }
 
