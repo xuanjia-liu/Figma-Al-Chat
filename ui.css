@@ -11900,9 +11900,6 @@
         scrollbar-width: none;
       }
 
-      .commands-content-header {
-        display: none;
-      }
 
       .commands-sidebar::-webkit-scrollbar {
         display: none;
