@@ -715,6 +715,47 @@ export function mountHueShift(container, options = {}) {
           const label = document.createElement('span');
           label.className = 'hue-shift-contrast-detail-label';
           label.textContent = `${translate('actions.hueShift.color', 'Color')} ${idx + 1} (${shortId}) · ${ratioText}`;
+          label.title = translate('actions.hueShift.copyContrastRatio', 'Click to copy contrast ratio');
+          label.tabIndex = 0;
+          const copyContrastRatio = () => {
+            if (ratioText === '--') return;
+            const copyText = ratioText;
+            const onDone = () => {
+              if (showToast) {
+                showToast(
+                  translate('actions.hueShift.copiedContrastRatio', 'Copied contrast ratio: {{ratio}}')
+                    .replace('{{ratio}}', copyText),
+                  'success'
+                );
+              }
+            };
+            if (navigator?.clipboard?.writeText) {
+              navigator.clipboard.writeText(copyText).then(onDone).catch(() => {});
+              return;
+            }
+            const temp = document.createElement('textarea');
+            temp.value = copyText;
+            temp.setAttribute('readonly', '');
+            temp.style.position = 'fixed';
+            temp.style.opacity = '0';
+            document.body.appendChild(temp);
+            temp.select();
+            try {
+              document.execCommand('copy');
+              onDone();
+            } catch (_) {
+              /* ignore copy failures */
+            } finally {
+              temp.remove();
+            }
+          };
+          label.addEventListener('click', copyContrastRatio);
+          label.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              copyContrastRatio();
+            }
+          });
           row.appendChild(label);
 
           contrastDetailsEl.appendChild(row);

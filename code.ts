@@ -6519,6 +6519,13 @@ function resolveTextNodeCompositeFillColor(textNode: TextNode): HueShiftComposit
   return null;
 }
 
+function asSceneNode(node: BaseNode | null | undefined): SceneNode | null {
+  if (!node || !('type' in node)) return null;
+  const typed = node as SceneNode;
+  if (!('id' in typed)) return null;
+  return typed;
+}
+
 function resolveBackgroundForTextNode(textNode: TextNode, selectedTopLevelNodes: SceneNode[]): HueShiftCompositeColor | null {
   const selectedTopLevelIds = new Set(selectedTopLevelNodes.map((n) => n.id));
   let selectedAncestor: SceneNode | null = null;
@@ -6531,35 +6538,27 @@ function resolveBackgroundForTextNode(textNode: TextNode, selectedTopLevelNodes:
     cursor = cursor.parent;
   }
 
-  let parent = textNode.parent as BaseNode | null;
-  while (parent && 'type' in parent) {
-    if (selectedAncestor && 'id' in parent && (parent as SceneNode).id === selectedAncestor.id) {
-      const selectedBg = resolveNodeCompositeFillColor(selectedAncestor);
-      if (selectedBg) return selectedBg;
+  // Build effective background from nearest container upward, preserving alpha compositing.
+  let composedBg: HueShiftCompositeColor | null = null;
+  let parent = asSceneNode(textNode.parent);
+  while (parent) {
+    const layerBg = resolveNodeCompositeFillColor(parent);
+    if (layerBg) {
+      composedBg = composedBg ? compositeOver(composedBg, layerBg) : layerBg;
+      if (composedBg.a >= 0.999) break;
+    }
+    if (selectedAncestor && parent.id === selectedAncestor.id && composedBg && composedBg.a >= 0.999) {
       break;
     }
-    if ('fills' in (parent as SceneNode)) {
-      const bg = resolveNodeCompositeFillColor(parent as SceneNode);
-      if (bg) return bg;
-    }
-    parent = parent.parent;
+    parent = asSceneNode(parent.parent);
   }
 
-  if (selectedAncestor) {
-    const selectedBg = resolveNodeCompositeFillColor(selectedAncestor);
-    if (selectedBg) return selectedBg;
+  if (!composedBg) return null;
+  if (composedBg.a < 0.999) {
+    // If still translucent, assume white canvas under the remaining alpha.
+    composedBg = compositeOver(composedBg, { r: 1, g: 1, b: 1, a: 1 });
   }
-
-  let fallback: BaseNode | null = textNode.parent;
-  while (fallback && 'type' in fallback) {
-    if ('fills' in (fallback as SceneNode)) {
-      const bg = resolveNodeCompositeFillColor(fallback as SceneNode);
-      if (bg) return bg;
-    }
-    fallback = fallback.parent;
-  }
-
-  return null;
+  return composedBg;
 }
 
 // Helper to get only the top-level nodes from a selection (filters out children if their parent is also selected)
@@ -12420,12 +12419,14 @@ figma.ui.onmessage = async (msg: {
         const textColor = resolveTextNodeCompositeFillColor(node);
         const bgColor = resolveBackgroundForTextNode(node, selectedTopLevel);
         if (!textColor || !bgColor) continue;
-        const ratio = wcagContrastRatio(textColor, bgColor);
+        // WCAG for translucent text should use effective rendered foreground over background.
+        const effectiveFg = textColor.a < 0.999 ? compositeOver(textColor, bgColor) : textColor;
+        const ratio = wcagContrastRatio(effectiveFg, bgColor);
         entries.push({
           nodeId: node.id,
           ratio,
           aaPass: ratio >= 4.5,
-          textHex: rgbToHex(textColor.r, textColor.g, textColor.b).toUpperCase(),
+          textHex: rgbToHex(effectiveFg.r, effectiveFg.g, effectiveFg.b).toUpperCase(),
           bgHex: rgbToHex(bgColor.r, bgColor.g, bgColor.b).toUpperCase(),
         });
       }

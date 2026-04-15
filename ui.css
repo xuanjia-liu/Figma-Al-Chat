@@ -1349,6 +1349,20 @@
       text-overflow: ellipsis;
       white-space: nowrap;
       color: var(--text-primary);
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 2px;
+    }
+
+    .hue-shift-contrast-detail-label:hover {
+      opacity: 0.9;
+    }
+
+    .hue-shift-contrast-detail-label:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 2px;
     }
 
     .gfp-sidebar {
@@ -10655,47 +10669,6 @@
         width: 18px;
         height: 18px;
       }
-
-      .commands-drawer-body {
-        flex-direction: column;
-      }
-
-      .commands-sidebar {
-        width: 100%;
-        height: auto;
-        padding: var(--space-md) var(--space-lg);
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        gap: 0;
-        scrollbar-width: none;
-      }
-
-      .commands-sidebar::-webkit-scrollbar {
-        display: none;
-      }
-
-      .commands-sidebar-item {
-        width: auto;
-        padding: var(--space-xs) var(--space-md);
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
-      .commands-sidebar-item svg {
-        width: 12px;
-        height: 12px;
-      }
-
-      .custom-quick-action-modal-row {
-        grid-template-columns: 1fr;
-      }
-
-      .command-item-custom-actions {
-        opacity: 1;
-      }
     }
 
     /* Settings Modal Overlay */
@@ -11759,6 +11732,50 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    /* max-width: 480px — commands drawer */
+    @media (max-width: 480px) {
+      .commands-drawer-body {
+        flex-direction: column;
+      }
+
+      .commands-sidebar {
+        width: 100%;
+        height: auto;
+        padding: var(--space-md) var(--space-lg);
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        gap: 0;
+        scrollbar-width: none;
+      }
+
+      .commands-sidebar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .commands-sidebar-item {
+        width: auto;
+        padding: var(--space-xs) var(--space-md);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .commands-sidebar-item svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .custom-quick-action-modal-row {
+        grid-template-columns: 1fr;
+      }
+
+      .command-item-custom-actions {
+        opacity: 1;
+      }
     }
 
     .commands-content {
