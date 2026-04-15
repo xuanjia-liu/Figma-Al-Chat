@@ -79,6 +79,14 @@
       --shadow-accent: -0.000px -18.000px 78.000px -8.000px rgba(0, 96, 255, 0.64), -0.000px -6.273px 28.032px -7.128px rgba(0, 110, 255, 0.44), -0.000px -2.690px 13.536px -5.642px rgba(0, 123, 255, 0.37), -0.000px -1.130px 7.290px -4.000px rgba(0, 137, 255, 0.32), -0.000px -0.395px 4.230px -2.358px rgba(0, 150, 255, 0.27), -0.000px -0.081px 2.208px -0.872px rgba(0, 164, 255, 0.20);
       --shadow-accent-agent: -0.000px -18.000px 78.000px -8.000px rgba(78, 0, 255, 0.64), -0.000px -6.273px 28.032px -7.128px rgba(104, 0, 255, 0.44), -0.000px -2.690px 13.536px -5.642px rgba(130, 0, 255, 0.37), -0.000px -1.130px 7.290px -4.000px rgba(156, 0, 255, 0.32), -0.000px -0.395px 4.230px -2.358px rgba(181, 0, 255, 0.27), -0.000px -0.081px 2.208px -0.872px rgba(207, 0, 255, 0.20);
       --shadow-accent-audit: -0.000px -18.000px 78.000px -8.000px rgba(0, 149, 63, 0.64), -0.000px -6.273px 28.032px -7.128px rgba(0, 149, 63, 0.44), -0.000px -2.690px 13.536px -5.642px rgba(0, 149, 63, 0.37), -0.000px -1.130px 7.290px -4.000px rgba(0, 149, 63, 0.32), -0.000px -0.395px 4.230px -2.358px rgba(0, 149, 63, 0.27), -0.000px -0.081px 2.208px -0.872px rgba(0, 149, 63, 0.20);
+
+      /*
+       * Layout breakpoints (used in @media throughout this file):
+       *   max-width: 440px  — Google Fonts preview stack
+       *   max-width: 480px  — settings sidebar, commands drawer, chat, hue-shift
+       *   min-width: 560px  — phase2 outline horizontal columns
+       *   min-width: 720px  — chat input wide inset
+       */
     }
 
     body.light-mode {
@@ -1176,12 +1184,6 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--space-xs);
-    }
-
-    @media (max-width: 480px) {
-      .hue-shift-inline-controls {
-        grid-template-columns: minmax(0, 1fr);
-      }
     }
 
     .hue-shift-slider-row {
@@ -2386,6 +2388,7 @@
       color: var(--text-danger, #ef4444);
     }
 
+    /* max-width: 440px — font preview layout */
     @media (max-width: 440px) {
       .gfp-root {
         flex-direction: column;
@@ -7976,6 +7979,7 @@
       overflow: visible;
     }
 
+    /* min-width: 720px — chat input wide inset */
     @media (min-width: 720px) {
       .chat-input-container {
         width: calc(100% - 2 * var(--space-2xl));
@@ -7985,7 +7989,12 @@
       }
     }
 
+    /* max-width: 480px — chat column + hue-shift */
     @media (max-width: 480px) {
+      .hue-shift-inline-controls {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
       .chat-messages {
         padding: 72px var(--space-md) var(--space-md) var(--space-md);
         gap: var(--space-md);
@@ -10519,7 +10528,8 @@
       display: block;
     }
 
-    @media (max-width: 479px) {
+    /* max-width: 480px — settings shell + commands drawer */
+    @media (max-width: 480px) {
       .settings-sidebar {
         width: 40px;
         min-width: 40px;
@@ -10535,6 +10545,47 @@
       .settings-menu-item svg {
         width: 18px;
         height: 18px;
+      }
+
+      .commands-drawer-body {
+        flex-direction: column;
+      }
+
+      .commands-sidebar {
+        width: 100%;
+        height: auto;
+        padding: var(--space-md) var(--space-lg);
+        flex-direction: row;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        gap: 0;
+        scrollbar-width: none;
+      }
+
+      .commands-sidebar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .commands-sidebar-item {
+        width: auto;
+        padding: var(--space-xs) var(--space-md);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .commands-sidebar-item svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      .custom-quick-action-modal-row {
+        grid-template-columns: 1fr;
+      }
+
+      .command-item-custom-actions {
+        opacity: 1;
       }
     }
 
@@ -11945,51 +11996,6 @@
       margin-top: 12px;
       display: flex;
       justify-content: center;
-    }
-
-    /* Responsive styles for Commands Drawer */
-    @media (max-width: 479px) {
-      .commands-drawer-body {
-        flex-direction: column;
-      }
-
-      .commands-sidebar {
-        width: 100%;
-        height: auto;
-        padding: var(--space-md) var(--space-lg);
-        flex-direction: row;
-        overflow-x: auto;
-        overflow-y: hidden;
-        border-right: none;
-        border-bottom: 1px solid var(--border);
-        gap: 0;
-        scrollbar-width: none;
-      }
-
-
-      .commands-sidebar::-webkit-scrollbar {
-        display: none;
-      }
-
-      .commands-sidebar-item {
-        width: auto;
-        padding: var(--space-xs) var(--space-md);
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
-      .commands-sidebar-item svg {
-        width: 12px;
-        height: 12px;
-      }
-
-      .custom-quick-action-modal-row {
-        grid-template-columns: 1fr;
-      }
-
-      .command-item-custom-actions {
-        opacity: 1;
-      }
     }
 
     /* ========================================
@@ -15207,7 +15213,7 @@
       display: flex;
     }
 
-    /* Horizontal Scrolling for > 768px */
+    /* min-width: 560px — phase2 outline columns */
     @media (min-width: 560px) {
       .phase2-multi-page-container {
         display: flex;
