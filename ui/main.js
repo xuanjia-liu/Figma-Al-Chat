@@ -28949,10 +28949,11 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           // Only close drawer if it's not a multi-step action like browseIconSet
           const keepDrawerOpenForCreateIcon = action.directAction === 'createIcon' && values.showResultsInDrawer !== false;
           const keepDrawerOpenForImageToAscii = action.directAction === 'imageToAscii';
+          const keepDrawerOpenForImageTo4PointVector = action.directAction === 'imageTo4PointVector';
           const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
           const keepDrawerOpenForAddProperty = action.directAction === 'addProperty';
           const keepDrawerOpenForFontMapping = action.directAction === 'fontMapping';
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForFontMapping) {
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForImageTo4PointVector && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForFontMapping) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -28970,7 +28971,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForImageTo4PointVector || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             promptDrawerSubmit.textContent = 'Run Action';
