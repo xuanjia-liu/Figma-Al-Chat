@@ -3600,6 +3600,18 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const chatTitleHeader = document.getElementById('chatTitleHeader');
     const settingsCheckBadge = document.getElementById('settingsCheckBadge');
     const chatMessages = document.getElementById('chatMessages');
+    const chatMessagesScroll = chatMessages && chatMessages.closest('.chat-messages-scroll');
+
+    function scrollChatToShowElement(el, padding = 64) {
+      if (!chatMessagesScroll || !el) return;
+      const top =
+        el.getBoundingClientRect().top -
+        chatMessagesScroll.getBoundingClientRect().top +
+        chatMessagesScroll.scrollTop -
+        padding;
+      chatMessagesScroll.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+
     let lastLocalStylesPayload = null;
     /** browseStyles: search / sort / filter state */
     let stylesSearchQuery = '';
@@ -32365,7 +32377,9 @@ Example structure:
         } else {
           chatMessages.appendChild(messageDiv);
         }
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (chatMessagesScroll) {
+          chatMessagesScroll.scrollTop = chatMessagesScroll.scrollHeight;
+        }
 
         // Apply collapsible behavior to long user messages (only for non-quick-action messages)
         if (!actionData) {
@@ -32751,12 +32765,7 @@ Example structure:
       requestAnimationFrame(() => {
         const previousMessage = messageDiv.previousElementSibling;
         const scrollTarget = previousMessage || messageDiv;
-        const scrollTop = scrollTarget.offsetTop;
-        const containerPadding = 64; // Small padding from top
-        chatMessages.scrollTo({
-          top: scrollTop - containerPadding,
-          behavior: 'smooth'
-        });
+        scrollChatToShowElement(scrollTarget, 64);
       });
     }
 
@@ -35185,12 +35194,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         // Find the previous user message (the question) to include it in view
         const previousMessage = messageDiv.previousElementSibling;
         const scrollTarget = previousMessage || messageDiv;
-        const scrollTop = scrollTarget.offsetTop;
-        const containerPadding = 64; // Small padding from top
-        chatMessages.scrollTo({
-          top: scrollTop - containerPadding,
-          behavior: 'smooth'
-        });
+        scrollChatToShowElement(scrollTarget, 64);
       });
     }
 
@@ -35236,12 +35240,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       requestAnimationFrame(() => {
         const previousMessage = messageDiv.previousElementSibling;
         const scrollTarget = previousMessage || messageDiv;
-        const scrollTop = scrollTarget.offsetTop;
-        const containerPadding = 64;
-        chatMessages.scrollTo({
-          top: scrollTop - containerPadding,
-          behavior: 'smooth'
-        });
+        scrollChatToShowElement(scrollTarget, 64);
       });
     }
 

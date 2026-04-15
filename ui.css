@@ -156,13 +156,18 @@
       box-sizing: border-box;
     }
 
-
+    /* Lock the document to the plugin iframe — avoid stacking 100vh on body + .app-layout (extra scroll / drift). */
+    html {
+      height: 100%;
+      overflow: hidden;
+    }
 
     body {
       font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      height: 100vh;
+      height: 100%;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -2739,6 +2744,7 @@
     /* Content Area */
     .content {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -2747,6 +2753,7 @@
     .panel {
       display: none;
       flex: 1;
+      min-height: 0;
       flex-direction: column;
       overflow: hidden;
     }
@@ -4577,7 +4584,7 @@
       background: var(--bg-tertiary);
       border-left: 2px solid var(--text-disabled);
     }
-    .prompt-comment-item.resolved .comment-header-text::after {
+    .prompt-comment-item.resolved .comment-header::after {
       content: '✓ Resolved';
       font-size: var(--text-xs);
       color: var(--success);
@@ -5152,15 +5159,31 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Full-width scrollport so the scrollbar sits on the plugin edge; inner .chat-messages stays max 720px. */
+    .chat-messages-scroll {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      overflow: auto;
+      overflow-x: hidden;
     }
 
     .chat-messages {
-      flex: 1;
-      overflow: auto;
       padding: 80px var(--space-xl) var(--space-xl) var(--space-xl);
       gap: var(--space-xl);
       display: flex;
       flex-direction: column;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 720px;
+      margin-left: auto;
+      margin-right: auto;
+      transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        gap 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .message.user {
@@ -7934,12 +7957,33 @@
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       flex-shrink: 0;
-      margin: var(--space-md);
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 720px;
       margin-top: 0;
+      margin-bottom: var(--space-md);
+      margin-left: auto;
+      margin-right: auto;
       border-radius: var(--radius-xl);
       box-shadow: var(--shadow-lg);
-      transition: box-shadow 0.2s ease-in-out;
+      transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        margin 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        gap 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.2s ease-in-out;
       overflow: visible;
+    }
+
+    @media (max-width: 480px) {
+      .chat-messages {
+        padding: 72px var(--space-md) var(--space-md) var(--space-md);
+        gap: var(--space-md);
+      }
+
+      .chat-input-container {
+        padding: var(--space-sm) var(--space-md);
+        gap: var(--space-sm);
+      }
     }
 
     .chat-input-container:hover {
@@ -15344,7 +15388,8 @@
     /* Chat History Sidebar */
     .app-layout {
       display: flex;
-      height: 100vh;
+      flex: 1 1 0;
+      min-height: 0;
       overflow: hidden;
     }
 
@@ -15747,6 +15792,7 @@
       flex-direction: column;
       overflow: hidden;
       min-width: 0;
+      min-height: 0;
     }
 
     /* Sidebar toggle button in header */
