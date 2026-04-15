@@ -303,6 +303,9 @@ export function mountHueShift(container, options = {}) {
   let targetButtons = {};
   let preserveButtons = {};
   let controlEls = {};
+  let wheelSizeButtons = {};
+  let wheelSizeMode = 'medium';
+  let strengthWheelLocked = false;
   let contrastPanel = null;
   let contrastHeader = null;
   let contrastDetailsEl = null;
@@ -494,6 +497,7 @@ export function mountHueShift(container, options = {}) {
 
   wheelWrap = document.createElement('div');
   wheelWrap.className = 'hue-shift-wheel-wrap';
+  wheelWrap.dataset.wheelSize = wheelSizeMode;
 
   wheelCanvas = document.createElement('canvas');
   wheelCanvas.className = 'hue-shift-wheel-canvas';
@@ -502,6 +506,36 @@ export function mountHueShift(container, options = {}) {
   overlayCanvas = document.createElement('canvas');
   overlayCanvas.className = 'hue-shift-overlay-canvas';
   wheelWrap.appendChild(overlayCanvas);
+
+  const wheelSizeTabs = document.createElement('div');
+  wheelSizeTabs.className = 'hue-shift-wheel-size-tabs';
+  wheelSizeTabs.addEventListener('pointerdown', (event) => {
+    event.stopPropagation();
+  });
+  const wheelSizeDefs = [
+    { key: 'small', labelKey: 'actions.hueShift.wheelSmall', fallback: 'Small' },
+    { key: 'medium', labelKey: 'actions.hueShift.wheelMedium', fallback: 'Medium' },
+    { key: 'large', labelKey: 'actions.hueShift.wheelLarge', fallback: 'Large' },
+  ];
+  for (const def of wheelSizeDefs) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'hue-shift-btn hue-shift-wheel-size-tab';
+    btn.textContent = translate(def.labelKey, def.fallback);
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (wheelSizeMode === def.key) return;
+      wheelSizeMode = def.key;
+      wheelWrap.dataset.wheelSize = wheelSizeMode;
+      updateWheelSizeControls();
+      requestAnimationFrame(() => initWheel());
+    });
+    wheelSizeButtons[def.key] = btn;
+    wheelSizeTabs.appendChild(btn);
+  }
+  wheelWrap.appendChild(wheelSizeTabs);
+  updateWheelSizeControls();
 
   container.appendChild(wheelWrap);
 
@@ -656,6 +690,15 @@ export function mountHueShift(container, options = {}) {
       onValuesChanged();
     }
     requestContrastComputation();
+  }
+
+  function updateWheelSizeControls() {
+    if (!wheelWrap) return;
+    wheelWrap.dataset.wheelSize = wheelSizeMode;
+    Object.entries(wheelSizeButtons).forEach(([key, button]) => {
+      button.classList.toggle('active', key === wheelSizeMode);
+      button.setAttribute('aria-pressed', key === wheelSizeMode ? 'true' : 'false');
+    });
   }
 
   function getContrastTargetNodeIds() {
@@ -1758,6 +1801,29 @@ export function mountHueShift(container, options = {}) {
     valueEl.className = 'hue-shift-slider-value';
     row.appendChild(valueEl);
 
+    if (config.key === 's' && colorMode !== 'oklch') {
+      const lockBtn = document.createElement('button');
+      lockBtn.type = 'button';
+      lockBtn.className = 'hue-shift-btn hue-shift-slider-lock-btn';
+      lockBtn.setAttribute('aria-label', translate('actions.hueShift.lockStrengthWheel', 'Lock strength on wheel'));
+      const syncLockBtn = () => {
+        lockBtn.classList.toggle('active', strengthWheelLocked);
+        lockBtn.title = strengthWheelLocked
+          ? translate('actions.hueShift.unlockStrengthWheel', 'Unlock strength on wheel')
+          : translate('actions.hueShift.lockStrengthWheel', 'Lock strength on wheel');
+        lockBtn.innerHTML = strengthWheelLocked
+          ? '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3.2" y="7" width="9.6" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M5.2 7V5.6a2.8 2.8 0 0 1 5.6 0V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
+          : '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3.2" y="7" width="9.6" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M6 7V5.8a2.8 2.8 0 0 1 5.2-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+      };
+      syncLockBtn();
+      lockBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        strengthWheelLocked = !strengthWheelLocked;
+        syncLockBtn();
+      });
+      row.appendChild(lockBtn);
+    }
+
     const beginSession = () => {
       controlSession = {
         key: config.key,
@@ -2415,7 +2481,7 @@ export function mountHueShift(container, options = {}) {
     overlayCanvas.style.cursor = 'grabbing';
     const pointerModel = posToWheelModel(x, y);
     const hueDelta = angularDelta(dragSession.startPointerModel.h, pointerModel.h);
-    const satDelta = pointerModel.s - dragSession.startPointerModel.s;
+    const satDelta = strengthWheelLocked ? 0 : pointerModel.s - dragSession.startPointerModel.s;
 
     for (const index of dragSession.targetIndices) {
       const baseModel = dragSession.models.get(index);
@@ -2517,6 +2583,7 @@ export function mountHueShift(container, options = {}) {
     if (colorMode !== 'oklch') {
       initWheel();
     }
+    updateWheelSizeControls();
     renderModeControls();
     drawWheel();
     refreshSelectionUI();
