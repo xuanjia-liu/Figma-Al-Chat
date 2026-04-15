@@ -305,7 +305,6 @@ export function mountHueShift(container, options = {}) {
   let controlEls = {};
   let contrastPanel = null;
   let contrastHeader = null;
-  let contrastStatusEl = null;
   let contrastDetailsEl = null;
   let contrastMarkBtn = null;
   let contrastAddBtn = null;
@@ -540,10 +539,6 @@ export function mountHueShift(container, options = {}) {
   contrastHeaderTitle.textContent = translate('actions.hueShift.wcagContrast', 'WCAG Contrast');
   contrastHeader.appendChild(contrastHeaderTitle);
 
-  contrastStatusEl = document.createElement('div');
-  contrastStatusEl.className = 'hue-shift-contrast-status';
-  contrastHeader.appendChild(contrastStatusEl);
-
   contrastPanel.appendChild(contrastHeader);
 
   const contrastActions = document.createElement('div');
@@ -578,12 +573,12 @@ export function mountHueShift(container, options = {}) {
   const contrastWriteBackLabel = document.createElement('span');
   contrastWriteBackLabel.className = 'camera-toggle-label';
   contrastWriteBackLabel.textContent = translate(
-    'actions.hueShift.writeBackMarkedText',
-    'Change marked text to contrast value'
+    'actions.hueShift.writeBackShort',
+    'Write back'
   );
   contrastWriteBackRow.appendChild(contrastWriteBackCheckbox);
   contrastWriteBackRow.appendChild(contrastWriteBackLabel);
-  contrastPanel.appendChild(contrastWriteBackRow);
+  contrastHeader.appendChild(contrastWriteBackRow);
 
   contrastWriteBackCheckbox.addEventListener('change', () => {
     contrastWriteBackEnabled = !!contrastWriteBackCheckbox.checked;
@@ -670,16 +665,9 @@ export function mountHueShift(container, options = {}) {
   }
 
   function refreshContrastUI() {
-    if (!contrastStatusEl || !contrastDetailsEl) return;
+    if (!contrastDetailsEl) return;
     const selectedCount = contrastSelectedTextNodeIds.length;
     const boundCount = contrastBoundTextNodeIds.length;
-    if (boundCount > 0) {
-      contrastStatusEl.textContent = translate('actions.hueShift.boundNodeCount', 'Bound text nodes: {{count}}').replace('{{count}}', String(boundCount));
-    } else if (contrastAutoTextNodeIds.length > 0) {
-      contrastStatusEl.textContent = translate('actions.hueShift.selectionNodeCount', 'Selected text nodes: {{count}}').replace('{{count}}', String(contrastAutoTextNodeIds.length));
-    } else {
-      contrastStatusEl.textContent = translate('actions.hueShift.noBoundTextNodes', 'No text nodes bound.');
-    }
 
     const entries = Array.isArray(contrastLatestResult?.entries) ? contrastLatestResult.entries : [];
     contrastDetailsEl.innerHTML = '';
@@ -818,9 +806,10 @@ export function mountHueShift(container, options = {}) {
       contrastBoundTextNodeIds.every((id) => selectedSet.has(id));
 
     if (contrastMarkBtn) {
-      const labelKey = boundCount > 0 ? 'actions.hueShift.updateMarkedTexts' : 'actions.hueShift.markOutputTextNode';
-      const fallback = boundCount > 0 ? 'Update the marked texts' : 'Mark output text node';
-      contrastMarkBtn.textContent = translate(labelKey, fallback);
+      const labelKey = boundCount > 0 ? 'actions.hueShift.updateMarkedTexts' : 'actions.hueShift.markText';
+      const fallback = boundCount > 0 ? 'Update the marked texts' : 'Mark text';
+      const base = translate(labelKey, fallback);
+      contrastMarkBtn.textContent = `${base} (${selectedCount})`;
       const disabled = !hasSelection || (boundCount > 0 && sameAsBound);
       contrastMarkBtn.disabled = disabled;
       contrastMarkBtn.classList.toggle('inactive', disabled);
