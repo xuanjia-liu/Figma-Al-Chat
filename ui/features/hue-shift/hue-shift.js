@@ -304,8 +304,8 @@ export function mountHueShift(container, options = {}) {
   let preserveButtons = {};
   let controlEls = {};
   let contrastPanel = null;
+  let contrastHeader = null;
   let contrastStatusEl = null;
-  let contrastValueEl = null;
   let contrastDetailsEl = null;
   let contrastMarkBtn = null;
   let contrastAddBtn = null;
@@ -531,9 +531,17 @@ export function mountHueShift(container, options = {}) {
   contrastPanel = document.createElement('div');
   contrastPanel.className = 'hue-shift-contrast-panel';
 
-  const contrastHeader = document.createElement('div');
+  contrastHeader = document.createElement('div');
   contrastHeader.className = 'hue-shift-contrast-header';
-  contrastHeader.textContent = translate('actions.hueShift.wcagContrast', 'WCAG Contrast');
+  const contrastHeaderTitle = document.createElement('span');
+  contrastHeaderTitle.className = 'hue-shift-contrast-header-title';
+  contrastHeaderTitle.textContent = translate('actions.hueShift.wcagContrast', 'WCAG Contrast');
+  contrastHeader.appendChild(contrastHeaderTitle);
+
+  contrastStatusEl = document.createElement('div');
+  contrastStatusEl.className = 'hue-shift-contrast-status';
+  contrastHeader.appendChild(contrastStatusEl);
+
   contrastPanel.appendChild(contrastHeader);
 
   const contrastActions = document.createElement('div');
@@ -559,14 +567,6 @@ export function mountHueShift(container, options = {}) {
   contrastActions.appendChild(contrastClearBtn);
 
   contrastPanel.appendChild(contrastActions);
-
-  contrastStatusEl = document.createElement('div');
-  contrastStatusEl.className = 'hue-shift-contrast-status';
-  contrastPanel.appendChild(contrastStatusEl);
-
-  contrastValueEl = document.createElement('div');
-  contrastValueEl.className = 'hue-shift-contrast-value';
-  contrastPanel.appendChild(contrastValueEl);
 
   contrastDetailsEl = document.createElement('div');
   contrastDetailsEl.className = 'hue-shift-contrast-details';
@@ -649,7 +649,7 @@ export function mountHueShift(container, options = {}) {
   }
 
   function refreshContrastUI() {
-    if (!contrastStatusEl || !contrastValueEl || !contrastDetailsEl) return;
+    if (!contrastStatusEl || !contrastDetailsEl) return;
     const selectedCount = contrastSelectedTextNodeIds.length;
     const boundCount = contrastBoundTextNodeIds.length;
     if (boundCount > 0) {
@@ -660,33 +660,34 @@ export function mountHueShift(container, options = {}) {
       contrastStatusEl.textContent = translate('actions.hueShift.noBoundTextNodes', 'No text nodes bound.');
     }
 
-    const ratio = contrastLatestResult?.worstRatio;
-    const aaPass = contrastLatestResult?.aaPass;
-    if (typeof ratio === 'number' && Number.isFinite(ratio) && boundCount > 0) {
-      const ratioText = `${ratio.toFixed(2)}:1`;
-      const aaText = aaPass
-        ? translate('actions.hueShift.aaPass', 'AA Pass')
-        : translate('actions.hueShift.aaFail', 'AA Fail');
-      contrastValueEl.textContent = `${translate('actions.hueShift.contrastRatio', 'Contrast')}: ${ratioText} · ${aaText}`;
-      contrastValueEl.classList.toggle('hue-shift-contrast-value--pass', !!aaPass);
-      contrastValueEl.classList.toggle('hue-shift-contrast-value--fail', !aaPass);
-    } else {
-      contrastValueEl.textContent = translate('actions.hueShift.contrastUnavailable', 'Contrast: --');
-      contrastValueEl.classList.remove('hue-shift-contrast-value--pass');
-      contrastValueEl.classList.remove('hue-shift-contrast-value--fail');
-    }
-
     const entries = Array.isArray(contrastLatestResult?.entries) ? contrastLatestResult.entries : [];
     contrastDetailsEl.innerHTML = '';
     if (entries.length > 0) {
-      entries
-        .slice()
+      const grouped = new Map();
+      for (const entry of entries) {
+        const key = `${entry?.textHex || ''}|${entry?.bgHex || ''}`;
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.count += 1;
+          if (entry?.textContent) existing.texts.push(String(entry.textContent));
+        } else {
+          grouped.set(key, {
+            ...entry,
+            count: 1,
+            texts: entry?.textContent ? [String(entry.textContent)] : [],
+          });
+        }
+      }
+      [...grouped.values()]
         .sort((a, b) => Number(a.ratio) - Number(b.ratio))
-        .forEach((entry, idx) => {
+        .forEach((entry) => {
           const row = document.createElement('div');
           row.className = 'hue-shift-contrast-detail-row';
           const ratioText = Number.isFinite(entry?.ratio) ? `${Number(entry.ratio).toFixed(2)}:1` : '--';
-          const shortId = String(entry?.nodeId || '').slice(-6);
+          const uniqueTexts = [...new Set(entry.texts.map((t) => String(t).trim()).filter(Boolean))];
+          const previewRaw = uniqueTexts.join(' | ');
+          const previewText = previewRaw.length > 80 ? `${previewRaw.slice(0, 80)}…` : previewRaw;
+          const countText = entry.count > 1 ? ` ×${entry.count}` : '';
 
           const icon = document.createElement('span');
           icon.className = `hue-shift-contrast-detail-icon ${entry?.aaPass ? 'hue-shift-contrast-detail-icon--pass' : 'hue-shift-contrast-detail-icon--fail'}`;
@@ -700,23 +701,33 @@ export function mountHueShift(container, options = {}) {
 
           const preview = document.createElement('span');
           preview.className = 'hue-shift-contrast-detail-preview';
+          const textHexChip = document.createElement('span');
+          textHexChip.className = 'hue-shift-contrast-hex-chip';
           const textSwatch = document.createElement('span');
           textSwatch.className = 'hue-shift-contrast-detail-swatch';
           textSwatch.title = `Text ${entry?.textHex || ''}`;
           textSwatch.style.backgroundColor = entry?.textHex || 'transparent';
+          textHexChip.appendChild(textSwatch);
+          textHexChip.append(` ${entry?.textHex || '--'}`);
+
+          const bgHexChip = document.createElement('span');
+          bgHexChip.className = 'hue-shift-contrast-hex-chip';
           const bgSwatch = document.createElement('span');
           bgSwatch.className = 'hue-shift-contrast-detail-swatch';
           bgSwatch.title = `BG ${entry?.bgHex || ''}`;
           bgSwatch.style.backgroundColor = entry?.bgHex || 'transparent';
-          preview.appendChild(textSwatch);
-          preview.appendChild(bgSwatch);
+          bgHexChip.appendChild(bgSwatch);
+          bgHexChip.append(` ${entry?.bgHex || '--'}`);
+
+          preview.appendChild(textHexChip);
+          preview.appendChild(bgHexChip);
           row.appendChild(preview);
 
-          const label = document.createElement('span');
-          label.className = 'hue-shift-contrast-detail-label';
-          label.textContent = `${translate('actions.hueShift.color', 'Color')} ${idx + 1} (${shortId}) · ${ratioText}`;
-          label.title = translate('actions.hueShift.copyContrastRatio', 'Click to copy contrast ratio');
-          label.tabIndex = 0;
+          const ratioEl = document.createElement('span');
+          ratioEl.className = 'hue-shift-contrast-ratio-value';
+          ratioEl.textContent = ratioText;
+          ratioEl.title = translate('actions.hueShift.copyContrastRatio', 'Click to copy contrast ratio');
+          ratioEl.tabIndex = 0;
           const copyContrastRatio = () => {
             if (ratioText === '--') return;
             const copyText = ratioText;
@@ -749,14 +760,24 @@ export function mountHueShift(container, options = {}) {
               temp.remove();
             }
           };
-          label.addEventListener('click', copyContrastRatio);
-          label.addEventListener('keydown', (event) => {
+          ratioEl.addEventListener('click', copyContrastRatio);
+          ratioEl.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
               copyContrastRatio();
             }
           });
-          row.appendChild(label);
+          row.appendChild(ratioEl);
+
+          const textPreviewEl = document.createElement('span');
+          textPreviewEl.className = 'hue-shift-contrast-text-preview';
+          textPreviewEl.textContent = previewText ? `"${previewText}"` : '';
+          row.appendChild(textPreviewEl);
+
+          const countEl = document.createElement('span');
+          countEl.className = 'hue-shift-contrast-count';
+          countEl.textContent = countText;
+          row.appendChild(countEl);
 
           contrastDetailsEl.appendChild(row);
         });

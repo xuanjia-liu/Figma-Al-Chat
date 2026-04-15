@@ -12417,6 +12417,7 @@ figma.ui.onmessage = async (msg: {
         aaPass: boolean;
         textHex: string;
         bgHex: string;
+        textContent: string;
       }> = [];
 
       for (const nodeId of requestedIds) {
@@ -12434,6 +12435,7 @@ figma.ui.onmessage = async (msg: {
           aaPass: ratio >= 4.5,
           textHex: rgbToHex(effectiveFg.r, effectiveFg.g, effectiveFg.b).toUpperCase(),
           bgHex: rgbToHex(bgColor.r, bgColor.g, bgColor.b).toUpperCase(),
+          textContent: String(node.characters || ''),
         });
       }
 
