@@ -12972,6 +12972,45 @@ figma.ui.onmessage = async (msg: {
         };
       };
 
+      // Single text in auto layout: use max(measured, text box) so render-bounds–tight boxes
+      // do not shrink the wrapper below the text layer width (avoids unwanted reflow).
+      const applySingleTextAutoLayoutDimensions = (
+        frame: FrameNode,
+        textNode: TextNode,
+        measuredBounds: { width: number; height: number }
+      ) => {
+        const boxW = Math.max(1, measuredBounds.width, textNode.width);
+        const boxH = Math.max(1, measuredBounds.height, textNode.height);
+        const pl = frame.paddingLeft || 0;
+        const pr = frame.paddingRight || 0;
+        const pt = frame.paddingTop || 0;
+        const pb = frame.paddingBottom || 0;
+        const lm = frame.layoutMode;
+        if (lm === 'VERTICAL') {
+          frame.counterAxisSizingMode = 'FIXED';
+          frame.primaryAxisSizingMode = 'AUTO';
+          const outerW = boxW + pl + pr;
+          const outerH = Math.max(frame.height, boxH + pt + pb);
+          frame.resize(outerW, outerH);
+          if ('layoutAlign' in textNode) textNode.layoutAlign = 'STRETCH';
+        } else if (lm === 'HORIZONTAL') {
+          frame.primaryAxisSizingMode = 'FIXED';
+          frame.counterAxisSizingMode = 'AUTO';
+          const outerW = Math.max(frame.width, boxW + pl + pr);
+          const outerH = Math.max(frame.height, boxH + pt + pb);
+          frame.resize(outerW, outerH);
+          if ('layoutGrow' in textNode) textNode.layoutGrow = 1;
+        } else {
+          return;
+        }
+        if ('layoutSizingHorizontal' in textNode) {
+          try { (textNode as any).layoutSizingHorizontal = 'FIXED'; } catch (_e) { /* ignore */ }
+        }
+        if ('layoutSizingVertical' in textNode) {
+          try { (textNode as any).layoutSizingVertical = 'FIXED'; } catch (_e) { /* ignore */ }
+        }
+      };
+
       // Helper to apply smart auto layout settings
       const applySmartAutoLayout = (frame: FrameNode, direction?: 'HORIZONTAL' | 'VERTICAL') => {
         let mode: 'HORIZONTAL' | 'VERTICAL' = direction || 'VERTICAL';
@@ -13056,6 +13095,14 @@ figma.ui.onmessage = async (msg: {
         frame.counterAxisAlignItems = 'MIN';
 
         console.log(`[applySmartAutoLayout] Applied to ${frame.name}: mode=${mode}, gap=${gap}, padding=[${paddingTop}, ${paddingRight}, ${paddingBottom}, ${paddingLeft}]`);
+
+        if (sortedChildren.length === 1 && sortedChildren[0].type === 'TEXT') {
+          applySingleTextAutoLayoutDimensions(
+            frame,
+            sortedChildren[0] as TextNode,
+            getNodesBounds([sortedChildren[0]])
+          );
+        }
       };
 
       // Helper to detect layout direction for a group of nodes
@@ -13348,28 +13395,18 @@ figma.ui.onmessage = async (msg: {
           frame.primaryAxisAlignItems = 'MIN';
           frame.counterAxisAlignItems = 'MIN';
 
-          // Preserve multiline wrapping when a single text layer is wrapped into auto layout.
-          // Without this, the new wrapper hugs the text width and the text can collapse to one line.
-          if (sortedNodes.length === 1 && sortedNodes[0].type === 'TEXT') {
-            const textNode = sortedNodes[0] as TextNode;
-            const originalWidth = Math.max(bounds.width, 1);
-            const currentHeight = Math.max(frame.height, 1);
-            if (direction === 'VERTICAL') {
-              frame.counterAxisSizingMode = 'FIXED';
-              frame.resize(originalWidth, currentHeight);
-              if ('layoutAlign' in textNode) textNode.layoutAlign = 'STRETCH';
-            } else {
-              frame.primaryAxisSizingMode = 'FIXED';
-              frame.resize(originalWidth, currentHeight);
-              if ('layoutGrow' in textNode) textNode.layoutGrow = 1;
-            }
-          }
-
           // Set padding with the relative offset included
           frame.paddingTop = relativeOffsetTop;
           frame.paddingLeft = relativeOffsetLeft;
           frame.paddingRight = 0;
           frame.paddingBottom = 0;
+
+          // Preserve text box size when a single text layer is wrapped into auto layout.
+          // Without this, tight render bounds or hug sizing can make the wrapper narrower than the text frame.
+          // Run after padding so fixed width still fits the text in the content box.
+          if (sortedNodes.length === 1 && sortedNodes[0].type === 'TEXT') {
+            applySingleTextAutoLayoutDimensions(frame, sortedNodes[0] as TextNode, bounds);
+          }
 
           console.log(`[wrapNodes] ${name}: Applied paddingTop=${relativeOffsetTop}, paddingLeft=${relativeOffsetLeft}`);
         }
@@ -18437,12 +18474,18 @@ figma.ui.onmessage = async (msg: {
               const wrapName = (cmd.name && String(cmd.name).trim()) || defaultWrapName(wrapperKind);
 
               if (modeRaw === 'each') {
+                const nodesToWrap = ewNodes.filter(n => !n.removed && !n.locked);
+                const allShareSameParent =
+                  nodesToWrap.length > 1 &&
+                  nodesToWrap.every(n => n.parent === nodesToWrap[0].parent);
+                const useSequenceNames = allShareSameParent && nodesToWrap.length > 1;
                 const out: SceneNode[] = [];
-                for (let i = 0; i < ewNodes.length; i++) {
-                  const n = ewNodes[i];
+                let sequenceIndex = 0;
+                for (const n of ewNodes) {
                   if (n.removed || n.locked) continue;
+                  sequenceIndex++;
                   const targetParent = pickTargetParent(n);
-                  const nm = ewNodes.length > 1 ? `${wrapName} ${i + 1}` : wrapName;
+                  const nm = useSequenceNames ? `${wrapName} ${sequenceIndex}` : wrapName;
                   if (wrapperKind === 'group') {
                     try {
                       const group = figma.group([n], targetParent);
@@ -18457,6 +18500,13 @@ figma.ui.onmessage = async (msg: {
                     const frame = wrapNodesInAutoLayoutFrame([n], targetParent, nm);
                     if (dir) applySmartAutoLayout(frame, dir);
                     applyWrapToAutoLayoutFrame(frame);
+                    if (frame.children.length === 1 && frame.children[0].type === 'TEXT') {
+                      applySingleTextAutoLayoutDimensions(
+                        frame,
+                        frame.children[0] as TextNode,
+                        getNodesBounds([frame.children[0]])
+                      );
+                    }
                     out.push(frame);
                   }
                 }
@@ -18476,9 +18526,7 @@ figma.ui.onmessage = async (msg: {
 
                 for (const [targetParent, nodesForParent] of groupedByParent.entries()) {
                   if (nodesForParent.length === 0) continue;
-                  const nm = groupedByParent.size > 1
-                    ? `${wrapName} ${out.length + 1}`
-                    : wrapName;
+                  const nm = wrapName;
 
                   if (wrapperKind === 'group') {
                     try {
@@ -18494,6 +18542,13 @@ figma.ui.onmessage = async (msg: {
                     const frame = wrapNodesInAutoLayoutFrame(nodesForParent, targetParent, nm);
                     if (dir) applySmartAutoLayout(frame, dir);
                     applyWrapToAutoLayoutFrame(frame);
+                    if (frame.children.length === 1 && frame.children[0].type === 'TEXT') {
+                      applySingleTextAutoLayoutDimensions(
+                        frame,
+                        frame.children[0] as TextNode,
+                        getNodesBounds([frame.children[0]])
+                      );
+                    }
                     out.push(frame);
                   }
                 }
