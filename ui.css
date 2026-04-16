@@ -8197,8 +8197,17 @@
       outline-offset: 2px;
     }
 
+    @property --chat-input-beam-angle {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
+
     .chat-input-container {
       position: relative;
+      --chat-input-beam-color: var(--accent);
+      --chat-input-beam-tail: color-mix(in srgb, var(--chat-input-beam-color) 32%, transparent);
+      --chat-input-beam-glow: color-mix(in srgb, var(--chat-input-beam-color) 40%, transparent);
       display: flex;
       flex-direction: column;
       gap: var(--space-md);
@@ -8223,6 +8232,42 @@
         gap 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 0.2s ease-in-out;
       overflow: visible;
+    }
+
+    .chat-input-container::before {
+      content: "";
+      position: absolute;
+      inset: -1.25px;
+      border-radius: inherit;
+      pointer-events: none;
+      padding: 1.4px;
+      opacity: 0;
+      background:
+        conic-gradient(from var(--chat-input-beam-angle),
+          transparent 0deg 318deg,
+          var(--chat-input-beam-tail) 334deg,
+          var(--chat-input-beam-color) 351deg,
+          var(--chat-input-beam-tail) 360deg);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask-composite: exclude;
+      filter: saturate(1.2) brightness(1.3);
+      transition: opacity 180ms ease;
+    }
+
+    .chat-input-container::after {
+      content: "";
+      position: absolute;
+      inset: -1px;
+      border-radius: calc(var(--radius-lg) + 1px);
+      pointer-events: none;
+      opacity: 0;
+      background:
+        radial-gradient(ellipse 110px 28px at 75% -4%, var(--chat-input-beam-glow), transparent),
+        radial-gradient(ellipse 120px 24px at 74% 102%, color-mix(in srgb, var(--chat-input-beam-color) 30%, transparent), transparent),
+        radial-gradient(ellipse 32px 56px at 100% 30%, color-mix(in srgb, var(--chat-input-beam-color) 24%, transparent), transparent);
+      transition: opacity 220ms ease;
     }
 
     /* min-width: 720px — chat input wide inset */
@@ -8260,6 +8305,43 @@
 
     .chat-input-container:focus-within {
       box-shadow: var(--shadow-accent);
+    }
+
+    .chat-input-container:focus-within::before {
+      opacity: 1;
+      animation: chat-input-border-beam 1.96s linear infinite, chat-input-beam-hue 2.4s linear infinite;
+    }
+
+    .chat-input-container:focus-within::after {
+      opacity: 1;
+      animation: chat-input-beam-hue 2.4s linear infinite;
+    }
+
+    @keyframes chat-input-border-beam {
+      to {
+        --chat-input-beam-angle: 360deg;
+      }
+    }
+
+    @keyframes chat-input-beam-hue {
+      0% {
+        filter: hue-rotate(-15deg) saturate(1.2) brightness(1.25);
+      }
+
+      50% {
+        filter: hue-rotate(15deg) saturate(1.3) brightness(1.35);
+      }
+
+      100% {
+        filter: hue-rotate(-15deg) saturate(1.2) brightness(1.25);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chat-input-container:focus-within::before,
+      .chat-input-container:focus-within::after {
+        animation: none;
+      }
     }
 
     body.ai-off-mode .chat-container,
@@ -9892,6 +9974,10 @@
       box-shadow: var(--shadow-accent-agent);
     }
 
+    body.agent-mode .chat-input-container {
+      --chat-input-beam-color: var(--accent-agent);
+    }
+
     body.agent-mode .chat-send-btn {
       background: var(--accent-gradient-agent);
     }
@@ -9909,6 +9995,10 @@
     body.audit-mode .chat-input-container:hover,
     body.audit-mode .chat-input-container:focus-within {
       box-shadow: var(--shadow-accent-audit);
+    }
+
+    body.audit-mode .chat-input-container {
+      --chat-input-beam-color: var(--accent-audit);
     }
 
     body.audit-mode .chat-send-btn {
