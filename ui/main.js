@@ -9629,6 +9629,7 @@ Rules:
         const nameVariants = getExactTranslationVariantsForSearch(task.name || '');
         const descVariants = getExactTranslationVariantsForSearch(task.desc || '');
         const helpVariants = getExactTranslationVariantsForSearch(task.help || '');
+        const keywordVariants = getExactTranslationVariantsForSearch(task.searchKeywords || '');
         const promptLower = (task.prompt || '').toLowerCase();
 
         let score = 0;
@@ -9646,6 +9647,11 @@ Rules:
         }
 
         if (helpVariants.some(v => String(v).toLowerCase().includes(qLower))) {
+          score += 5;
+          matched = true;
+        }
+
+        if (keywordVariants.some(v => String(v).toLowerCase().includes(qLower))) {
           score += 5;
           matched = true;
         }

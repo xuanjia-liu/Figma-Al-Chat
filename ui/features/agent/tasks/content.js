@@ -478,6 +478,7 @@ export const accessibilityQualityTasks = [
           prompt: '',
           askMode: true,
           help: 'Validates WCAG AA/AAA compliance for text and background color combinations.',
+          searchKeywords: 'WCAG, color contrast, accessibility, accessblity',
           requiredContext: ContextMode.ALL,
           fields: [
             {

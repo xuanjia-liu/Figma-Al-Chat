@@ -123,6 +123,7 @@ export const stylingTasks = [
 {
           name: 'HUE shift',
           desc: 'Shift hues of selected node colors interactively',
+          searchKeywords: 'WCAG, color contrast, accessibility, accessblity',
           prompt: '',
           requiredContext: ContextMode.STYLE_ONLY,
           directAction: 'hueShift',
