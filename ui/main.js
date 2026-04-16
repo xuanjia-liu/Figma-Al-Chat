@@ -27385,6 +27385,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }));
 
       await executeCommands(commands);
+      window.dispatchEvent(new CustomEvent('hueshift-applied'));
     }
 
     async function runTextLinkColorAction(values) {

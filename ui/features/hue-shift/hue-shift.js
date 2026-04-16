@@ -2612,6 +2612,10 @@ export function mountHueShift(container, options = {}) {
     refreshContrastUI();
   });
 
+  function handleHueShiftApplied() {
+    requestContrastComputationNow();
+  }
+
   function handlePluginMessage(event) {
     const msg = event.data?.pluginMessage;
     if (!msg) return;
@@ -2718,6 +2722,7 @@ export function mountHueShift(container, options = {}) {
   window.addEventListener('message', handlePluginMessage);
   window.addEventListener('pointerup', onPointerUp);
   window.addEventListener('pointerdown', handleOutsidePointerDown);
+  window.addEventListener('hueshift-applied', handleHueShiftApplied);
 
   function handleOutsidePointerDown(event) {
     if (!settingsPopover || settingsPopover.classList.contains('hidden')) return;
@@ -2768,6 +2773,7 @@ export function mountHueShift(container, options = {}) {
     window.removeEventListener('message', handlePluginMessage);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointerdown', handleOutsidePointerDown);
+    window.removeEventListener('hueshift-applied', handleHueShiftApplied);
     container._hueShiftGetValues = null;
     if (contrastComputeTimer !== null) {
       clearTimeout(contrastComputeTimer);
