@@ -17094,6 +17094,9 @@ Generate ONLY the reply text, nothing else.`;
     let realtimePromptActionTimer = null;
     let realtimePromptActionInFlight = false;
     let realtimePromptActionQueued = false;
+    let realtimePromptActionRunId = 0;
+    let realtimePromptActionWatchdogTimer = null;
+    const REALTIME_PROMPT_ACTION_TIMEOUT_MS = 20000;
 
     // --- Multi-minimized-drawer state ---
     const minimizedDrawers = new Map(); // id -> { id, actionData, iconHtml, title, color, fieldValues, isRunning, directUIPhase, directUISections, directUIFieldValues, directUIHydratedFields }
@@ -17610,6 +17613,11 @@ Generate ONLY the reply text, nothing else.`;
         clearTimeout(realtimePromptActionTimer);
         realtimePromptActionTimer = null;
       }
+      if (realtimePromptActionWatchdogTimer) {
+        clearTimeout(realtimePromptActionWatchdogTimer);
+        realtimePromptActionWatchdogTimer = null;
+      }
+      realtimePromptActionRunId += 1;
       realtimePromptActionInFlight = false;
       realtimePromptActionQueued = false;
     }
@@ -17622,7 +17630,18 @@ Generate ONLY the reply text, nothing else.`;
         return;
       }
 
+      const runId = ++realtimePromptActionRunId;
       realtimePromptActionInFlight = true;
+      if (realtimePromptActionWatchdogTimer) {
+        clearTimeout(realtimePromptActionWatchdogTimer);
+      }
+      realtimePromptActionWatchdogTimer = setTimeout(() => {
+        if (!realtimePromptActionInFlight || runId !== realtimePromptActionRunId) return;
+        // Recover from rare stuck runs so users don't need to reopen quick action.
+        realtimePromptActionInFlight = false;
+        realtimePromptActionQueued = true;
+        scheduleRealtimePromptAction(0);
+      }, REALTIME_PROMPT_ACTION_TIMEOUT_MS);
       try {
         const action = currentPromptAction;
         const values = getPromptFieldValues();
@@ -17630,6 +17649,13 @@ Generate ONLY the reply text, nothing else.`;
       } catch (error) {
         console.warn('Realtime prompt action failed:', error);
       } finally {
+        if (realtimePromptActionWatchdogTimer) {
+          clearTimeout(realtimePromptActionWatchdogTimer);
+          realtimePromptActionWatchdogTimer = null;
+        }
+        if (runId !== realtimePromptActionRunId) {
+          return;
+        }
         realtimePromptActionInFlight = false;
         if (realtimePromptActionQueued) {
           realtimePromptActionQueued = false;
