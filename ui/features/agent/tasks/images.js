@@ -356,7 +356,8 @@ export const quickCreateImageTasks = [
           name: 'Perspective tool',
           desc: 'Warp an image onto a four-corner target with perspective.',
           help:
-            'Perspective warp: map an image to four corners (image to 4-point vector). Keywords: perspective, image warp, distort, mockup.',
+            'Perspective warp: map an image to four corners (image to 4-point vector).',
+          searchKeywords: 'perspective, image warp, distort, mockup',
           directAction: 'imageTo4PointVector',
           fields: [
             {
