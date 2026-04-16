@@ -701,6 +701,14 @@ export function mountHueShift(container, options = {}) {
     });
   }
 
+  function syncWheelSizeFromMarkedTexts() {
+    const nextMode = contrastBoundTextNodeIds.length > 0 ? 'small' : 'medium';
+    if (wheelSizeMode === nextMode) return;
+    wheelSizeMode = nextMode;
+    updateWheelSizeControls();
+    requestAnimationFrame(() => initWheel());
+  }
+
   function getContrastTargetNodeIds() {
     if (contrastBoundTextNodeIds.length > 0) return [...contrastBoundTextNodeIds];
     if (contrastAutoTextNodeIds.length > 0) return [...contrastAutoTextNodeIds];
@@ -2599,6 +2607,7 @@ export function mountHueShift(container, options = {}) {
   contrastClearBtn?.addEventListener('click', () => {
     contrastBoundTextNodeIds = [];
     contrastLatestResult = null;
+    syncWheelSizeFromMarkedTexts();
     requestAutoContrastTextSelection();
     refreshContrastUI();
   });
@@ -2646,6 +2655,7 @@ export function mountHueShift(container, options = {}) {
       } else {
         contrastLatestResult = null;
       }
+      syncWheelSizeFromMarkedTexts();
       refreshContrastUI();
       return;
     }
@@ -2675,6 +2685,7 @@ export function mountHueShift(container, options = {}) {
             }
           }
         }
+        syncWheelSizeFromMarkedTexts();
       }
       if (msg.requestId === pendingContrastAutoSelectionRequestId) {
         contrastSelectedTextNodeIds = ids;
