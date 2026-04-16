@@ -299,14 +299,24 @@ export function createPromptDrawerHelpers({
 
       if (el.classList.contains('prompt-color-picker')) {
         const selectedSourceRaw = el.closest('.prompt-color-input-wrapper')?.dataset.selectedSource;
+        let nextValue;
         if (selectedSourceRaw) {
           try {
-            values[key] = JSON.parse(selectedSourceRaw);
+            nextValue = JSON.parse(selectedSourceRaw);
           } catch (error) {
-            values[key] = el.value;
+            nextValue = el.value;
           }
         } else {
-          values[key] = el.value;
+          nextValue = el.value;
+        }
+        if (values[key] !== undefined) {
+          if (Array.isArray(values[key])) {
+            values[key].push(nextValue);
+          } else {
+            values[key] = [values[key], nextValue];
+          }
+        } else {
+          values[key] = nextValue;
         }
         return;
       }

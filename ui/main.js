@@ -5261,6 +5261,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let colorPickMenuSearchOpen = false;
     let colorPickMenuLibraryLoading = false;
     let colorPickMenuLibraryError = '';
+    let colorPickMenuSelectedOptionId = '';
+    let colorPickMenuSelectedTarget = null;
     let colorSwapLocalSourcesCache = null;
     let colorSwapLibrarySourcesCache = null;
     let colorSwapLocalSourcesPromise = null;
@@ -5323,6 +5325,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       normalized.groupLibrary = option?.groupLibrary || normalized.libraryName || '';
       normalized.groupCollection = option?.groupCollection || normalized.collectionName || '';
       normalized.groupPathPrefix = option?.groupPathPrefix || getColorOptionPathPrefix(normalized.name);
+      normalized.sourceType = option?.sourceType || normalized.sourceType || '';
+      normalized.sourceBadgeLabel = option?.sourceBadgeLabel || normalized.sourceBadgeLabel || '';
       normalized.previewRgba = normalizeColorPreviewRgba(option?.previewRgba || option?.rgba || normalized.previewRgba);
       normalized.previewCss = option?.previewCss || rgbaToCssColor(normalized.previewRgba, normalized.hex);
       return normalized;
@@ -5370,7 +5374,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
     function getColorOptionId(option) {
       if (!option) return '';
-      if (option.kind === 'custom') return `custom:${option.hex}`;
+      if (option.kind === 'custom') return `custom:${option.hex}:${option.sourceType || 'any'}`;
       if (option.kind === 'paintStyle') return `paintStyle:${option.scope}:${option.id || option.key || option.name || option.hex}`;
       if (option.kind === 'colorVariable') return `colorVariable:${option.scope}:${option.id || option.key || option.name || option.hex}`;
       return `${option.kind || 'unknown'}:${option.hex || option.name || ''}`;
@@ -5389,8 +5393,21 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       colorPickMenuSearchOpen = false;
       colorPickMenuLibraryLoading = false;
       colorPickMenuLibraryError = '';
+      colorPickMenuSelectedOptionId = '';
+      colorPickMenuSelectedTarget = null;
       document.removeEventListener('mousedown', handleColorMenuOutside);
       document.removeEventListener('keydown', handleColorMenuKeydown);
+    }
+
+    function isColorPickOptionSelected(option) {
+      if (!option) return false;
+      const optionId = getColorOptionId(option);
+      if (optionId && optionId === colorPickMenuSelectedOptionId) return true;
+      if (!colorPickMenuSelectedTarget) return false;
+      const selectedHex = normalizeSelectionHexColor(colorPickMenuSelectedTarget.hex || '');
+      const optionHex = normalizeSelectionHexColor(option.hex || '');
+      if (selectedHex && optionHex && selectedHex === optionHex) return true;
+      return false;
     }
 
     function handleColorMenuOutside(event) {
@@ -5529,16 +5546,45 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     }
 
     function renderColorPickOption(option, index) {
+      const isSelected = isColorPickOptionSelected(option);
+      const computedCustomBadge = option.kind === 'custom'
+        ? (option.sourceBadgeLabel || (
+          option.sourceType === 'styleLinked'
+            ? 'Style-linked'
+            : option.sourceType === 'variableLinked'
+              ? 'Variable-linked'
+              : option.sourceType === 'flat'
+                ? 'Flat color'
+                : ''
+        ))
+        : '';
+      const computedCustomBadgeType = option.kind === 'custom'
+        ? (option.sourceType === 'styleLinked'
+          ? 'style-linked'
+          : option.sourceType === 'variableLinked'
+            ? 'variable-linked'
+            : option.sourceType === 'flat'
+              ? 'flat'
+              : '')
+        : '';
       return `
-        <button type="button" class="color-pick-option" data-index="${index}">
+        <button type="button" class="color-pick-option${isSelected ? ' selected' : ''}" data-index="${index}" aria-pressed="${isSelected ? 'true' : 'false'}">
           <span class="color-swatch">
             <span class="color-swatch-fill" style="background:${escapeHtmlAttr(option.previewCss || option.hex || '#FFFFFF')};"></span>
           </span>
           <div class="color-pick-meta">
-            <span class="color-pick-name">${escapeHtml(option.name || option.hex || 'Unnamed color')}</span>
+            <span class="color-pick-name-row">
+              <span class="color-pick-name">${escapeHtml(option.name || option.hex || 'Unnamed color')}</span>
+              ${computedCustomBadge ? `<span class="color-pick-link-indicator${computedCustomBadgeType ? ` color-pick-link-indicator--${computedCustomBadgeType}` : ''}">${escapeHtml(computedCustomBadge)}</span>` : ''}
+            </span>
             <span class="color-pick-source">${escapeHtml(option.subtitle || option.label || '')}</span>
           </div>
           <span class="color-pick-hex">${escapeHtml(option.hex || '')}</span>
+          <span class="color-pick-selected-check" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </span>
         </button>
       `;
     }
@@ -5708,6 +5754,21 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       closeColorPickMenu();
       if (!options || options.length === 0) return;
 
+      let selectedOptionId = '';
+      let selectedTarget = null;
+      try {
+        const wrapper = anchorEl?.closest?.('.prompt-color-input-wrapper');
+        const selectedSourceRaw = wrapper?.dataset?.selectedSource;
+        const selectedSource = selectedSourceRaw ? JSON.parse(selectedSourceRaw) : null;
+        if (selectedSource) {
+          selectedTarget = enhanceColorOption(selectedSource);
+          selectedOptionId = getColorOptionId(selectedTarget);
+        }
+      } catch (_error) {
+        selectedOptionId = '';
+        selectedTarget = null;
+      }
+
       const menu = document.createElement('div');
       menu.className = 'color-pick-menu';
       colorPickMenuOptions = Array.isArray(options) ? options.slice() : [];
@@ -5715,6 +5776,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       colorPickMenuViewMode = 'list';
       colorPickMenuLibraryLoading = false;
       colorPickMenuLibraryError = '';
+      colorPickMenuSelectedOptionId = selectedOptionId;
+      colorPickMenuSelectedTarget = selectedTarget;
       renderColorPickMenu(menu, colorPickMenuOptions);
 
       document.body.appendChild(menu);
@@ -5765,15 +5828,25 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       return value.toUpperCase();
     }
 
-    function collectSelectionColors(selection) {
+    function collectSelectionColors(selection, options = {}) {
       if (!Array.isArray(selection)) return [];
+      const includeSourceBadges = options?.includeSourceBadges === true;
 
       const colorMap = new Map();
 
-      const addColor = (hex, sourceLabel, previewRgba = null) => {
+      const resolveCustomSourceType = ({ styleLinked = false, variableLinked = false } = {}) => {
+        if (!includeSourceBadges) return { sourceType: 'flat', sourceBadgeLabel: '' };
+        if (styleLinked) return { sourceType: 'styleLinked', sourceBadgeLabel: 'Style-linked' };
+        if (variableLinked) return { sourceType: 'variableLinked', sourceBadgeLabel: 'Variable-linked' };
+        return { sourceType: 'flat', sourceBadgeLabel: 'Flat color' };
+      };
+
+      const addColor = (hex, sourceLabel, previewRgba = null, sourceMeta = null) => {
         const normalized = normalizeSelectionHexColor(hex);
         if (!normalized) return;
-        const entry = colorMap.get(normalized) || { hex: normalized, sources: [], count: 0, previewRgba: null };
+        const { sourceType = 'flat', sourceBadgeLabel = 'Flat color' } = sourceMeta || {};
+        const mapKey = `${normalized}::${sourceType}`;
+        const entry = colorMap.get(mapKey) || { hex: normalized, sourceType, sourceBadgeLabel, sources: [], count: 0, previewRgba: null };
         entry.count += 1;
         if (sourceLabel && entry.sources.length < 2) {
           entry.sources.push(sourceLabel);
@@ -5781,16 +5854,16 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         if (!entry.previewRgba && previewRgba) {
           entry.previewRgba = normalizeColorPreviewRgba(previewRgba);
         }
-        colorMap.set(normalized, entry);
+        colorMap.set(mapKey, entry);
       };
 
-      const processPaint = (paint, nodeLabel, kind) => {
+      const processPaint = (paint, nodeLabel, kind, sourceMeta) => {
         if (!paint || paint.visible === false) return;
         const baseLabel = `${kind} • ${nodeLabel}`;
 
         if (paint.type === 'SOLID' && paint.color) {
           const baseColor = hexToRgbObject(paint.color);
-          addColor(paint.color, baseLabel, baseColor ? { ...baseColor, a: paint.opacity ?? 1 } : null);
+          addColor(paint.color, baseLabel, baseColor ? { ...baseColor, a: paint.opacity ?? 1 } : null, sourceMeta);
           return;
         }
 
@@ -5802,9 +5875,32 @@ import { optimize as optimizeSvg } from 'svgo/browser';
               ? `${baseLabel} (stop ${Math.round(stop.position * 100)}%)`
               : baseLabel;
             const stopColor = hexToRgbObject(stop.color);
-            addColor(stop.color, stopLabel, stopColor ? { ...stopColor, a: stop.opacity ?? 1 } : null);
+            const stopVariableLinked = includeSourceBadges && stop?.boundVariables?.color?.type === 'VARIABLE_ALIAS' && !!stop?.boundVariables?.color?.id;
+            const stopSourceMeta = stopVariableLinked
+              ? resolveCustomSourceType({ styleLinked: false, variableLinked: true })
+              : sourceMeta;
+            addColor(stop.color, stopLabel, stopColor ? { ...stopColor, a: stop.opacity ?? 1 } : null, stopSourceMeta);
           });
         }
+      };
+
+      const processEffect = (effect, nodeLabel) => {
+        if (!effect || effect.visible === false) return;
+        if (effect.type !== 'DROP_SHADOW' && effect.type !== 'INNER_SHADOW') return;
+        if (!effect.color) return;
+        const effectColor = effect.color;
+        const effectHex = rgbToHex(effectColor.r, effectColor.g, effectColor.b);
+        const shadowKind = effect.type === 'INNER_SHADOW' ? 'Inner shadow' : 'Drop shadow';
+        const effectSourceMeta = resolveCustomSourceType({
+          styleLinked: false,
+          variableLinked: includeSourceBadges && effect?.boundVariables?.color?.type === 'VARIABLE_ALIAS' && !!effect?.boundVariables?.color?.id
+        });
+        addColor(effectHex, `${shadowKind} • ${nodeLabel}`, {
+          r: effectColor.r,
+          g: effectColor.g,
+          b: effectColor.b,
+          a: effectColor.a ?? 1
+        }, effectSourceMeta);
       };
 
       const walk = (node, path = '') => {
@@ -5815,17 +5911,35 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const nodeLabel = path ? `${path} › ${label}` : label;
 
         if (Array.isArray(node.fillsDetailed) && node.fillsDetailed.length > 0) {
-          node.fillsDetailed.forEach(fill => processPaint(fill, nodeLabel, 'Fill'));
+          const fillSourceMeta = resolveCustomSourceType({
+            styleLinked: !!node.fillStyleId,
+            variableLinked: false
+          });
+          node.fillsDetailed.forEach((fill) => {
+            const variableLinked = includeSourceBadges && fill?.boundVariables?.color?.type === 'VARIABLE_ALIAS' && !!fill?.boundVariables?.color?.id;
+            processPaint(fill, nodeLabel, 'Fill', variableLinked ? resolveCustomSourceType({ styleLinked: false, variableLinked: true }) : fillSourceMeta);
+          });
         } else if (node.fills) {
-          addColor(node.fills, `Fill • ${nodeLabel}`);
+          addColor(node.fills, `Fill • ${nodeLabel}`, null, resolveCustomSourceType({ styleLinked: !!node.fillStyleId, variableLinked: false }));
         }
 
         if (Array.isArray(node.strokesDetailed) && node.strokesDetailed.length > 0) {
-          node.strokesDetailed.forEach(stroke => processPaint(stroke, nodeLabel, 'Stroke'));
+          const strokeSourceMeta = resolveCustomSourceType({
+            styleLinked: !!node.strokeStyleId,
+            variableLinked: false
+          });
+          node.strokesDetailed.forEach((stroke) => {
+            const variableLinked = includeSourceBadges && stroke?.boundVariables?.color?.type === 'VARIABLE_ALIAS' && !!stroke?.boundVariables?.color?.id;
+            processPaint(stroke, nodeLabel, 'Stroke', variableLinked ? resolveCustomSourceType({ styleLinked: false, variableLinked: true }) : strokeSourceMeta);
+          });
         } else if (node.strokes) {
-          addColor(node.strokes, `Stroke • ${nodeLabel}`);
+          addColor(node.strokes, `Stroke • ${nodeLabel}`, null, resolveCustomSourceType({ styleLinked: !!node.strokeStyleId, variableLinked: false }));
         } else if (node.strokeColor) {
-          addColor(node.strokeColor, `Stroke • ${nodeLabel}`);
+          addColor(node.strokeColor, `Stroke • ${nodeLabel}`, null, resolveCustomSourceType({ styleLinked: !!node.strokeStyleId, variableLinked: false }));
+        }
+
+        if (Array.isArray(node.effects) && node.effects.length > 0) {
+          node.effects.forEach((effect) => processEffect(effect, nodeLabel));
         }
 
         if (Array.isArray(node.children)) {
@@ -5848,6 +5962,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             label: label || '',
             subtitle: label || 'Selection color',
             count: entry.count,
+            sourceType: entry.sourceType || 'flat',
+            sourceBadgeLabel: entry.sourceBadgeLabel || '',
             previewRgba: entry.previewRgba,
             tab: 'custom'
           });
@@ -6186,7 +6302,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           return;
         }
 
-        const customOptions = collectSelectionColors(selectionData);
+        let customOptions = collectSelectionColors(selectionData, { includeSourceBadges: false });
         const colorOptions = mergeColorMenuOptions(customOptions);
         if (colorOptions.length === 0) {
           showToast('Selected element has no visible fill or stroke colors', 'error');
@@ -6210,14 +6326,34 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         });
         setColorPickMenuState({ libraryLoading: true, libraryError: '' });
 
+        const rebuildColorPickOptions = (localOptions = null, libraryOptions = null) => {
+          const resolvedLocalOptions = Array.isArray(localOptions) ? localOptions : (colorSwapLocalSourcesCache || []);
+          const resolvedLibraryOptions = Array.isArray(libraryOptions) ? libraryOptions : (colorSwapLibrarySourcesCache || []);
+          const filteredLibraryOptions = fieldKey === 'fromColor'
+            ? filterLibraryOptionsForSelection(mergeColorMenuOptions(resolvedLocalOptions, resolvedLibraryOptions), selectionData)
+            : mergeColorMenuOptions(resolvedLocalOptions, resolvedLibraryOptions);
+          return mergeColorMenuOptions(customOptions, filteredLibraryOptions);
+        };
+
+        // Defer expensive linked-source badge detection until after initial paint.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (!colorPickMenuEl) return;
+            try {
+              customOptions = collectSelectionColors(selectionData, { includeSourceBadges: true });
+              setColorPickMenuState({
+                options: rebuildColorPickOptions(),
+              });
+            } catch (error) {
+              console.warn('Failed to load custom color source badges', error);
+            }
+          });
+        });
+
         Promise.all([loadLocalColorSwapSources(), loadLibraryColorSwapSources()])
           .then(([localOptions, libraryOptions]) => {
-            const filteredLibraryOptions = fieldKey === 'fromColor'
-              ? filterLibraryOptionsForSelection(mergeColorMenuOptions(localOptions, libraryOptions), selectionData)
-              : mergeColorMenuOptions(localOptions, libraryOptions);
-            const nextOptions = mergeColorMenuOptions(customOptions, filteredLibraryOptions);
             setColorPickMenuState({
-              options: nextOptions,
+              options: rebuildColorPickOptions(localOptions, libraryOptions),
               libraryLoading: false,
               libraryError: ''
             });
@@ -10023,7 +10159,7 @@ Rules:
             if (NON_AI_LOCAL_TASKS.has(actionName) && actionName !== 'Smart rename') {
               closeCommandsDrawer();
               recordQuickActionUsage(actionName);
-              await runLocalDeterministicQuickAction(actionName, {});
+              await runLocalDeterministicQuickAction(actionName, {}, { name: actionName, icon: actionIcon });
               return;
             }
 
@@ -10053,7 +10189,7 @@ Rules:
               closeCommandsDrawer();
               recordQuickActionUsage(actionName);
               setMode('agent');
-              await runDirectAction(task.directAction, {}, task);
+              await runDirectAction(task.directAction, {}, { ...task, icon: actionIcon });
               return;
             }
 
@@ -18709,6 +18845,27 @@ Generate ONLY the reply text, nothing else.`;
       openCommandsDrawer({ keepSelection: true, category: targetCategory });
     }
 
+    function normalizeSwapFromColorEntries(rawValue, fallbackColor = '#3B82F6') {
+      const list = Array.isArray(rawValue) ? rawValue : [rawValue];
+      const normalized = list
+        .map((item) => normalizePromptColorSelection(item, fallbackColor))
+        .filter((item) => item && item.hex);
+      if (normalized.length > 0) return normalized;
+      return [normalizePromptColorSelection(fallbackColor, fallbackColor)];
+    }
+
+    function updateSwapFromColorEntries(mutator) {
+      if (!currentPromptAction || currentPromptAction.name !== 'Swap colors') return;
+      const currentValues = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+      const nextEntries = normalizeSwapFromColorEntries(currentValues.fromColor, '#3B82F6');
+      const mutated = typeof mutator === 'function' ? mutator(nextEntries) : nextEntries;
+      const safeEntries = Array.isArray(mutated) && mutated.length > 0
+        ? mutated
+        : [normalizePromptColorSelection('#3B82F6', '#3B82F6')];
+      const nextValues = { ...currentValues, fromColor: safeEntries };
+      renderPromptFields(currentPromptAction.fields, nextValues);
+    }
+
     const {
       syncSelectState,
       applyStyleDefaults,
@@ -19804,27 +19961,61 @@ Generate ONLY the reply text, nothing else.`;
             </div>
           `;
         } else if (field.type === 'color') {
-          // Color picker with hex input
+          const isSwapFromColorField = currentPromptAction?.name === 'Swap colors' && field.key === 'fromColor';
           const preservedColorValue = (preservedValues && preservedValues[field.key] !== undefined)
             ? preservedValues[field.key]
             : (field.default || '#3B82F6');
-          const normalizedColorValue = normalizePromptColorSelection(preservedColorValue, field.default || '#3B82F6');
-          const colorValue = normalizedColorValue.hex || '#3B82F6';
-          const colorSourceValue = serializeColorSelectionForDataset(normalizedColorValue);
-          const colorSourceBadge = getPromptColorSourceBadgeLabel(normalizedColorValue);
-          fieldHtml += `
-            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
-              <label class="prompt-field-label">${field.label}</label>
-              ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
-              <div class="prompt-color-input-wrapper" data-selected-source="${escapeHtmlAttr(colorSourceValue)}" data-selected-kind="${escapeHtmlAttr(normalizedColorValue.kind || 'custom')}">
-                <input type="color" class="prompt-color-picker" id="${fieldId}-picker" value="${colorValue}" data-field-key="${field.key}"${disabledAttr}>
-                <input type="text" class="prompt-color-hex" id="${fieldId}-hex" value="${colorValue}" placeholder="#000000" data-color-hex="${field.key}"${disabledAttr}>
+          const colorEntries = isSwapFromColorField
+            ? normalizeSwapFromColorEntries(preservedColorValue, field.default || '#3B82F6')
+            : [normalizePromptColorSelection(preservedColorValue, field.default || '#3B82F6')];
+          const addColorButtonHtml = isSwapFromColorField ? `
+            <button class="add-option-btn prompt-add-color-btn" data-add-color-field="${field.key}" title="${tu('actions.prompt.add')} ${field.label || field.key}" type="button"${disabledAttr}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span>${tu('actions.prompt.add')}</span>
+            </button>
+          ` : '';
+          const fieldHeaderHtml = isSwapFromColorField
+            ? `
+              <div class="prompt-field-label-row">
+                <label class="prompt-field-label">${field.label}</label>
+                <div class="prompt-ai-actions">${addColorButtonHtml}</div>
+              </div>
+            `
+            : `<label class="prompt-field-label">${field.label}</label>`;
+          const colorRowsHtml = colorEntries.map((entry, index) => {
+            const colorValue = entry.hex || '#3B82F6';
+            const colorSourceValue = serializeColorSelectionForDataset(entry);
+            const colorSourceBadge = getPromptColorSourceBadgeLabel(entry);
+            const showDeleteBtn = isSwapFromColorField && colorEntries.length > 1;
+            return `
+              <div class="prompt-color-input-wrapper" data-selected-source="${escapeHtmlAttr(colorSourceValue)}" data-selected-kind="${escapeHtmlAttr(entry.kind || 'custom')}">
+                <input type="color" class="prompt-color-picker" id="${fieldId}-picker-${index}" value="${colorValue}" data-field-key="${field.key}"${disabledAttr}>
+                <input type="text" class="prompt-color-hex" id="${fieldId}-hex-${index}" value="${colorValue}" placeholder="#000000" data-color-hex="${field.key}"${disabledAttr}>
                 <span class="prompt-color-source-badge"${colorSourceBadge ? '' : ' hidden'}>${escapeHtml(colorSourceBadge)}</span>
-                <button class="audit-pick-btn prompt-color-pick-btn" title="${escapeHtml(tu('actions.color.useSelectionFill'))}"${disabledAttr}>
+                <button class="audit-pick-btn prompt-color-pick-btn" title="${escapeHtml(tu('actions.color.useSelectionFill'))}" type="button"${disabledAttr}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
                   </svg>
                 </button>
+                ${showDeleteBtn ? `
+                  <button class="audit-pick-btn prompt-color-delete-btn" title="Remove color" data-remove-color-field="${field.key}" data-remove-color-index="${index}" type="button"${disabledAttr}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                ` : ''}
+              </div>
+            `;
+          }).join('');
+          fieldHtml += `
+            <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
+              ${fieldHeaderHtml}
+              ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
+              <div class="prompt-color-input-list${isSwapFromColorField ? ' prompt-color-input-list-multi' : ''}">
+                ${colorRowsHtml}
               </div>
             </div>
           `;
@@ -20426,7 +20617,26 @@ Generate ONLY the reply text, nothing else.`;
         btn.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          openAddOptionModal(btn.dataset.addFor);
+          if (btn.dataset.addColorField === 'fromColor') {
+            updateSwapFromColorEntries((entries) => [...entries, normalizePromptColorSelection('#3B82F6', '#3B82F6')]);
+            return;
+          }
+          if (btn.dataset.addFor) {
+            openAddOptionModal(btn.dataset.addFor);
+          }
+        };
+      });
+
+      promptDrawerFields.querySelectorAll('.prompt-color-delete-btn').forEach(btn => {
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const index = Number.parseInt(btn.dataset.removeColorIndex || '', 10);
+          if (!Number.isFinite(index)) return;
+          updateSwapFromColorEntries((entries) => {
+            if (!Array.isArray(entries) || entries.length <= 1) return entries;
+            return entries.filter((_, entryIndex) => entryIndex !== index);
+          });
         };
       });
 
@@ -26936,12 +27146,26 @@ Return as JSON with colors array containing objects with hierarchical names. Use
     }
 
     async function runSwapColorsAction(values, actionMeta) {
-      const fromTarget = normalizePromptColorSelection(values.fromColor || '');
+      const fromRawList = Array.isArray(values.fromColor) ? values.fromColor : [values.fromColor];
+      const fromTargets = [];
+      const fromSeen = new Set();
+      fromRawList.forEach((rawTarget) => {
+        const normalized = normalizePromptColorSelection(rawTarget || '');
+        if (!normalized?.hex) return;
+        const dedupeKey = `${normalized.kind || 'custom'}::${normalized.id || ''}::${normalized.hex}`;
+        if (fromSeen.has(dedupeKey)) return;
+        fromSeen.add(dedupeKey);
+        fromTargets.push(normalized);
+      });
       const toTarget = normalizePromptColorSelection(values.toColor || '');
       const swapMode = values.swapMode || 'replace';
 
-      if (!fromTarget?.hex || !toTarget?.hex) {
+      if (!fromTargets.length || !toTarget?.hex) {
         showToast('Please provide both From Color and To Color.', 'error');
+        return;
+      }
+      if (swapMode === 'swap' && fromTargets.length > 1) {
+        showToast('Swap mode supports only one From Color. Use Replace mode for multiple source colors.', 'error');
         return;
       }
 
@@ -26956,7 +27180,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       const includeStrokes = readSwapColorsIncludeFlag('includeStrokes', values, true);
       const includeEffects = readSwapColorsIncludeFlag('includeEffects', values, true);
 
-      const commands = selection.map(node => ({
+      const commands = selection.flatMap(node => fromTargets.map(fromTarget => ({
         action: 'swapColorTargets',
         nodeId: node.id,
         swapMode,
@@ -26965,7 +27189,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         includeGradients,
         includeStrokes,
         includeEffects
-      }));
+      })));
 
       const execResult = await executeCommands(commands);
       const success = execResult?.success || 0;
@@ -27590,8 +27814,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         title: 'No-AI Results',
         subtitle: 'Deterministic local quick action output'
       });
-      // Default policy: keep overlay hidden until user taps FAB.
-      setNoAiOverlayVisible(false);
+      const shouldAutoOpen = options.autoOpen !== false;
+      setNoAiOverlayVisible(shouldAutoOpen);
     }
 
     function openChatHistorySidebarForNoAi() {
@@ -28353,10 +28577,37 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       });
     }
 
-    async function runLocalDeterministicQuickAction(actionName, values) {
+    function formatLocalDeterministicQuickActionResultMarkdown(actionName, result) {
+      const metrics = [];
+      if (Number.isFinite(Number(result?.total))) {
+        metrics.push(`Total: ${Number(result.total)}`);
+      }
+      if (Number.isFinite(Number(result?.renamed))) {
+        metrics.push(`Renamed: ${Number(result.renamed)}`);
+      }
+      if (Number.isFinite(Number(result?.updated))) {
+        metrics.push(`Updated: ${Number(result.updated)}`);
+      }
+      if (Number.isFinite(Number(result?.skipped))) {
+        metrics.push(`Skipped: ${Number(result.skipped)}`);
+      }
+      if (Number.isFinite(Number(result?.failed))) {
+        metrics.push(`Failed: ${Number(result.failed)}`);
+      }
+
+      const lines = [`${actionName} complete.`];
+      if (metrics.length > 0) {
+        lines.push('');
+        metrics.forEach((metric) => lines.push(`- ${metric}`));
+      }
+      return lines.join('\n');
+    }
+
+    async function runLocalDeterministicQuickAction(actionName, values, actionMeta = null) {
+      let result;
       switch (actionName) {
         case 'Sequential naming':
-          return runLocalActionRequest({
+          result = await runLocalActionRequest({
             requestType: 'local-sequential-naming',
             resultType: 'local-sequential-naming-result',
             payload: {
@@ -28369,8 +28620,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Sequential naming failed', 'Please select at least one layer to rename.']
           });
+          break;
         case 'Prefix/Suffix (smart)':
-          return runLocalActionRequest({
+          result = await runLocalActionRequest({
             requestType: 'local-prefix-suffix-naming',
             resultType: 'local-prefix-suffix-naming-result',
             payload: {
@@ -28382,15 +28634,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Prefix/suffix naming failed', 'Please select at least one layer to rename.']
           });
+          break;
         case 'Clean up names':
-          return runLocalActionRequest({
+          result = await runLocalActionRequest({
             requestType: 'local-clean-up-names',
             resultType: 'local-clean-up-names-result',
             payload: {},
             errorPrefixes: ['Clean up names failed', 'Please select at least one layer to rename.']
           });
+          break;
         case 'Format sequencer':
-          return runLocalActionRequest({
+          result = await runLocalActionRequest({
             requestType: 'local-format-sequencer',
             resultType: 'local-format-sequencer-result',
             payload: {
@@ -28403,8 +28657,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Format sequencer failed', 'Please select at least one text layer.']
           });
+          break;
         case 'Add prefix/suffix':
-          return runLocalActionRequest({
+          result = await runLocalActionRequest({
             requestType: 'local-add-prefix-suffix-text',
             resultType: 'local-add-prefix-suffix-text-result',
             payload: {
@@ -28413,6 +28668,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Add prefix/suffix failed', 'Please select at least one text layer.']
           });
+          break;
         case 'Vertical text': {
           const lhRaw = values.lineHeightPx;
           const lineHeightPx = typeof lhRaw === 'number' && Number.isFinite(lhRaw) && lhRaw > 0
@@ -28421,7 +28677,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
                 const p = parseFloat(String(lhRaw ?? '').trim());
                 return Number.isFinite(p) && p > 0 ? p : 0;
               })();
-          return runLocalActionRequest({
+          result = await runLocalActionRequest({
             requestType: 'local-verticalize-text',
             resultType: 'local-verticalize-text-result',
             payload: {
@@ -28435,10 +28691,29 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             },
             errorPrefixes: ['Verticalize text failed', 'Please select at least one text layer.']
           });
+          break;
         }
         default:
           throw new Error(`Unsupported local action: ${actionName}`);
       }
+
+      if (isAiOffModeEnabled()) {
+        const md = formatLocalDeterministicQuickActionResultMarkdown(actionName, result);
+        setMode('ask');
+        addMessage('user', actionName, null, {
+          name: actionMeta?.name || actionName,
+          icon: actionMeta?.icon || ''
+        });
+        addMessage('bot', md);
+        showNoAiLocalResultCard(md, {
+          title: actionName,
+          quickActionName: actionMeta?.name || actionName,
+          quickActionIcon: actionMeta?.icon || ''
+        });
+        setNoAiOverlayVisible(true);
+      }
+
+      return result;
     }
 
     function mapQuickActionTargetLanguageToGoogleCode(label) {
@@ -29719,7 +29994,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         if (NON_AI_LOCAL_TASKS.has(action.name) && action.name !== 'Smart rename') {
           closePromptDrawer();
           closeCommandsDrawer();
-          await runLocalDeterministicQuickAction(action.name, values);
+          await runLocalDeterministicQuickAction(action.name, values, { name: action.name, icon: action.icon || '' });
           return;
         }
 
@@ -40657,7 +40932,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       if (task.directAction) {
         setMode('agent');
-        await runDirectAction(task.directAction, {}, task);
+        await runDirectAction(task.directAction, {}, { ...task, icon });
         return;
       }
 

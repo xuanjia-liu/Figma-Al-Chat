@@ -14460,14 +14460,26 @@ figma.ui.onmessage = async (msg: {
         paints: Paint[],
         from: RGBA,
         to: RGBA,
-        includeGradients: boolean
+        includeGradients: boolean,
+        sourceType?: 'flat' | 'variableLinked' | 'styleLinked',
+        currentStyleId?: string
       ): { updated: boolean; paints: Paint[]; found: boolean } => {
         let updated = false;
         let found = false;
+        const matchesSourceType = (isStyleLinked: boolean, isVariableLinked: boolean): boolean => {
+          if (!sourceType) return true;
+          if (sourceType === 'styleLinked') return isStyleLinked;
+          if (sourceType === 'variableLinked') return isVariableLinked;
+          return !isStyleLinked && !isVariableLinked;
+        };
 
         const nextPaints = paints.map((paint) => {
           if (paint.type === 'SOLID') {
             const solid = paint as SolidPaint;
+            const isStyleLinked = !!currentStyleId;
+            const colorBinding = (solid as any)?.boundVariables?.color;
+            const isVariableLinked = colorBinding?.type === 'VARIABLE_ALIAS' && !!colorBinding?.id;
+            if (!matchesSourceType(isStyleLinked, isVariableLinked)) return paint;
             if (colorsEqual(solid.color, from)) {
               found = true;
               updated = true;
@@ -14495,7 +14507,13 @@ figma.ui.onmessage = async (msg: {
           ) {
             const gradient = paint as GradientPaint;
             let stopChanged = false;
+            const isStyleLinked = !!currentStyleId;
             const newStops = gradient.gradientStops.map((stop, idx) => {
+              const colorBinding = (stop as any)?.boundVariables?.color || (gradient as any)?.boundVariables?.color;
+              const isVariableLinked = colorBinding?.type === 'VARIABLE_ALIAS' && !!colorBinding?.id;
+              if (!matchesSourceType(isStyleLinked, isVariableLinked)) {
+                return { position: stop.position, color: { ...stop.color } };
+              }
               const match = colorsEqualRGB(stop.color, from);
               if (match) {
                 found = true;
@@ -14531,15 +14549,27 @@ figma.ui.onmessage = async (msg: {
         paints: Paint[],
         a: RGBA,
         b: RGBA,
-        includeGradients: boolean
+        includeGradients: boolean,
+        sourceType?: 'flat' | 'variableLinked' | 'styleLinked',
+        currentStyleId?: string
       ): { updated: boolean; paints: Paint[]; foundA: boolean; foundB: boolean } => {
         let updated = false;
         let foundA = false;
         let foundB = false;
+        const matchesSourceType = (isStyleLinked: boolean, isVariableLinked: boolean): boolean => {
+          if (!sourceType) return true;
+          if (sourceType === 'styleLinked') return isStyleLinked;
+          if (sourceType === 'variableLinked') return isVariableLinked;
+          return !isStyleLinked && !isVariableLinked;
+        };
 
         const nextPaints = paints.map((paint) => {
           if (paint.type === 'SOLID') {
             const solid = paint as SolidPaint;
+            const isStyleLinked = !!currentStyleId;
+            const colorBinding = (solid as any)?.boundVariables?.color;
+            const isVariableLinked = colorBinding?.type === 'VARIABLE_ALIAS' && !!colorBinding?.id;
+            if (!matchesSourceType(isStyleLinked, isVariableLinked)) return paint;
             if (colorsEqual(solid.color, a)) {
               foundA = true;
               updated = true;
@@ -14575,6 +14605,12 @@ figma.ui.onmessage = async (msg: {
             const gradient = paint as GradientPaint;
             let stopChanged = false;
             const newStops = gradient.gradientStops.map((stop) => {
+              const isStyleLinked = !!currentStyleId;
+              const colorBinding = (stop as any)?.boundVariables?.color || (gradient as any)?.boundVariables?.color;
+              const isVariableLinked = colorBinding?.type === 'VARIABLE_ALIAS' && !!colorBinding?.id;
+              if (!matchesSourceType(isStyleLinked, isVariableLinked)) {
+                return { position: stop.position, color: { ...stop.color } };
+              }
               if (colorsEqualRGB(stop.color, a)) {
                 foundA = true;
                 stopChanged = true;
@@ -14611,13 +14647,25 @@ figma.ui.onmessage = async (msg: {
       const swapColorsInEffects = (
         effects: ReadonlyArray<Effect>,
         from: RGBA,
-        to: RGBA
+        to: RGBA,
+        sourceType?: 'flat' | 'variableLinked' | 'styleLinked',
+        effectStyleId?: string
       ): { updated: boolean; effects: Effect[]; found: boolean } => {
         let updated = false;
         let found = false;
+        const matchesSourceType = (isStyleLinked: boolean, isVariableLinked: boolean): boolean => {
+          if (!sourceType) return true;
+          if (sourceType === 'styleLinked') return isStyleLinked;
+          if (sourceType === 'variableLinked') return isVariableLinked;
+          return !isStyleLinked && !isVariableLinked;
+        };
         const next = effects.map((effect) => {
           if (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') {
             const shadowEffect = effect as DropShadowEffect;
+            const isStyleLinked = !!effectStyleId;
+            const colorBinding = (shadowEffect as any)?.boundVariables?.color;
+            const isVariableLinked = colorBinding?.type === 'VARIABLE_ALIAS' && !!colorBinding?.id;
+            if (!matchesSourceType(isStyleLinked, isVariableLinked)) return effect;
             if (shadowEffect.color && colorsEqualRGB(shadowEffect.color, from)) {
               found = true;
               updated = true;
@@ -14640,17 +14688,29 @@ figma.ui.onmessage = async (msg: {
       const swapColorsInEffectsTwoWay = (
         effects: ReadonlyArray<Effect>,
         a: RGBA,
-        b: RGBA
+        b: RGBA,
+        sourceType?: 'flat' | 'variableLinked' | 'styleLinked',
+        effectStyleId?: string
       ): { updated: boolean; effects: Effect[]; foundA: boolean; foundB: boolean } => {
         let updated = false;
         let foundA = false;
         let foundB = false;
+        const matchesSourceType = (isStyleLinked: boolean, isVariableLinked: boolean): boolean => {
+          if (!sourceType) return true;
+          if (sourceType === 'styleLinked') return isStyleLinked;
+          if (sourceType === 'variableLinked') return isVariableLinked;
+          return !isStyleLinked && !isVariableLinked;
+        };
         const next = effects.map((effect) => {
           if (
             (effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW') &&
             (effect as DropShadowEffect).color
           ) {
             const shadowEffect = effect as DropShadowEffect;
+            const isStyleLinked = !!effectStyleId;
+            const colorBinding = (shadowEffect as any)?.boundVariables?.color;
+            const isVariableLinked = colorBinding?.type === 'VARIABLE_ALIAS' && !!colorBinding?.id;
+            if (!matchesSourceType(isStyleLinked, isVariableLinked)) return effect;
             if (colorsEqualRGB(shadowEffect.color, a)) {
               foundA = true;
               updated = true;
@@ -14780,6 +14840,7 @@ figma.ui.onmessage = async (msg: {
         id?: string;
         key?: string;
         name?: string;
+        sourceType?: 'flat' | 'variableLinked' | 'styleLinked';
       };
 
       const isGradientPaintType = (t: string) =>
@@ -14973,7 +15034,10 @@ figma.ui.onmessage = async (msg: {
           hex: hex || undefined,
           id: typeof raw.id === 'string' ? raw.id : undefined,
           key: typeof raw.key === 'string' ? raw.key : undefined,
-          name: typeof raw.name === 'string' ? raw.name : undefined
+          name: typeof raw.name === 'string' ? raw.name : undefined,
+          sourceType: raw.sourceType === 'flat' || raw.sourceType === 'variableLinked' || raw.sourceType === 'styleLinked'
+            ? raw.sourceType
+            : undefined
         };
 
         if (kind === 'custom') {
@@ -15174,7 +15238,14 @@ figma.ui.onmessage = async (msg: {
           if (!Array.isArray(fieldPaints)) return;
 
           if (swapMode === 'replace' && fromTarget.kind === 'custom' && toTarget.kind === 'custom' && fromTarget.rgba && toTarget.rgba) {
-            const result = swapColorsInPaints(fieldPaints, fromTarget.rgba, toTarget.rgba, includeGradients);
+            const result = swapColorsInPaints(
+              fieldPaints,
+              fromTarget.rgba,
+              toTarget.rgba,
+              includeGradients,
+              fromTarget.sourceType,
+              typeof currentStyleId === 'string' ? currentStyleId : ''
+            );
             matched = matched || result.found;
             if (result.updated) {
               (target as any)[field] = result.paints;
@@ -15184,7 +15255,14 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (swapMode === 'swap' && fromTarget.kind === 'custom' && toTarget.kind === 'custom' && fromTarget.rgba && toTarget.rgba) {
-            const result = swapColorsInPaintsTwoWay(fieldPaints, fromTarget.rgba, toTarget.rgba, includeGradients);
+            const result = swapColorsInPaintsTwoWay(
+              fieldPaints,
+              fromTarget.rgba,
+              toTarget.rgba,
+              includeGradients,
+              fromTarget.sourceType,
+              typeof currentStyleId === 'string' ? currentStyleId : ''
+            );
             matched = matched || result.foundA || result.foundB;
             if (result.updated) {
               (target as any)[field] = result.paints;
@@ -15288,7 +15366,13 @@ figma.ui.onmessage = async (msg: {
           if (Array.isArray(effects)) {
             const originalEffects = effects.slice();
             if (swapMode === 'swap') {
-              const result = swapColorsInEffectsTwoWay(effects, fromRawColor, toRawColor);
+              const result = swapColorsInEffectsTwoWay(
+                effects,
+                fromRawColor,
+                toRawColor,
+                fromTarget.kind === 'custom' ? fromTarget.sourceType : undefined,
+                'effectStyleId' in target ? (target as any).effectStyleId : ''
+              );
               matched = matched || result.foundA || result.foundB;
               if (result.updated) {
                 const withBindings = await updateEffectVariableBindings(
@@ -15304,7 +15388,13 @@ figma.ui.onmessage = async (msg: {
                 changed = true;
               }
             } else {
-              const result = swapColorsInEffects(effects, fromRawColor, toRawColor);
+              const result = swapColorsInEffects(
+                effects,
+                fromRawColor,
+                toRawColor,
+                fromTarget.kind === 'custom' ? fromTarget.sourceType : undefined,
+                'effectStyleId' in target ? (target as any).effectStyleId : ''
+              );
               matched = matched || result.found;
               if (result.updated) {
                 const withBindings = await updateEffectVariableBindings(
