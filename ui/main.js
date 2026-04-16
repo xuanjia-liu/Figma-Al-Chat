@@ -18327,6 +18327,11 @@ Generate ONLY the reply text, nothing else.`;
       }
     }
 
+    function refreshMiniFabPositionIfVisible() {
+      if (minimizedDrawers.size === 0 || !promptDrawerMiniFabContainer.classList.contains('visible')) return;
+      positionMiniFabContainer();
+    }
+
     /** Render all mini-FABs from minimizedDrawers map */
     function renderMiniFabs() {
       promptDrawerMiniFabContainer.innerHTML = '';
@@ -18533,6 +18538,21 @@ Generate ONLY the reply text, nothing else.`;
     function restoreFromMaximize() {
       promptDrawer.classList.remove('maximized');
       parent.postMessage({ pluginMessage: { type: 'clear-maximized-drawer' } }, '*');
+    }
+
+    window.addEventListener('resize', refreshMiniFabPositionIfVisible);
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', refreshMiniFabPositionIfVisible);
+      window.visualViewport.addEventListener('scroll', refreshMiniFabPositionIfVisible);
+    }
+
+    const chatInputContainerEl = document.getElementById('chatInputContainer');
+    if (chatInputContainerEl && typeof ResizeObserver !== 'undefined') {
+      const miniFabPositionObserver = new ResizeObserver(() => {
+        refreshMiniFabPositionIfVisible();
+      });
+      miniFabPositionObserver.observe(chatInputContainerEl);
     }
 
     // Global keyboard shortcuts

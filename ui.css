@@ -12390,6 +12390,7 @@
       gap: 10px;
       z-index: 1102;
       pointer-events: none;
+      padding-right: var(--space-md);
     }
 
     .prompt-drawer-mini-fab-container.visible {
