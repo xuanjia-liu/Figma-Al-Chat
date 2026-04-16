@@ -1042,15 +1042,15 @@
     }
 
     .hue-shift-wheel-wrap[data-wheel-size='small'] {
-      max-height: 180px;
+      max-height: min(180px, 20vh);
     }
 
     .hue-shift-wheel-wrap[data-wheel-size='medium'] {
-      max-height: 260px;
+      max-height: min(260px, 40vh);
     }
 
     .hue-shift-wheel-wrap[data-wheel-size='large'] {
-      max-height: 380px;
+      max-height: min(380px, 60vh);
     }
 
     .hue-shift-wheel-wrap.single-selected {
