@@ -13074,6 +13074,15 @@
       display: none;
     }
 
+    .prompt-field-image-max-1 .prompt-image-upload-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .prompt-field-image-max-1 .prompt-image-upload-slot {
+      max-width: none;
+      max-height: 30vh;
+    }
+
     .prompt-field-label-row .prompt-ai-actions {
       margin-left: auto;
     }
@@ -13988,6 +13997,18 @@
     .prompt-field-row {
       display: flex;
       gap: var(--space-md);
+    }
+
+    .prompt-field-row.prompt-field-row--perspective-source-target {
+      display: grid;
+      grid-template-columns: 1fr 2fr;
+      align-items: start;
+      gap: var(--space-md);
+    }
+
+    .prompt-field-row.prompt-field-row--perspective-source-target .prompt-field {
+      flex: unset;
+      min-width: 0;
     }
 
     .prompt-field-row .prompt-field {

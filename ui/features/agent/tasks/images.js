@@ -360,14 +360,20 @@ export const quickCreateImageTasks = [
           directAction: 'imageTo4PointVector',
           fields: [
             {
-              key: 'imageInput',
-              type: 'image',
-              label: 'Source Image',
-              maxImages: 1
-            },
-            {
-              type: 'quadTargetPreview',
-              label: 'Target shape'
+              type: 'row',
+              rowClass: 'prompt-field-row--perspective-source-target',
+              fields: [
+                {
+                  key: 'imageInput',
+                  type: 'image',
+                  label: 'Source Image',
+                  maxImages: 1
+                },
+                {
+                  type: 'quadTargetPreview',
+                  label: 'Target shape'
+                }
+              ]
             },
             {
               key: 'rotateSteps',

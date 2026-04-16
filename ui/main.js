@@ -18646,16 +18646,155 @@ Generate ONLY the reply text, nothing else.`;
 
     let imageTo4PointQuadPreviewTimeout = null;
     let imageTo4PointQuadPreviewListener = null;
+    let imageTo4PointPreviewSeq = 0;
+    let imageTo4PointPreviewFieldDelegate = null;
+    let imageTo4PointQuadPreviewFieldDebounce = null;
 
     function teardownImageTo4PointQuadPreview() {
+      imageTo4PointPreviewSeq += 1;
       if (imageTo4PointQuadPreviewTimeout) {
         clearTimeout(imageTo4PointQuadPreviewTimeout);
         imageTo4PointQuadPreviewTimeout = null;
+      }
+      if (imageTo4PointQuadPreviewFieldDebounce) {
+        clearTimeout(imageTo4PointQuadPreviewFieldDebounce);
+        imageTo4PointQuadPreviewFieldDebounce = null;
       }
       if (typeof imageTo4PointQuadPreviewListener === 'function') {
         imageTo4PointQuadPreviewListener();
         imageTo4PointQuadPreviewListener = null;
       }
+      if (imageTo4PointPreviewFieldDelegate && promptDrawerFields) {
+        promptDrawerFields.removeEventListener('change', imageTo4PointPreviewFieldDelegate);
+        promptDrawerFields.removeEventListener('input', imageTo4PointPreviewFieldDelegate);
+        imageTo4PointPreviewFieldDelegate = null;
+      }
+    }
+
+    function scheduleImageTo4PointQuadPreviewRefresh() {
+      if (currentPromptAction?.directAction !== 'imageTo4PointVector') return;
+      if (imageTo4PointQuadPreviewFieldDebounce) clearTimeout(imageTo4PointQuadPreviewFieldDebounce);
+      imageTo4PointQuadPreviewFieldDebounce = setTimeout(() => {
+        imageTo4PointQuadPreviewFieldDebounce = null;
+        refreshImageTo4PointQuadPreview();
+      }, 150);
+    }
+
+    async function drawPerspectiveToolQuadPreview(canvas, statusEl, metaEl, msg, values, seq) {
+      const status = msg.status;
+      const isOk = status === 'ok';
+      const uploaded = extractImageDataUrls(values.imageInput);
+      const sourceImageDataUrl = uploaded.length ? toDataUrlFromImageFieldValue(uploaded[0]) : '';
+
+      if (!isOk || !sourceImageDataUrl) {
+        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
+        return;
+      }
+
+      const rotateDegrees = normalizeDegrees(values.rotateSteps ?? 0);
+      const flipHorizontal = values.flipHorizontal === true || values.flipHorizontal === 'true' || values.flipHorizontal === 'on';
+      const flipVertical = values.flipVertical === true || values.flipVertical === 'true' || values.flipVertical === 'on';
+      const outputScale = clampOutputScale(values.outputScale ?? 1);
+
+      let processedImageDataUrl;
+      try {
+        processedImageDataUrl = await preprocessImageDataUrl(sourceImageDataUrl, {
+          rotateDegrees,
+          flipHorizontal,
+          flipVertical
+        });
+      } catch {
+        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
+        return;
+      }
+      if (seq !== imageTo4PointPreviewSeq) return;
+
+      const previewParams = buildPerspectivePreviewWarpParams(msg, outputScale);
+      if (!previewParams) {
+        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
+        return;
+      }
+
+      let warpedDataUrl;
+      try {
+        warpedDataUrl = await warpImageToQuadCanvas(
+          processedImageDataUrl,
+          previewParams.scaledWidth,
+          previewParams.scaledHeight,
+          previewParams.scaledQuad
+        );
+      } catch {
+        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
+        return;
+      }
+      if (seq !== imageTo4PointPreviewSeq) return;
+
+      let img;
+      try {
+        img = await new Promise((resolve, reject) => {
+          const el = new Image();
+          el.onload = () => resolve(el);
+          el.onerror = () => reject(new Error('preview'));
+          el.src = warpedDataUrl;
+        });
+      } catch {
+        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
+        return;
+      }
+      if (seq !== imageTo4PointPreviewSeq) return;
+
+      const metaLine = [msg.nodeName, msg.nodeType].filter(Boolean).join(' · ');
+      if (metaEl) {
+        metaEl.textContent = metaLine;
+        metaEl.title = metaLine;
+        metaEl.toggleAttribute('hidden', !metaLine);
+      }
+      if (statusEl) {
+        statusEl.classList.remove('quad-target-preview-status--ok', 'quad-target-preview-status--warn', 'quad-target-preview-status--error');
+        statusEl.classList.add('quad-target-preview-status--ok');
+        statusEl.textContent = 'Ready';
+      }
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const viewport = canvas.closest('.quad-target-preview-viewport');
+      const cssW = Math.min(360, (viewport && viewport.clientWidth) ? viewport.clientWidth : 360);
+      const cssH = 160;
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      const panel = canvas.closest('.prompt-drawer') || document.body;
+      const bg = getComputedStyle(panel).getPropertyValue('--bg-secondary').trim() || '#27272a';
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      const pw = previewParams.scaledWidth;
+      const ph = previewParams.scaledHeight;
+      const pq = previewParams.scaledQuad;
+      const pad = 14;
+      const fit = Math.min((cssW - pad * 2) / pw, (cssH - pad * 2) / ph);
+      const dw = pw * fit;
+      const dh = ph * fit;
+      const dx = (cssW - dw) / 2;
+      const dy = (cssH - dh) / 2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+
+      const strokeMuted = getComputedStyle(panel).getPropertyValue('--text-muted').trim() || '#a1a1aa';
+      ctx.strokeStyle = strokeMuted || '#71717a';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      pq.forEach((p, i) => {
+        const x = dx + Number(p.x) * fit;
+        const y = dy + Number(p.y) * fit;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.stroke();
     }
 
     function drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, payload) {
@@ -18842,7 +18981,10 @@ Generate ONLY the reply text, nothing else.`;
         const msg = event.data.pluginMessage;
         if (!msg || msg.type !== 'selection-quad-info') return;
         cleanup();
-        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
+        imageTo4PointPreviewSeq += 1;
+        const seq = imageTo4PointPreviewSeq;
+        const values = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+        void drawPerspectiveToolQuadPreview(canvas, statusEl, metaEl, msg, values, seq);
       };
       timeoutId = setTimeout(() => {
         timeoutId = null;
@@ -18855,6 +18997,9 @@ Generate ONLY the reply text, nothing else.`;
 
     function setupImageTo4PointQuadPreview() {
       teardownImageTo4PointQuadPreview();
+      imageTo4PointPreviewFieldDelegate = () => scheduleImageTo4PointQuadPreviewRefresh();
+      promptDrawerFields.addEventListener('change', imageTo4PointPreviewFieldDelegate);
+      promptDrawerFields.addEventListener('input', imageTo4PointPreviewFieldDelegate);
       refreshImageTo4PointQuadPreview();
     }
 
@@ -20358,6 +20503,10 @@ Generate ONLY the reply text, nothing else.`;
           container.appendChild(chip);
         });
       });
+
+      if (currentPromptAction?.directAction === 'imageTo4PointVector') {
+        scheduleImageTo4PointQuadPreviewRefresh();
+      }
     }
 
     async function resetPromptFields() {
@@ -27384,6 +27533,57 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return Math.max(0.5, Math.min(50, parsed));
     }
 
+    /** Preview warp resolution vs output scale: output 1 → 0.5×, output 10 → 2× (linear between). */
+    function getPerspectivePreviewToneMultiplier(outputScaleRaw) {
+      const s = clampOutputScale(outputScaleRaw ?? 1);
+      const t = Math.max(1, Math.min(10, s));
+      return 0.5 + ((t - 1) / 9) * 1.5;
+    }
+
+    const PERSPECTIVE_PREVIEW_MAX_WARP_PX = 720;
+
+    function computePerspectiveWarpParams(quadInfo, outputScaleRaw) {
+      const outputScale = clampOutputScale(outputScaleRaw ?? 1);
+      const width = Number(quadInfo.width) || 0;
+      const height = Number(quadInfo.height) || 0;
+      const localQuadRaw = Array.isArray(quadInfo.localQuad) ? quadInfo.localQuad : null;
+      if (!localQuadRaw || localQuadRaw.length !== 4 || width <= 0 || height <= 0) {
+        return null;
+      }
+      const maxOutputDimension = 4096;
+      const scaleByDimensionCap = Math.min(maxOutputDimension / width, maxOutputDimension / height);
+      const safeDimensionCap = Number.isFinite(scaleByDimensionCap) && scaleByDimensionCap > 0 ? scaleByDimensionCap : outputScale;
+      const effectiveScale = Math.min(outputScale, safeDimensionCap);
+      if (!Number.isFinite(effectiveScale) || effectiveScale <= 0) {
+        return null;
+      }
+      const scaledWidth = Math.max(1, Math.round(width * effectiveScale));
+      const scaledHeight = Math.max(1, Math.round(height * effectiveScale));
+      const scaledQuad = localQuadRaw.map((p) => ({
+        x: Number(p.x) * effectiveScale,
+        y: Number(p.y) * effectiveScale
+      }));
+      return { effectiveScale, scaledWidth, scaledHeight, scaledQuad };
+    }
+
+    /** Same homography as run action, with extra tone + max-size cap for responsive UI preview. */
+    function buildPerspectivePreviewWarpParams(quadInfo, outputScaleRaw) {
+      const base = computePerspectiveWarpParams(quadInfo, outputScaleRaw);
+      if (!base) return null;
+      const tone = getPerspectivePreviewToneMultiplier(outputScaleRaw);
+      let pw = Math.max(1, Math.round(base.scaledWidth * tone));
+      let ph = Math.max(1, Math.round(base.scaledHeight * tone));
+      let pq = base.scaledQuad.map((p) => ({ x: p.x * tone, y: p.y * tone }));
+      const maxDim = Math.max(pw, ph);
+      if (maxDim > PERSPECTIVE_PREVIEW_MAX_WARP_PX) {
+        const r = PERSPECTIVE_PREVIEW_MAX_WARP_PX / maxDim;
+        pw = Math.max(1, Math.round(pw * r));
+        ph = Math.max(1, Math.round(ph * r));
+        pq = pq.map((p) => ({ x: p.x * r, y: p.y * r }));
+      }
+      return { scaledWidth: pw, scaledHeight: ph, scaledQuad: pq };
+    }
+
     async function preprocessImageDataUrl(imageDataUrl, { rotateDegrees = 0, flipHorizontal = false, flipVertical = false } = {}) {
       const img = await new Promise((resolve, reject) => {
         const el = new Image();
@@ -27600,27 +27800,12 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           refreshImageTo4PointQuadPreview();
           return;
         }
-        const width = Number(quadInfo.width) || 0;
-        const height = Number(quadInfo.height) || 0;
-        const localQuadRaw = Array.isArray(quadInfo.localQuad) ? quadInfo.localQuad : null;
-        if (!localQuadRaw || localQuadRaw.length !== 4 || width <= 0 || height <= 0) {
+        const warpParams = computePerspectiveWarpParams(quadInfo, outputScale);
+        if (!warpParams) {
           refreshImageTo4PointQuadPreview();
           return;
         }
-        const maxOutputDimension = 4096;
-        const scaleByDimensionCap = Math.min(maxOutputDimension / width, maxOutputDimension / height);
-        const safeDimensionCap = Number.isFinite(scaleByDimensionCap) && scaleByDimensionCap > 0 ? scaleByDimensionCap : outputScale;
-        const effectiveScale = Math.min(outputScale, safeDimensionCap);
-        if (!Number.isFinite(effectiveScale) || effectiveScale <= 0) {
-          showToast('Could not compute a safe output scale for this target size.', 'error');
-          return;
-        }
-        const scaledWidth = Math.max(1, Math.round(width * effectiveScale));
-        const scaledHeight = Math.max(1, Math.round(height * effectiveScale));
-        const scaledQuad = localQuadRaw.map((p) => ({
-          x: Number(p.x) * effectiveScale,
-          y: Number(p.y) * effectiveScale
-        }));
+        const { scaledWidth, scaledHeight, scaledQuad } = warpParams;
         const warpedDataUrl = await warpImageToQuadCanvas(processedImageDataUrl, scaledWidth, scaledHeight, scaledQuad);
         const warpedBase64 = warpedDataUrl.split(',')[1] || '';
         if (!warpedBase64) {
