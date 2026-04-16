@@ -959,6 +959,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let promptTokenUpdateTimeout = null;
     let lastSelectionIdString = '';
     let lastKnownSelectionItems = null;
+    let selectionDescendantsById = new Map();
+    let lastSelectionSignature = '';
+    let pendingSelectionDescendantsSignature = '';
+    let selectionDescendantsTruncated = false;
+    let selectionTooLargeForDescendants = false;
     let isTokenCounterEnabled = false;
     let lastUserMessage = '';
     let pendingAskBackContext = null;
@@ -3499,6 +3504,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (!items) return;
       lastKnownSelectionItems = items;
       selectionCount.textContent = items.length;
+      const selectionSignature = items.map(i => i.id).join(',');
+      if (selectionSignature !== lastSelectionSignature) {
+        lastSelectionSignature = selectionSignature;
+        selectionDescendantsById = new Map();
+        selectionDescendantsTruncated = false;
+        selectionTooLargeForDescendants = false;
+        pendingSelectionDescendantsSignature = '';
+      }
 
       if (lastFillFromOnlineParams) {
         lastFillFromOnlineParams = null;
@@ -3512,6 +3525,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           if (listContainer) updateCommentsListOnly(); // Prefer updateCommentsListOnly for smoother update
           else renderCommentsInDrawer(container);
         }
+        requestSelectionDescendantsIfNeeded(false);
       }
 
       // Update Create Graph selection size when drawer is open
@@ -3578,6 +3592,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       } else {
         if (items.length === 1) {
           selectionNames.textContent = items[0].name;
+        } else if (items.length > 12) {
+          selectionNames.textContent = `${items.length} layers selected`;
         } else {
           selectionNames.textContent = items.map(i => i.name).join(', ');
         }
@@ -3602,6 +3618,65 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (promptDrawer.classList.contains('open')) {
         applyPromptFieldVisibility();
       }
+    }
+
+    function getSelectionDescendantsSignature(items = lastKnownSelectionItems || []) {
+      if (!Array.isArray(items) || items.length === 0) return '';
+      return items.map((node) => node?.id).filter(Boolean).join(',');
+    }
+
+    function addSelectionNodeAndDescendantIds(selectedIds, selectedNodes = lastKnownSelectionItems || []) {
+      (selectedNodes || []).forEach((node) => {
+        if (!node || !node.id) return;
+        selectedIds.add(node.id);
+        if (Array.isArray(node.descendantIds) && node.descendantIds.length > 0) {
+          node.descendantIds.forEach((id) => selectedIds.add(id));
+          return;
+        }
+        const cachedIds = selectionDescendantsById.get(node.id);
+        if (Array.isArray(cachedIds)) {
+          cachedIds.forEach((id) => selectedIds.add(id));
+        }
+      });
+    }
+
+    function requestSelectionDescendantsIfNeeded(force = false) {
+      const needsDescendants =
+        currentCommentsScope === 'selection' ||
+        currentStickiesScope === 'selection' ||
+        (currentPromptAction?.directAction === 'listAllComponents' && currentComponentsScope === 'selection') ||
+        (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'selection');
+      if (!needsDescendants) return;
+      const signature = getSelectionDescendantsSignature();
+      if (!signature) return;
+      if (!force && (selectionTooLargeForDescendants || selectionDescendantsTruncated)) return;
+      if (!force && pendingSelectionDescendantsSignature === signature) return;
+      const hasAllDescendants = (lastKnownSelectionItems || []).every((node) =>
+        Array.isArray(node?.descendantIds) || selectionDescendantsById.has(node?.id)
+      );
+      if (!force && hasAllDescendants) return;
+      pendingSelectionDescendantsSignature = signature;
+      parent.postMessage({ pluginMessage: { type: 'get-selection-descendants' } }, '*');
+    }
+
+    function applySelectionDescendantsPayload(items, signature, flags = {}) {
+      const expectedSignature = getSelectionDescendantsSignature();
+      if (!expectedSignature || !Array.isArray(items)) return false;
+      if (signature && signature !== expectedSignature) return false;
+
+      const nextMap = new Map();
+      items.forEach((node) => {
+        if (!node || !node.id) return;
+        if (Array.isArray(node.descendantIds)) {
+          nextMap.set(node.id, node.descendantIds);
+        }
+      });
+
+      selectionDescendantsById = nextMap;
+      selectionDescendantsTruncated = flags.descendantsTruncated === true;
+      selectionTooLargeForDescendants = flags.selectionTooLarge === true;
+      pendingSelectionDescendantsSignature = '';
+      return true;
     }
     const chatStatusHeader = document.getElementById('chatStatusHeader');
     const chatStatusLoadingSuffix = document.getElementById('chatStatusLoadingSuffix');
@@ -11118,13 +11193,7 @@ CRITICAL RULES:
         });
       } else if (currentCommentsScope === 'selection') {
         const selectedIds = new Set();
-        const selectedNodes = lastKnownSelectionItems || [];
-        selectedNodes.forEach(node => {
-          selectedIds.add(node.id);
-          if (node.descendantIds) {
-            node.descendantIds.forEach(id => selectedIds.add(id));
-          }
-        });
+        addSelectionNodeAndDescendantIds(selectedIds, lastKnownSelectionItems || []);
         filteredComments = filteredComments.filter(c => {
           const nodeId = c.client_meta?.node_id;
           return nodeId && selectedIds.has(nodeId);
@@ -11619,13 +11688,7 @@ ${commentsList}`;
         });
       } else if (currentCommentsScope === 'selection') {
         const selectedIds = new Set();
-        const selectedNodes = lastKnownSelectionItems || [];
-        selectedNodes.forEach(node => {
-          selectedIds.add(node.id);
-          if (node.descendantIds) {
-            node.descendantIds.forEach(id => selectedIds.add(id));
-          }
-        });
+        addSelectionNodeAndDescendantIds(selectedIds, lastKnownSelectionItems || []);
         visible = visible.filter(c => {
           const nodeId = c.client_meta?.node_id;
           return nodeId && selectedIds.has(nodeId);
@@ -11696,6 +11759,9 @@ ${commentsList}`;
 
       if (scope === 'page' || scope === 'selection') {
         parent.postMessage({ pluginMessage: { type: 'get-current-context' } }, '*');
+      }
+      if (scope === 'selection') {
+        requestSelectionDescendantsIfNeeded(true);
       }
 
       const promptContainer = document.getElementById('promptCommentsContainer');
@@ -12739,12 +12805,7 @@ Requirements:
         visible = visible.filter((sticky) => sticky.pageId === figmaCurrentPageId);
       } else if (currentStickiesScope === 'selection') {
         const selectedIds = new Set();
-        (lastKnownSelectionItems || []).forEach((node) => {
-          selectedIds.add(node.id);
-          if (Array.isArray(node.descendantIds)) {
-            node.descendantIds.forEach((id) => selectedIds.add(id));
-          }
-        });
+        addSelectionNodeAndDescendantIds(selectedIds, lastKnownSelectionItems || []);
         visible = visible.filter((sticky) => selectedIds.has(sticky.id));
       }
 
@@ -12933,6 +12994,9 @@ Requirements:
       btn.classList.add('active');
       if (scope === 'page' || scope === 'selection') {
         parent.postMessage({ pluginMessage: { type: 'get-current-context' } }, '*');
+      }
+      if (scope === 'selection') {
+        requestSelectionDescendantsIfNeeded(true);
       }
       const container = document.getElementById('promptStickiesContainer');
       if (container) {
@@ -26848,6 +26912,11 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       selection.forEach((node) => {
         if (Array.isArray(node?.descendantIds)) {
           node.descendantIds.forEach((id) => descendantIds.add(id));
+          return;
+        }
+        const cachedIds = selectionDescendantsById.get(node?.id);
+        if (Array.isArray(cachedIds)) {
+          cachedIds.forEach((id) => descendantIds.add(id));
         }
       });
       return selection.filter((node) => !descendantIds.has(node?.id));
@@ -43214,6 +43283,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
         case 'selection-changed':
         case 'selection-info':
           handleSelectionChange(msg.data);
+          requestSelectionDescendantsIfNeeded(false);
           // Refresh comments if in selection scope
           if (currentCommentsScope === 'selection') {
             const promptContainer = document.getElementById('promptCommentsContainer');
@@ -43228,6 +43298,22 @@ Based on the user's instruction, generate the appropriate commands to modify the
           if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'selection') {
             const promptContainer = document.getElementById('promptStickiesContainer');
             if (promptContainer) renderStickiesInDrawer(promptContainer);
+          }
+          break;
+
+        case 'selection-descendants':
+          if (applySelectionDescendantsPayload(msg.data, msg.signature, {
+            selectionTooLarge: msg.selectionTooLarge,
+            descendantsTruncated: msg.descendantsTruncated,
+          })) {
+            if (currentCommentsScope === 'selection') {
+              const promptContainer = document.getElementById('promptCommentsContainer');
+              if (promptContainer) renderCommentsInDrawer(promptContainer);
+            }
+            if (currentPromptAction?.directAction === 'listAllStickies' && currentStickiesScope === 'selection') {
+              const promptContainer = document.getElementById('promptStickiesContainer');
+              if (promptContainer) renderStickiesInDrawer(promptContainer);
+            }
           }
           break;
 

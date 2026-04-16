@@ -1253,19 +1253,31 @@ async function setEditableTextTargetContent(target: EditableTextTarget, newText:
   }
 }
 
-function buildSelectionInfoPayload(selection: readonly SceneNode[]) {
-  const collectDescendantIds = (node: BaseNode): string[] => {
-    const ids: string[] = [];
-    if ('children' in node) {
-      for (const child of node.children) {
-        ids.push(child.id);
-        ids.push(...collectDescendantIds(child));
-      }
-    }
-    return ids;
-  };
+const MAX_SELECTION_ITEMS_FOR_DESCENDANTS = 120;
+const MAX_DESCENDANT_IDS_BUDGET = 8000;
 
-  return selection.map(node => {
+type SelectionInfoItem = {
+  name: string;
+  type: SceneNode['type'];
+  id: string;
+  description?: string;
+  hasImageFill: boolean;
+  descendantIds?: string[];
+  descendantsTruncated?: boolean;
+};
+
+type SelectionInfoPayload = {
+  items: SelectionInfoItem[];
+  selectionTooLarge?: boolean;
+  descendantsTruncated?: boolean;
+};
+
+function getSelectionSignature(selection: readonly SceneNode[]): string {
+  return selection.map((node) => node.id).sort().join(',');
+}
+
+function buildSelectionInfoLite(selection: readonly SceneNode[]): SelectionInfoPayload {
+  const items = selection.map((node) => {
     let hasImageFill = false;
     if ('fills' in node && Array.isArray(node.fills)) {
       hasImageFill = node.fills.some((fill: Paint) => fill.type === 'IMAGE');
@@ -1276,9 +1288,53 @@ function buildSelectionInfoPayload(selection: readonly SceneNode[]) {
       id: node.id,
       description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
       hasImageFill,
-      descendantIds: collectDescendantIds(node)
     };
   });
+  return { items };
+}
+
+function buildSelectionInfoWithDescendants(selection: readonly SceneNode[]): SelectionInfoPayload {
+  const lite = buildSelectionInfoLite(selection);
+  if (selection.length === 0) return lite;
+  if (selection.length > MAX_SELECTION_ITEMS_FOR_DESCENDANTS) {
+    return {
+      ...lite,
+      selectionTooLarge: true,
+      descendantsTruncated: true,
+    };
+  }
+
+  let remainingBudget = MAX_DESCENDANT_IDS_BUDGET;
+  let anyTruncated = false;
+
+  const collectDescendantIds = (node: BaseNode, out: string[]): boolean => {
+    if (remainingBudget <= 0) return true;
+    if (!('children' in node)) return false;
+    for (const child of node.children) {
+      if (remainingBudget <= 0) return true;
+      out.push(child.id);
+      remainingBudget--;
+      const childTruncated = collectDescendantIds(child, out);
+      if (childTruncated) return true;
+    }
+    return false;
+  };
+
+  const items = lite.items.map((item, index) => {
+    const ids: string[] = [];
+    const truncated = collectDescendantIds(selection[index], ids);
+    if (truncated) anyTruncated = true;
+    return {
+      ...item,
+      descendantIds: ids,
+      descendantsTruncated: truncated || undefined,
+    };
+  });
+
+  return {
+    items,
+    descendantsTruncated: anyTruncated || undefined,
+  };
 }
 
 type ComponentInventoryScope = 'selection' | 'page' | 'file';
@@ -7696,7 +7752,7 @@ async function runLocalQuickDetachBody(msg: any, selectedRoots: readonly SceneNo
     skippedNodeCount: anyNonInstanceOp ? skippedNodeCount : 0,
   });
   try {
-    figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+    figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
   } catch (e) {
     /* ignore */
   }
@@ -9475,7 +9531,20 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'get-selection-info': {
-      figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(selection) });
+      figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(selection).items });
+      break;
+    }
+
+    case 'get-selection-descendants': {
+      const selectionNow = figma.currentPage.selection;
+      const payload = buildSelectionInfoWithDescendants(selectionNow);
+      figma.ui.postMessage({
+        type: 'selection-descendants',
+        data: payload.items,
+        selectionTooLarge: payload.selectionTooLarge === true,
+        descendantsTruncated: payload.descendantsTruncated === true,
+        signature: getSelectionSignature(selectionNow),
+      });
       break;
     }
 
@@ -9515,7 +9584,7 @@ figma.ui.onmessage = async (msg: {
           total: targets.length
         });
 
-        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
       } catch (error) {
         console.error('smart-rename-case-only failed', error);
         figma.ui.postMessage({
@@ -9568,7 +9637,7 @@ figma.ui.onmessage = async (msg: {
         });
 
         figma.ui.postMessage({ type: 'local-sequential-naming-result', renamed, skipped, total: targets.length });
-        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
       } catch (error) {
         console.error('local-sequential-naming failed', error);
         figma.ui.postMessage({ type: 'error', message: `Sequential naming failed: ${(error as Error)?.message || 'Unknown error'}` });
@@ -9605,7 +9674,7 @@ figma.ui.onmessage = async (msg: {
         });
 
         figma.ui.postMessage({ type: 'local-prefix-suffix-naming-result', renamed, skipped, total: targets.length });
-        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
       } catch (error) {
         console.error('local-prefix-suffix-naming failed', error);
         figma.ui.postMessage({ type: 'error', message: `Prefix/suffix naming failed: ${(error as Error)?.message || 'Unknown error'}` });
@@ -9635,7 +9704,7 @@ figma.ui.onmessage = async (msg: {
         });
 
         figma.ui.postMessage({ type: 'local-clean-up-names-result', renamed, skipped, total: targets.length });
-        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
       } catch (error) {
         console.error('local-clean-up-names failed', error);
         figma.ui.postMessage({ type: 'error', message: `Clean up names failed: ${(error as Error)?.message || 'Unknown error'}` });
@@ -10402,7 +10471,7 @@ figma.ui.onmessage = async (msg: {
             failed: 0,
             total: selection.length
           });
-          figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+          figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
           break;
         }
 
@@ -10435,7 +10504,7 @@ figma.ui.onmessage = async (msg: {
           failed,
           total: entries.length
         });
-        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
       } catch (error) {
         console.error('local-google-translate-text failed', error);
         figma.ui.postMessage({ type: 'error', message: `Translate text failed: ${(error as Error)?.message || 'Unknown error'}` });
@@ -10500,7 +10569,7 @@ figma.ui.onmessage = async (msg: {
           skipped,
           total: targets.length
         });
-        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoPayload(figma.currentPage.selection) });
+        figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
       } catch (error) {
         console.error('local-google-translate-naming failed', error);
         figma.ui.postMessage({ type: 'error', message: `Translate naming failed: ${(error as Error)?.message || 'Unknown error'}` });
@@ -25396,9 +25465,25 @@ figma.ui.onmessage = async (msg: {
   }
 };
 
+const SELECTION_CHANGE_DEBOUNCE_MS = 120;
+let selectionChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastSelectionChangeSignature = '';
+
+function emitSelectionChangedLite() {
+  const selection = figma.currentPage.selection;
+  const signature = getSelectionSignature(selection);
+  if (signature === lastSelectionChangeSignature) return;
+  lastSelectionChangeSignature = signature;
+  figma.ui.postMessage({ type: 'selection-changed', data: buildSelectionInfoLite(selection).items });
+}
+
 // Listen for selection changes
 figma.on('selectionchange', () => {
-  const selection = figma.currentPage.selection;
-  const info = buildSelectionInfoPayload(selection);
-  figma.ui.postMessage({ type: 'selection-changed', data: info });
+  if (selectionChangeDebounceTimer) {
+    clearTimeout(selectionChangeDebounceTimer);
+  }
+  selectionChangeDebounceTimer = setTimeout(() => {
+    selectionChangeDebounceTimer = null;
+    emitSelectionChangedLite();
+  }, SELECTION_CHANGE_DEBOUNCE_MS);
 });
