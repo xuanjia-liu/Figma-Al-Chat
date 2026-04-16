@@ -17579,7 +17579,8 @@ Generate ONLY the reply text, nothing else.`;
           actionData.name === 'Font preview' ||
           actionData.name === 'HUE shift' ||
           actionData.directAction === 'listAllComponents' ||
-          actionData.directAction === 'randomizeSelectedInstances';
+          actionData.directAction === 'randomizeSelectedInstances' ||
+          actionData.directAction === 'imageTo4PointVector';
         if (!hidePromptDrawerHelp && actionData.help && actionData.help.trim()) {
           promptDrawerHelpText.textContent = localizedAction.displayHelp || actionData.help.trim();
           promptDrawerHelp.classList.remove('hidden');
@@ -27661,8 +27662,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
         showToast('Image mapped to selected 4-point target.', 'success');
       } catch (error) {
-        console.error('Image to 4-point vector failed:', error);
-        showToast(error?.message || `Failed to run ${actionMeta?.name || 'Image to 4-point vector'}`, 'error');
+        console.error('Perspective tool failed:', error);
+        showToast(error?.message || `Failed to run ${actionMeta?.name || 'Perspective tool'}`, 'error');
       }
     }
 
@@ -30554,7 +30555,8 @@ Example structure:
           currentPromptAction.name === 'Vertical text' ||
           currentPromptAction.name === 'Font preview' ||
           currentPromptAction.directAction === 'listAllComponents' ||
-          currentPromptAction.directAction === 'randomizeSelectedInstances';
+          currentPromptAction.directAction === 'randomizeSelectedInstances' ||
+          currentPromptAction.directAction === 'imageTo4PointVector';
         if (!shouldHidePromptDrawerHelp && currentPromptAction.help && currentPromptAction.help.trim()) {
           const _localizedHelp = getLocalizedTask(currentPromptAction);
           promptDrawerHelpText.textContent =

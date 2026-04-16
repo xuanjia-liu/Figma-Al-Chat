@@ -2427,6 +2427,11 @@ const exactTranslations = {
       'オフのとき、スタイルの解除とインスタンスのデタッチは選択範囲とすべての子孫に適用されます。',
     'Set image fill': '画像塗りを設定',
     'Fill with stock photos': 'ストック写真で塗りつぶす',
+    'Perspective tool': 'パースペクティブツール',
+    'Warp an image onto a four-corner target with perspective.':
+      'パースペクティブで画像を四隅のターゲットにワープします。',
+    'Perspective warp: map an image to four corners (image to 4-point vector). Keywords: perspective, image warp, distort, mockup.':
+      'パースペクティブワープ: 画像を四隅にマッピング（画像を4点ベクトルへ）。画像ワープ・歪み・モックアップ向け。検索: パースペクティブ、画像ワープ、歪み、4点ベクトル、モックアップ。',
     'Styles and variables': 'スタイルと変数',
     'Font preview': 'フォントプレビュー',
     'Browse Google Fonts with live preview and filters.':
@@ -2974,6 +2979,10 @@ const exactTranslations = {
       '关闭时，样式解除与实例分离会应用到选区及其所有子级。',
     'Set image fill': '设置图像填充',
     'Fill with stock photos': '用图库照片填充',
+    'Perspective tool': '透视工具',
+    'Warp an image onto a four-corner target with perspective.': '以透视方式将图像贴合到四角目标。',
+    'Perspective warp: map an image to four corners (image to 4-point vector). Keywords: perspective, image warp, distort, mockup.':
+      '透视变形：将图像映射到四角（图像转四点矢量）。适用于图像变形、扭曲与样机。关键词：透视、图像变形、扭曲、四点矢量、样机。',
     'Styles and variables': '样式与变量',
     'Font preview': '字体预览',
     'Browse Google Fonts with live preview and filters.': '使用实时预览与筛选浏览 Google Fonts。',
