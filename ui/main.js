@@ -1413,6 +1413,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       } else if (commandsDrawer.classList.contains('show')) {
         closeCommandsDrawer();
       }
+      if (!isOff) {
+        noAiOverlayVisible = false;
+      }
+      renderNoAiOverlayCards();
     }
 
     function normalizeGeminiModelName(name) {
@@ -3761,6 +3765,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const settingsModal = document.getElementById('settingsModal');
     const openSettingsBtn = document.getElementById('openSettingsBtn');
     const openSettingsBtnNoAi = document.getElementById('openSettingsBtnNoAi');
+    const noAiHistoryBtn = document.getElementById('noAiHistoryBtn');
+    const noAiOverlayFab = document.getElementById('noAiOverlayFab');
+    const noAiOverlayCloseBtn = document.getElementById('noAiOverlayCloseBtn');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const languageSelect = document.getElementById('settingsLanguageSelect');
     const noAiModeToggle = document.getElementById('noAiModeToggle');
@@ -27403,6 +27410,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     function formatColorContrastCheckerMarkdown(data) {
       if (!data || !Array.isArray(data.entries)) return '_No contrast data._';
+      const maxLayerNameChars = 32;
       const w = typeof data.worstRatio === 'number' ? data.worstRatio : 0;
       const ev = Number(data.evaluatedCount) || data.entries.length;
       const aaFail = Number(data.aaFailCount) || 0;
@@ -27419,7 +27427,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       lines.push('| Layer | Ratio | Text | BG | Size | AA | AAA |');
       lines.push('| --- | --- | --- | --- | --- | --- | --- |');
       for (const e of data.entries) {
-        const name = String(e.nodeName || e.nodeId || '').replace(/\|/g, '\\|').slice(0, 36);
+        const rawName = String(e.nodeName || e.nodeId || '').replace(/\|/g, '\\|');
+        const name = rawName.length > maxLayerNameChars
+          ? `${rawName.slice(0, maxLayerNameChars - 1)}…`
+          : rawName;
         const ratio = typeof e.ratio === 'number' ? e.ratio : 0;
         const th = String(e.textHex || '');
         const bh = String(e.bgHex || '');
@@ -27433,25 +27444,187 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return lines.join('\n');
     }
 
-    function showNoAiContrastResultPanel(markdownText) {
-      try {
-        const drawer = document.getElementById('commandsDrawer');
-        const body = drawer && drawer.querySelector('.commands-drawer-body');
-        if (!body || typeof parseMarkdown !== 'function') return;
-        let panel = document.getElementById('noAiContrastResultPanel');
-        if (!panel) {
-          panel = document.createElement('div');
-          panel.id = 'noAiContrastResultPanel';
-          panel.className = 'no-ai-contrast-result-panel';
-          panel.setAttribute('role', 'region');
-          panel.setAttribute('aria-label', 'Color contrast results');
-          body.insertBefore(panel, body.firstChild);
-        }
-        panel.innerHTML = parseMarkdown(markdownText);
-        panel.style.display = 'block';
-      } catch (_err) {
-        // ignore
+    let noAiOverlayVisible = false;
+    let noAiOverlayCards = [];
+    let noAiOverlayTitle = 'No-AI Results';
+    let noAiOverlaySubtitle = 'Deterministic local quick action output';
+    let selectedArchiveChatId = null;
+
+    function extractTextFromMessagePart(part) {
+      if (typeof part?.text === 'string') return part.text;
+      return '';
+    }
+
+    function createNoAiMessageElement(role, markdownText) {
+      const messageDiv = document.createElement('div');
+      const normalizedRole = role === 'user' ? 'user' : 'bot';
+      messageDiv.className = `message ${normalizedRole} mode-ask no-ai-overlay-message`;
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+      contentDiv.innerHTML = parseMarkdown(markdownText || '');
+      contentDiv.querySelectorAll('img').forEach(wireChatMessageContentImage);
+      messageDiv.appendChild(contentDiv);
+      return messageDiv;
+    }
+
+    function createNoAiQuickActionUserElement(actionName, actionIcon) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message user mode-ask no-ai-overlay-message';
+      const wrapperDiv = document.createElement('div');
+      wrapperDiv.className = 'message-wrapper';
+      const contentGroup = document.createElement('div');
+      contentGroup.className = 'message-content-group';
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'message-content';
+
+      const quickActionDisplay = document.createElement('div');
+      quickActionDisplay.className = 'quick-action-display';
+
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'action-icon';
+      iconSpan.innerHTML = actionIcon || '';
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'action-title';
+      titleSpan.textContent = actionName || 'Quick Action';
+
+      quickActionDisplay.appendChild(iconSpan);
+      quickActionDisplay.appendChild(titleSpan);
+      contentDiv.appendChild(quickActionDisplay);
+      contentGroup.appendChild(contentDiv);
+      wrapperDiv.appendChild(contentGroup);
+      messageDiv.appendChild(wrapperDiv);
+      return messageDiv;
+    }
+
+    function renderNoAiOverlayCards() {
+      const overlayRoot = document.getElementById('noAiOverlay');
+      const cardsHost = document.getElementById('noAiOverlayCards');
+      const titleEl = document.getElementById('noAiOverlayTitle');
+      const subtitleEl = document.getElementById('noAiOverlaySubtitle');
+      const fab = document.getElementById('noAiOverlayFab');
+      if (!overlayRoot || !cardsHost || !fab) return;
+
+      const isNoAi = isAiOffModeEnabled();
+      if (titleEl) titleEl.textContent = noAiOverlayTitle || 'No-AI Results';
+      if (subtitleEl) subtitleEl.textContent = noAiOverlaySubtitle || '';
+
+      cardsHost.innerHTML = '';
+      if (!Array.isArray(noAiOverlayCards) || noAiOverlayCards.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'no-ai-overlay-empty';
+        empty.textContent = 'No results yet.';
+        cardsHost.appendChild(empty);
+      } else {
+        noAiOverlayCards.forEach((card) => {
+          const cardEl = document.createElement('article');
+          cardEl.className = 'no-ai-overlay-card';
+
+          const meta = document.createElement('div');
+          meta.className = 'no-ai-overlay-card-meta';
+          const metaTitle = document.createElement('span');
+          metaTitle.className = 'no-ai-overlay-card-meta-title';
+          metaTitle.textContent = card.title || 'Result';
+          meta.appendChild(metaTitle);
+          if (card.timestampLabel) {
+            const metaTime = document.createElement('span');
+            metaTime.className = 'no-ai-overlay-card-meta-time';
+            metaTime.textContent = card.timestampLabel;
+            meta.appendChild(metaTime);
+          }
+          cardEl.appendChild(meta);
+
+          const thread = document.createElement('div');
+          thread.className = 'no-ai-overlay-card-thread';
+          const messages = Array.isArray(card.messages) ? card.messages : [];
+          messages.forEach((msg) => {
+            if (msg.quickAction) {
+              thread.appendChild(createNoAiQuickActionUserElement(msg.quickAction.name, msg.quickAction.icon));
+            } else {
+              thread.appendChild(createNoAiMessageElement(msg.role, msg.content));
+            }
+          });
+          cardEl.appendChild(thread);
+          cardsHost.appendChild(cardEl);
+        });
       }
+
+      const shouldShowOverlay = isNoAi && noAiOverlayVisible;
+      overlayRoot.classList.toggle('show', shouldShowOverlay);
+      overlayRoot.classList.toggle('hidden', !shouldShowOverlay);
+      const hasContent = Array.isArray(noAiOverlayCards) && noAiOverlayCards.length > 0;
+      const shouldShowFab = isNoAi && !noAiOverlayVisible && hasContent;
+      fab.classList.toggle('show', shouldShowFab);
+      fab.classList.toggle('hidden', !shouldShowFab);
+    }
+
+    function setNoAiOverlayVisible(visible) {
+      noAiOverlayVisible = !!visible;
+      renderNoAiOverlayCards();
+    }
+
+    function setNoAiOverlayCards(cards, options = {}) {
+      noAiOverlayCards = Array.isArray(cards) ? cards : [];
+      if (typeof options.title === 'string') noAiOverlayTitle = options.title;
+      if (typeof options.subtitle === 'string') noAiOverlaySubtitle = options.subtitle;
+      renderNoAiOverlayCards();
+    }
+
+    function showNoAiLocalResultCard(markdownText, options = {}) {
+      if (!isAiOffModeEnabled()) return;
+      selectedArchiveChatId = null;
+      const title = options.title || 'Local Result';
+      const timestampLabel = formatChatDate(Date.now());
+      const quickActionName = options.quickActionName || title;
+      const quickActionIcon = options.quickActionIcon || '';
+      setNoAiOverlayCards([
+        {
+          title,
+          timestampLabel,
+          messages: [
+            { role: 'user', quickAction: { name: quickActionName, icon: quickActionIcon } },
+            { role: 'bot', content: markdownText }
+          ]
+        }
+      ], {
+        title: 'No-AI Results',
+        subtitle: 'Deterministic local quick action output'
+      });
+      // Default policy: keep overlay hidden until user taps FAB.
+      setNoAiOverlayVisible(false);
+    }
+
+    function openChatHistorySidebarForNoAi() {
+      if (!chatHistorySidebar || !sidebarToggleBtn || !sidebarOverlay) return;
+      if (!isSidebarOpen) {
+        toggleSidebar();
+      }
+      if (chatHistorySearchInput) {
+        chatHistorySearchInput.focus();
+      }
+    }
+
+    function setNoAiOverlayFromArchiveChat(chat) {
+      if (!chat || !Array.isArray(chat.chatHistory)) return;
+      selectedArchiveChatId = chat.id;
+      const threadMessages = chat.chatHistory
+        .filter((msg) => (msg?.role === 'user' || msg?.role === 'model') && Array.isArray(msg.parts))
+        .map((msg) => ({
+          role: msg.role === 'user' ? 'user' : 'bot',
+          content: msg.parts.map(extractTextFromMessagePart).filter(Boolean).join('\n')
+        }))
+        .filter((msg) => msg.content.trim().length > 0);
+      setNoAiOverlayCards([
+        {
+          title: chat.title || 'Selected chat',
+          timestampLabel: formatChatDate(chat.updatedAt || chat.createdAt || Date.now()),
+          messages: threadMessages
+        }
+      ], {
+        title: 'No-AI Selected Chat',
+        subtitle: 'Full thread from chat history sidebar'
+      });
+      setNoAiOverlayVisible(true);
     }
 
     async function runColorContrastCheckerAction(values, actionMeta) {
@@ -27489,11 +27662,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         addMessage('bot', md);
 
         if (isAiOffModeEnabled()) {
-          showNoAiContrastResultPanel(md);
+          showNoAiLocalResultCard(md, {
+            title: 'Color Contrast Checker',
+            quickActionName: actionMeta?.name || 'Color Contrast Checker',
+            quickActionIcon: actionMeta?.icon || ''
+          });
           showToast('Contrast check complete', 'success');
         } else {
-          const existing = document.getElementById('noAiContrastResultPanel');
-          if (existing) existing.style.display = 'none';
+          setNoAiOverlayVisible(false);
           const consultingPrompt =
             'The following WCAG contrast results were computed deterministically in the Figma plugin (source of truth). Give concise, prioritized accessibility advice (fixes, token suggestions). Do not change or recompute contrast ratios.\n\n' +
             JSON.stringify(msg.data, null, 2);
@@ -32299,6 +32475,26 @@ Example structure:
         toggleHeaderSettingsMenu(drawerSettingsMenu, openSettingsBtnNoAi);
       });
     }
+    if (noAiHistoryBtn) {
+      noAiHistoryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!isAiOffModeEnabled()) return;
+        openChatHistorySidebarForNoAi();
+      });
+    }
+    if (noAiOverlayFab) {
+      noAiOverlayFab.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!isAiOffModeEnabled()) return;
+        setNoAiOverlayVisible(true);
+      });
+    }
+    if (noAiOverlayCloseBtn) {
+      noAiOverlayCloseBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setNoAiOverlayVisible(false);
+      });
+    }
 
     closeSettingsBtn.addEventListener('click', attemptCloseSettingsModal);
 
@@ -32757,6 +32953,14 @@ Example structure:
     async function loadChatFromArchive(chatId) {
       const chat = chatArchives.find(c => c.id === chatId);
       if (!chat) return;
+
+      if (isAiOffModeEnabled()) {
+        currentChatId = chat.id;
+        renderChatHistoryList();
+        parent.postMessage({ pluginMessage: { type: 'save-last-chat-id', chatId: currentChatId } }, '*');
+        setNoAiOverlayFromArchiveChat(chat);
+        return;
+      }
 
       if (currentChatId !== chatId) {
         isFirstTurnInChat = true;

@@ -67,6 +67,28 @@
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
+    <!-- No-AI Overlay Cards -->
+    <div class="no-ai-overlay hidden" id="noAiOverlay">
+      <div class="no-ai-overlay-header">
+        <div class="no-ai-overlay-title-group">
+          <div class="no-ai-overlay-title" id="noAiOverlayTitle">No-AI Results</div>
+          <div class="no-ai-overlay-subtitle" id="noAiOverlaySubtitle">Deterministic local quick action output</div>
+        </div>
+        <button class="no-ai-overlay-close" id="noAiOverlayCloseBtn" title="Hide results">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="no-ai-overlay-cards" id="noAiOverlayCards"></div>
+    </div>
+    <button class="no-ai-overlay-fab hidden" id="noAiOverlayFab" title="Show no-ai results">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 12h18" />
+        <path d="M12 3v18" />
+      </svg>
+    </button>
+
     <!-- Main Content -->
     <div class="main-content">
       <div class="header">
@@ -1327,6 +1349,14 @@
         <input type="text" id="commandsSearch" placeholder="Search actions..." />
       </div>
       <div class="header-settings-dropdown">
+        <button class="settings-btn no-ai-history-btn" type="button" id="noAiHistoryBtn" title="History"
+          data-i18n-title="settings.historySidebar.toggleHistoryTitle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 3-6.7" />
+            <path d="M3 3v6h6" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+        </button>
         <button class="settings-btn no-ai-settings-btn" type="button" id="openSettingsBtnNoAi" title="Settings"
           data-i18n-title="settings.openButtonTitle" aria-haspopup="menu" aria-expanded="false"
           aria-controls="drawerSettingsMenu">
