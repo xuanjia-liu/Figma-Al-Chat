@@ -11153,14 +11153,14 @@ figma.ui.onmessage = async (msg: {
       if (selection.length === 0) {
         postQuadInfo({
           status: 'empty',
-          message: 'Nothing selected. Select one rectangle or a vector path with exactly 4 points.'
+          message: 'Select a layer.'
         });
         break;
       }
       if (selection.length > 1) {
         postQuadInfo({
           status: 'multiple',
-          message: `Select one layer only (${selection.length} selected).`
+          message: 'One layer only.'
         });
         break;
       }
@@ -11175,7 +11175,7 @@ figma.ui.onmessage = async (msg: {
           nodeId: node.id,
           nodeName,
           nodeType,
-          message: 'This layer cannot receive an image fill.'
+          message: "Can't use image fill."
         });
         break;
       }
@@ -11186,7 +11186,7 @@ figma.ui.onmessage = async (msg: {
           nodeId: node.id,
           nodeName,
           nodeType,
-          message: 'Mixed fills are not supported. Use a single fill mode.'
+          message: 'Single fill only.'
         });
         break;
       }
@@ -11199,7 +11199,7 @@ figma.ui.onmessage = async (msg: {
           nodeId: node.id,
           nodeName,
           nodeType,
-          message: 'Invalid layer size for mapping.'
+          message: 'Invalid size.'
         });
         break;
       }
@@ -11229,7 +11229,7 @@ figma.ui.onmessage = async (msg: {
             vertexCount: 0,
             previewVertices: [],
             previewSegments: [],
-            message: 'This vector has no points to map. Use a 4-point path.'
+            message: 'Need 4 points.'
           });
           break;
         }
@@ -11245,7 +11245,7 @@ figma.ui.onmessage = async (msg: {
             vertexCount: n,
             previewVertices,
             previewSegments,
-            message: `This path has ${n} points; need exactly 4 corners for this action.`
+            message: `${n} points — need 4.`
           });
           break;
         }
@@ -11267,7 +11267,7 @@ figma.ui.onmessage = async (msg: {
             localQuad,
             previewVertices,
             previewSegments,
-            message: 'Shape is too flat to map (zero area).'
+            message: 'No area.'
           });
           break;
         }

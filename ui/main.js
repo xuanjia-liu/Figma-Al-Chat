@@ -18657,26 +18657,32 @@ Generate ONLY the reply text, nothing else.`;
       }
     }
 
-    function drawQuadTargetPreviewCanvas(canvas, statusEl, payload) {
+    function drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, payload) {
       if (!canvas) return;
       const msg = payload || {};
       const status = msg.status;
       const line1 = msg.message || '';
-      const meta = [msg.nodeName, msg.nodeType].filter(Boolean).join(' · ');
+      const metaLine = [msg.nodeName, msg.nodeType].filter(Boolean).join(' · ');
       const isOk = status === 'ok';
       const isErrorShape = status === 'notFourPointVector' || status === 'degenerate';
+
+      if (metaEl) {
+        metaEl.textContent = metaLine;
+        metaEl.title = metaLine;
+        metaEl.toggleAttribute('hidden', !metaLine);
+      }
 
       if (statusEl) {
         statusEl.classList.remove('quad-target-preview-status--ok', 'quad-target-preview-status--warn', 'quad-target-preview-status--error');
         if (isOk) {
           statusEl.classList.add('quad-target-preview-status--ok');
-          statusEl.textContent = meta ? `Ready — ${meta}` : 'Ready to map.';
+          statusEl.textContent = 'Ready';
         } else if (isErrorShape) {
           statusEl.classList.add('quad-target-preview-status--error');
-          statusEl.textContent = line1 + (meta ? ` — ${meta}` : '');
+          statusEl.textContent = line1;
         } else {
           statusEl.classList.add('quad-target-preview-status--warn');
-          statusEl.textContent = line1 + (meta ? ` — ${meta}` : '');
+          statusEl.textContent = line1;
         }
       }
 
@@ -18757,7 +18763,7 @@ Generate ONLY the reply text, nothing else.`;
         ctx.fillStyle = 'rgba(99, 102, 241, 0.15)';
         ctx.fill();
         ctx.strokeStyle = strokeMuted || '#71717a';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1;
         ctx.stroke();
         return;
       }
@@ -18768,7 +18774,7 @@ Generate ONLY the reply text, nothing else.`;
 
       const strokeRed = '#ef4444';
       const fillRed = 'rgba(239, 68, 68, 0.12)';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.strokeStyle = strokeRed;
       ctx.fillStyle = fillRed;
 
@@ -18815,6 +18821,7 @@ Generate ONLY the reply text, nothing else.`;
       if (!panel) return;
       const canvas = panel.querySelector('.quad-target-preview-canvas');
       const statusEl = panel.querySelector('.quad-target-preview-status');
+      const metaEl = panel.querySelector('.quad-target-preview-meta');
       if (!canvas || !statusEl) return;
 
       if (typeof imageTo4PointQuadPreviewListener === 'function') {
@@ -18834,7 +18841,7 @@ Generate ONLY the reply text, nothing else.`;
         const msg = event.data.pluginMessage;
         if (!msg || msg.type !== 'selection-quad-info') return;
         cleanup();
-        drawQuadTargetPreviewCanvas(canvas, statusEl, msg);
+        drawQuadTargetPreviewCanvas(canvas, statusEl, metaEl, msg);
       };
       timeoutId = setTimeout(() => {
         timeoutId = null;
@@ -19935,7 +19942,10 @@ Generate ONLY the reply text, nothing else.`;
         } else if (field.type === 'quadTargetPreview') {
           fieldHtml += `
             <div class="prompt-field prompt-field-quad-target-preview${wrapperClass}"${conditionalAttrs}>
-              <label class="prompt-field-label">${escapeHtml(field.label || 'Target shape')}</label>
+              <div class="prompt-field-label-row prompt-field-label-row--quad-target">
+                <span class="prompt-field-label">${escapeHtml(field.label || 'Target shape')}</span>
+                <span class="quad-target-preview-meta" id="${fieldId}-quad-meta" hidden title=""></span>
+              </div>
               <div class="quad-target-preview-viewport">
                 <canvas class="quad-target-preview-canvas" id="${fieldId}-quad-canvas" width="560" height="320" aria-hidden="true"></canvas>
                 <div class="quad-target-preview-status" id="${fieldId}-quad-status" aria-live="polite"></div>
