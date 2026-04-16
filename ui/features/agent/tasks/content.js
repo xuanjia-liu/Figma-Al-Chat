@@ -474,28 +474,12 @@ export const accessibilityQualityTasks = [
         },
 {
           name: 'Color Contrast Checker',
-          desc: 'Check WCAG compliance for text/background',
+          desc: 'Check WCAG contrast (auto background & text size)',
           prompt: '',
-          askMode: true,
-          help: 'Validates WCAG AA/AAA compliance for text and background color combinations.',
+          directAction: 'colorContrastChecker',
+          help: 'Runs a local WCAG contrast check on text in the selection. Background is resolved from ancestor fills (same approach as HUE shift). Text size class (normal vs large) is detected from font size/weight. Reports pass/fail for AA and AAA without manual inputs.',
           searchKeywords: 'WCAG, color contrast, accessibility, accessblity',
           requiredContext: ContextMode.ALL,
-          fields: [
-            {
-              key: 'complianceLevel', type: 'select', label: 'Compliance Level', default: 'AA', options: [
-                { value: 'AA', label: 'AA (4.5:1 for normal text, 3:1 for large)' },
-                { value: 'AAA', label: 'AAA (7:1 for normal text, 4.5:1 for large)' }
-              ]
-            },
-            {
-              key: 'textSize', type: 'select', label: 'Text Size', default: 'normal', options: [
-                { value: 'normal', label: 'Normal (<18pt or <14pt bold)' },
-                { value: 'large', label: 'Large (≥18pt or ≥14pt bold)' }
-              ]
-            },
-            { key: 'backgroundColor', type: 'color', label: 'Background Color', default: '#FFFFFF' }
-          ],
-          promptTemplate: 'Analyze the selected elements for WCAG color contrast compliance. Check text elements against the specified background color ({backgroundColor}). Compliance level: {complianceLevel}. Text size: {textSize}. Calculate contrast ratios and identify any violations. Report the contrast ratio for each text/background combination and highlight elements that fail the {complianceLevel} standard.'
         },
 {
           name: 'Touch Target Validator',

@@ -27401,6 +27401,110 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
     }
 
+    function formatColorContrastCheckerMarkdown(data) {
+      if (!data || !Array.isArray(data.entries)) return '_No contrast data._';
+      const w = typeof data.worstRatio === 'number' ? data.worstRatio : 0;
+      const ev = Number(data.evaluatedCount) || data.entries.length;
+      const aaFail = Number(data.aaFailCount) || 0;
+      const aaaFail = Number(data.aaaFailCount) || 0;
+      const lines = [];
+      lines.push('## Color contrast (WCAG)');
+      lines.push('');
+      lines.push(`- **Evaluated:** ${ev} text layer(s)`);
+      lines.push(`- **Worst ratio:** ${w.toFixed(2)}:1`);
+      lines.push(`- **AA failures:** ${aaFail} · **AAA failures:** ${aaaFail}`);
+      lines.push('');
+      lines.push('Per-layer results (background is inferred from ancestor fills):');
+      lines.push('');
+      lines.push('| Layer | Ratio | Text | BG | Size | AA | AAA |');
+      lines.push('| --- | --- | --- | --- | --- | --- | --- |');
+      for (const e of data.entries) {
+        const name = String(e.nodeName || e.nodeId || '').replace(/\|/g, '\\|').slice(0, 36);
+        const ratio = typeof e.ratio === 'number' ? e.ratio : 0;
+        const th = String(e.textHex || '');
+        const bh = String(e.bgHex || '');
+        const sz = e.textSizeClass === 'large' ? 'large' : 'normal';
+        const aa = e.aaPass ? 'Pass' : 'Fail';
+        const aaa = e.aaaPass ? 'Pass' : 'Fail';
+        lines.push(`| ${name} | ${ratio.toFixed(2)}:1 | \`${th}\` | \`${bh}\` | ${sz} | ${aa} | ${aaa} |`);
+      }
+      lines.push('');
+      lines.push('_Large text: ≥24px, or ≥~18.67px bold (WCAG). Verify visually on images/gradients._');
+      return lines.join('\n');
+    }
+
+    function showNoAiContrastResultPanel(markdownText) {
+      try {
+        const drawer = document.getElementById('commandsDrawer');
+        const body = drawer && drawer.querySelector('.commands-drawer-body');
+        if (!body || typeof parseMarkdown !== 'function') return;
+        let panel = document.getElementById('noAiContrastResultPanel');
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.id = 'noAiContrastResultPanel';
+          panel.className = 'no-ai-contrast-result-panel';
+          panel.setAttribute('role', 'region');
+          panel.setAttribute('aria-label', 'Color contrast results');
+          body.insertBefore(panel, body.firstChild);
+        }
+        panel.innerHTML = parseMarkdown(markdownText);
+        panel.style.display = 'block';
+      } catch (_err) {
+        // ignore
+      }
+    }
+
+    async function runColorContrastCheckerAction(values, actionMeta) {
+      try {
+        const requestId = `ccc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const msg = await new Promise((resolve, reject) => {
+          const timeoutMs = 25000;
+          const timeout = setTimeout(() => {
+            window.removeEventListener('message', handler);
+            reject(new Error('Contrast check timed out'));
+          }, timeoutMs);
+          const handler = (event) => {
+            const payload = event.data && event.data.pluginMessage;
+            if (!payload || payload.requestId !== requestId) return;
+            if (payload.type !== 'color-contrast-checker-result') return;
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(payload);
+          };
+          window.addEventListener('message', handler);
+          parent.postMessage({ pluginMessage: { type: 'compute-color-contrast-checker', requestId } }, '*');
+        });
+
+        if (!msg.ok) {
+          showToast(msg.error || 'Could not compute contrast', 'error');
+          return;
+        }
+
+        const md = formatColorContrastCheckerMarkdown(msg.data);
+        setMode('ask');
+        addMessage('user', 'Color Contrast Checker', null, {
+          name: actionMeta && actionMeta.name,
+          icon: actionMeta && actionMeta.icon,
+        });
+        addMessage('bot', md);
+
+        if (isAiOffModeEnabled()) {
+          showNoAiContrastResultPanel(md);
+          showToast('Contrast check complete', 'success');
+        } else {
+          const existing = document.getElementById('noAiContrastResultPanel');
+          if (existing) existing.style.display = 'none';
+          const consultingPrompt =
+            'The following WCAG contrast results were computed deterministically in the Figma plugin (source of truth). Give concise, prioritized accessibility advice (fixes, token suggestions). Do not change or recompute contrast ratios.\n\n' +
+            JSON.stringify(msg.data, null, 2);
+          await sendToAI(consultingPrompt, null, null, []);
+        }
+      } catch (error) {
+        console.error('Color contrast checker failed', error);
+        showToast(error && error.message ? error.message : 'Contrast check failed', 'error');
+      }
+    }
+
     async function runDirectAction(actionKey, values, actionMeta) {
       if (isAiOffModeEnabled() && !isDirectActionAllowedInAiOff(actionKey)) {
         showToast(getAiOffBlockedMessage(actionMeta?.name || 'This action'), 'error');
@@ -27496,6 +27600,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'quickDetach':
           await runQuickDetachAction(values, actionMeta);
+          break;
+        case 'colorContrastChecker':
+          await runColorContrastCheckerAction(values, actionMeta);
           break;
         default:
           showToast('Unknown action', 'error');

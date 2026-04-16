@@ -77,7 +77,8 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'browseStyles',
   'googleFontPreview',
   'splitTextLocal',
-  'quickDetach'
+  'quickDetach',
+  'colorContrastChecker'
 ]);
 
 export const NON_AI_LOCAL_TASKS = new Set([

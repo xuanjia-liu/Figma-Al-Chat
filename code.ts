@@ -6633,6 +6633,68 @@ function getTopLevelSelection(nodes: readonly SceneNode[]): SceneNode[] {
   });
 }
 
+/** Heuristic bold detection from Figma font style name (WCAG large-text exception). */
+function isFontNameBoldForWcag(fontName: FontName | PluginAPI['mixed']): boolean {
+  if (fontName === figma.mixed) return false;
+  if (!fontName || typeof fontName !== 'object') return false;
+  const style = String((fontName as FontName).style || '').toLowerCase();
+  return /(bold|black|heavy|semibold|demibold|extrabold|ultra)/i.test(style);
+}
+
+/**
+ * WCAG 2.x text size: large if ≥18pt (≈24px) or ≥14pt bold (≈18.67px).
+ * Figma fontSize is in CSS pixels; thresholds use common px equivalents.
+ */
+function classifyWcagTextSizeFromTextNode(node: TextNode): 'large' | 'normal' {
+  const chars = node.characters || '';
+  if (chars.length === 0) return 'normal';
+  let minSize = Infinity;
+  for (let i = 0; i < chars.length; i += 1) {
+    const fs = node.getRangeFontSize(i, i + 1);
+    if (typeof fs === 'number' && fs > 0) minSize = Math.min(minSize, fs);
+  }
+  if (!Number.isFinite(minSize)) {
+    const fs = node.fontSize;
+    if (typeof fs === 'number' && fs > 0) minSize = fs;
+    else return 'normal';
+  }
+  let anyAtMin = false;
+  let allBoldAtMin = true;
+  for (let i = 0; i < chars.length; i += 1) {
+    const fs = node.getRangeFontSize(i, i + 1);
+    if (typeof fs !== 'number' || Math.abs(fs - minSize) > 0.01) continue;
+    anyAtMin = true;
+    if (!isFontNameBoldForWcag(node.getRangeFontName(i, i + 1))) {
+      allBoldAtMin = false;
+      break;
+    }
+  }
+  if (!anyAtMin) {
+    const fn = node.fontName;
+    if (minSize >= 24) return 'large';
+    if (minSize >= 18.67 && isFontNameBoldForWcag(fn)) return 'large';
+    return 'normal';
+  }
+  if (minSize >= 24) return 'large';
+  if (minSize >= 18.67 && allBoldAtMin) return 'large';
+  return 'normal';
+}
+
+function wcagContrastPassForSize(
+  ratio: number,
+  size: 'large' | 'normal',
+  level: 'AA' | 'AAA'
+): boolean {
+  const aa = size === 'large' ? 3.0 : 4.5;
+  const aaa = size === 'large' ? 4.5 : 7.0;
+  const need = level === 'AA' ? aa : aaa;
+  return ratio >= need;
+}
+
+function wcagThresholdsForSize(size: 'large' | 'normal'): { aa: number; aaa: number } {
+  return size === 'large' ? { aa: 3.0, aaa: 4.5 } : { aa: 4.5, aaa: 7.0 };
+}
+
 // Helper function to export selection using clone-into-frame method (fallback for complex cases)
 async function exportWithCloneMethod(
   nodes: SceneNode[],
@@ -12695,6 +12757,104 @@ figma.ui.onmessage = async (msg: {
           worstRatio: worst.ratio,
           aaPass: worst.aaPass,
           evaluatedCount: entries.length,
+          entries,
+        },
+      });
+      break;
+    }
+
+    case 'compute-color-contrast-checker': {
+      const requestId = (msg as any).requestId;
+      const selectedTopLevel = getTopLevelSelection(selection);
+      const textNodeIds: string[] = [];
+      for (const node of selectedTopLevel) {
+        if (node.type === 'TEXT') {
+          textNodeIds.push(node.id);
+          continue;
+        }
+        if (!('findAll' in node)) continue;
+        const textNodes = node.findAll((child) => child.type === 'TEXT') as TextNode[];
+        for (const textNode of textNodes) {
+          textNodeIds.push(textNode.id);
+        }
+      }
+      const uniqueIds = [...new Set(textNodeIds)];
+      if (uniqueIds.length === 0) {
+        figma.ui.postMessage({
+          type: 'color-contrast-checker-result',
+          requestId,
+          ok: false,
+          error: 'Select at least one text layer or a container with text.',
+        });
+        break;
+      }
+
+      type CheckerEntry = {
+        nodeId: string;
+        nodeName: string;
+        ratio: number;
+        textHex: string;
+        bgHex: string;
+        textContent: string;
+        textSizeClass: 'large' | 'normal';
+        aaRequired: number;
+        aaaRequired: number;
+        aaPass: boolean;
+        aaaPass: boolean;
+      };
+
+      const entries: CheckerEntry[] = [];
+
+      for (const nodeId of uniqueIds) {
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (!node || node.type !== 'TEXT') continue;
+        const textColor = resolveTextNodeCompositeFillColor(node);
+        const bgColor = resolveBackgroundForTextNode(node, selectedTopLevel);
+        if (!textColor || !bgColor) continue;
+        const effectiveFg = textColor.a < 0.999 ? compositeOver(textColor, bgColor) : textColor;
+        const ratio = wcagContrastRatio(effectiveFg, bgColor);
+        const textSizeClass = classifyWcagTextSizeFromTextNode(node);
+        const { aa: aaRequired, aaa: aaaRequired } = wcagThresholdsForSize(textSizeClass);
+        const aaPass = wcagContrastPassForSize(ratio, textSizeClass, 'AA');
+        const aaaPass = wcagContrastPassForSize(ratio, textSizeClass, 'AAA');
+        entries.push({
+          nodeId: node.id,
+          nodeName: node.name,
+          ratio,
+          textHex: rgbToHex(effectiveFg.r, effectiveFg.g, effectiveFg.b).toUpperCase(),
+          bgHex: rgbToHex(bgColor.r, bgColor.g, bgColor.b).toUpperCase(),
+          textContent: String(node.characters || ''),
+          textSizeClass,
+          aaRequired,
+          aaaRequired,
+          aaPass,
+          aaaPass,
+        });
+      }
+
+      if (entries.length === 0) {
+        figma.ui.postMessage({
+          type: 'color-contrast-checker-result',
+          requestId,
+          ok: false,
+          error: 'Could not resolve text and background colors for the selection.',
+        });
+        break;
+      }
+
+      const worst = entries.reduce((acc, item) => (item.ratio < acc.ratio ? item : acc), entries[0]);
+      const aaFailCount = entries.filter((e) => !e.aaPass).length;
+      const aaaFailCount = entries.filter((e) => !e.aaaPass).length;
+
+      figma.ui.postMessage({
+        type: 'color-contrast-checker-result',
+        requestId,
+        ok: true,
+        data: {
+          worstRatio: worst.ratio,
+          evaluatedCount: entries.length,
+          aaFailCount,
+          aaaFailCount,
           entries,
         },
       });
