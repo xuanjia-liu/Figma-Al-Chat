@@ -27797,35 +27797,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         cardsHost.appendChild(empty);
       } else {
         noAiOverlayCards.forEach((card) => {
-          const cardEl = document.createElement('article');
-          cardEl.className = 'no-ai-overlay-card';
-
-          const meta = document.createElement('div');
-          meta.className = 'no-ai-overlay-card-meta';
-          const metaTitle = document.createElement('span');
-          metaTitle.className = 'no-ai-overlay-card-meta-title';
-          metaTitle.textContent = card.title || 'Result';
-          meta.appendChild(metaTitle);
-          if (card.timestampLabel) {
-            const metaTime = document.createElement('span');
-            metaTime.className = 'no-ai-overlay-card-meta-time';
-            metaTime.textContent = card.timestampLabel;
-            meta.appendChild(metaTime);
-          }
-          cardEl.appendChild(meta);
-
-          const thread = document.createElement('div');
-          thread.className = 'no-ai-overlay-card-thread';
           const messages = Array.isArray(card.messages) ? card.messages : [];
           messages.forEach((msg) => {
             if (msg.quickAction) {
-              thread.appendChild(createNoAiQuickActionUserElement(msg.quickAction.name, msg.quickAction.icon));
+              cardsHost.appendChild(createNoAiQuickActionUserElement(msg.quickAction.name, msg.quickAction.icon));
             } else {
-              thread.appendChild(createNoAiMessageElement(msg.role, msg.content));
+              cardsHost.appendChild(createNoAiMessageElement(msg.role, msg.content));
             }
           });
-          cardEl.appendChild(thread);
-          cardsHost.appendChild(cardEl);
         });
       }
 
