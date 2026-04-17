@@ -8206,8 +8206,11 @@
     .chat-input-container {
       position: relative;
       --chat-input-beam-color: var(--accent);
-      --chat-input-beam-tail: color-mix(in srgb, var(--chat-input-beam-color) 32%, transparent);
-      --chat-input-beam-glow: color-mix(in srgb, var(--chat-input-beam-color) 40%, transparent);
+      /* Accent-anchored palette used by the rotating mask window (mimics BorderBeam md). */
+      --chat-input-beam-c1: var(--chat-input-beam-color);
+      --chat-input-beam-c2: color-mix(in srgb, var(--chat-input-beam-color), white 32%);
+      --chat-input-beam-c3: color-mix(in srgb, var(--chat-input-beam-color), black 22%);
+      --chat-input-beam-c4: color-mix(in srgb, var(--chat-input-beam-color), white 58%);
       display: flex;
       flex-direction: column;
       gap: var(--space-md);
@@ -8234,50 +8237,98 @@
       overflow: visible;
     }
 
+    /* Stroke ring: static accent palette revealed by a rotating conic mask window. */
     .chat-input-container::before {
       content: "";
       position: absolute;
-      inset: -1.25px;
+      inset: 0;
       border-radius: inherit;
+      padding: 1.25px;
       pointer-events: none;
-      padding: 1.4px;
       opacity: 0;
       background:
+        radial-gradient(ellipse 70px 40px at 33% -7%, var(--chat-input-beam-c2), transparent),
+        radial-gradient(ellipse 60px 35px at 12% -5%, var(--chat-input-beam-c1), transparent),
+        radial-gradient(ellipse 40px 70px at 2% 68%, var(--chat-input-beam-c3), transparent),
+        radial-gradient(ellipse 20px 35px at 2% 68%, var(--chat-input-beam-c4), transparent),
+        radial-gradient(ellipse 180px 32px at 74% 100%, var(--chat-input-beam-c1), transparent),
+        radial-gradient(ellipse 85px 26px at 55% 100%, var(--chat-input-beam-c2), transparent),
+        radial-gradient(ellipse 74px 32px at 94% 0%, var(--chat-input-beam-c3), transparent),
+        radial-gradient(ellipse 26px 42px at 100% 27%, var(--chat-input-beam-c1), transparent),
+        radial-gradient(ellipse 52px 48px at 100% 27%, var(--chat-input-beam-c4), transparent);
+      -webkit-mask:
         conic-gradient(from var(--chat-input-beam-angle),
-          transparent 0deg 308deg,
-          var(--chat-input-beam-tail) 322deg,
-          var(--chat-input-beam-color) 342deg,
-          var(--chat-input-beam-tail) 356deg,
-          transparent 360deg);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude;
-      filter: saturate(1.12) brightness(1.22);
-      transition: opacity 180ms ease;
+          transparent 0%, transparent 30%,
+          rgba(255, 255, 255, 0.10) 36%,
+          rgba(255, 255, 255, 0.35) 44%,
+          #fff 52%, #fff 80%,
+          rgba(255, 255, 255, 0.35) 86%,
+          rgba(255, 255, 255, 0.10) 92%,
+          transparent 95%, transparent 100%),
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: source-in, xor;
+      mask:
+        conic-gradient(from var(--chat-input-beam-angle),
+          transparent 0%, transparent 30%,
+          rgba(255, 255, 255, 0.10) 36%,
+          rgba(255, 255, 255, 0.35) 44%,
+          #fff 52%, #fff 80%,
+          rgba(255, 255, 255, 0.35) 86%,
+          rgba(255, 255, 255, 0.10) 92%,
+          transparent 95%, transparent 100%),
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      mask-composite: intersect, exclude;
+      box-shadow: inset 0 0 9px 1px rgba(255, 255, 255, 0.22);
+      transition: opacity 200ms ease;
     }
 
+    /* Inner bleed: colored light leaking INSIDE the box near each edge, fading
+       toward the center, revealed by the same rotating conic window as the stroke.
+       Mirrors BorderBeam's `::before` inner layer (innerGradients + edge-linear masks). */
     .chat-input-container::after {
       content: "";
       position: absolute;
-      inset: -1px;
+      inset: 0;
       border-radius: inherit;
       pointer-events: none;
       opacity: 0;
-      /* Edge-aligned bloom: true vertical strips on L/R, horizontal on T/B (linear = flush to box edges). */
       background:
-        linear-gradient(to right,
-          color-mix(in srgb, var(--chat-input-beam-color) 24%, transparent) 0%,
-          transparent 18px),
-        linear-gradient(to left,
-          color-mix(in srgb, var(--chat-input-beam-color) 24%, transparent) 0%,
-          transparent 18px),
-        linear-gradient(to bottom,
-          color-mix(in srgb, var(--chat-input-beam-glow) 38%, transparent) 0%,
-          transparent 14px),
-        linear-gradient(to top,
-          color-mix(in srgb, var(--chat-input-beam-glow) 38%, transparent) 0%,
-          transparent 14px);
+        radial-gradient(ellipse 63px 36px at 33% -7%, color-mix(in srgb, var(--chat-input-beam-c2) 48%, transparent), transparent),
+        radial-gradient(ellipse 54px 32px at 12% -5%, color-mix(in srgb, var(--chat-input-beam-c1) 48%, transparent), transparent),
+        radial-gradient(ellipse 36px 63px at 2% 68%, color-mix(in srgb, var(--chat-input-beam-c3) 48%, transparent), transparent),
+        radial-gradient(ellipse 18px 32px at 2% 68%, color-mix(in srgb, var(--chat-input-beam-c4) 48%, transparent), transparent),
+        radial-gradient(ellipse 162px 29px at 74% 100%, color-mix(in srgb, var(--chat-input-beam-c1) 48%, transparent), transparent),
+        radial-gradient(ellipse 77px 23px at 55% 100%, color-mix(in srgb, var(--chat-input-beam-c2) 48%, transparent), transparent),
+        radial-gradient(ellipse 67px 29px at 94% 0%, color-mix(in srgb, var(--chat-input-beam-c3) 48%, transparent), transparent),
+        radial-gradient(ellipse 23px 38px at 100% 27%, color-mix(in srgb, var(--chat-input-beam-c1) 48%, transparent), transparent),
+        radial-gradient(ellipse 47px 43px at 100% 27%, color-mix(in srgb, var(--chat-input-beam-c4) 48%, transparent), transparent);
+      box-shadow: inset 0 0 9px 1px rgba(255, 255, 255, 0.22);
+      -webkit-mask:
+        conic-gradient(from var(--chat-input-beam-angle),
+          transparent 0%, transparent 30%,
+          rgba(255, 255, 255, 0.10) 36%,
+          rgba(255, 255, 255, 0.35) 44%,
+          #fff 52%, #fff 80%,
+          rgba(255, 255, 255, 0.35) 86%,
+          rgba(255, 255, 255, 0.10) 92%,
+          transparent 95%, transparent 100%),
+        linear-gradient(#fff, transparent 28px, transparent calc(100% - 28px), #fff),
+        linear-gradient(to right, #fff, transparent 28px, transparent calc(100% - 28px), #fff);
+      -webkit-mask-composite: source-in, source-over;
+      mask:
+        conic-gradient(from var(--chat-input-beam-angle),
+          transparent 0%, transparent 30%,
+          rgba(255, 255, 255, 0.10) 36%,
+          rgba(255, 255, 255, 0.35) 44%,
+          #fff 52%, #fff 80%,
+          rgba(255, 255, 255, 0.35) 86%,
+          rgba(255, 255, 255, 0.10) 92%,
+          transparent 95%, transparent 100%),
+        linear-gradient(#fff, transparent 28px, transparent calc(100% - 28px), #fff),
+        linear-gradient(to right, #fff, transparent 28px, transparent calc(100% - 28px), #fff);
+      mask-composite: intersect, add;
       transition: opacity 220ms ease;
     }
 
@@ -8324,83 +8375,49 @@
     .chat-input-container:focus-within::before {
       opacity: 1;
       animation:
-        chat-input-border-beam 1.96s linear infinite,
-        chat-input-beam-color-drift 9.7s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        chat-input-beam-spin 1.96s linear infinite,
+        chat-input-beam-hue 12s ease-in-out infinite;
     }
 
     .chat-input-container:focus-within::after {
       opacity: 1;
-      animation: chat-input-beam-color-drift-bloom 12.4s cubic-bezier(0.42, 0, 0.58, 1) infinite;
+      animation:
+        chat-input-beam-spin 1.96s linear infinite,
+        chat-input-beam-hue-inner 10s ease-in-out infinite;
     }
 
-    @keyframes chat-input-border-beam {
+    @keyframes chat-input-beam-spin {
       to {
         --chat-input-beam-angle: 360deg;
       }
     }
 
-    /* Subtle color drift: small hue wobble around accent + sat/brightness “weather” (irregular loop). */
-    @keyframes chat-input-beam-color-drift {
+    /* Small hue wobble (±8°) around accent + gentle sat/brightness breathing. */
+    @keyframes chat-input-beam-hue {
       0% {
-        filter: hue-rotate(-6deg) saturate(1.06) brightness(1.16);
+        filter: hue-rotate(-8deg) saturate(1.15) brightness(1.22);
       }
 
-      13% {
-        filter: hue-rotate(3deg) saturate(1.14) brightness(1.22);
-      }
-
-      28% {
-        filter: hue-rotate(-2deg) saturate(1.2) brightness(1.26);
-      }
-
-      44% {
-        filter: hue-rotate(7deg) saturate(1.1) brightness(1.2);
-      }
-
-      59% {
-        filter: hue-rotate(-4deg) saturate(1.17) brightness(1.24);
-      }
-
-      76% {
-        filter: hue-rotate(5deg) saturate(1.08) brightness(1.18);
-      }
-
-      91% {
-        filter: hue-rotate(-1deg) saturate(1.15) brightness(1.21);
+      50% {
+        filter: hue-rotate(8deg) saturate(1.22) brightness(1.28);
       }
 
       100% {
-        filter: hue-rotate(-6deg) saturate(1.06) brightness(1.16);
+        filter: hue-rotate(-8deg) saturate(1.15) brightness(1.22);
       }
     }
 
-    @keyframes chat-input-beam-color-drift-bloom {
+    @keyframes chat-input-beam-hue-inner {
       0% {
-        filter: hue-rotate(4deg) saturate(1.04) brightness(1.1);
+        filter: hue-rotate(-8deg) saturate(1.18) brightness(1.2);
       }
 
-      18% {
-        filter: hue-rotate(-3deg) saturate(1.12) brightness(1.14);
-      }
-
-      35% {
-        filter: hue-rotate(6deg) saturate(1.07) brightness(1.12);
-      }
-
-      52% {
-        filter: hue-rotate(-5deg) saturate(1.14) brightness(1.16);
-      }
-
-      69% {
-        filter: hue-rotate(2deg) saturate(1.09) brightness(1.13);
-      }
-
-      86% {
-        filter: hue-rotate(-2deg) saturate(1.06) brightness(1.11);
+      50% {
+        filter: hue-rotate(8deg) saturate(1.26) brightness(1.26);
       }
 
       100% {
-        filter: hue-rotate(4deg) saturate(1.04) brightness(1.1);
+        filter: hue-rotate(-8deg) saturate(1.18) brightness(1.2);
       }
     }
 
@@ -8478,10 +8495,13 @@
 
     body.ai-off-mode .no-ai-overlay {
       position: fixed;
-      left: var(--space-lg);
-      right: var(--space-lg);
+      left: 0;
+      right: 0;
       bottom: var(--space-lg);
-      height: min(52vh, 520px);
+      width: min(calc(100% - (2 * var(--space-lg))), 720px);
+      margin-left: auto;
+      margin-right: auto;
+      height: min(70vh, 520px);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
@@ -8559,7 +8579,9 @@
       overflow-x: hidden;
       padding: var(--space-md);
       padding-top: calc(var(--space-md) + 28px + var(--space-xs));
-      display: block;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
       flex: 1 1 0;
       height: 100%;
       min-height: 0;
@@ -8569,62 +8591,20 @@
       pointer-events: auto;
     }
 
-    body.ai-off-mode .no-ai-overlay-card {
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      background: var(--bg-secondary);
-      overflow:hidden;
-      flex: 0 0 auto;
-      margin-bottom: var(--space-sm);
-    }
-
-    body.ai-off-mode .no-ai-overlay-card:last-child {
-      margin-bottom: 0;
-    }
-
-    body.ai-off-mode .no-ai-overlay-card-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-sm);
-      padding: var(--space-xs) var(--space-sm);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-tertiary);
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
-
-    body.ai-off-mode .no-ai-overlay-card-meta-title {
-      font-weight: 600;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    body.ai-off-mode .no-ai-overlay-card-thread {
-      padding: var(--space-xs) var(--space-sm) var(--space-sm);
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-xs);
-      min-height: 0;
-      overflow: visible;
-    }
-
-    body.ai-off-mode .no-ai-overlay-card .message {
+    body.ai-off-mode .no-ai-overlay-cards .message {
       margin: 0;
       max-width: 100%;
     }
 
-    body.ai-off-mode .no-ai-overlay-card .message.bot:last-child {
+    body.ai-off-mode .no-ai-overlay-cards .message.bot:last-child {
       margin-bottom: 0;
     }
 
-    body.ai-off-mode .no-ai-overlay-card .message .message-content {
+    body.ai-off-mode .no-ai-overlay-cards .message .message-content {
       max-width: 100%;
     }
 
-    body.ai-off-mode .no-ai-overlay-card .message .table-container {
+    body.ai-off-mode .no-ai-overlay-cards .message .table-container {
       overflow-x: auto;
     }
 
