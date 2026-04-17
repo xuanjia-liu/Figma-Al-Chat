@@ -8253,7 +8253,7 @@
       -webkit-mask-composite: xor;
       mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
       mask-composite: exclude;
-      filter: saturate(1.2) brightness(1.3);
+      filter: saturate(1.12) brightness(1.22);
       transition: opacity 180ms ease;
     }
 
@@ -8289,6 +8289,9 @@
         border-radius: var(--radius-xl);
         padding: var(--space-lg) var(--space-xl);
       }
+      .commands-drawer {
+        bottom: 24px;
+      }
     }
 
     /* max-width: 480px — chat column + hue-shift */
@@ -8320,12 +8323,14 @@
 
     .chat-input-container:focus-within::before {
       opacity: 1;
-      animation: chat-input-border-beam 1.96s linear infinite, chat-input-beam-hue 2.4s linear infinite;
+      animation:
+        chat-input-border-beam 1.96s linear infinite,
+        chat-input-beam-color-drift 9.7s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
     }
 
     .chat-input-container:focus-within::after {
       opacity: 1;
-      animation: chat-input-beam-hue 2.4s linear infinite;
+      animation: chat-input-beam-color-drift-bloom 12.4s cubic-bezier(0.42, 0, 0.58, 1) infinite;
     }
 
     @keyframes chat-input-border-beam {
@@ -8334,17 +8339,68 @@
       }
     }
 
-    @keyframes chat-input-beam-hue {
+    /* Subtle color drift: small hue wobble around accent + sat/brightness “weather” (irregular loop). */
+    @keyframes chat-input-beam-color-drift {
       0% {
-        filter: hue-rotate(-15deg) saturate(1.2) brightness(1.25);
+        filter: hue-rotate(-6deg) saturate(1.06) brightness(1.16);
       }
 
-      50% {
-        filter: hue-rotate(15deg) saturate(1.3) brightness(1.35);
+      13% {
+        filter: hue-rotate(3deg) saturate(1.14) brightness(1.22);
+      }
+
+      28% {
+        filter: hue-rotate(-2deg) saturate(1.2) brightness(1.26);
+      }
+
+      44% {
+        filter: hue-rotate(7deg) saturate(1.1) brightness(1.2);
+      }
+
+      59% {
+        filter: hue-rotate(-4deg) saturate(1.17) brightness(1.24);
+      }
+
+      76% {
+        filter: hue-rotate(5deg) saturate(1.08) brightness(1.18);
+      }
+
+      91% {
+        filter: hue-rotate(-1deg) saturate(1.15) brightness(1.21);
       }
 
       100% {
-        filter: hue-rotate(-15deg) saturate(1.2) brightness(1.25);
+        filter: hue-rotate(-6deg) saturate(1.06) brightness(1.16);
+      }
+    }
+
+    @keyframes chat-input-beam-color-drift-bloom {
+      0% {
+        filter: hue-rotate(4deg) saturate(1.04) brightness(1.1);
+      }
+
+      18% {
+        filter: hue-rotate(-3deg) saturate(1.12) brightness(1.14);
+      }
+
+      35% {
+        filter: hue-rotate(6deg) saturate(1.07) brightness(1.12);
+      }
+
+      52% {
+        filter: hue-rotate(-5deg) saturate(1.14) brightness(1.16);
+      }
+
+      69% {
+        filter: hue-rotate(2deg) saturate(1.09) brightness(1.13);
+      }
+
+      86% {
+        filter: hue-rotate(-2deg) saturate(1.06) brightness(1.11);
+      }
+
+      100% {
+        filter: hue-rotate(4deg) saturate(1.04) brightness(1.1);
       }
     }
 
@@ -8373,6 +8429,7 @@
       min-height: 0;
       transform: translateY(0);
       border: none;
+      max-width: 100%;
       border-radius: 0;
       box-shadow: none;
       background: var(--bg-primary);
@@ -8412,6 +8469,10 @@
 
     body.ai-off-mode .commands-drawer-search input {
       width: 100%;
+    }
+
+    body.ai-off-mode .commands-content-header {
+      display: none;
     }
 
     .no-ai-overlay,
