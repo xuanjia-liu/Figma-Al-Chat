@@ -8244,10 +8244,11 @@
       opacity: 0;
       background:
         conic-gradient(from var(--chat-input-beam-angle),
-          transparent 0deg 318deg,
-          var(--chat-input-beam-tail) 334deg,
-          var(--chat-input-beam-color) 351deg,
-          var(--chat-input-beam-tail) 360deg);
+          transparent 0deg 308deg,
+          var(--chat-input-beam-tail) 322deg,
+          var(--chat-input-beam-color) 342deg,
+          var(--chat-input-beam-tail) 356deg,
+          transparent 360deg);
       -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
       -webkit-mask-composite: xor;
       mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -8260,13 +8261,23 @@
       content: "";
       position: absolute;
       inset: -1px;
-      border-radius: calc(var(--radius-lg) + 1px);
+      border-radius: inherit;
       pointer-events: none;
       opacity: 0;
+      /* Edge-aligned bloom: true vertical strips on L/R, horizontal on T/B (linear = flush to box edges). */
       background:
-        radial-gradient(ellipse 110px 28px at 75% -4%, var(--chat-input-beam-glow), transparent),
-        radial-gradient(ellipse 120px 24px at 74% 102%, color-mix(in srgb, var(--chat-input-beam-color) 30%, transparent), transparent),
-        radial-gradient(ellipse 32px 56px at 100% 30%, color-mix(in srgb, var(--chat-input-beam-color) 24%, transparent), transparent);
+        linear-gradient(to right,
+          color-mix(in srgb, var(--chat-input-beam-color) 24%, transparent) 0%,
+          transparent 18px),
+        linear-gradient(to left,
+          color-mix(in srgb, var(--chat-input-beam-color) 24%, transparent) 0%,
+          transparent 18px),
+        linear-gradient(to bottom,
+          color-mix(in srgb, var(--chat-input-beam-glow) 38%, transparent) 0%,
+          transparent 14px),
+        linear-gradient(to top,
+          color-mix(in srgb, var(--chat-input-beam-glow) 38%, transparent) 0%,
+          transparent 14px);
       transition: opacity 220ms ease;
     }
 
