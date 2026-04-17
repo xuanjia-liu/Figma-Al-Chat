@@ -11774,7 +11774,7 @@ figma.ui.onmessage = async (msg: {
           return true;
         }
 
-        function traverseNode(node: SceneNode) {
+        async function traverseNode(node: SceneNode): Promise<void> {
           const collectColor = categories.includes('colors') && shouldCollectColor(node);
 
           // Colors from fills
@@ -11952,7 +11952,7 @@ figma.ui.onmessage = async (msg: {
           // Also check instances for component references
           if (categories.includes('components') && node.type === 'INSTANCE') {
             const inst = node as InstanceNode;
-            const mainComp = inst.mainComponent;
+            const mainComp = await resolveInstanceMainComponent(inst);
             if (mainComp && !rawComponents.has(mainComp.name)) {
               const info: any = { name: mainComp.name, type: 'COMPONENT (referenced)', variants: [] };
               if (mainComp.parent && mainComp.parent.type === 'COMPONENT_SET') {
@@ -11965,13 +11965,13 @@ figma.ui.onmessage = async (msg: {
           // Recurse
           if ('children' in node) {
             for (const child of (node as any).children) {
-              traverseNode(child);
+              await traverseNode(child);
             }
           }
         }
 
         for (const node of rootNodes) {
-          traverseNode(node);
+          await traverseNode(node);
         }
 
         // Collect style IDs referenced by selected nodes (for selection-scoped extraction)
