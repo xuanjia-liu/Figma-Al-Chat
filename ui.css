@@ -8471,10 +8471,6 @@
       width: 100%;
     }
 
-    body.ai-off-mode .commands-content-header {
-      display: none;
-    }
-
     .no-ai-overlay,
     .no-ai-overlay-fab {
       display: none;
@@ -8492,8 +8488,8 @@
       backdrop-filter: blur(8px);
       box-shadow: var(--shadow-xl);
       z-index: 1300;
-      display: grid;
-      grid-template-rows: auto 1fr;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       min-height: 0;
       pointer-events: none;
@@ -8512,7 +8508,7 @@
     }
 
     body.ai-off-mode .no-ai-overlay.hidden {
-      display: grid !important;
+      display: flex !important;
       pointer-events: none;
       opacity: 0;
       visibility: hidden;
@@ -8528,42 +8524,11 @@
       }
     }
 
-    body.ai-off-mode .no-ai-overlay-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--space-sm);
-      flex: 0 0 auto;
-      padding: var(--space-sm) var(--space-md);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-tertiary);
-    }
-
-    body.ai-off-mode .no-ai-overlay-title-group {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    body.ai-off-mode .no-ai-overlay-title {
-      font-size: var(--text-md);
-      font-weight: 600;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    body.ai-off-mode .no-ai-overlay-subtitle {
-      font-size: var(--text-xs);
-      color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     body.ai-off-mode .no-ai-overlay-close {
+      position: absolute;
+      top: var(--space-sm);
+      right: var(--space-sm);
+      z-index: 2;
       width: 28px;
       height: 28px;
       border: 1px solid var(--border);
@@ -8572,7 +8537,7 @@
       align-items: center;
       justify-content: center;
       color: var(--text-secondary);
-      background: transparent;
+      background:var(--bg-secondary);
       cursor: pointer;
       flex: 0 0 auto;
     }
@@ -8593,6 +8558,7 @@
       overflow-y: auto;
       overflow-x: hidden;
       padding: var(--space-md);
+      padding-top: calc(var(--space-md) + 28px + var(--space-xs));
       display: block;
       flex: 1 1 0;
       height: 100%;

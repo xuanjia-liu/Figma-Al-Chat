@@ -7856,6 +7856,270 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
   }
 }
 
+type PerspectiveQuadPoint = { x: number; y: number };
+type PerspectiveDerivedQuad = {
+  quad: PerspectiveQuadPoint[];
+  derivedBy: 'handles-4' | 'handles-8' | 'alt-sides-8';
+};
+
+function perspectiveIntersectLines(
+  p1: PerspectiveQuadPoint, d1: PerspectiveQuadPoint,
+  p2: PerspectiveQuadPoint, d2: PerspectiveQuadPoint
+): PerspectiveQuadPoint | null {
+  const denom = d1.x * d2.y - d1.y * d2.x;
+  if (!Number.isFinite(denom) || Math.abs(denom) < 1e-9) return null;
+  const t = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / denom;
+  const x = p1.x + t * d1.x;
+  const y = p1.y + t * d1.y;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
+function perspectiveQuadSignedArea(quad: PerspectiveQuadPoint[]): number {
+  let acc = 0;
+  for (let i = 0; i < quad.length; i++) {
+    const a = quad[i];
+    const b = quad[(i + 1) % quad.length];
+    acc += a.x * b.y - b.x * a.y;
+  }
+  return acc * 0.5;
+}
+
+type PerspectiveSegInfo = {
+  start: number;
+  end: number;
+  tangentStart: PerspectiveQuadPoint;
+  tangentEnd: PerspectiveQuadPoint;
+  hasCurve: boolean;
+};
+
+/**
+ * Normalize a VectorNetwork by:
+ * - Coalescing vertices that share the same position (SVG importers often emit a
+ *   duplicate trailing vertex when a path ends with an explicit line-to-start
+ *   command followed by `Z`).
+ * - Dropping zero-length straight segments (e.g. the implicit closing line emitted
+ *   by `Z` when the path has already returned to the start point).
+ * - Re-pointing segment indices through the coalescing table.
+ * Returns the deduped vertex list and the cleaned segment list.
+ */
+function perspectiveNormalizeVectorNetwork(vn: any): { vertices: PerspectiveQuadPoint[]; segments: PerspectiveSegInfo[] } | null {
+  if (!vn || !Array.isArray(vn.vertices) || !Array.isArray(vn.segments)) return null;
+
+  const rawVerts: PerspectiveQuadPoint[] = [];
+  for (const v of vn.vertices) {
+    const x = Number(v?.x);
+    const y = Number(v?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    rawVerts.push({ x, y });
+  }
+
+  const vertexCoalesceEps = 1e-3;
+  const remap: number[] = rawVerts.map((_, i) => i);
+  for (let i = 1; i < rawVerts.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (remap[j] !== j) continue;
+      const dx = rawVerts[i].x - rawVerts[j].x;
+      const dy = rawVerts[i].y - rawVerts[j].y;
+      if (Math.hypot(dx, dy) <= vertexCoalesceEps) {
+        remap[i] = j;
+        break;
+      }
+    }
+  }
+  const keptIdx: number[] = [];
+  const newIndexFor: number[] = new Array(rawVerts.length).fill(-1);
+  for (let i = 0; i < rawVerts.length; i++) {
+    if (remap[i] === i) {
+      newIndexFor[i] = keptIdx.length;
+      keptIdx.push(i);
+    }
+  }
+  for (let i = 0; i < rawVerts.length; i++) {
+    if (remap[i] !== i) newIndexFor[i] = newIndexFor[remap[i]];
+  }
+  const vertices: PerspectiveQuadPoint[] = keptIdx.map(i => rawVerts[i]);
+
+  const segs: PerspectiveSegInfo[] = [];
+  for (const s of vn.segments) {
+    const startRaw = Number(s?.start);
+    const endRaw = Number(s?.end);
+    if (!Number.isInteger(startRaw) || !Number.isInteger(endRaw)) return null;
+    if (startRaw < 0 || endRaw < 0 || startRaw >= rawVerts.length || endRaw >= rawVerts.length) return null;
+    const start = newIndexFor[startRaw];
+    const end = newIndexFor[endRaw];
+    if (start < 0 || end < 0) return null;
+    const tsx = Number(s?.tangentStart?.x) || 0;
+    const tsy = Number(s?.tangentStart?.y) || 0;
+    const tex = Number(s?.tangentEnd?.x) || 0;
+    const tey = Number(s?.tangentEnd?.y) || 0;
+    const tanMag = Math.max(Math.hypot(tsx, tsy), Math.hypot(tex, tey));
+    const hasCurve = tanMag > 1e-4;
+    if (start === end && !hasCurve) continue; // drop zero-length closing stub
+    segs.push({
+      start,
+      end,
+      tangentStart: { x: tsx, y: tsy },
+      tangentEnd: { x: tex, y: tey },
+      hasCurve
+    });
+  }
+
+  return { vertices, segments: segs };
+}
+
+/** Build a cyclic chain of N segments starting from segments[0]; supports segments
+ *  whose direction is reversed by swapping start/end and their tangent vectors. */
+function perspectiveOrderSegmentChain(segs: PerspectiveSegInfo[], n: number): PerspectiveSegInfo[] | null {
+  if (segs.length < n) return null;
+  const ordered: PerspectiveSegInfo[] = [];
+  const used = new Set<number>();
+  ordered.push(segs[0]);
+  used.add(0);
+  for (let step = 1; step < n; step++) {
+    const needStart = ordered[ordered.length - 1].end;
+    let nextIdx = segs.findIndex((s, i) => !used.has(i) && s.start === needStart);
+    if (nextIdx !== -1) {
+      ordered.push(segs[nextIdx]);
+      used.add(nextIdx);
+      continue;
+    }
+    nextIdx = segs.findIndex((s, i) => !used.has(i) && s.end === needStart);
+    if (nextIdx === -1) return null;
+    const rev = segs[nextIdx];
+    ordered.push({
+      start: rev.end,
+      end: rev.start,
+      tangentStart: { x: rev.tangentEnd.x, y: rev.tangentEnd.y },
+      tangentEnd: { x: rev.tangentStart.x, y: rev.tangentStart.y },
+      hasCurve: rev.hasCurve
+    });
+    used.add(nextIdx);
+  }
+  if (ordered[n - 1].end !== ordered[0].start) return null;
+  return ordered;
+}
+
+/** Roll/flip the 4 derived corners so corners[0] approximates the top-left of the
+ *  target's bounding box and the winding is clockwise (matching the source image's
+ *  natural orientation: TL → TR → BR → BL). */
+function perspectiveOrientQuad(quad: PerspectiveQuadPoint[]): PerspectiveQuadPoint[] {
+  if (quad.length !== 4) return quad;
+  let arranged = quad.slice();
+  if (perspectiveQuadSignedArea(arranged) < 0) arranged = arranged.slice().reverse();
+  let bestIdx = 0;
+  let bestScore = Infinity;
+  for (let i = 0; i < 4; i++) {
+    const p = arranged[i];
+    const score = p.x + p.y;
+    if (score < bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  if (bestIdx === 0) return arranged;
+  return [
+    arranged[bestIdx],
+    arranged[(bestIdx + 1) % 4],
+    arranged[(bestIdx + 2) % 4],
+    arranged[(bestIdx + 3) % 4]
+  ];
+}
+
+/**
+ * Reconstruct a 4-corner quad from a Figma VectorNetwork by extending the curve
+ * tangent handles (for a 4-point ellipse-like shape) or the 4 main-side edges
+ * (for an 8-point chamfered-rectangle-like shape). Returns null when derivation
+ * is not applicable (e.g. straight 4-point rectangle) or geometrically degenerate.
+ */
+function deriveQuadFromVectorNetwork(vn: any): PerspectiveDerivedQuad | null {
+  const normalized = perspectiveNormalizeVectorNetwork(vn);
+  if (!normalized) return null;
+  const { vertices, segments: segs } = normalized;
+  const n = vertices.length;
+  if (n !== 4 && n !== 8) return null;
+  if (segs.length < n) return null;
+
+  const ordered = perspectiveOrderSegmentChain(segs, n);
+  if (!ordered) return null;
+
+  const validQuad = (candidate: (PerspectiveQuadPoint | null)[]): PerspectiveQuadPoint[] | null => {
+    if (candidate.length !== 4) return null;
+    const pts: PerspectiveQuadPoint[] = [];
+    for (const p of candidate) {
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+      pts.push(p);
+    }
+    if (Math.abs(perspectiveQuadSignedArea(pts)) < 1e-3) return null;
+    return pts;
+  };
+
+  if (n === 4) {
+    const anyCurve = ordered.some(s => s.hasCurve);
+    if (!anyCurve) return null;
+    const corners: (PerspectiveQuadPoint | null)[] = [];
+    for (const seg of ordered) {
+      const a = vertices[seg.start];
+      const b = vertices[seg.end];
+      corners.push(perspectiveIntersectLines(a, seg.tangentStart, b, seg.tangentEnd));
+    }
+    const quad = validQuad(corners);
+    return quad ? { quad: perspectiveOrientQuad(quad), derivedBy: 'handles-4' } : null;
+  }
+
+  // n === 8: select the 4 "main side" segments and intersect consecutive ones.
+  const evenIdx = [0, 2, 4, 6];
+  const oddIdx = [1, 3, 5, 7];
+  const curved = ordered.map(s => s.hasCurve);
+  let mainIndices: number[] | null = null;
+  let derivedBy: PerspectiveDerivedQuad['derivedBy'] = 'alt-sides-8';
+  const evenAllCurved = evenIdx.every(i => curved[i]);
+  const oddAllCurved = oddIdx.every(i => curved[i]);
+  const evenAllStraight = evenIdx.every(i => !curved[i]);
+  const oddAllStraight = oddIdx.every(i => !curved[i]);
+  if (oddAllCurved && evenAllStraight) {
+    mainIndices = evenIdx;
+    derivedBy = 'handles-8';
+  } else if (evenAllCurved && oddAllStraight) {
+    mainIndices = oddIdx;
+    derivedBy = 'handles-8';
+  } else {
+    const segLen = (seg: PerspectiveSegInfo) => {
+      const a = vertices[seg.start];
+      const b = vertices[seg.end];
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    };
+    const evenLen = evenIdx.reduce((acc, i) => acc + segLen(ordered[i]), 0);
+    const oddLen = oddIdx.reduce((acc, i) => acc + segLen(ordered[i]), 0);
+    mainIndices = evenLen >= oddLen ? evenIdx : oddIdx;
+  }
+
+  const sideLines: { point: PerspectiveQuadPoint; dir: PerspectiveQuadPoint }[] = [];
+  for (const i of mainIndices) {
+    const seg = ordered[i];
+    const a = vertices[seg.start];
+    const b = vertices[seg.end];
+    const chord: PerspectiveQuadPoint = { x: b.x - a.x, y: b.y - a.y };
+    const chordLen = Math.hypot(chord.x, chord.y);
+    let dir: PerspectiveQuadPoint = chord;
+    if (chordLen < 1e-6) {
+      const ts = seg.tangentStart;
+      const tsLen = Math.hypot(ts.x, ts.y);
+      if (tsLen < 1e-6) return null;
+      dir = ts;
+    }
+    sideLines.push({ point: a, dir });
+  }
+  const corners: (PerspectiveQuadPoint | null)[] = [];
+  for (let i = 0; i < 4; i++) {
+    const L1 = sideLines[i];
+    const L2 = sideLines[(i + 1) % 4];
+    corners.push(perspectiveIntersectLines(L1.point, L1.dir, L2.point, L2.dir));
+  }
+  const quad = validQuad(corners);
+  return quad ? { quad: perspectiveOrientQuad(quad), derivedBy } : null;
+}
+
 figma.ui.onmessage = async (msg: {
   type: string,
   cssFormat?: string,
@@ -11365,7 +11629,12 @@ figma.ui.onmessage = async (msg: {
           break;
         }
 
-        if (n !== 4) {
+        // For 4-vertex shapes with curve handles (e.g. a flattened ellipse) or
+        // for 8-vertex chamfered/rounded shapes, reconstruct the 4 target corners
+        // by extending tangent handles / main-side edges.
+        const derived = (n === 4 || n === 8) ? deriveQuadFromVectorNetwork(vn) : null;
+
+        if (n !== 4 && !derived) {
           postQuadInfo({
             status: 'notFourPointVector',
             nodeId: node.id,
@@ -11381,7 +11650,7 @@ figma.ui.onmessage = async (msg: {
           break;
         }
 
-        const localQuad = previewVertices;
+        const localQuad = derived ? derived.quad : previewVertices;
         const signedArea = localQuad.reduce((acc: number, point: { x: number; y: number }, index: number) => {
           const next = localQuad[(index + 1) % localQuad.length];
           return acc + point.x * next.y - next.x * point.y;
@@ -11411,7 +11680,8 @@ figma.ui.onmessage = async (msg: {
           height,
           localQuad,
           previewVertices,
-          previewSegments
+          previewSegments,
+          derivedBy: derived ? derived.derivedBy : null
         });
         break;
       }
@@ -20941,7 +21211,14 @@ figma.ui.onmessage = async (msg: {
                   });
                   const getQuadPoints = () => {
                     if ((node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') && Array.isArray(anyNode?.vectorNetwork?.vertices)) {
-                      const vertices = anyNode.vectorNetwork.vertices;
+                      const vn = anyNode.vectorNetwork;
+                      const vertices = vn.vertices;
+                      // Prefer reconstructed corners (curve handles / 8-point sides) so the
+                      // server-side fill step uses the same 4 points the UI used to warp.
+                      const derived = deriveQuadFromVectorNetwork(vn);
+                      if (derived) {
+                        return derived.quad.map((p: any) => toWorldPoint(Number(p.x), Number(p.y)));
+                      }
                       if (vertices.length !== 4) return null;
                       return vertices.map((v: any) => toWorldPoint(Number(v.x), Number(v.y)));
                     }

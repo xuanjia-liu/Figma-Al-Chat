@@ -19096,7 +19096,11 @@ Generate ONLY the reply text, nothing else.`;
         statusEl.classList.remove('quad-target-preview-status--ok', 'quad-target-preview-status--warn', 'quad-target-preview-status--error');
         if (isOk) {
           statusEl.classList.add('quad-target-preview-status--ok');
-          statusEl.textContent = 'Ready';
+          let readyLabel = 'Ready';
+          if (msg.derivedBy === 'handles-4') readyLabel = 'Ready · derived from curve handles';
+          else if (msg.derivedBy === 'handles-8') readyLabel = 'Ready · derived from 8-point curves';
+          else if (msg.derivedBy === 'alt-sides-8') readyLabel = 'Ready · derived from 8-point sides';
+          statusEl.textContent = readyLabel;
         } else if (isErrorShape) {
           statusEl.classList.add('quad-target-preview-status--error');
           statusEl.textContent = line1;
@@ -19147,9 +19151,13 @@ Generate ONLY the reply text, nothing else.`;
         return { minX, minY, maxX, maxY };
       };
 
+      const isDerived = isOk && !!msg.derivedBy;
       let pointsForBounds = [];
       if (isOk && localQuad && localQuad.length === 4) {
         pointsForBounds = localQuad.map((p) => ({ x: Number(p.x), y: Number(p.y) }));
+        if (isDerived && previewVertices && previewVertices.length > 0) {
+          pointsForBounds = pointsForBounds.concat(previewVertices.map((p) => ({ x: Number(p.x), y: Number(p.y) })));
+        }
       } else if (previewVertices && previewVertices.length > 0) {
         pointsForBounds = previewVertices.map((p) => ({ x: Number(p.x), y: Number(p.y) }));
       } else if (localQuad && localQuad.length > 0) {
@@ -19172,6 +19180,27 @@ Generate ONLY the reply text, nothing else.`;
       const strokeMuted = getComputedStyle(panel).getPropertyValue('--text-muted').trim() || '#a1a1aa';
 
       if (isOk && localQuad && localQuad.length === 4) {
+        if (isDerived && previewSegments && previewSegments.length > 0 && previewVertices && previewVertices.length > 0) {
+          ctx.save();
+          ctx.strokeStyle = strokeMuted || '#71717a';
+          ctx.globalAlpha = 0.55;
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          previewSegments.forEach((seg) => {
+            const a = previewVertices[seg.start];
+            const b = previewVertices[seg.end];
+            if (!a || !b) return;
+            const ax = ox + Number(a.x) * scale;
+            const ay = oy + Number(a.y) * scale;
+            const bx = ox + Number(b.x) * scale;
+            const by = oy + Number(b.y) * scale;
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+          });
+          ctx.stroke();
+          ctx.restore();
+        }
         ctx.beginPath();
         localQuad.forEach((p, i) => {
           const x = ox + Number(p.x) * scale;
@@ -27833,7 +27862,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           title,
           timestampLabel,
           messages: [
-            { role: 'user', quickAction: { name: quickActionName, icon: quickActionIcon } },
             { role: 'bot', content: markdownText }
           ]
         }
@@ -27855,16 +27883,81 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
     }
 
+    function truncateQuickActionFallbackTitle(text) {
+      const clean = (text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return 'User message';
+      const MAX_LEN = 60;
+      return clean.length > MAX_LEN ? `${clean.slice(0, MAX_LEN - 1).trimEnd()}…` : clean;
+    }
+
+    function buildArchiveMessagesFromHtml(messagesHtml) {
+      if (typeof messagesHtml !== 'string' || !messagesHtml.trim()) return null;
+      const container = document.createElement('div');
+      container.innerHTML = messagesHtml;
+      const messageEls = container.querySelectorAll('.message.user, .message.bot');
+      if (!messageEls.length) return null;
+      const thread = [];
+      messageEls.forEach((el) => {
+        if (el.classList.contains('user')) {
+          if (el.dataset.isQuickAction === 'true') {
+            thread.push({
+              role: 'user',
+              quickAction: {
+                name: el.dataset.actionName || 'Quick Action',
+                icon: el.dataset.actionIcon || ''
+              }
+            });
+            return;
+          }
+          const rawText = el.dataset.content
+            || el.querySelector('.message-content')?.innerText
+            || '';
+          const cleaned = rawText.replace(/\s+/g, ' ').trim();
+          if (!cleaned) return;
+          thread.push({
+            role: 'user',
+            quickAction: {
+              name: truncateQuickActionFallbackTitle(cleaned),
+              icon: ''
+            }
+          });
+        } else {
+          const rawMarkdown = el.dataset.content
+            || el.querySelector('.message-content')?.innerText
+            || '';
+          if (!rawMarkdown.trim()) return;
+          thread.push({ role: 'bot', content: rawMarkdown });
+        }
+      });
+      return thread.length ? thread : null;
+    }
+
     function setNoAiOverlayFromArchiveChat(chat) {
-      if (!chat || !Array.isArray(chat.chatHistory)) return;
+      if (!chat) return;
       selectedArchiveChatId = chat.id;
-      const threadMessages = chat.chatHistory
-        .filter((msg) => (msg?.role === 'user' || msg?.role === 'model') && Array.isArray(msg.parts))
-        .map((msg) => ({
-          role: msg.role === 'user' ? 'user' : 'bot',
-          content: msg.parts.map(extractTextFromMessagePart).filter(Boolean).join('\n')
-        }))
-        .filter((msg) => msg.content.trim().length > 0);
+
+      let threadMessages = buildArchiveMessagesFromHtml(chat.messagesHtml);
+      if (!threadMessages) {
+        if (!Array.isArray(chat.chatHistory)) return;
+        threadMessages = chat.chatHistory
+          .filter((msg) => (msg?.role === 'user' || msg?.role === 'model') && Array.isArray(msg.parts))
+          .map((msg) => {
+            const text = msg.parts.map(extractTextFromMessagePart).filter(Boolean).join('\n').trim();
+            if (!text) return null;
+            if (msg.role === 'user') {
+              return {
+                role: 'user',
+                quickAction: {
+                  name: truncateQuickActionFallbackTitle(text),
+                  icon: ''
+                }
+              };
+            }
+            return { role: 'bot', content: text };
+          })
+          .filter(Boolean);
+      }
+
       setNoAiOverlayCards([
         {
           title: chat.title || 'Selected chat',
