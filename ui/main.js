@@ -27836,13 +27836,16 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const timestampLabel = formatChatDate(Date.now());
       const quickActionName = options.quickActionName || title;
       const quickActionIcon = options.quickActionIcon || '';
+      const messages = [];
+      if (quickActionName) {
+        messages.push({ quickAction: { name: quickActionName, icon: quickActionIcon } });
+      }
+      messages.push({ role: 'bot', content: markdownText });
       setNoAiOverlayCards([
         {
           title,
           timestampLabel,
-          messages: [
-            { role: 'bot', content: markdownText }
-          ]
+          messages
         }
       ], {
         title: 'No-AI Results',
@@ -29275,34 +29278,217 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }, '*');
     }
 
-    function handleDesignSystemExtracted(data) {
+    async function handleDesignSystemExtracted(data) {
       const pending = pendingDesignSystemOutput;
       if (!pending) return;
       pendingDesignSystemOutput = null;
 
       const { outputTo, fileFormat, actionMeta } = pending;
-      routeDesignSystemOutput(data, outputTo, fileFormat, actionMeta);
+
+      // Surface detected scope to the user
+      const scope = (data && data.scope) || { kind: 'design-system' };
+      if (scope.kind === 'component') {
+        showToast(`Detected component scope — generating component spec for "${scope.name || 'selection'}".`, 'info');
+      } else if (scope.kind === 'screen') {
+        showToast(`Detected screen scope — generating screen spec for "${scope.name || 'selection'}".`, 'info');
+      }
+
+      // Skip AI augmentation for token-output (pure data path) and when MD output isn't consumed (json/css)
+      const needsNarrative = outputTo !== 'tokens'
+        && !(outputTo === 'file' && fileFormat && fileFormat !== 'md');
+
+      let narrative = null;
+      if (needsNarrative && !isAiOffModeEnabled()) {
+        try {
+          const thinkingLabel = scope.kind === 'component'
+            ? 'Drafting component spec narrative...'
+            : scope.kind === 'screen'
+            ? 'Drafting screen spec narrative...'
+            : 'Drafting design-system narrative...';
+          showThinkingIndicator(thinkingLabel);
+          narrative = await augmentDesignSystemWithAI(data);
+        } catch (err) {
+          console.warn('AI augmentation failed, falling back to no-AI doc:', err);
+        } finally {
+          removeThinkingIndicator();
+        }
+      }
+
+      routeDesignSystemOutput(data, outputTo, fileFormat, actionMeta, narrative);
     }
 
-    function routeDesignSystemOutput(data, outputTo, fileFormat, actionMeta) {
+    function routeDesignSystemOutput(data, outputTo, fileFormat, actionMeta, narrative) {
       switch (outputTo) {
         case 'tokens':
           showToast('Creating design tokens...', 'info');
           parent.postMessage({ pluginMessage: { type: 'create-design-tokens', data } }, '*');
           break;
         case 'file':
-          downloadDesignSystemFile(data, fileFormat);
+          downloadDesignSystemFile(data, fileFormat, narrative, actionMeta);
           break;
         case 'chat':
-          displayDesignSystemInChat(data, actionMeta);
+          displayDesignSystemInChat(data, actionMeta, narrative);
           break;
         case 'figma':
           showToast('Creating Figma document...', 'info');
-          parent.postMessage({ pluginMessage: { type: 'output-design-system-figma', data } }, '*');
+          parent.postMessage({ pluginMessage: { type: 'output-design-system-figma', data, narrative } }, '*');
           break;
         default:
-          downloadDesignSystemFile(data, 'md');
+          downloadDesignSystemFile(data, 'md', narrative, actionMeta);
       }
+    }
+
+    // --- AI narrative augmentation ---
+    async function augmentDesignSystemWithAI(data) {
+      const scope = (data && data.scope) || { kind: 'design-system' };
+
+      // Component scope → smaller, component-focused narrative
+      if (scope.kind === 'component') {
+        return augmentComponentSpecWithAI(data, scope);
+      }
+      if (scope.kind === 'screen') {
+        return augmentScreenSpecWithAI(data, scope);
+      }
+
+      // Trim obvious noise before sending to the model: drop large debug fields and cap arrays.
+      const compact = {
+        theme: data.theme || null,
+        colors: data.colors ? {
+          background: (data.colors.background || []).slice(0, 4),
+          surface: (data.colors.surface || []).slice(0, 4),
+          text: (data.colors.text || []).slice(0, 4),
+          brand: (data.colors.brand || []).slice(0, 2),
+          accent: (data.colors.accent || []).slice(0, 4),
+          semantic: (data.colors.semantic || []).slice(0, 6),
+          border: (data.colors.border || []).slice(0, 3),
+          overlay: (data.colors.overlay || []).slice(0, 2),
+          // legacy fallback so image-extracted docs also work
+          primary: (data.colors.primary || []).slice(0, 3),
+          secondary: (data.colors.secondary || []).slice(0, 3),
+          neutral: (data.colors.neutral || []).slice(0, 4)
+        } : null,
+        typography: data.typography ? {
+          fontFamilies: (data.typography.fontFamilies || []).slice(0, 4),
+          fontWeights: (data.typography.fontWeights || []).slice(0, 6),
+          fontSizes: (data.typography.fontSizes || []).slice(0, 10),
+          styles: (data.typography.styles || []).slice(0, 12).map(s => ({
+            role: s.role, name: s.name, fontFamily: s.fontFamily,
+            fontSize: s.fontSize, fontWeight: s.fontWeight,
+            lineHeight: s.lineHeight, letterSpacing: s.letterSpacing
+          }))
+        } : null,
+        components: data.components ? {
+          buttons: (data.components.buttons || []).slice(0, 6).map(c => ({ name: c.name, variants: c.variants, style: c.style })),
+          inputs: (data.components.inputs || []).slice(0, 4).map(c => ({ name: c.name, variants: c.variants, style: c.style })),
+          cards: (data.components.cards || []).slice(0, 4).map(c => ({ name: c.name, variants: c.variants, style: c.style })),
+          badges: (data.components.badges || []).slice(0, 4).map(c => ({ name: c.name, variants: c.variants, style: c.style })),
+          navigation: (data.components.navigation || []).slice(0, 4).map(c => ({ name: c.name, variants: c.variants, style: c.style }))
+        } : null,
+        effects: data.effects ? {
+          shadows: (data.effects.shadows || []).slice(0, 6).map(s => ({ name: s.name, value: s.value, level: s.level, use: s.use })),
+          cornerRadii: (data.effects.cornerRadii || []).slice(0, 8),
+          radiusScale: (data.effects.radiusScale || []).slice(0, 8)
+        } : null,
+        spacing: data.spacing ? {
+          tokens: (data.spacing.tokens || []).slice(0, 10),
+          paddings: (data.spacing.paddings || []).slice(0, 10)
+        } : null
+      };
+
+      const systemPrompt = 'You are a senior design-systems writer. Given structured design-system data extracted from a Figma file, write the narrative sections of a handoff document. Reference ONLY values present in the provided data (hexes, font families, sizes, weights, shadow values). Keep the voice observational and specific — no generic filler. Return ONLY valid JSON that exactly matches the requested schema. No markdown fences, no prose outside the JSON.';
+
+      const userContent = `Design-system data:\n\n\`\`\`json\n${JSON.stringify(compact, null, 2)}\n\`\`\`\n\nWrite the narrative with this exact shape (all strings; keys are required):\n\n{\n  "visualTheme": "1-2 paragraphs describing the overall visual theme. Ground every claim in the data — cite specific hexes, font families, sizes, weights, radius range, and shadow levels. Mention whether the theme is dark or light and what emotional atmosphere it projects.",\n  "doDont": {\n    "do":   ["4-6 prescriptive design Do statements that reference concrete tokens/values from the data."],\n    "dont": ["4-6 paired Don't statements warning against common mis-uses."]\n  },\n  "responsive": {\n    "breakpoints": [\n      {"name":"Mobile","width":"<640px","changes":"Concrete description of how layout/typography/spacing collapse."},\n      {"name":"Tablet","width":"640-1024px","changes":"..."},\n      {"name":"Desktop","width":">1024px","changes":"..."}\n    ],\n    "strategy": "1-2 sentence summary of the responsive strategy (e.g. mobile-first, density shifts, sidebar behavior)."\n  },\n  "agentPromptGuide": {\n    "quickReference": [\n      {"role":"Primary background","value":"#..."},\n      {"role":"Primary text","value":"#..."},\n      {"role":"Brand accent","value":"#..."},\n      {"role":"Border","value":"#..."},\n      {"role":"Body font","value":"Family at 16px / Regular"}\n    ],\n    "examplePrompts": [\n      "3-5 natural-language prompts an agent could paste to brief a UI build — each must mention at least one specific color/token from the data."\n    ],\n    "iterationGuide": [\n      "4-6 short rules for iterating in the system: letter-spacing tightening by size, elevation rules, spacing scale rules, brand usage rules."\n    ]\n  }\n}`;
+
+      const response = await callAISimple({
+        systemPrompt,
+        userContent,
+        temperature: 0.2,
+        maxTokens: 4096,
+        jsonMode: selectedProvider === 'gemini' || selectedProvider === 'openai'
+      });
+
+      const text = (response && response.text) || '';
+      if (!text) return null;
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.warn('AI narrative did not include JSON. Skipping.');
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return parsed;
+      } catch (err) {
+        console.warn('Failed to parse AI narrative JSON:', err);
+        return null;
+      }
+    }
+
+    async function augmentComponentSpecWithAI(data, scope) {
+      const comp = _dsFindComponent(data, scope.name);
+      const compact = {
+        scope,
+        component: comp ? { name: comp.name, variants: comp.variants, properties: comp.properties, style: comp.style } : null,
+        colors: data.colors ? {
+          brand: (data.colors.brand || []).slice(0, 3),
+          accent: (data.colors.accent || []).slice(0, 3),
+          text: (data.colors.text || []).slice(0, 3),
+          border: (data.colors.border || []).slice(0, 3),
+          semantic: (data.colors.semantic || []).slice(0, 4)
+        } : null,
+        typography: data.typography ? {
+          fontFamilies: (data.typography.fontFamilies || []).slice(0, 3),
+          styles: (data.typography.styles || []).slice(0, 6).map(s => ({ role: s.role, fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight }))
+        } : null,
+        effects: data.effects ? { shadows: (data.effects.shadows || []).slice(0, 4).map(s => ({ value: s.value, level: s.level })) } : null
+      };
+
+      const systemPrompt = 'You are a senior design-systems writer. Given structured data for ONE component (or a small component set), write a component specification narrative. Reference ONLY values present in the provided data. Return ONLY valid JSON matching the requested schema.';
+
+      const userContent = `Component data:\n\n\`\`\`json\n${JSON.stringify(compact, null, 2)}\n\`\`\`\n\nReturn JSON with this exact shape:\n\n{\n  "overview": "1 short paragraph describing what this component is, its purpose, and the visual impression it creates. Reference the actual hex values, font, and padding from the data.",\n  "usage": "1-2 sentences: where should this component be used in a product?",\n  "doDont": {\n    "do":   ["3-5 specific Do statements tied to real tokens"],\n    "dont": ["3-5 paired Don't statements"]\n  },\n  "variations": [\n    {"name": "Variant name from data","use": "When to use this variant"}\n  ]\n}`;
+
+      const response = await callAISimple({
+        systemPrompt,
+        userContent,
+        temperature: 0.2,
+        maxTokens: 2048,
+        jsonMode: selectedProvider === 'gemini' || selectedProvider === 'openai'
+      });
+      const text = (response && response.text) || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+      try { return JSON.parse(jsonMatch[0]); } catch (e) { console.warn('Component narrative parse failed:', e); return null; }
+    }
+
+    async function augmentScreenSpecWithAI(data, scope) {
+      const compact = {
+        scope,
+        theme: data.theme || null,
+        colors: data.colors ? {
+          background: (data.colors.background || []).slice(0, 3),
+          text: (data.colors.text || []).slice(0, 3),
+          brand: (data.colors.brand || []).slice(0, 2)
+        } : null,
+        typography: data.typography ? {
+          styles: (data.typography.styles || []).slice(0, 8).map(s => ({ role: s.role, fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight }))
+        } : null,
+        components: _dsAllComponents(data).slice(0, 10).map(c => ({ name: c.name }))
+      };
+
+      const systemPrompt = 'You are a senior product designer documenting a single screen. Reference only the values provided. Return ONLY valid JSON.';
+
+      const userContent = `Screen data:\n\n\`\`\`json\n${JSON.stringify(compact, null, 2)}\n\`\`\`\n\nReturn JSON with this shape:\n\n{\n  "overview": "1-2 sentences describing the screen's purpose and overall composition, referencing real values from the data.",\n  "doDont": {\n    "do": ["3-5 specific screen-level Do statements tied to the tokens/components"],\n    "dont": ["3-5 paired Don't statements"]\n  },\n  "responsive": {\n    "breakpoints": [\n      {"name":"Mobile","width":"<640px","changes":"Concrete layout changes"},\n      {"name":"Tablet","width":"640-1024px","changes":"..."},\n      {"name":"Desktop","width":">1024px","changes":"..."}\n    ],\n    "strategy": "1 sentence summary of the responsive strategy."\n  }\n}`;
+
+      const response = await callAISimple({
+        systemPrompt,
+        userContent,
+        temperature: 0.2,
+        maxTokens: 2048,
+        jsonMode: selectedProvider === 'gemini' || selectedProvider === 'openai'
+      });
+      const text = (response && response.text) || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+      try { return JSON.parse(jsonMatch[0]); } catch (e) { console.warn('Screen narrative parse failed:', e); return null; }
     }
 
     // --- Image-based extraction via AI ---
@@ -29392,7 +29578,7 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
     }
 
     // --- File download formatters ---
-    function downloadDesignSystemFile(data, format) {
+    function downloadDesignSystemFile(data, format, narrative, actionMeta) {
       let content, mimeType, extension;
 
       switch (format) {
@@ -29408,7 +29594,7 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
           break;
         case 'md':
         default:
-          content = formatDesignSystemMD(data);
+          content = formatDesignSystemMD(data, narrative);
           mimeType = 'text/markdown;charset=utf-8;';
           extension = 'md';
           break;
@@ -29426,147 +29612,620 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       showToast(`Design system downloaded as ${extension.toUpperCase()}`, 'success');
+
+      if (isAiOffModeEnabled()) {
+        const qaName = actionMeta?.name || 'Extract Design System';
+        const qaIcon = actionMeta?.icon || '';
+        let previewMd;
+        if (extension === 'md') {
+          previewMd = `_Saved as \`${filename}\`_\n\n${content}`;
+        } else {
+          const lang = extension === 'json' ? 'json' : 'css';
+          previewMd = `_Saved as \`${filename}\`_\n\n\`\`\`${lang}\n${content}\n\`\`\``;
+        }
+        showNoAiLocalResultCard(previewMd, {
+          title: 'Extract Design System',
+          quickActionName: qaName,
+          quickActionIcon: qaIcon
+        });
+      }
     }
 
-    function formatDesignSystemMD(data) {
-      let md = '# Design System\n\n';
-      md += '> A structured design system document ready for implementation.\n';
-      md += `> Generated on ${new Date().toLocaleDateString()}\n\n`;
-      md += '---\n\n';
+    // --- Markdown renderer helpers ---
 
-      if (data.colors) {
-        md += '## Color Styles\n\n';
-        md += 'Consistent color palette for brand identity and UI states.\n\n';
-        const colorSections = [
-          { key: 'primary', title: 'Primary Colors', desc: 'Main brand colors used for primary actions and emphasis.' },
-          { key: 'secondary', title: 'Secondary Colors', desc: 'Supporting colors for secondary UI elements.' },
-          { key: 'semantic', title: 'Semantic Colors', desc: 'Status and feedback colors (success, error, warning, info).' },
-          { key: 'neutral', title: 'Neutral Colors', desc: 'Grays and neutral tones for text, borders, and backgrounds.' }
-        ];
-        for (const section of colorSections) {
-          const colors = data.colors[section.key];
-          if (colors && colors.length > 0) {
-            md += `### ${section.title}\n\n${section.desc}\n\n`;
-            md += '| Token | Value | Description |\n|-------|-------|-------------|\n';
-            for (const c of colors) {
-              md += `| \`${c.name}\` | \`${c.hex}\` | ${c.description || ''} |\n`;
-            }
-            md += '\n';
-          }
+    function _dsNormalizeColors(colors) {
+      if (!colors) return null;
+      const out = {
+        background: Array.isArray(colors.background) ? colors.background : [],
+        surface:    Array.isArray(colors.surface)    ? colors.surface    : [],
+        text:       Array.isArray(colors.text)       ? colors.text       : [],
+        brand:      Array.isArray(colors.brand)      ? colors.brand      : [],
+        accent:     Array.isArray(colors.accent)     ? colors.accent     : [],
+        semantic:   Array.isArray(colors.semantic)   ? colors.semantic   : [],
+        border:     Array.isArray(colors.border)     ? colors.border     : [],
+        overlay:    Array.isArray(colors.overlay)    ? colors.overlay    : [],
+        gradients:  Array.isArray(colors.gradients)  ? colors.gradients  : []
+      };
+      // Legacy fallback (image-extraction or older shape: primary/secondary/neutral)
+      if (out.brand.length === 0 && Array.isArray(colors.primary) && colors.primary.length > 0) {
+        out.brand = colors.primary;
+      }
+      if (out.accent.length === 0 && Array.isArray(colors.secondary) && colors.secondary.length > 0) {
+        out.accent = colors.secondary;
+      }
+      if (out.background.length === 0 && out.surface.length === 0 && Array.isArray(colors.neutral) && colors.neutral.length > 0) {
+        // Split neutrals: light-most → background, mid → surface, dark → text (best-effort fallback)
+        const lumOf = (hex) => {
+          const h = (hex || '').replace('#', '');
+          if (h.length < 6) return 0.5;
+          const r = parseInt(h.slice(0, 2), 16) / 255;
+          const g = parseInt(h.slice(2, 4), 16) / 255;
+          const b = parseInt(h.slice(4, 6), 16) / 255;
+          return 0.299 * r + 0.587 * g + 0.114 * b;
+        };
+        const sorted = [...colors.neutral].sort((a, b) => lumOf(b.hex) - lumOf(a.hex));
+        out.background = sorted.slice(0, 2);
+        out.surface = sorted.slice(2, 5);
+        if (out.text.length === 0) out.text = sorted.slice(-3).reverse();
+      }
+      return out;
+    }
+
+    function _dsHexLuminance(hex) {
+      const h = (hex || '').replace('#', '');
+      if (h.length < 6) return 0.5;
+      const r = parseInt(h.slice(0, 2), 16) / 255;
+      const g = parseInt(h.slice(2, 4), 16) / 255;
+      const b = parseInt(h.slice(4, 6), 16) / 255;
+      return 0.299 * r + 0.587 * g + 0.114 * b;
+    }
+
+    function _dsRenderVisualTheme(data, narrative, colors) {
+      const theme = data.theme || {};
+      let out = '## 1. Visual Theme & Atmosphere\n\n';
+      if (narrative && narrative.visualTheme) {
+        out += narrative.visualTheme.trim() + '\n\n';
+      } else {
+        const mode = theme.mode || (colors && colors.background[0] && _dsHexLuminance(colors.background[0].hex) < 0.3 ? 'dark' : 'light');
+        const dominantBg = theme.dominantBackground?.hex || (colors && colors.background[0] && colors.background[0].hex);
+        const brand = theme.brand?.hex || (colors && colors.brand[0] && colors.brand[0].hex);
+        const typo = theme.typography || {};
+        const primaryFamily = typo.primaryFamily || (data.typography && data.typography.fontFamilies && data.typography.fontFamilies[0]);
+        const weights = typo.weights || (data.typography && data.typography.fontWeights) || [];
+        const sizeRange = typo.sizeRange || (data.typography && data.typography.fontSizes && data.typography.fontSizes.length > 0
+          ? [data.typography.fontSizes[0], data.typography.fontSizes[data.typography.fontSizes.length - 1]]
+          : null);
+        const radii = theme.radiusRange || (data.effects && data.effects.cornerRadii && data.effects.cornerRadii.length > 0
+          ? [data.effects.cornerRadii[0], data.effects.cornerRadii[data.effects.cornerRadii.length - 1]]
+          : null);
+        const shadowLevels = (theme.shadowLevels != null ? theme.shadowLevels : (data.effects && data.effects.shadows ? data.effects.shadows.length : 0));
+
+        const parts = [];
+        parts.push(`- **Theme mode**: ${mode === 'dark' ? 'Dark — low-luminance canvas with bright accents' : 'Light — bright canvas with grounded text'}`);
+        if (dominantBg) parts.push(`- **Dominant background**: \`${dominantBg}\``);
+        if (brand) parts.push(`- **Primary brand accent**: \`${brand}\``);
+        if (primaryFamily) parts.push(`- **Primary typeface**: ${primaryFamily}${weights.length ? ` (weights: ${weights.slice(0, 5).join(', ')})` : ''}`);
+        if (sizeRange) parts.push(`- **Type size range**: ${sizeRange[0]}–${sizeRange[1]}px`);
+        if (radii) parts.push(`- **Corner-radius range**: ${radii[0]}–${radii[1]}px`);
+        if (shadowLevels) parts.push(`- **Elevation tiers detected**: ${shadowLevels}`);
+
+        out += parts.join('\n') + '\n\n';
+        out += `> Dominant ${mode} theme${brand ? ` anchored by the brand accent \`${brand}\`` : ''}.`;
+        if (primaryFamily) out += ` Typography leans on **${primaryFamily}**${weights.length ? ` across ${weights.slice(0, 3).join(' / ')} weights` : ''}.`;
+        if (radii) out += ` Corners stay in the ${radii[0]}–${radii[1]}px range, giving a consistent tactile rhythm.`;
+        out += '\n\n';
+      }
+      return out;
+    }
+
+    function _dsRenderColorTable(title, arr, extraCols) {
+      if (!arr || arr.length === 0) return '';
+      let out = `### ${title}\n\n`;
+      if (extraCols === 'overlay') {
+        out += '| Token | Hex | Alpha | Description |\n|-------|-----|-------|-------------|\n';
+        for (const c of arr) {
+          out += `| \`${c.name || '-'}\` | \`${c.hex || '-'}\` | ${c.alpha != null ? c.alpha : '-'} | ${c.description || ''} |\n`;
+        }
+      } else {
+        out += '| Token | Hex | Description |\n|-------|-----|-------------|\n';
+        for (const c of arr) {
+          out += `| \`${c.name || '-'}\` | \`${c.hex || '-'}\` | ${c.description || ''} |\n`;
+        }
+      }
+      return out + '\n';
+    }
+
+    function _dsRenderColorPalette(colors) {
+      if (!colors) return '';
+      let out = '## 2. Color Palette & Roles\n\n';
+      out += 'Colors grouped by functional role rather than by shade. Use these tokens directly when composing UI — do not reach past them to raw hex values.\n\n';
+
+      out += _dsRenderColorTable('Background & Canvas', colors.background);
+      out += _dsRenderColorTable('Surface & Elevated Panels', colors.surface);
+      out += _dsRenderColorTable('Text', colors.text);
+      out += _dsRenderColorTable('Brand & Primary Accent', colors.brand);
+      out += _dsRenderColorTable('Supporting Accents', colors.accent);
+      out += _dsRenderColorTable('Semantic States', colors.semantic);
+      out += _dsRenderColorTable('Borders & Dividers', colors.border);
+      out += _dsRenderColorTable('Overlays & Scrims', colors.overlay, 'overlay');
+
+      if (colors.gradients && colors.gradients.length > 0) {
+        out += '### Gradients\n\n';
+        for (const g of colors.gradients) {
+          const stops = (g.stops || []).map(s => `${s.color}@${s.position}`).join(' → ');
+          out += `- **${g.name || g.type}**: ${stops}\n`;
+        }
+        out += '\n';
+      }
+      return out;
+    }
+
+    function _dsRenderTypography(data) {
+      if (!data.typography) return '';
+      const t = data.typography;
+      let out = '## 3. Typography Rules\n\n';
+
+      if (t.fontFamilies && t.fontFamilies.length > 0) {
+        out += `**Primary family**: ${t.fontFamilies[0]}\n\n`;
+        if (t.fontFamilies.length > 1) {
+          out += `**Supporting families**: ${t.fontFamilies.slice(1).join(', ')}\n\n`;
         }
       }
 
-      if (data.typography) {
-        md += '## Typography Styles\n\n';
-        md += 'Type scale and text styles for consistent hierarchy.\n\n';
-        if (data.typography.fontFamilies && data.typography.fontFamilies.length > 0) {
-          md += `**Font Families:** ${data.typography.fontFamilies.join(', ')}\n\n`;
+      if (t.styles && t.styles.length > 0) {
+        out += '### Hierarchy\n\n';
+        out += '| Role | Font | Size | Weight | Line Height | Letter Spacing |\n';
+        out += '|------|------|------|--------|-------------|----------------|\n';
+        for (const s of t.styles) {
+          const role = s.role || s.name || '-';
+          const font = s.fontFamily || '-';
+          const size = s.fontSize != null ? `${s.fontSize}px` : '-';
+          const weight = s.fontWeight || '-';
+          const lh = s.lineHeight != null && s.lineHeight !== '' ? s.lineHeight : 'auto';
+          const ls = s.letterSpacing != null && s.letterSpacing !== '' ? s.letterSpacing : '0';
+          out += `| ${role} | ${font} | ${size} | ${weight} | ${lh} | ${ls} |\n`;
         }
-        if (data.typography.styles && data.typography.styles.length > 0) {
-          md += '### Text Styles\n\n';
-          md += '| Token | Font | Size | Weight | Line Height | Letter Spacing | Description |\n';
-          md += '|-------|------|------|--------|-------------|----------------|-------------|\n';
-          for (const s of data.typography.styles) {
-            md += `| \`${s.name}\` | ${s.fontFamily || '-'} | ${s.fontSize || '-'} | ${s.fontWeight || '-'} | ${s.lineHeight || '-'} | ${s.letterSpacing || '0'} | ${s.description || ''} |\n`;
-          }
-          md += '\n';
-        }
-        if (data.typography.fontSizes && data.typography.fontSizes.length > 0) {
-          md += `**Font Size Scale:** ${data.typography.fontSizes.join(', ')}px\n\n`;
-        }
-        if (data.typography.fontWeights && data.typography.fontWeights.length > 0) {
-          md += `**Font Weights:** ${data.typography.fontWeights.join(', ')}\n\n`;
-        }
+        out += '\n';
       }
 
-      if (data.components) {
-        md += '## Component Library\n\n';
-        md += 'Reusable UI components with variants and states.\n\n';
-        const compSections = [
-          { key: 'buttons', title: 'Buttons' }, { key: 'inputs', title: 'Inputs' },
-          { key: 'cards', title: 'Cards' }, { key: 'navigation', title: 'Navigation' },
-          { key: 'forms', title: 'Forms' }, { key: 'icons', title: 'Icons' }
-        ];
-        for (const section of compSections) {
-          const comps = data.components[section.key];
-          if (comps && comps.length > 0) {
-            md += `### ${section.title}\n\n`;
-            for (const comp of comps) {
-              md += `- **${comp.name}**`;
-              if (comp.variants && comp.variants.length > 0) {
-                md += ` — Variants: ${comp.variants.join(', ')}`;
-              }
-              if (comp.description) md += ` — ${comp.description}`;
-              md += '\n';
-            }
-            md += '\n';
+      const scaleLines = [];
+      if (t.fontSizes && t.fontSizes.length > 0) scaleLines.push(`- **Size scale**: ${t.fontSizes.join(', ')}px`);
+      if (t.fontWeights && t.fontWeights.length > 0) scaleLines.push(`- **Weights**: ${t.fontWeights.join(', ')}`);
+      if (t.lineHeights && t.lineHeights.length > 0) scaleLines.push(`- **Line heights**: ${t.lineHeights.join(', ')}`);
+      if (t.letterSpacings && t.letterSpacings.length > 0) scaleLines.push(`- **Letter spacings**: ${t.letterSpacings.join(', ')}`);
+      if (scaleLines.length > 0) out += scaleLines.join('\n') + '\n\n';
+
+      return out;
+    }
+
+    function _dsRenderComponentEntry(comp) {
+      let out = `**${comp.name}**\n`;
+      if (comp.variants && comp.variants.length > 0) {
+        out += `- Variants: ${comp.variants.slice(0, 8).join(', ')}${comp.variants.length > 8 ? `, +${comp.variants.length - 8} more` : ''}\n`;
+      }
+      const s = comp.style;
+      if (s) {
+        if (s.background) out += `- Background: \`${s.background}\`${s.backgroundAlpha != null ? ` @ ${s.backgroundAlpha}` : ''}\n`;
+        if (s.textColor) out += `- Text: \`${s.textColor}\`\n`;
+        if (s.borderColor || s.borderWidth) out += `- Border: ${s.borderWidth != null ? `${s.borderWidth}px` : ''}${s.borderColor ? ` \`${s.borderColor}\`` : ''}\n`;
+        if (s.paddingTop != null || s.paddingLeft != null) {
+          const pY = s.paddingTop === s.paddingBottom ? `${s.paddingTop}px` : `${s.paddingTop}px ${s.paddingBottom}px`;
+          const pX = s.paddingLeft === s.paddingRight ? `${s.paddingLeft}px` : `${s.paddingLeft}px ${s.paddingRight}px`;
+          out += `- Padding: ${pY} ${pX}${s.itemSpacing != null ? ` · Gap ${s.itemSpacing}px` : ''}\n`;
+        }
+        if (s.cornerRadius != null) out += `- Radius: ${s.cornerRadius}${typeof s.cornerRadius === 'number' ? 'px' : ''}\n`;
+        if (s.fontFamily || s.fontSize) out += `- Typography: ${s.fontFamily || ''} ${s.fontWeight || ''} ${s.fontSize != null ? `${s.fontSize}px` : ''}\n`.replace(/\s+/g, ' ').replace(' \n', '\n');
+        if (s.shadow) out += `- Shadow: \`${s.shadow}\`${s.shadowInset ? ' (inset)' : ''}\n`;
+      } else if (comp.properties && comp.properties.length > 0) {
+        out += `- Properties: ${comp.properties.join(', ')}\n`;
+      }
+      if (comp.description) out += `- ${comp.description}\n`;
+      return out + '\n';
+    }
+
+    function _dsRenderComponents(data) {
+      if (!data.components) return '';
+      let out = '## 4. Component Stylings\n\n';
+      out += 'Each entry lists the representative visual style of the component (sampled from the first variant of a component set).\n\n';
+      const sections = [
+        { key: 'buttons', title: 'Buttons' },
+        { key: 'inputs', title: 'Inputs' },
+        { key: 'cards', title: 'Cards' },
+        { key: 'badges', title: 'Badges & Pills' },
+        { key: 'navigation', title: 'Navigation' },
+        { key: 'forms', title: 'Forms' },
+        { key: 'icons', title: 'Icons' },
+        { key: 'other', title: 'Other' }
+      ];
+      let wroteAny = false;
+      for (const sec of sections) {
+        const list = data.components[sec.key];
+        if (!list || list.length === 0) continue;
+        wroteAny = true;
+        out += `### ${sec.title}\n\n`;
+        for (const comp of list) {
+          out += _dsRenderComponentEntry(comp);
+        }
+      }
+      if (!wroteAny) out += '_No components were detected in the selected scope._\n\n';
+      return out;
+    }
+
+    function _dsRenderLayout(data) {
+      if (!data.spacing && !data.effects) return '';
+      let out = '## 5. Layout Principles\n\n';
+
+      if (data.spacing) {
+        if (data.spacing.tokens && data.spacing.tokens.length > 0) {
+          out += '### Spacing Scale\n\n';
+          out += '| Token | Value |\n|-------|-------|\n';
+          for (const t of data.spacing.tokens) {
+            out += `| \`${t.name}\` | ${t.value}px |\n`;
+          }
+          out += '\n';
+        }
+        if (data.spacing.paddings && data.spacing.paddings.length > 0) {
+          out += `- **Common paddings**: ${data.spacing.paddings.join(', ')}px\n`;
+        }
+        if (data.spacing.margins && data.spacing.margins.length > 0) {
+          out += `- **Gaps between elements**: ${data.spacing.margins.join(', ')}px\n`;
+        }
+        if (data.spacing.gridSystems && data.spacing.gridSystems.length > 0) {
+          out += '\n### Grid Systems\n\n';
+          for (const g of data.spacing.gridSystems) {
+            out += `- **${g.columns || 12} columns** — Gutter: ${g.gutter || 16}px · Margin: ${g.margin || 24}px${g.pattern ? ` · Pattern: ${g.pattern}` : ''}\n`;
           }
         }
       }
 
       if (data.effects) {
-        md += '## Effects & Styles\n\n';
-        md += 'Visual effects for depth, focus, and polish.\n\n';
-        if (data.effects.shadows && data.effects.shadows.length > 0) {
-          md += '### Shadows\n\n| Token | Value | Description |\n|-------|-------|-------------|\n';
-          for (const s of data.effects.shadows) {
-            md += `| \`${s.name}\` | \`${s.value}\` | ${s.description || ''} |\n`;
+        if (data.effects.radiusScale && data.effects.radiusScale.length > 0) {
+          out += '\n### Corner-Radius Scale\n\n';
+          out += '| Token | Value |\n|-------|-------|\n';
+          for (const r of data.effects.radiusScale) {
+            out += `| \`${r.name}\` | ${r.value}px |\n`;
           }
-          md += '\n';
-        }
-        if (data.effects.blurs && data.effects.blurs.length > 0) {
-          md += '### Blurs\n\n| Token | Value | Description |\n|-------|-------|-------------|\n';
-          for (const b of data.effects.blurs) {
-            md += `| \`${b.name}\` | \`${b.value}\` | ${b.description || ''} |\n`;
-          }
-          md += '\n';
-        }
-        if (data.effects.borders && data.effects.borders.length > 0) {
-          md += '### Borders\n\n| Token | Width | Color | Description |\n|-------|-------|-------|-------------|\n';
-          for (const b of data.effects.borders) {
-            md += `| \`${b.name}\` | ${b.width || '-'} | \`${b.color || '-'}\` | ${b.description || ''} |\n`;
-          }
-          md += '\n';
-        }
-        if (data.effects.cornerRadii && data.effects.cornerRadii.length > 0) {
-          md += `**Corner Radii:** ${data.effects.cornerRadii.join(', ')}px\n\n`;
+          out += '\n';
+        } else if (data.effects.cornerRadii && data.effects.cornerRadii.length > 0) {
+          out += `\n- **Corner radii**: ${data.effects.cornerRadii.join(', ')}px\n`;
         }
         if (data.effects.opacities && data.effects.opacities.length > 0) {
-          md += `**Opacities:** ${data.effects.opacities.join(', ')}\n\n`;
+          out += `- **Opacities used**: ${data.effects.opacities.join(', ')}\n`;
+        }
+        if (data.effects.borders && data.effects.borders.length > 0) {
+          out += '\n### Borders\n\n| Token | Width | Color |\n|-------|-------|-------|\n';
+          for (const b of data.effects.borders) {
+            out += `| \`${b.name}\` | ${b.width != null ? `${b.width}px` : '-'} | \`${b.color || '-'}\` |\n`;
+          }
+          out += '\n';
         }
       }
 
-      if (data.spacing) {
-        md += '## Spacing System\n\n';
-        md += 'Consistent spacing tokens for layout rhythm.\n\n';
-        if (data.spacing.tokens && data.spacing.tokens.length > 0) {
-          md += '### Spacing Tokens\n\n| Token | Value | Description |\n|-------|-------|-------------|\n';
-          for (const t of data.spacing.tokens) {
-            md += `| \`${t.name}\` | ${t.value}px | ${t.description || ''} |\n`;
-          }
-          md += '\n';
+      return out;
+    }
+
+    function _dsRenderElevation(data) {
+      if (!data.effects || !data.effects.shadows || data.effects.shadows.length === 0) return '';
+      let out = '## 6. Depth & Elevation\n\n';
+      out += 'Layered elevation system used to convey hierarchy. Levels are assigned by blur + offset intensity.\n\n';
+      out += '| Level | Treatment | Value | Use |\n|-------|-----------|-------|-----|\n';
+      for (const s of data.effects.shadows) {
+        const level = s.level || '-';
+        const use = s.use || s.description || '-';
+        out += `| ${level} | \`${s.name || '-'}\` | \`${s.value}\` | ${use} |\n`;
+      }
+      out += '\n';
+      if (data.effects.blurs && data.effects.blurs.length > 0) {
+        out += '### Blurs\n\n| Token | Radius |\n|-------|--------|\n';
+        for (const b of data.effects.blurs) {
+          out += `| \`${b.name}\` | ${b.value}px |\n`;
         }
-        if (data.spacing.paddings && data.spacing.paddings.length > 0) {
-          md += `**Padding Scale:** ${data.spacing.paddings.join(', ')}px\n\n`;
+        out += '\n';
+      }
+      return out;
+    }
+
+    function _dsRenderDoDont(narrative) {
+      if (!narrative || !narrative.doDont) return '';
+      let out = '## 7. Do\'s and Don\'ts\n\n';
+      const dos = Array.isArray(narrative.doDont.do) ? narrative.doDont.do : [];
+      const donts = Array.isArray(narrative.doDont.dont) ? narrative.doDont.dont : [];
+      if (dos.length > 0) {
+        out += '### Do\n\n';
+        for (const d of dos) out += `- ${d}\n`;
+        out += '\n';
+      }
+      if (donts.length > 0) {
+        out += '### Don\'t\n\n';
+        for (const d of donts) out += `- ${d}\n`;
+        out += '\n';
+      }
+      return out;
+    }
+
+    function _dsRenderResponsive(narrative) {
+      if (!narrative || !narrative.responsive) return '';
+      const r = narrative.responsive;
+      let out = '## 8. Responsive Behavior\n\n';
+      if (Array.isArray(r.breakpoints) && r.breakpoints.length > 0) {
+        out += '| Breakpoint | Width | Adjustments |\n|------------|-------|-------------|\n';
+        for (const bp of r.breakpoints) {
+          out += `| ${bp.name || '-'} | ${bp.width || '-'} | ${bp.changes || '-'} |\n`;
         }
-        if (data.spacing.margins && data.spacing.margins.length > 0) {
-          md += `**Margin Scale:** ${data.spacing.margins.join(', ')}px\n\n`;
+        out += '\n';
+      }
+      if (r.strategy) out += `${r.strategy}\n\n`;
+      return out;
+    }
+
+    function _dsRenderAgentGuide(narrative, data) {
+      if (!narrative || !narrative.agentPromptGuide) return '';
+      const g = narrative.agentPromptGuide;
+      let out = '## 9. Agent Prompt Guide\n\n';
+      if (Array.isArray(g.quickReference) && g.quickReference.length > 0) {
+        out += '### Quick Color Reference\n\n';
+        out += '| Role | Value |\n|------|-------|\n';
+        for (const q of g.quickReference) {
+          out += `| ${q.role || q.name || '-'} | \`${q.value || q.hex || '-'}\` |\n`;
         }
-        if (data.spacing.gridSystems && data.spacing.gridSystems.length > 0) {
-          md += '### Grid System\n\n';
-          for (const g of data.spacing.gridSystems) {
-            md += `- **${g.columns || 12} columns** — Gutter: ${g.gutter || 16}px, Margin: ${g.margin || 24}px\n`;
+        out += '\n';
+      }
+      if (Array.isArray(g.examplePrompts) && g.examplePrompts.length > 0) {
+        out += '### Example Prompts\n\n';
+        for (const p of g.examplePrompts) {
+          out += `> ${p}\n\n`;
+        }
+      }
+      if (Array.isArray(g.iterationGuide) && g.iterationGuide.length > 0) {
+        out += '### Iteration Guide\n\n';
+        for (const it of g.iterationGuide) {
+          out += `- ${it}\n`;
+        }
+        out += '\n';
+      }
+      return out;
+    }
+
+    // --- Scope-aware helpers ---
+
+    function _dsAllComponents(data) {
+      const acc = [];
+      if (!data.components) return acc;
+      for (const key of Object.keys(data.components)) {
+        const list = data.components[key];
+        if (Array.isArray(list)) for (const c of list) acc.push(c);
+      }
+      return acc;
+    }
+
+    function _dsFindComponent(data, name) {
+      const list = _dsAllComponents(data);
+      if (!list.length) return null;
+      const exact = list.find(c => c && c.name === name);
+      return exact || list[0];
+    }
+
+    function _dsRenderComponentStyleBlock(style) {
+      if (!style) return '_No visual style detected (component may be empty or dynamic)._\n\n';
+      let out = '';
+      if (style.background) out += `- **Background**: \`${style.background}\`${style.backgroundAlpha != null ? ` @ ${style.backgroundAlpha}` : ''}\n`;
+      if (style.textColor) out += `- **Text color**: \`${style.textColor}\`\n`;
+      if (style.borderColor || style.borderWidth) out += `- **Border**: ${style.borderWidth != null ? `${style.borderWidth}px ` : ''}${style.borderColor ? `\`${style.borderColor}\`` : ''}\n`;
+      if (style.cornerRadius != null) out += `- **Corner radius**: ${style.cornerRadius}${typeof style.cornerRadius === 'number' ? 'px' : ''}\n`;
+      if (style.paddingTop != null || style.paddingLeft != null) {
+        const pY = style.paddingTop === style.paddingBottom ? `${style.paddingTop}px` : `${style.paddingTop}px / ${style.paddingBottom}px`;
+        const pX = style.paddingLeft === style.paddingRight ? `${style.paddingLeft}px` : `${style.paddingLeft}px / ${style.paddingRight}px`;
+        out += `- **Padding**: ${pY} · ${pX}`;
+        if (style.itemSpacing != null) out += ` · **Gap** ${style.itemSpacing}px`;
+        out += '\n';
+      }
+      if (style.layoutMode) out += `- **Layout mode**: ${style.layoutMode}\n`;
+      if (style.fontFamily || style.fontSize || style.fontWeight) {
+        const parts = [style.fontFamily, style.fontWeight, style.fontSize != null ? `${style.fontSize}px` : null].filter(Boolean);
+        out += `- **Typography**: ${parts.join(' · ')}\n`;
+      }
+      if (style.shadow) out += `- **Shadow**: \`${style.shadow}\`${style.shadowInset ? ' (inset)' : ''}\n`;
+      return out + '\n';
+    }
+
+    function formatComponentSpecMD(data, narrative, scope) {
+      const details = scope.details || {};
+      const isSet = details.type === 'COMPONENT_SET';
+      const isCollection = details.type === 'COMPONENT_COLLECTION';
+      const comp = _dsFindComponent(data, scope.name);
+      const colors = _dsNormalizeColors(data.colors);
+
+      let md = `# Component: ${scope.name || 'Untitled'}\n\n`;
+      const meta = [];
+      if (isCollection) meta.push(`${(details.items || []).length} components`);
+      else if (isSet) meta.push('Component Set');
+      else meta.push('Component');
+      if (details.variants && details.variants.length > 0) meta.push(`${details.variants.length} variants`);
+      if (details.properties && details.properties.length > 0) meta.push(`${details.properties.length} properties`);
+      md += `> ${meta.join(' · ')}\n`;
+      md += `> Generated on ${new Date().toLocaleDateString()}\n\n---\n\n`;
+
+      md += '## 1. Overview\n\n';
+      if (narrative && narrative.overview) {
+        md += String(narrative.overview).trim() + '\n\n';
+      } else {
+        md += `This document describes **${scope.name || 'the selected component'}** as extracted from Figma. `;
+        md += isSet ? `It is a component set containing ${details.variants ? details.variants.length : 0} variants.` : 'It is a single component definition.';
+        md += '\n\n';
+      }
+
+      if (isCollection) {
+        md += '### Components in selection\n\n';
+        for (const item of details.items || []) {
+          md += `- **${item.name}** (${item.type})\n`;
+        }
+        md += '\n';
+      }
+
+      // Visual style
+      md += '## 2. Visual Style\n\n';
+      if (comp && comp.style) {
+        md += _dsRenderComponentStyleBlock(comp.style);
+      } else {
+        md += '_No representative style block was captured (the component may contain only nested instances)._\n\n';
+      }
+
+      // Variants
+      if (details.variants && details.variants.length > 0) {
+        md += '## 3. Variants\n\n';
+        md += '| # | Variant |\n|---|---------|\n';
+        details.variants.forEach((v, i) => { md += `| ${i + 1} | ${v} |\n`; });
+        md += '\n';
+      }
+
+      // Properties
+      if (details.properties && details.properties.length > 0) {
+        md += '## 4. Component Properties\n\n';
+        for (const p of details.properties) md += `- \`${p}\`\n`;
+        md += '\n';
+      }
+
+      // Tokens used
+      md += '## 5. Tokens Used\n\n';
+      if (colors) {
+        const colorGroups = [
+          { key: 'background', title: 'Backgrounds' },
+          { key: 'surface', title: 'Surfaces' },
+          { key: 'text', title: 'Text' },
+          { key: 'brand', title: 'Brand' },
+          { key: 'accent', title: 'Accents' },
+          { key: 'semantic', title: 'Semantic' },
+          { key: 'border', title: 'Borders' }
+        ];
+        const present = colorGroups.filter(g => Array.isArray(colors[g.key]) && colors[g.key].length > 0);
+        if (present.length > 0) {
+          md += '### Colors\n\n';
+          md += '| Role | Hex |\n|------|-----|\n';
+          for (const g of present) {
+            for (const c of colors[g.key]) {
+              md += `| ${g.title} — ${(c.name || '').split('/').pop() || g.title} | \`${c.hex}\` |\n`;
+            }
           }
           md += '\n';
         }
       }
+      if (data.typography && data.typography.styles && data.typography.styles.length > 0) {
+        md += '### Typography\n\n';
+        md += '| Role | Font | Size | Weight |\n|------|------|------|--------|\n';
+        for (const s of data.typography.styles) {
+          md += `| ${s.role || s.name || '-'} | ${s.fontFamily || '-'} | ${s.fontSize != null ? `${s.fontSize}px` : '-'} | ${s.fontWeight || '-'} |\n`;
+        }
+        md += '\n';
+      }
+      if (data.effects && Array.isArray(data.effects.shadows) && data.effects.shadows.length > 0) {
+        md += '### Shadows\n\n| Level | Value |\n|-------|-------|\n';
+        for (const s of data.effects.shadows) md += `| ${s.level || '-'} | \`${s.value}\` |\n`;
+        md += '\n';
+      }
 
+      // Usage from AI narrative
+      if (narrative && (narrative.doDont || narrative.usage || narrative.variations)) {
+        md += '## 6. Usage Guidelines\n\n';
+        if (narrative.usage) md += String(narrative.usage).trim() + '\n\n';
+        if (narrative.doDont) {
+          if (Array.isArray(narrative.doDont.do) && narrative.doDont.do.length > 0) {
+            md += '### Do\n\n';
+            for (const d of narrative.doDont.do) md += `- ${d}\n`;
+            md += '\n';
+          }
+          if (Array.isArray(narrative.doDont.dont) && narrative.doDont.dont.length > 0) {
+            md += "### Don't\n\n";
+            for (const d of narrative.doDont.dont) md += `- ${d}\n`;
+            md += '\n';
+          }
+        }
+        if (narrative.variations && Array.isArray(narrative.variations)) {
+          md += '### When to use each variant\n\n';
+          for (const v of narrative.variations) md += `- **${v.name || '-'}**: ${v.use || v.description || ''}\n`;
+          md += '\n';
+        }
+      }
+
+      md += '---\n\n*Scope: component · Use this spec when building or documenting the component in code.*\n';
+      return md;
+    }
+
+    function formatScreenSpecMD(data, narrative, scope) {
+      const details = scope.details || {};
+      const colors = _dsNormalizeColors(data.colors);
+
+      let md = `# Screen: ${scope.name || 'Untitled'}\n\n`;
+      md += `> ${details.type || 'FRAME'}${details.hasInstances ? ' · uses components' : ''}\n`;
+      md += `> Generated on ${new Date().toLocaleDateString()}\n\n---\n\n`;
+
+      md += '## 1. Overview\n\n';
+      if (narrative && narrative.overview) md += String(narrative.overview).trim() + '\n\n';
+      else md += `Single-screen breakdown of **${scope.name || 'the selected frame'}**, focused on the tokens and components it uses.\n\n`;
+
+      // Typography on this screen
+      if (data.typography && data.typography.styles && data.typography.styles.length > 0) {
+        md += '## 2. Typography on Screen\n\n';
+        md += '| Role | Font | Size | Weight |\n|------|------|------|--------|\n';
+        for (const s of data.typography.styles) {
+          md += `| ${s.role || '-'} | ${s.fontFamily || '-'} | ${s.fontSize != null ? `${s.fontSize}px` : '-'} | ${s.fontWeight || '-'} |\n`;
+        }
+        md += '\n';
+      }
+
+      // Colors on this screen (reuse design-system palette)
+      if (colors) {
+        md += '## 3. Colors on Screen\n\n';
+        md += _dsRenderColorPalette(colors).replace(/^## [^\n]*\n\n[^\n]*\n\n/, '');
+      }
+
+      // Components referenced
+      const comps = _dsAllComponents(data);
+      if (comps.length > 0) {
+        md += '## 4. Components Referenced\n\n';
+        for (const c of comps) {
+          md += `- **${c.name}**${c.variants && c.variants.length ? ` — ${c.variants.length} variants` : ''}\n`;
+        }
+        md += '\n';
+      }
+
+      // Layout + elevation
+      md += _dsRenderLayout(data).replace('## 5. Layout Principles', '## 5. Layout Used');
+      md += _dsRenderElevation(data).replace('## 6. Depth & Elevation', '## 6. Elevation Used');
+
+      if (narrative) {
+        if (narrative.doDont) md += _dsRenderDoDont(narrative).replace('## 7. Do\'s and Don\'ts', '## 7. Screen Guidelines');
+        if (narrative.responsive) md += _dsRenderResponsive(narrative);
+      }
+      md += '---\n\n*Scope: screen · Use this spec to rebuild or hand off the screen.*\n';
+      return md;
+    }
+
+    function formatDesignSystemMD(data, narrative) {
+      const scope = (data && data.scope) || { kind: 'design-system' };
+      if (scope.kind === 'component') return formatComponentSpecMD(data, narrative, scope);
+      if (scope.kind === 'screen') return formatScreenSpecMD(data, narrative, scope);
+
+      const colors = _dsNormalizeColors(data.colors);
+      let md = '# Design System\n\n';
+      md += '> Structured design system document generated from the current Figma context.\n';
+      md += `> Generated on ${new Date().toLocaleDateString()}\n\n`;
+      md += '---\n\n';
+      md += _dsRenderVisualTheme(data, narrative, colors);
+      if (colors) md += _dsRenderColorPalette(colors);
+      md += _dsRenderTypography(data);
+      md += _dsRenderComponents(data);
+      md += _dsRenderLayout(data);
+      md += _dsRenderElevation(data);
+      if (narrative) {
+        md += _dsRenderDoDont(narrative);
+        md += _dsRenderResponsive(narrative);
+        md += _dsRenderAgentGuide(narrative, data);
+      }
       md += '---\n\n*Usage Guidelines:*\n';
-      md += '- Use semantic color tokens for states instead of raw hex values.\n';
-      md += '- Follow the type scale for consistent hierarchy.\n';
-      md += '- Use spacing tokens from the spacing system for all padding and margins.\n';
-      md += '- Refer to component variants when building UI for consistent interaction patterns.\n';
-
+      md += '- Reference tokens by role (e.g. `color/text/primary`) instead of raw hex.\n';
+      md += '- Follow the hierarchy table to maintain consistent type rhythm.\n';
+      md += '- Use the elevation table to choose the correct shadow for each layer.\n';
+      if (narrative) md += '- Treat the Agent Prompt Guide as the source of truth when briefing an AI designer.\n';
       return md;
     }
 
@@ -29699,12 +30358,21 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
     }
 
     // --- Chat output ---
-    function displayDesignSystemInChat(data, actionMeta) {
-      const md = formatDesignSystemMD(data);
+    function displayDesignSystemInChat(data, actionMeta, narrative) {
+      const md = formatDesignSystemMD(data, narrative);
       setMode('ask');
       addMessage('user', 'Extract Design System', null, actionMeta ? { name: actionMeta.name, icon: actionMeta.icon } : null);
       addMessage('bot', md);
-      showToast('Design system displayed in chat', 'success');
+      if (isAiOffModeEnabled()) {
+        showNoAiLocalResultCard(md, {
+          title: 'Extract Design System',
+          quickActionName: actionMeta?.name || 'Extract Design System',
+          quickActionIcon: actionMeta?.icon || ''
+        });
+        showToast('Design system shown in No-AI results', 'success');
+      } else {
+        showToast('Design system displayed in chat', 'success');
+      }
     }
 
     let isSubmittingPrompt = false;

@@ -11730,6 +11730,70 @@ figma.ui.onmessage = async (msg: {
 
         const data: any = {};
 
+        // Detect scope — does this selection describe a full design system, a single component, or a single screen?
+        function detectScope(source: string, roots: readonly SceneNode[]): { kind: 'design-system' | 'component' | 'screen', name?: string, details?: any } {
+          if (source !== 'selection') return { kind: 'design-system' };
+          if (!roots || roots.length === 0) return { kind: 'design-system' };
+
+          // All roots are components / component sets → component scope
+          const allComponentLike = roots.every(n => n.type === 'COMPONENT' || n.type === 'COMPONENT_SET');
+          if (allComponentLike) {
+            if (roots.length === 1) {
+              const n = roots[0] as ComponentNode | ComponentSetNode;
+              const details: any = { type: n.type };
+              if (n.type === 'COMPONENT_SET') {
+                const cs = n as ComponentSetNode;
+                details.variants = cs.children.map(c => c.name);
+                try {
+                  details.properties = (cs as any).componentPropertyDefinitions ? Object.keys((cs as any).componentPropertyDefinitions) : [];
+                } catch (_) { details.properties = []; }
+              } else {
+                const c = n as ComponentNode;
+                if (c.parent && c.parent.type === 'COMPONENT_SET') {
+                  details.variants = (c.parent as ComponentSetNode).children.map(v => v.name);
+                }
+                try {
+                  details.properties = (c as any).componentPropertyDefinitions ? Object.keys((c as any).componentPropertyDefinitions) : [];
+                } catch (_) { details.properties = []; }
+              }
+              return { kind: 'component', name: n.name, details };
+            }
+            // Multiple components selected → still component scope (library subset)
+            return {
+              kind: 'component',
+              name: `${roots.length} components`,
+              details: { type: 'COMPONENT_COLLECTION', items: roots.map(n => ({ name: n.name, type: n.type })) }
+            };
+          }
+
+          // Single frame/section that does NOT contain any top-level component → screen scope
+          if (roots.length === 1) {
+            const n = roots[0];
+            if (n.type === 'FRAME' || n.type === 'SECTION' || n.type === 'INSTANCE') {
+              let hasComponents = false;
+              let hasInstances = false;
+              function walk(node: SceneNode): void {
+                if (hasComponents && hasInstances) return;
+                if (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET') hasComponents = true;
+                if (node.type === 'INSTANCE') hasInstances = true;
+                if ('children' in node) {
+                  for (const c of (node as any).children) walk(c);
+                }
+              }
+              walk(n);
+              // Only treat as "screen" when it's a designed surface (no top-level components defined here)
+              if (!hasComponents) {
+                return { kind: 'screen', name: n.name, details: { type: n.type, hasInstances } };
+              }
+            }
+          }
+
+          return { kind: 'design-system' };
+        }
+
+        const scope = detectScope(source, rootNodes);
+        data.scope = scope;
+
         // Collect raw values from node tree
         const rawColors: Map<string, { hex: string, count: number, r: number, g: number, b: number }> = new Map();
         const rawGradients: any[] = [];
@@ -11748,6 +11812,11 @@ figma.ui.onmessage = async (msg: {
         const rawPaddings: Set<number> = new Set();
         const rawGridSystems: any[] = [];
         const rawComponents: Map<string, any> = new Map();
+        const componentNodeRefs: Map<string, ComponentNode | ComponentSetNode> = new Map();
+        const rawTextColors: Map<string, { hex: string, count: number, r: number, g: number, b: number }> = new Map();
+        const rawBgColors: Map<string, { hex: string, count: number, maxArea: number, r: number, g: number, b: number }> = new Map();
+        const rawStrokeColors: Map<string, { hex: string, count: number, r: number, g: number, b: number }> = new Map();
+        const rawOverlayColors: Map<string, { hex: string, count: number, alpha: number }> = new Map();
 
         const STRUCTURAL_NODE_TYPES = new Set(['RECTANGLE', 'TEXT', 'FRAME', 'INSTANCE', 'COMPONENT', 'COMPONENT_SET', 'SECTION', 'GROUP']);
         const ILLUSTRATION_KEYWORDS = ['illustration', 'vector', 'art', 'graphic', 'drawing', 'img', 'image', 'icon', 'logo', 'svg', 'doodle', 'sketch', 'avatar', 'hero'];
@@ -11776,6 +11845,10 @@ figma.ui.onmessage = async (msg: {
 
         async function traverseNode(node: SceneNode): Promise<void> {
           const collectColor = categories.includes('colors') && shouldCollectColor(node);
+          const nodeArea = ('width' in node && 'height' in node && typeof node.width === 'number' && typeof node.height === 'number')
+            ? node.width * node.height
+            : 0;
+          const isBackgroundContext = node.type === 'FRAME' || node.type === 'SECTION' || node.type === 'COMPONENT' || node.type === 'COMPONENT_SET';
 
           // Colors from fills
           if (collectColor && 'fills' in node && Array.isArray(node.fills)) {
@@ -11788,6 +11861,27 @@ figma.ui.onmessage = async (msg: {
                   existing.count++;
                 } else {
                   rawColors.set(hex, { hex, count: 1, r: fill.color.r, g: fill.color.g, b: fill.color.b });
+                }
+
+                // Contextual color tracking
+                const fillOpacity = typeof (fill as any).opacity === 'number' ? (fill as any).opacity : 1;
+                if (fillOpacity < 1) {
+                  const existingOverlay = rawOverlayColors.get(hex);
+                  if (existingOverlay) existingOverlay.count++;
+                  else rawOverlayColors.set(hex, { hex, count: 1, alpha: Math.round(fillOpacity * 100) / 100 });
+                }
+                if (node.type === 'TEXT') {
+                  const t = rawTextColors.get(hex);
+                  if (t) t.count++;
+                  else rawTextColors.set(hex, { hex, count: 1, r: fill.color.r, g: fill.color.g, b: fill.color.b });
+                } else if (isBackgroundContext) {
+                  const b = rawBgColors.get(hex);
+                  if (b) {
+                    b.count++;
+                    if (nodeArea > b.maxArea) b.maxArea = nodeArea;
+                  } else {
+                    rawBgColors.set(hex, { hex, count: 1, maxArea: nodeArea, r: fill.color.r, g: fill.color.g, b: fill.color.b });
+                  }
                 }
               } else if (fill.type === 'GRADIENT_LINEAR' || fill.type === 'GRADIENT_RADIAL' || fill.type === 'GRADIENT_ANGULAR') {
                 const gradPaint = fill as GradientPaint;
@@ -11809,6 +11903,10 @@ figma.ui.onmessage = async (msg: {
                 const existing = rawColors.get(hex);
                 if (existing) existing.count++;
                 else rawColors.set(hex, { hex, count: 1, r: stroke.color.r, g: stroke.color.g, b: stroke.color.b });
+
+                const s = rawStrokeColors.get(hex);
+                if (s) s.count++;
+                else rawStrokeColors.set(hex, { hex, count: 1, r: stroke.color.r, g: stroke.color.g, b: stroke.color.b });
               }
             }
           }
@@ -11947,6 +12045,7 @@ figma.ui.onmessage = async (msg: {
               } catch (_) { }
             }
             rawComponents.set(compNode.name, info);
+            componentNodeRefs.set(compNode.name, compNode);
           }
 
           // Also check instances for component references
@@ -11957,6 +12056,9 @@ figma.ui.onmessage = async (msg: {
               const info: any = { name: mainComp.name, type: 'COMPONENT (referenced)', variants: [] };
               if (mainComp.parent && mainComp.parent.type === 'COMPONENT_SET') {
                 info.variants = (mainComp.parent as ComponentSetNode).children.map(c => c.name);
+                componentNodeRefs.set(mainComp.name, mainComp.parent as ComponentSetNode);
+              } else {
+                componentNodeRefs.set(mainComp.name, mainComp);
               }
               rawComponents.set(mainComp.name, info);
             }
@@ -12089,63 +12191,199 @@ figma.ui.onmessage = async (msg: {
           return `${n}%`;
         }
 
-        // Classify colors by heuristic
+        // Classify colors by heuristic — grouped into background / surface / text / brand / accent / semantic / border / overlay
         if (categories.includes('colors')) {
+          const luminanceOf = (c: { r: number, g: number, b: number }) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+          const saturationOf = (c: { r: number, g: number, b: number }) => Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+
+          // Detect dominant background for theme detection (largest background area wins)
+          let dominantBg: { hex: string, r: number, g: number, b: number } | null = null;
+          if (rawBgColors.size > 0) {
+            const sortedBgs = [...rawBgColors.values()].sort((a, b) => b.maxArea - a.maxArea || b.count - a.count);
+            dominantBg = sortedBgs[0];
+          }
+          const themeLum = dominantBg ? luminanceOf(dominantBg) : 0.95;
+          const themeMode: 'dark' | 'light' = themeLum < 0.3 ? 'dark' : 'light';
+
           const sortedColors = [...rawColors.values()].sort((a, b) => b.count - a.count);
-          const primaryColors: any[] = [];
-          const secondaryColors: any[] = [];
+          const backgroundColors: any[] = [];
+          const surfaceColors: any[] = [];
+          const textColors: any[] = [];
+          const brandColors: any[] = [];
+          const accentColors: any[] = [];
           const semanticColors: any[] = [];
-          const neutralColors: any[] = [];
+          const borderColors: any[] = [];
+          const overlayColors: any[] = [];
+          const neutralColorsLegacy: any[] = [];
+          const primaryColorsLegacy: any[] = [];
+          const secondaryColorsLegacy: any[] = [];
 
+          const usedSet: Set<string> = new Set();
+
+          // 1) Background / surface from rawBgColors sorted by maxArea
+          if (rawBgColors.size > 0) {
+            const bgs = [...rawBgColors.values()].sort((a, b) => b.maxArea - a.maxArea);
+            bgs.forEach((b, i) => {
+              const lum = luminanceOf(b);
+              const entry = { hex: b.hex, name: '', description: `${themeMode === 'dark' ? 'Surface' : 'Surface'} — luminance ${Math.round(lum * 100)}%`, usage: b.count, _luminance: lum };
+              if (i === 0) {
+                entry.name = 'color/background/canvas';
+                entry.description = `${themeMode === 'dark' ? 'Primary dark background' : 'Primary page background'}`;
+                backgroundColors.push(entry);
+              } else if (i < 3) {
+                entry.name = `color/background/${i === 1 ? 'panel' : 'elevated'}`;
+                backgroundColors.push(entry);
+              } else {
+                entry.name = `color/surface/${i - 2}`;
+                surfaceColors.push(entry);
+              }
+              usedSet.add(b.hex);
+            });
+          }
+
+          // 2) Text colors
+          if (rawTextColors.size > 0) {
+            const txts = [...rawTextColors.values()].sort((a, b) => luminanceOf(b) - luminanceOf(a));
+            txts.forEach((t, i) => {
+              const lum = luminanceOf(t);
+              const role = themeMode === 'dark'
+                ? (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'tertiary' : 'quaternary')
+                : (i === 0 ? 'primary' : i === 1 ? 'secondary' : i === 2 ? 'tertiary' : 'quaternary');
+              textColors.push({
+                hex: t.hex,
+                name: `color/text/${role}`,
+                description: `Text · luminance ${Math.round(lum * 100)}%`,
+                usage: t.count
+              });
+              usedSet.add(t.hex);
+            });
+          }
+
+          // 3) Stroke colors → borders
+          if (rawStrokeColors.size > 0) {
+            const strokes = [...rawStrokeColors.values()].sort((a, b) => b.count - a.count);
+            strokes.forEach((s, i) => {
+              borderColors.push({
+                hex: s.hex,
+                name: i === 0 ? 'color/border/default' : `color/border/variant-${i}`,
+                description: `Border / divider color`,
+                usage: s.count
+              });
+              usedSet.add(s.hex);
+            });
+          }
+
+          // 4) Overlays (fills with alpha<1)
+          if (rawOverlayColors.size > 0) {
+            const overs = [...rawOverlayColors.values()].sort((a, b) => b.count - a.count);
+            overs.forEach((o, i) => {
+              overlayColors.push({
+                hex: o.hex,
+                alpha: o.alpha,
+                name: i === 0 ? 'color/overlay/default' : `color/overlay/variant-${i}`,
+                description: `Semi-transparent fill (alpha ${o.alpha})`,
+                usage: o.count
+              });
+            });
+          }
+
+          // 5) Remaining colors → semantic / brand / accent
           for (const c of sortedColors) {
-            const luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-            const saturation = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+            if (usedSet.has(c.hex)) continue;
+            const sat = saturationOf(c);
 
-            if (saturation < 0.1) {
-              neutralColors.push({ name: `color/neutral/${c.hex.slice(1)}`, hex: c.hex, description: `Neutral tone (luminance: ${Math.round(luminance * 100)}%)`, _luminance: luminance });
-            } else if (c.r > 0.7 && c.g < 0.3 && c.b < 0.3) {
-              semanticColors.push({ name: `color/error/${c.hex.slice(1)}`, hex: c.hex, description: 'Error/danger state' });
-            } else if (c.g > 0.6 && c.r < 0.4 && c.b < 0.4) {
-              semanticColors.push({ name: `color/success/${c.hex.slice(1)}`, hex: c.hex, description: 'Success state' });
-            } else if (c.r > 0.8 && c.g > 0.6 && c.b < 0.2) {
-              semanticColors.push({ name: `color/warning/${c.hex.slice(1)}`, hex: c.hex, description: 'Warning state' });
-            } else if (c.b > 0.5 && c.r < 0.4 && c.g < 0.5) {
-              semanticColors.push({ name: `color/info/${c.hex.slice(1)}`, hex: c.hex, description: 'Info state' });
-            } else if (primaryColors.length < 5) {
-              primaryColors.push({ name: `color/primary/${c.hex.slice(1)}`, hex: c.hex, description: `Primary brand color`, _count: c.count });
-            } else {
-              secondaryColors.push({ name: `color/secondary/${c.hex.slice(1)}`, hex: c.hex, description: `Secondary color`, _count: c.count });
+            if (sat < 0.08) {
+              // Leftover near-gray — treat as surface if unused elsewhere
+              if (surfaceColors.length < 6) {
+                surfaceColors.push({ hex: c.hex, name: `color/surface/neutral-${surfaceColors.length + 1}`, description: 'Neutral surface tone', usage: c.count });
+              }
+              neutralColorsLegacy.push({ name: `color/neutral/${c.hex.slice(1)}`, hex: c.hex, description: 'Neutral tone', _luminance: luminanceOf(c) });
+              continue;
+            }
+
+            if (c.r > 0.7 && c.g < 0.35 && c.b < 0.35) {
+              semanticColors.push({ name: `color/semantic/error`, hex: c.hex, description: 'Error / destructive state', usage: c.count });
+              continue;
+            }
+            if (c.g > 0.55 && c.r < 0.5 && c.b < 0.5) {
+              semanticColors.push({ name: `color/semantic/success`, hex: c.hex, description: 'Success state', usage: c.count });
+              continue;
+            }
+            if (c.r > 0.8 && c.g > 0.55 && c.b < 0.25) {
+              semanticColors.push({ name: `color/semantic/warning`, hex: c.hex, description: 'Warning state', usage: c.count });
+              continue;
+            }
+            if (c.b > 0.55 && c.r < 0.45 && c.g < 0.6) {
+              // Could be brand blue or info — infer by usage count
+              if (brandColors.length === 0 && c.count >= 3) {
+                brandColors.push({ name: `color/brand/primary`, hex: c.hex, description: 'Primary brand / accent', usage: c.count });
+                primaryColorsLegacy.push({ name: `color/primary/500`, hex: c.hex, description: 'Primary brand color' });
+              } else {
+                semanticColors.push({ name: `color/semantic/info`, hex: c.hex, description: 'Info state', usage: c.count });
+              }
+              continue;
+            }
+
+            // Highly saturated colors → brand / accent
+            if (brandColors.length === 0) {
+              brandColors.push({ name: `color/brand/primary`, hex: c.hex, description: 'Primary brand color', usage: c.count });
+              primaryColorsLegacy.push({ name: `color/primary/500`, hex: c.hex, description: 'Primary brand color' });
+            } else if (accentColors.length < 5) {
+              accentColors.push({ name: `color/accent/${accentColors.length + 1}`, hex: c.hex, description: 'Accent / supporting color', usage: c.count });
+              secondaryColorsLegacy.push({ name: `color/secondary/${accentColors.length * 100}`, hex: c.hex, description: 'Secondary accent' });
             }
           }
 
-          // Sort neutrals light-to-dark, primaries/secondaries by usage frequency
-          neutralColors.sort((a, b) => b._luminance - a._luminance);
+          // Finalize legacy neutral shade naming (light→dark)
+          neutralColorsLegacy.sort((a, b) => b._luminance - a._luminance);
           const neutralShades = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
-          neutralColors.forEach((c, i) => { c.name = `color/neutral/${neutralShades[i] || (i * 100)}`; delete c._luminance; });
+          neutralColorsLegacy.forEach((c, i) => { c.name = `color/neutral/${neutralShades[i] || (i * 100)}`; delete c._luminance; });
 
-          const primaryShades = ['50', '100', '300', '500', '700', '800', '900'];
-          primaryColors.forEach((c, i) => { c.name = `color/primary/${primaryShades[i] || (i * 100)}`; delete c._count; });
+          // Backfill primary/secondary legacy if empty from surface colors
+          if (primaryColorsLegacy.length === 0 && brandColors.length > 0) {
+            primaryColorsLegacy.push({ name: 'color/primary/500', hex: brandColors[0].hex, description: brandColors[0].description });
+          }
 
-          const secondaryShades = ['50', '100', '300', '500', '700', '800', '900'];
-          secondaryColors.forEach((c, i) => { c.name = `color/secondary/${secondaryShades[i] || (i * 100)}`; delete c._count; });
-
-          data.colors = { primary: primaryColors.slice(0, 10), secondary: secondaryColors.slice(0, 10), semantic: semanticColors.slice(0, 10), neutral: neutralColors.slice(0, 10) };
+          data.colors = {
+            // New grouped roles (reference structure)
+            background: backgroundColors.slice(0, 6),
+            surface: surfaceColors.slice(0, 8),
+            text: textColors.slice(0, 8),
+            brand: brandColors.slice(0, 4),
+            accent: accentColors.slice(0, 6),
+            semantic: semanticColors.slice(0, 10),
+            border: borderColors.slice(0, 6),
+            overlay: overlayColors.slice(0, 4),
+            // Legacy compatibility buckets (for existing tokens/figma output consumers)
+            primary: primaryColorsLegacy.slice(0, 10),
+            secondary: secondaryColorsLegacy.slice(0, 10),
+            neutral: neutralColorsLegacy.slice(0, 10)
+          };
 
           if (rawGradients.length > 0) {
-            data.colors.gradients = rawGradients.slice(0, 10).map((g, i) => ({
+            (data.colors as any).gradients = rawGradients.slice(0, 10).map((g, i) => ({
               name: `color/gradient/${i + 1}`,
               type: g.type,
               stops: g.stops,
               description: `${g.type.replace('GRADIENT_', '')} gradient`
             }));
           }
+
+          // Store theme + dominant bg for Visual Theme section
+          data.theme = {
+            mode: themeMode,
+            dominantBackground: dominantBg ? { hex: dominantBg.hex, luminance: Math.round(themeLum * 100) / 100 } : null,
+            accentCount: brandColors.length + accentColors.length,
+            brand: brandColors[0] || null,
+            semanticCount: semanticColors.length
+          };
         }
 
         // Build typography data — sorted by font size descending (headings first)
         if (categories.includes('typography')) {
           const sortedFontStyles = [...rawFontStyles.values()].sort((a, b) => (b.fontSize || 0) - (a.fontSize || 0));
 
-          const styles = sortedFontStyles.map((s) => {
+          const styles: any[] = sortedFontStyles.map((s) => {
             const sizeLabel = s.fontSize >= 32 ? 'display' : s.fontSize >= 24 ? 'h1' : s.fontSize >= 20 ? 'h2' : s.fontSize >= 18 ? 'h3' : s.fontSize >= 16 ? 'body' : s.fontSize >= 14 ? 'body-sm' : 'caption';
             let lhValue: string | number = 'auto';
             if (s.lineHeight && typeof s.lineHeight === 'object') {
@@ -12168,13 +12406,42 @@ figma.ui.onmessage = async (msg: {
             };
           });
 
+          // Attach hierarchy role per style (reference template uses Role / Font / Size / Weight / LH / LS)
+          for (const s of styles) {
+            const size = s.fontSize as number;
+            if (size >= 64) s.role = 'Display XL';
+            else if (size >= 48) s.role = 'Display';
+            else if (size >= 36) s.role = 'Display Large';
+            else if (size >= 30) s.role = 'Heading 1';
+            else if (size >= 22) s.role = 'Heading 2';
+            else if (size >= 18) s.role = 'Heading 3';
+            else if (size >= 16) s.role = 'Body';
+            else if (size >= 14) s.role = 'Small';
+            else if (size >= 12) s.role = 'Caption';
+            else s.role = 'Micro';
+          }
+
+          const sortedFamilies = [...rawFontFamilies].sort();
+          const sortedSizes = [...rawFontSizes].sort((a, b) => a - b).map(fmtNum);
+          const sortedWeights = [...rawFontWeights];
+
           data.typography = {
             styles: styles.slice(0, 30),
-            fontFamilies: [...rawFontFamilies].sort().slice(0, 20),
-            fontSizes: [...rawFontSizes].sort((a, b) => a - b).map(fmtNum).slice(0, 20),
-            fontWeights: [...rawFontWeights].slice(0, 10),
+            fontFamilies: sortedFamilies.slice(0, 20),
+            fontSizes: sortedSizes.slice(0, 20),
+            fontWeights: sortedWeights.slice(0, 10),
             lineHeights: [...rawLineHeights].slice(0, 10),
             letterSpacings: [...rawLetterSpacings].slice(0, 10)
+          };
+
+          // Typography summary for Visual Theme prose
+          if (!data.theme) data.theme = {};
+          data.theme.typography = {
+            primaryFamily: sortedFamilies[0] || null,
+            families: sortedFamilies.slice(0, 3),
+            weights: sortedWeights.slice(0, 6),
+            sizeRange: sortedSizes.length > 0 ? [sortedSizes[0], sortedSizes[sortedSizes.length - 1]] : null,
+            styleCount: styles.length
           };
         }
 
@@ -12185,16 +12452,123 @@ figma.ui.onmessage = async (msg: {
           const cards: any[] = [];
           const navigation: any[] = [];
           const forms: any[] = [];
+          const badges: any[] = [];
           const icons: any[] = [];
           const other: any[] = [];
 
+          // Extract representative visual style from a ComponentNode (or first variant of a ComponentSetNode)
+          async function extractComponentStyle(ref: ComponentNode | ComponentSetNode): Promise<any> {
+            const target: ComponentNode | null = ref.type === 'COMPONENT_SET'
+              ? ((ref as ComponentSetNode).children.find(c => c.type === 'COMPONENT') as ComponentNode | undefined) || null
+              : (ref as ComponentNode);
+            if (!target) return null;
+
+            const style: any = {};
+
+            // Background (first visible SOLID fill)
+            if ('fills' in target && Array.isArray(target.fills)) {
+              const fill = target.fills.find(f => (f as Paint).visible !== false);
+              if (fill && fill.type === 'SOLID') {
+                style.background = rgbToHex(fill.color.r, fill.color.g, fill.color.b);
+                const op = typeof (fill as any).opacity === 'number' ? (fill as any).opacity : 1;
+                if (op < 1) style.backgroundAlpha = Math.round(op * 100) / 100;
+              }
+            }
+
+            // Stroke / border
+            if ('strokes' in target && Array.isArray(target.strokes) && target.strokes.length > 0) {
+              const stroke = target.strokes.find(s => (s as Paint).visible !== false);
+              if (stroke && stroke.type === 'SOLID') {
+                style.borderColor = rgbToHex(stroke.color.r, stroke.color.g, stroke.color.b);
+              }
+              if (typeof (target as any).strokeWeight === 'number') {
+                style.borderWidth = fmtNum((target as any).strokeWeight);
+              }
+            }
+
+            // Corner radius
+            if ('cornerRadius' in target) {
+              const cr = (target as any).cornerRadius;
+              if (typeof cr === 'number') style.cornerRadius = fmtNum(cr);
+              else if (typeof cr === 'symbol') style.cornerRadius = 'mixed';
+            }
+
+            // Auto-layout padding + itemSpacing
+            if ('layoutMode' in target && (target as any).layoutMode && (target as any).layoutMode !== 'NONE') {
+              const f = target as unknown as FrameNode;
+              style.paddingTop = fmtNum(f.paddingTop || 0);
+              style.paddingRight = fmtNum(f.paddingRight || 0);
+              style.paddingBottom = fmtNum(f.paddingBottom || 0);
+              style.paddingLeft = fmtNum(f.paddingLeft || 0);
+              style.itemSpacing = fmtNum(f.itemSpacing || 0);
+              style.layoutMode = (target as any).layoutMode;
+            }
+
+            // First visible shadow
+            if ('effects' in target && Array.isArray(target.effects)) {
+              const shadow = target.effects.find(e => (e.type === 'DROP_SHADOW' || e.type === 'INNER_SHADOW') && (e as any).visible !== false);
+              if (shadow) {
+                const s = shadow as DropShadowEffect;
+                const color = s.color
+                  ? `rgba(${Math.round(s.color.r * 255)},${Math.round(s.color.g * 255)},${Math.round(s.color.b * 255)},${Math.round((s.color.a || 1) * 100) / 100})`
+                  : 'rgba(0,0,0,0.1)';
+                style.shadow = `${fmtNum(s.offset?.x || 0)}px ${fmtNum(s.offset?.y || 0)}px ${fmtNum(s.radius)}px ${fmtNum(s.spread || 0)}px ${color}`;
+                style.shadowInset = shadow.type === 'INNER_SHADOW';
+              }
+            }
+
+            // First text descendant — use for typography preview
+            function findFirstText(n: SceneNode): TextNode | null {
+              if (n.type === 'TEXT') return n as TextNode;
+              if ('children' in n) {
+                for (const child of (n as any).children) {
+                  const found = findFirstText(child);
+                  if (found) return found;
+                }
+              }
+              return null;
+            }
+            const textNode = findFirstText(target);
+            if (textNode) {
+              try {
+                const segs = textNode.getStyledTextSegments(['fontName', 'fontSize', 'fills']);
+                const seg = segs[0];
+                if (seg) {
+                  if (seg.fontName) {
+                    style.fontFamily = seg.fontName.family;
+                    style.fontWeight = seg.fontName.style;
+                  }
+                  if (seg.fontSize) style.fontSize = fmtNum(seg.fontSize);
+                  if (Array.isArray(seg.fills) && seg.fills.length > 0) {
+                    const tf = seg.fills[0];
+                    if (tf.type === 'SOLID') {
+                      style.textColor = rgbToHex(tf.color.r, tf.color.g, tf.color.b);
+                    }
+                  }
+                }
+              } catch (_) { /* mixed fonts — skip */ }
+            }
+
+            return style;
+          }
+
           for (const [, comp] of rawComponents) {
             const nameLower = comp.name.toLowerCase();
-            const entry = {
+            const ref = componentNodeRefs.get(comp.name);
+            let style: any = null;
+            if (ref) {
+              try {
+                style = await extractComponentStyle(ref);
+              } catch (err) {
+                console.warn('Failed to extract style for component', comp.name, err);
+              }
+            }
+            const entry: any = {
               name: comp.name,
               variants: comp.variants || [],
               properties: comp.properties || [],
-              description: comp.variants.length > 0 ? `${comp.variants.length} variants` : ''
+              description: comp.variants.length > 0 ? `${comp.variants.length} variants` : '',
+              style: style || null
             };
 
             if (nameLower.includes('button') || nameLower.includes('btn') || nameLower.includes('cta')) {
@@ -12207,6 +12581,8 @@ figma.ui.onmessage = async (msg: {
               navigation.push(entry);
             } else if (nameLower.includes('form') || nameLower.includes('checkbox') || nameLower.includes('radio') || nameLower.includes('toggle') || nameLower.includes('switch') || nameLower.includes('select') || nameLower.includes('dropdown')) {
               forms.push(entry);
+            } else if (nameLower.includes('badge') || nameLower.includes('pill') || nameLower.includes('tag') || nameLower.includes('chip')) {
+              badges.push(entry);
             } else if (nameLower.includes('icon') || nameLower.includes('ico')) {
               icons.push(entry);
             } else {
@@ -12220,6 +12596,7 @@ figma.ui.onmessage = async (msg: {
             cards: cards.slice(0, 20),
             navigation: navigation.slice(0, 20),
             forms: forms.slice(0, 20),
+            badges: badges.slice(0, 20),
             icons: icons.slice(0, 30),
             other: other.slice(0, 30)
           };
@@ -12228,11 +12605,39 @@ figma.ui.onmessage = async (msg: {
         // Build effects data
         if (categories.includes('effects')) {
           const shadowNames = ['xs', 'sm', 'md', 'lg', 'xl', '2xl'];
-          const shadows = [...rawShadows.values()].map((s, i) => ({
-            name: s.styleName || `effect/shadow/${shadowNames[i] || 'shadow-' + (i + 1)}`,
-            value: `${fmtNum(s.offsetX)}px ${fmtNum(s.offsetY)}px ${fmtNum(s.blur)}px ${fmtNum(s.spread)}px ${s.color}`,
-            description: `${s.type === 'INNER_SHADOW' ? 'Inner' : 'Drop'} shadow — blur ${fmtNum(s.blur)}px`
-          }));
+          // Sort raw shadows by visual intensity (blur + |offsetY|) to assign elevation levels
+          const sortedRawShadows = [...rawShadows.values()].sort((a, b) => {
+            const ia = (a.blur || 0) + Math.abs(a.offsetY || 0);
+            const ib = (b.blur || 0) + Math.abs(b.offsetY || 0);
+            return ia - ib;
+          });
+
+          function tagElevation(s: any): { level: string, use: string } {
+            if (s.type === 'INNER_SHADOW') {
+              return { level: 'Inset', use: 'Pressed states, recessed wells' };
+            }
+            const blur = s.blur || 0;
+            const absOffset = Math.abs(s.offsetY || 0);
+            const intensity = blur + absOffset;
+            if (intensity < 6) return { level: 'Subtle', use: 'Borders, dividers, hairline separations' };
+            if (intensity < 16) return { level: 'Surface', use: 'Cards, rows, default surfaces' };
+            if (intensity < 32) return { level: 'Elevated', use: 'Dropdowns, popovers, tooltips' };
+            if (intensity < 64) return { level: 'Floating', use: 'Modals, sidebars, sheets' };
+            return { level: 'Dialog', use: 'Full-screen dialogs, hero overlays' };
+          }
+
+          const shadows = sortedRawShadows.map((s, i) => {
+            const tag = tagElevation(s);
+            return {
+              name: s.styleName || `effect/shadow/${shadowNames[i] || 'shadow-' + (i + 1)}`,
+              value: `${fmtNum(s.offsetX)}px ${fmtNum(s.offsetY)}px ${fmtNum(s.blur)}px ${fmtNum(s.spread)}px ${s.color}`,
+              level: tag.level,
+              use: tag.use,
+              blur: fmtNum(s.blur),
+              offsetY: fmtNum(s.offsetY),
+              description: `${s.type === 'INNER_SHADOW' ? 'Inner' : 'Drop'} shadow — ${tag.level}`
+            };
+          });
 
           const blurs = [...rawBlurs.values()].map((b, i) => ({
             name: `effect/blur/${b.type === 'BACKGROUND_BLUR' ? 'background' : 'layer'}-${i + 1}`,
@@ -12247,13 +12652,32 @@ figma.ui.onmessage = async (msg: {
             description: `${fmtNum(b.width)}px border`
           }));
 
+          const sortedRadii = [...rawCornerRadii].sort((a, b) => a - b);
+          const radiusScale = sortedRadii.map((r) => {
+            let label: string;
+            if (r === 0) label = 'none';
+            else if (r < 4) label = 'xs';
+            else if (r < 8) label = 'sm';
+            else if (r < 12) label = 'md';
+            else if (r < 20) label = 'lg';
+            else if (r < 32) label = 'xl';
+            else if (r >= 999) label = 'full';
+            else label = '2xl';
+            return { name: `radius/${label}`, value: fmtNum(r) };
+          });
+
           data.effects = {
             shadows: shadows.slice(0, 10),
             blurs: blurs.slice(0, 10),
             borders: borders.slice(0, 10),
-            cornerRadii: [...rawCornerRadii].sort((a, b) => a - b).map(fmtNum).slice(0, 10),
+            cornerRadii: sortedRadii.map(fmtNum).slice(0, 10),
+            radiusScale: radiusScale.slice(0, 10),
             opacities: [...rawOpacities].sort((a, b) => a - b).map(fmtNum).slice(0, 10)
           };
+
+          if (!data.theme) data.theme = {};
+          data.theme.radiusRange = sortedRadii.length > 0 ? [sortedRadii[0], sortedRadii[sortedRadii.length - 1]] : null;
+          data.theme.shadowLevels = shadows.length;
         }
 
         // Build spacing data
@@ -12296,9 +12720,18 @@ figma.ui.onmessage = async (msg: {
         // Create color variables
         if (dsData.colors) {
           const allColors: { name: string, hex: string }[] = [];
-          for (const group of ['primary', 'secondary', 'semantic', 'neutral']) {
+          const seenNames = new Set<string>();
+          // Include both the new grouped roles and the legacy buckets (de-duplicated by token name)
+          const groupOrder = [
+            'brand', 'accent', 'background', 'surface', 'text', 'border', 'overlay',
+            'primary', 'secondary', 'semantic', 'neutral'
+          ];
+          for (const group of groupOrder) {
             if (dsData.colors[group]) {
               for (const c of dsData.colors[group]) {
+                if (!c || !c.name || !c.hex) continue;
+                if (seenNames.has(c.name)) continue;
+                seenNames.add(c.name);
                 allColors.push(c);
               }
             }
@@ -12448,6 +12881,8 @@ figma.ui.onmessage = async (msg: {
     case 'output-design-system-figma': {
       try {
         const dsData = (msg as any).data;
+        const narrative = (msg as any).narrative || null;
+        const scope = (dsData && dsData.scope) || { kind: 'design-system' };
         const PAGE_PADDING = 80;
         const SECTION_GAP = 60;
         const CARD_GAP = 16;
@@ -12458,7 +12893,12 @@ figma.ui.onmessage = async (msg: {
         await smartLoadFont({ family: 'Inter', style: 'Medium' });
 
         const mainFrame = figma.createFrame();
-        mainFrame.name = 'Design System';
+        const frameTitle = scope.kind === 'component'
+          ? `Component: ${scope.name || 'Untitled'}`
+          : scope.kind === 'screen'
+          ? `Screen: ${scope.name || 'Untitled'}`
+          : 'Design System';
+        mainFrame.name = frameTitle;
         mainFrame.layoutMode = 'VERTICAL';
         mainFrame.primaryAxisSizingMode = 'AUTO';
         mainFrame.counterAxisSizingMode = 'AUTO';
@@ -12473,14 +12913,27 @@ figma.ui.onmessage = async (msg: {
         // Title
         const titleText = figma.createText();
         titleText.fontName = { family: 'Inter', style: 'Bold' };
-        titleText.characters = 'Design System';
+        titleText.characters = frameTitle;
         titleText.fontSize = 40;
         titleText.fills = [{ type: 'SOLID', color: { r: 0.1, g: 0.1, b: 0.1 } }];
         mainFrame.appendChild(titleText);
 
         const subtitleText = figma.createText();
         subtitleText.fontName = { family: 'Inter', style: 'Regular' };
-        subtitleText.characters = `Generated on ${new Date().toLocaleDateString()}`;
+        const subtitleParts: string[] = [];
+        if (scope.kind === 'component' && scope.details) {
+          if (scope.details.type === 'COMPONENT_SET') subtitleParts.push('Component Set');
+          else if (scope.details.type === 'COMPONENT_COLLECTION') subtitleParts.push(`${(scope.details.items || []).length} components`);
+          else subtitleParts.push('Component');
+          if (Array.isArray(scope.details.variants) && scope.details.variants.length > 0) {
+            subtitleParts.push(`${scope.details.variants.length} variants`);
+          }
+        } else if (scope.kind === 'screen' && scope.details) {
+          subtitleParts.push(scope.details.type || 'Frame');
+          if (scope.details.hasInstances) subtitleParts.push('uses components');
+        }
+        subtitleParts.push(`Generated ${new Date().toLocaleDateString()}`);
+        subtitleText.characters = subtitleParts.join(' · ');
         subtitleText.fontSize = 14;
         subtitleText.fills = [{ type: 'SOLID', color: { r: 0.5, g: 0.5, b: 0.5 } }];
         mainFrame.appendChild(subtitleText);
@@ -12510,6 +12963,91 @@ figma.ui.onmessage = async (msg: {
           return d;
         }
 
+        function createBodyText(text: string, size: number = 13, widthPx: number = 800): TextNode {
+          const t = figma.createText();
+          t.fontName = { family: 'Inter', style: 'Regular' };
+          t.characters = text || '';
+          t.fontSize = size;
+          t.fills = [{ type: 'SOLID', color: { r: 0.25, g: 0.25, b: 0.25 } }];
+          t.resize(widthPx, t.height);
+          t.textAutoResize = 'HEIGHT';
+          return t;
+        }
+
+        function createBulletList(items: string[], widthPx: number = 800): FrameNode {
+          const f = figma.createFrame();
+          f.layoutMode = 'VERTICAL';
+          f.primaryAxisSizingMode = 'AUTO';
+          f.counterAxisSizingMode = 'FIXED';
+          f.resize(widthPx, 10);
+          f.itemSpacing = 6;
+          f.fills = [];
+          for (const it of items) {
+            f.appendChild(createBodyText(`• ${it}`, 13, widthPx));
+          }
+          return f;
+        }
+
+        // 1. Overview section (prose + bullets, scope-aware)
+        {
+          const section = figma.createFrame();
+          section.name = scope.kind === 'component' ? 'Component Overview' : scope.kind === 'screen' ? 'Screen Overview' : 'Visual Theme';
+          section.layoutMode = 'VERTICAL';
+          section.primaryAxisSizingMode = 'AUTO';
+          section.counterAxisSizingMode = 'AUTO';
+          section.itemSpacing = 16;
+          section.fills = [];
+
+          const sectionTitle = scope.kind === 'component'
+            ? '1. Component Overview'
+            : scope.kind === 'screen'
+            ? '1. Screen Overview'
+            : '1. Visual Theme & Atmosphere';
+          section.appendChild(createSectionTitle(sectionTitle));
+          section.appendChild(createDivider());
+
+          if (narrative && (narrative.visualTheme || narrative.overview)) {
+            section.appendChild(createBodyText(String(narrative.visualTheme || narrative.overview)));
+          } else if (scope.kind === 'component') {
+            const bullets: string[] = [];
+            const det = scope.details || {};
+            if (det.type === 'COMPONENT_SET') bullets.push(`Type: Component Set (${(det.variants || []).length} variants)`);
+            else if (det.type === 'COMPONENT_COLLECTION') bullets.push(`Type: ${(det.items || []).length} selected components`);
+            else bullets.push('Type: Component');
+            if (Array.isArray(det.properties) && det.properties.length > 0) {
+              bullets.push(`Properties: ${det.properties.join(', ')}`);
+            }
+            if (bullets.length > 0) section.appendChild(createBulletList(bullets));
+          } else if (scope.kind === 'screen') {
+            const bullets: string[] = [];
+            const det = scope.details || {};
+            bullets.push(`Type: ${det.type || 'Frame'}`);
+            if (det.hasInstances) bullets.push('Uses component instances');
+            section.appendChild(createBulletList(bullets));
+          } else {
+            const theme = dsData.theme || {};
+            const bullets: string[] = [];
+            const dominantBg = theme.dominantBackground?.hex || (dsData.colors?.background?.[0]?.hex);
+            const brand = theme.brand?.hex || (dsData.colors?.brand?.[0]?.hex) || (dsData.colors?.primary?.[0]?.hex);
+            const primaryFamily = theme.typography?.primaryFamily || dsData.typography?.fontFamilies?.[0];
+            const weights = theme.typography?.weights || dsData.typography?.fontWeights || [];
+            const sizeRange = theme.typography?.sizeRange;
+            const radiusRange = theme.radiusRange;
+            const shadowLevels = theme.shadowLevels;
+
+            bullets.push(`Theme mode: ${theme.mode === 'dark' ? 'Dark' : 'Light'}`);
+            if (dominantBg) bullets.push(`Dominant background: ${dominantBg}`);
+            if (brand) bullets.push(`Primary brand accent: ${brand}`);
+            if (primaryFamily) bullets.push(`Primary typeface: ${primaryFamily}${weights.length ? ` (${weights.slice(0, 4).join(', ')})` : ''}`);
+            if (sizeRange) bullets.push(`Type size range: ${sizeRange[0]}–${sizeRange[1]}px`);
+            if (radiusRange) bullets.push(`Corner-radius range: ${radiusRange[0]}–${radiusRange[1]}px`);
+            if (shadowLevels) bullets.push(`Elevation tiers detected: ${shadowLevels}`);
+
+            if (bullets.length > 0) section.appendChild(createBulletList(bullets));
+          }
+          mainFrame.appendChild(section);
+        }
+
         // Colors section
         if (dsData.colors) {
           const section = figma.createFrame();
@@ -12520,10 +13058,15 @@ figma.ui.onmessage = async (msg: {
           section.itemSpacing = 24;
           section.fills = [];
 
-          section.appendChild(createSectionTitle('Color Styles'));
+          section.appendChild(createSectionTitle('2. Color Palette & Roles'));
           section.appendChild(createDivider());
 
-          for (const group of ['primary', 'secondary', 'semantic', 'neutral']) {
+          // Prefer new grouped roles; fall back to legacy buckets when missing
+          const colorGroupOrder = Array.isArray(dsData.colors.background) && dsData.colors.background.length > 0
+            ? ['background', 'surface', 'text', 'brand', 'accent', 'semantic', 'border', 'overlay']
+            : ['primary', 'secondary', 'semantic', 'neutral'];
+
+          for (const group of colorGroupOrder) {
             const colors = dsData.colors[group];
             if (!colors || colors.length === 0) continue;
 
@@ -12584,7 +13127,7 @@ figma.ui.onmessage = async (msg: {
           section.itemSpacing = 16;
           section.fills = [];
 
-          section.appendChild(createSectionTitle('Typography Styles'));
+          section.appendChild(createSectionTitle('3. Typography Rules'));
           section.appendChild(createDivider());
 
           for (const s of dsData.typography.styles.slice(0, 15)) {
@@ -12631,12 +13174,13 @@ figma.ui.onmessage = async (msg: {
           section.itemSpacing = 16;
           section.fills = [];
 
-          section.appendChild(createSectionTitle('Component Library'));
+          section.appendChild(createSectionTitle('4. Component Stylings'));
           section.appendChild(createDivider());
 
           const compGroups = [
             { key: 'buttons', title: 'Buttons' }, { key: 'inputs', title: 'Inputs' },
-            { key: 'cards', title: 'Cards' }, { key: 'navigation', title: 'Navigation' },
+            { key: 'cards', title: 'Cards' }, { key: 'badges', title: 'Badges & Pills' },
+            { key: 'navigation', title: 'Navigation' },
             { key: 'forms', title: 'Forms' }, { key: 'icons', title: 'Icons' },
             { key: 'other', title: 'Other' }
           ];
@@ -12702,7 +13246,8 @@ figma.ui.onmessage = async (msg: {
           mainFrame.appendChild(section);
         }
 
-        // Effects section
+        // Effects section (rendered AFTER spacing so display order matches 5 → 6)
+        const renderEffectsSection = () => {
         if (dsData.effects) {
           const section = figma.createFrame();
           section.name = 'Effects';
@@ -12712,7 +13257,7 @@ figma.ui.onmessage = async (msg: {
           section.itemSpacing = 16;
           section.fills = [];
 
-          section.appendChild(createSectionTitle('Effects & Styles'));
+          section.appendChild(createSectionTitle('6. Depth & Elevation'));
           section.appendChild(createDivider());
 
           if (dsData.effects.shadows && dsData.effects.shadows.length > 0) {
@@ -12797,8 +13342,9 @@ figma.ui.onmessage = async (msg: {
           }
           mainFrame.appendChild(section);
         }
+        };
 
-        // Spacing section
+        // Spacing section (rendered as section 5 — before Effects)
         if (dsData.spacing && dsData.spacing.tokens && dsData.spacing.tokens.length > 0) {
           const section = figma.createFrame();
           section.name = 'Spacing';
@@ -12808,7 +13354,7 @@ figma.ui.onmessage = async (msg: {
           section.itemSpacing = 16;
           section.fills = [];
 
-          section.appendChild(createSectionTitle('Spacing System'));
+          section.appendChild(createSectionTitle('5. Layout Principles'));
           section.appendChild(createDivider());
 
           for (const t of dsData.spacing.tokens.slice(0, 12)) {
@@ -12835,6 +13381,114 @@ figma.ui.onmessage = async (msg: {
             section.appendChild(row);
           }
           mainFrame.appendChild(section);
+        }
+
+        // Render Effects (section 6 — Depth & Elevation) after Spacing
+        renderEffectsSection();
+
+        // Narrative sections (7–9) from AI when available
+        if (narrative) {
+          // 7. Do's and Don'ts
+          if (narrative.doDont && (Array.isArray(narrative.doDont.do) || Array.isArray(narrative.doDont.dont))) {
+            const section = figma.createFrame();
+            section.name = "Do's and Don'ts";
+            section.layoutMode = 'VERTICAL';
+            section.primaryAxisSizingMode = 'AUTO';
+            section.counterAxisSizingMode = 'AUTO';
+            section.itemSpacing = 12;
+            section.fills = [];
+            section.appendChild(createSectionTitle("7. Do's and Don'ts"));
+            section.appendChild(createDivider());
+            if (Array.isArray(narrative.doDont.do) && narrative.doDont.do.length > 0) {
+              const dos = figma.createText();
+              dos.fontName = { family: 'Inter', style: 'Medium' };
+              dos.characters = 'Do';
+              dos.fontSize = 16;
+              dos.fills = [{ type: 'SOLID', color: { r: 0.15, g: 0.5, b: 0.25 } }];
+              section.appendChild(dos);
+              section.appendChild(createBulletList(narrative.doDont.do.map(String)));
+            }
+            if (Array.isArray(narrative.doDont.dont) && narrative.doDont.dont.length > 0) {
+              const dont = figma.createText();
+              dont.fontName = { family: 'Inter', style: 'Medium' };
+              dont.characters = "Don't";
+              dont.fontSize = 16;
+              dont.fills = [{ type: 'SOLID', color: { r: 0.7, g: 0.2, b: 0.2 } }];
+              section.appendChild(dont);
+              section.appendChild(createBulletList(narrative.doDont.dont.map(String)));
+            }
+            mainFrame.appendChild(section);
+          }
+
+          // 8. Responsive Behavior
+          if (narrative.responsive) {
+            const section = figma.createFrame();
+            section.name = 'Responsive Behavior';
+            section.layoutMode = 'VERTICAL';
+            section.primaryAxisSizingMode = 'AUTO';
+            section.counterAxisSizingMode = 'AUTO';
+            section.itemSpacing = 12;
+            section.fills = [];
+            section.appendChild(createSectionTitle('8. Responsive Behavior'));
+            section.appendChild(createDivider());
+            if (Array.isArray(narrative.responsive.breakpoints)) {
+              const lines = narrative.responsive.breakpoints.map((bp: any) =>
+                `${bp.name || '-'} (${bp.width || '-'}): ${bp.changes || '-'}`
+              );
+              section.appendChild(createBulletList(lines));
+            }
+            if (narrative.responsive.strategy) {
+              section.appendChild(createBodyText(String(narrative.responsive.strategy)));
+            }
+            mainFrame.appendChild(section);
+          }
+
+          // 9. Agent Prompt Guide
+          if (narrative.agentPromptGuide) {
+            const g = narrative.agentPromptGuide;
+            const section = figma.createFrame();
+            section.name = 'Agent Prompt Guide';
+            section.layoutMode = 'VERTICAL';
+            section.primaryAxisSizingMode = 'AUTO';
+            section.counterAxisSizingMode = 'AUTO';
+            section.itemSpacing = 12;
+            section.fills = [];
+            section.appendChild(createSectionTitle('9. Agent Prompt Guide'));
+            section.appendChild(createDivider());
+
+            if (Array.isArray(g.quickReference) && g.quickReference.length > 0) {
+              const h = figma.createText();
+              h.fontName = { family: 'Inter', style: 'Medium' };
+              h.characters = 'Quick Color Reference';
+              h.fontSize = 16;
+              h.fills = [{ type: 'SOLID', color: { r: 0.2, g: 0.2, b: 0.2 } }];
+              section.appendChild(h);
+              section.appendChild(createBulletList(
+                g.quickReference.map((q: any) => `${q.role || q.name || '-'}: ${q.value || q.hex || '-'}`)
+              ));
+            }
+            if (Array.isArray(g.examplePrompts) && g.examplePrompts.length > 0) {
+              const h = figma.createText();
+              h.fontName = { family: 'Inter', style: 'Medium' };
+              h.characters = 'Example Prompts';
+              h.fontSize = 16;
+              h.fills = [{ type: 'SOLID', color: { r: 0.2, g: 0.2, b: 0.2 } }];
+              section.appendChild(h);
+              for (const p of g.examplePrompts) {
+                section.appendChild(createBodyText(`"${p}"`, 13));
+              }
+            }
+            if (Array.isArray(g.iterationGuide) && g.iterationGuide.length > 0) {
+              const h = figma.createText();
+              h.fontName = { family: 'Inter', style: 'Medium' };
+              h.characters = 'Iteration Guide';
+              h.fontSize = 16;
+              h.fills = [{ type: 'SOLID', color: { r: 0.2, g: 0.2, b: 0.2 } }];
+              section.appendChild(h);
+              section.appendChild(createBulletList(g.iterationGuide.map(String)));
+            }
+            mainFrame.appendChild(section);
+          }
         }
 
         // Position and focus
