@@ -11741,11 +11741,12 @@ figma.ui.onmessage = async (msg: {
             if (roots.length === 1) {
               const n = roots[0] as ComponentNode | ComponentSetNode;
               const details: any = { type: n.type };
+              const stripPropId = (k: string) => typeof k === 'string' ? k.replace(/#\d+:\d+$/, '') : k;
               if (n.type === 'COMPONENT_SET') {
                 const cs = n as ComponentSetNode;
                 details.variants = cs.children.map(c => c.name);
                 try {
-                  details.properties = (cs as any).componentPropertyDefinitions ? Object.keys((cs as any).componentPropertyDefinitions) : [];
+                  details.properties = (cs as any).componentPropertyDefinitions ? Object.keys((cs as any).componentPropertyDefinitions).map(stripPropId) : [];
                 } catch (_) { details.properties = []; }
               } else {
                 const c = n as ComponentNode;
@@ -11753,7 +11754,7 @@ figma.ui.onmessage = async (msg: {
                   details.variants = (c.parent as ComponentSetNode).children.map(v => v.name);
                 }
                 try {
-                  details.properties = (c as any).componentPropertyDefinitions ? Object.keys((c as any).componentPropertyDefinitions) : [];
+                  details.properties = (c as any).componentPropertyDefinitions ? Object.keys((c as any).componentPropertyDefinitions).map(stripPropId) : [];
                 } catch (_) { details.properties = []; }
               }
               return { kind: 'component', name: n.name, details };
@@ -12462,7 +12463,11 @@ figma.ui.onmessage = async (msg: {
               ? ((ref as ComponentSetNode).children.find(c => c.type === 'COMPONENT') as ComponentNode | undefined) || null
               : (ref as ComponentNode);
             if (!target) return null;
+            return extractStyleFromComponent(target);
+          }
 
+          // Extract visual style from a single ComponentNode (used by per-variant extraction too).
+          async function extractStyleFromComponent(target: ComponentNode): Promise<any> {
             const style: any = {};
 
             // Background (first visible SOLID fill)
@@ -12552,23 +12557,75 @@ figma.ui.onmessage = async (msg: {
             return style;
           }
 
+          // Parse a Figma variant label like "size=Large, type=Primary, state=Default"
+          // into { size: 'Large', type: 'Primary', state: 'Default' }.
+          function parseVariantName(variantName: string): { [key: string]: string } {
+            const out: { [key: string]: string } = {};
+            if (!variantName || typeof variantName !== 'string') return out;
+            const parts = variantName.split(',');
+            for (const raw of parts) {
+              const eq = raw.indexOf('=');
+              if (eq === -1) continue;
+              const k = raw.slice(0, eq).trim();
+              const v = raw.slice(eq + 1).trim();
+              if (k) out[k] = v;
+            }
+            return out;
+          }
+
+          // Strip the Figma property-id suffix like "#2255:182" that appears in
+          // componentPropertyDefinitions keys, so documentation reads cleanly.
+          function stripPropertyIdSuffix(name: string): string {
+            if (typeof name !== 'string') return name;
+            return name.replace(/#\d+:\d+$/, '');
+          }
+
           for (const [, comp] of rawComponents) {
             const nameLower = comp.name.toLowerCase();
             const ref = componentNodeRefs.get(comp.name);
             let style: any = null;
+            let variantStyles: any[] | null = null;
             if (ref) {
               try {
                 style = await extractComponentStyle(ref);
               } catch (err) {
                 console.warn('Failed to extract style for component', comp.name, err);
               }
+              // For ComponentSets, capture a style block for each variant so the
+              // documentation can show per-variant differences.
+              if (ref.type === 'COMPONENT_SET') {
+                try {
+                  const cs = ref as ComponentSetNode;
+                  const variantNodes = cs.children.filter(c => c.type === 'COMPONENT') as ComponentNode[];
+                  variantStyles = [];
+                  for (const vn of variantNodes) {
+                    let vStyle: any = null;
+                    try {
+                      vStyle = await extractStyleFromComponent(vn);
+                    } catch (err) {
+                      console.warn('Failed to extract variant style for', comp.name, vn.name, err);
+                    }
+                    variantStyles.push({
+                      name: vn.name,
+                      properties: parseVariantName(vn.name),
+                      style: vStyle || null
+                    });
+                  }
+                } catch (err) {
+                  console.warn('Failed to extract variant styles for component set', comp.name, err);
+                }
+              }
             }
+            const cleanedProperties = Array.isArray(comp.properties)
+              ? comp.properties.map(stripPropertyIdSuffix)
+              : [];
             const entry: any = {
               name: comp.name,
               variants: comp.variants || [],
-              properties: comp.properties || [],
+              properties: cleanedProperties,
               description: comp.variants.length > 0 ? `${comp.variants.length} variants` : '',
-              style: style || null
+              style: style || null,
+              variantStyles: variantStyles && variantStyles.length > 0 ? variantStyles : null
             };
 
             if (nameLower.includes('button') || nameLower.includes('btn') || nameLower.includes('cta')) {

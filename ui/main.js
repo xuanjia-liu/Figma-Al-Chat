@@ -29427,7 +29427,13 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const comp = _dsFindComponent(data, scope.name);
       const compact = {
         scope,
-        component: comp ? { name: comp.name, variants: comp.variants, properties: comp.properties, style: comp.style } : null,
+        component: comp ? {
+          name: comp.name,
+          variants: comp.variants,
+          properties: (comp.properties || []).map(_dsStripPropId),
+          style: comp.style,
+          variantStyles: Array.isArray(comp.variantStyles) ? comp.variantStyles.slice(0, 24) : null
+        } : null,
         colors: data.colors ? {
           brand: (data.colors.brand || []).slice(0, 3),
           accent: (data.colors.accent || []).slice(0, 3),
@@ -29817,7 +29823,23 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
         if (s.fontFamily || s.fontSize) out += `- Typography: ${s.fontFamily || ''} ${s.fontWeight || ''} ${s.fontSize != null ? `${s.fontSize}px` : ''}\n`.replace(/\s+/g, ' ').replace(' \n', '\n');
         if (s.shadow) out += `- Shadow: \`${s.shadow}\`${s.shadowInset ? ' (inset)' : ''}\n`;
       } else if (comp.properties && comp.properties.length > 0) {
-        out += `- Properties: ${comp.properties.join(', ')}\n`;
+        out += `- Properties: ${comp.properties.map(_dsStripPropId).join(', ')}\n`;
+      }
+      if (Array.isArray(comp.variantStyles) && comp.variantStyles.length > 1) {
+        const keys = ['background', 'textColor', 'borderColor', 'borderWidth', 'cornerRadius',
+          'paddingTop', 'paddingLeft', 'itemSpacing', 'fontFamily', 'fontWeight', 'fontSize', 'shadow'];
+        const varying = keys.filter((k) => {
+          const seen = new Set();
+          for (const v of comp.variantStyles) {
+            const val = v.style ? v.style[k] : undefined;
+            seen.add(val == null ? '∅' : (typeof val === 'object' ? JSON.stringify(val) : String(val)));
+            if (seen.size > 1) return true;
+          }
+          return false;
+        });
+        if (varying.length > 0) {
+          out += `- Varies across variants: ${varying.join(', ')}\n`;
+        }
       }
       if (comp.description) out += `- ${comp.description}\n`;
       return out + '\n';
@@ -30028,6 +30050,93 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
       return out + '\n';
     }
 
+    function _dsStripPropId(name) {
+      return typeof name === 'string' ? name.replace(/#\d+:\d+$/, '') : name;
+    }
+
+    function _dsFormatStyleValue(style, key) {
+      if (!style || style[key] == null) return '—';
+      const v = style[key];
+      switch (key) {
+        case 'background':
+        case 'textColor':
+        case 'borderColor':
+          return `\`${v}\``;
+        case 'borderWidth':
+        case 'cornerRadius':
+        case 'paddingTop':
+        case 'paddingRight':
+        case 'paddingBottom':
+        case 'paddingLeft':
+        case 'itemSpacing':
+        case 'fontSize':
+          return typeof v === 'number' ? `${v}px` : String(v);
+        case 'shadow':
+          return `\`${v}\`${style.shadowInset ? ' (inset)' : ''}`;
+        default:
+          return String(v);
+      }
+    }
+
+    function _dsRenderVariantStyleTable(variantStyles, baseStyle) {
+      if (!Array.isArray(variantStyles) || variantStyles.length === 0) return '';
+
+      // Discover which property keys actually vary across the variants.
+      const trackedKeys = [
+        'background', 'textColor', 'borderColor', 'borderWidth',
+        'cornerRadius', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'itemSpacing', 'fontFamily', 'fontWeight', 'fontSize', 'shadow'
+      ];
+      const varyingKeys = trackedKeys.filter((key) => {
+        const seen = new Set();
+        for (const v of variantStyles) {
+          const val = v.style ? v.style[key] : undefined;
+          seen.add(val == null ? '∅' : (typeof val === 'object' ? JSON.stringify(val) : String(val)));
+          if (seen.size > 1) return true;
+        }
+        return false;
+      });
+
+      if (varyingKeys.length === 0) {
+        // No differences detected — show a simple variant list.
+        let out = '| # | Variant |\n|---|---------|\n';
+        variantStyles.forEach((v, i) => { out += `| ${i + 1} | ${v.name} |\n`; });
+        out += '\n_All variants share the same visual style (see §2)._\n\n';
+        return out;
+      }
+
+      const keyLabels = {
+        background: 'BG', textColor: 'Text', borderColor: 'Border',
+        borderWidth: 'Border W', cornerRadius: 'Radius',
+        paddingTop: 'Pad T', paddingRight: 'Pad R', paddingBottom: 'Pad B', paddingLeft: 'Pad L',
+        itemSpacing: 'Gap', fontFamily: 'Font', fontWeight: 'Weight', fontSize: 'Size',
+        shadow: 'Shadow'
+      };
+
+      let out = '| # | Variant | ' + varyingKeys.map(k => keyLabels[k] || k).join(' | ') + ' |\n';
+      out += '|---|---------|' + varyingKeys.map(() => '-----').join('|') + '|\n';
+      variantStyles.forEach((v, i) => {
+        const cells = varyingKeys.map(k => _dsFormatStyleValue(v.style, k));
+        out += `| ${i + 1} | ${v.name} | ${cells.join(' | ')} |\n`;
+      });
+      out += '\n_Only columns that differ across variants are shown. See §2 for the full base style._\n\n';
+      return out;
+    }
+
+    function _dsRenderVariantStyleDetails(variantStyles, baseStyle) {
+      if (!Array.isArray(variantStyles) || variantStyles.length === 0) return '';
+      let out = '### Per-variant style\n\n';
+      for (const v of variantStyles) {
+        out += `**${v.name}**\n\n`;
+        if (v.style) {
+          out += _dsRenderComponentStyleBlock(v.style);
+        } else {
+          out += '_No visual style captured._\n\n';
+        }
+      }
+      return out;
+    }
+
     function formatComponentSpecMD(data, narrative, scope) {
       const details = scope.details || {};
       const isSet = details.type === 'COMPONENT_SET';
@@ -30065,13 +30174,19 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
       // Visual style
       md += '## 2. Visual Style\n\n';
       if (comp && comp.style) {
+        md += isSet ? '_Representative style (first variant; see §3 for per-variant differences):_\n\n' : '';
         md += _dsRenderComponentStyleBlock(comp.style);
       } else {
         md += '_No representative style block was captured (the component may contain only nested instances)._\n\n';
       }
 
-      // Variants
-      if (details.variants && details.variants.length > 0) {
+      // Variants with per-variant style breakdown
+      const variantStyles = (comp && Array.isArray(comp.variantStyles)) ? comp.variantStyles : null;
+      if (variantStyles && variantStyles.length > 0) {
+        md += '## 3. Variants\n\n';
+        md += _dsRenderVariantStyleTable(variantStyles, comp.style);
+        md += _dsRenderVariantStyleDetails(variantStyles, comp.style);
+      } else if (details.variants && details.variants.length > 0) {
         md += '## 3. Variants\n\n';
         md += '| # | Variant |\n|---|---------|\n';
         details.variants.forEach((v, i) => { md += `| ${i + 1} | ${v} |\n`; });
@@ -30081,7 +30196,7 @@ Return ONLY valid JSON matching this structure (omit categories not requested):
       // Properties
       if (details.properties && details.properties.length > 0) {
         md += '## 4. Component Properties\n\n';
-        for (const p of details.properties) md += `- \`${p}\`\n`;
+        for (const p of details.properties) md += `- \`${_dsStripPropId(p)}\`\n`;
         md += '\n';
       }
 
