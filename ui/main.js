@@ -20726,6 +20726,7 @@ Generate ONLY the reply text, nothing else.`;
       const renamePresetSelect = promptDrawerFields.querySelector('[data-field-key="renamePreset"]');
       const renamePromptTextarea = promptDrawerFields.querySelector('textarea[data-field-key="renamePrompt"]');
       if (renamePresetSelect && renamePromptTextarea) {
+        const renamePromptFieldEl = renamePromptTextarea.closest('.prompt-field');
         const selectedPreset = renamePresetSelect.dataset.selected || '';
         const presetData = selectedPreset
           ? (SMART_RENAME_PROMPT_PRESETS[selectedPreset] || customSmartRenamePresets.find(p => p.value === selectedPreset || p.label === selectedPreset))
@@ -20733,7 +20734,7 @@ Generate ONLY the reply text, nothing else.`;
         const presetPrompt = (presetData?.style || '').trim();
         const currentPrompt = (renamePromptTextarea.value || '').trim();
         updatePromptFieldIndicator('renamePrompt', {
-          visible: !!selectedPreset && !!currentPrompt && currentPrompt !== presetPrompt,
+          visible: renamePromptFieldEl?.style.display !== 'none' && !!selectedPreset && !!currentPrompt && currentPrompt !== presetPrompt,
           text: tu('actions.prompt.presetModified'),
           buttonText: tu('actions.prompt.reset')
         });
@@ -20771,8 +20772,9 @@ Generate ONLY the reply text, nothing else.`;
               : null;
             const presetPrompt = (presetData?.style || '').trim();
             const currentPrompt = (e.target.value || '').trim();
+            const renamePromptFieldEl = e.target.closest('.prompt-field');
             updatePromptFieldIndicator('renamePrompt', {
-              visible: !!selectedPresetValue && currentPrompt !== presetPrompt,
+              visible: renamePromptFieldEl?.style.display !== 'none' && !!selectedPresetValue && currentPrompt !== presetPrompt,
               text: tu('actions.prompt.presetModified'),
               buttonText: tu('actions.prompt.reset')
             });
@@ -22400,16 +22402,23 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
 
       if (currentPromptAction?.name === 'Smart rename') {
-        const caseOnlyEnabled = getPromptVisibilityValue('caseOnly') === 'true';
-        ['renamePreset', 'renamePrompt'].forEach((fieldKey) => {
-          const fieldEl = promptDrawerFields.querySelector(`[data-field-key="${fieldKey}"]`)?.closest('.prompt-field');
-          if (!fieldEl) return;
-          const shouldDisable = caseOnlyEnabled || isAiOffModeEnabled();
-          fieldEl.classList.toggle('disabled', shouldDisable);
-        });
-
-        if (caseOnlyEnabled) {
+        const renamePromptFieldEl = promptDrawerFields.querySelector('[data-field-key="renamePrompt"]')?.closest('.prompt-field');
+        if (!renamePromptFieldEl || renamePromptFieldEl.style.display === 'none') {
           updatePromptFieldIndicator('renamePrompt', { visible: false });
+        } else {
+          const renamePresetSelect = promptDrawerFields.querySelector('[data-field-key="renamePreset"]');
+          const renamePromptTextarea = promptDrawerFields.querySelector('textarea[data-field-key="renamePrompt"]');
+          const selectedPreset = renamePresetSelect?.dataset.selected || '';
+          const presetData = selectedPreset
+            ? (SMART_RENAME_PROMPT_PRESETS[selectedPreset] || customSmartRenamePresets.find(p => p.value === selectedPreset || p.label === selectedPreset))
+            : null;
+          const presetPrompt = (presetData?.style || '').trim();
+          const currentPrompt = (renamePromptTextarea?.value || '').trim();
+          updatePromptFieldIndicator('renamePrompt', {
+            visible: !!selectedPreset && currentPrompt !== presetPrompt,
+            text: tu('actions.prompt.presetModified'),
+            buttonText: tu('actions.prompt.reset')
+          });
         }
       }
 
@@ -28649,6 +28658,23 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       });
     }
 
+    async function runSmartRenameTranslationStep(values) {
+      return runGoogleTranslateQuickAction('Translate naming', {
+        targetLanguage: values.targetLanguage || 'English',
+        keepOriginal: values.translateKeepOriginal === true
+      });
+    }
+
+    async function runSmartRenamePreprocessing(values) {
+      if (values.translateNamesFirst !== true) {
+        return { translated: false };
+      }
+
+      await runSmartRenameTranslationStep(values);
+
+      return { translated: true };
+    }
+
     async function runLocalActionRequest({ requestType, resultType, payload, timeoutMs = 15000, errorPrefixes = [] }) {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -30844,6 +30870,13 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         }
 
         if (action.name === 'Smart rename') {
+          try {
+            await runSmartRenamePreprocessing(values);
+          } catch (err) {
+            showToast(err?.message || 'Translation failed', 'error');
+            return;
+          }
+
           if (values.caseOnly) {
             closePromptDrawer();
             closeCommandsDrawer();
@@ -30852,7 +30885,12 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           if (isAiOffModeEnabled()) {
-            showToast('In No AI mode, Smart rename only supports "Case only (keep text)".', 'error');
+            if (values.translateNamesFirst) {
+              closePromptDrawer();
+              closeCommandsDrawer();
+              return;
+            }
+            showToast('In No AI mode, Smart rename only supports translation and/or "Case only (keep text)".', 'error');
             return;
           }
 

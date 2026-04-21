@@ -362,13 +362,27 @@ export const layerNamingTasks = [
               type: 'select',
               label: 'Prompt Preset',
               default: '',
+              showWhen: { field: 'caseOnly', equals: false },
               searchable: true,
               options: () => [
                 { value: '', label: 'None (Custom)' },
                 ...Object.keys(SMART_RENAME_PROMPT_PRESETS).map(name => ({ value: name, label: name }))
               ]
             },
-            { key: 'renamePrompt', type: 'textarea', label: 'Prompt', placeholder: 'Describe how Smart Rename should rename the selected layers...', default: '', aiButtons: true },
+            { key: 'renamePrompt', type: 'textarea', label: 'Prompt', placeholder: 'Describe how Smart Rename should rename the selected layers...', default: '', aiButtons: true, showWhen: { field: 'caseOnly', equals: false } },
+            { key: 'translateNamesFirst', type: 'checkbox', label: 'Translate names first', default: false },
+            {
+              key: 'targetLanguage', type: 'select', label: 'Target Language', default: 'English', showWhen: { field: 'translateNamesFirst', equals: true }, options: [
+                { value: 'English', label: 'English' },
+                { value: 'Japanese', label: 'Japanese' },
+                { value: 'Chinese (Simplified)', label: 'Chinese (Simplified)' },
+                { value: 'Korean', label: 'Korean' },
+                { value: 'Spanish', label: 'Spanish' },
+                { value: 'French', label: 'French' },
+                { value: 'German', label: 'German' },
+              ]
+            },
+            { key: 'translateKeepOriginal', type: 'checkbox', label: 'Keep original name in parentheses', default: false, showWhen: { field: 'translateNamesFirst', equals: true } },
             {
               key: 'delimiter', type: 'select', label: 'Delimiter', default: 'camelCase', options: [
                 { value: 'camelCase', label: 'camelCase' },
