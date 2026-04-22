@@ -357,6 +357,35 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       return getLocalizedActionText(currentSettingsLocale, value);
     }
 
+    const NODE_ACTION_LABELS = {
+      'new-chat': 'New chat',
+      'summarize-selection': 'Summarize selection',
+      'extract-prompt': 'Extract prompt',
+      'generate-image': 'Edit image',
+      'smart-rename': 'Smart rename',
+    };
+
+    function refreshLocalizedQuickActionTitles(root = document) {
+      const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+      scope.querySelectorAll('.message.user[data-action-name] .action-title').forEach((element) => {
+        const messageEl = element.closest('.message.user[data-action-name]');
+        const actionName = messageEl?.dataset.actionName || element.textContent || 'Quick Action';
+        element.textContent = localizeActionString(actionName);
+      });
+    }
+
+    function refreshLocalizedNodeActionLabels(root = document) {
+      const scope = root && typeof root.querySelectorAll === 'function' ? root : document;
+      scope.querySelectorAll('.node-actions-content .node-action-btn > span').forEach((element) => {
+        const buttonEl = element.closest('.node-action-btn');
+        const label = buttonEl?.dataset.actionLabel
+          || NODE_ACTION_LABELS[buttonEl?.dataset.action]
+          || element.textContent
+          || '';
+        element.textContent = localizeActionString(label);
+      });
+    }
+
     const PUBLIC_CONTEXT_MODES = new Set([
       ContextMode.SMART,
       ContextMode.ALL,
@@ -602,6 +631,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       refreshChatInputPlaceholder();
       syncTokenCounterTitle();
+      refreshLocalizedQuickActionTitles();
+      refreshLocalizedNodeActionLabels();
       if (typeof renderChatHistoryList === 'function') renderChatHistoryList();
       if (Array.isArray(lastKnownSelectionItems) && lastKnownSelectionItems.length === 0 && selectionNames) {
         selectionNames.textContent = t('settings.header.nothingSelected');
@@ -3200,11 +3231,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       // Always include "New Chat" button when node actions are shown
       html += `
-        <button class="node-action-btn" id="newChatNodeBtn" data-action="new-chat">
+        <button class="node-action-btn" id="newChatNodeBtn" data-action="new-chat" data-action-label="New chat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          <span>New chat</span>
+          <span>${localizeActionString('New chat')}</span>
         </button>
       `;
 
@@ -3217,7 +3248,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         const isDisabled = !isTaskAvailableInAiOff(action.task, action.name);
         const disabledClass = isDisabled ? ' ai-disabled' : '';
         const disabledAttrs = isDisabled ? ' aria-disabled="true" tabindex="-1"' : '';
-        const title = isDisabled ? getAiOffBlockedMessage(action.name || 'Quick action') : (action.desc || action.name);
+        const title = isDisabled
+          ? getAiOffBlockedMessage(action.name || 'Quick action')
+          : localizeActionString(action.desc || action.name);
         const customActions = action.isCustomQuickAction ? `
           <div class="command-item-custom-actions node-action-custom-actions">
             <button class="command-item-custom-trigger" data-custom-popover-trigger="${escapeHtml(action.customQuickActionId)}" title="${escapeHtml(tu('actions.customQuickAction.moreActionsTitle'))}" aria-haspopup="menu" aria-expanded="false">
@@ -3255,15 +3288,15 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           </div>
         ` : '';
         html += action.isCustomQuickAction ? `
-          <div class="node-action-btn last-used-action-btn node-action-btn--custom${disabledClass}" data-last-used-index="${idx}" title="${title}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" role="button"${disabledAttrs}>
+          <div class="node-action-btn last-used-action-btn node-action-btn--custom${disabledClass}" data-last-used-index="${idx}" data-action-label="${escapeHtml(action.name || '')}" title="${escapeHtml(title)}" data-ai-disabled="${isDisabled ? 'true' : 'false'}" role="button"${disabledAttrs}>
               ${action.icon || defaultActionIcon}
-              <span>${action.name}</span>
+              <span>${escapeHtml(localizeActionString(action.name || ''))}</span>
               ${customActions}
           </div>
         ` : `
-          <button class="node-action-btn last-used-action-btn${disabledClass}" data-last-used-index="${idx}" title="${title}" data-ai-disabled="${isDisabled ? 'true' : 'false'}"${disabledAttrs}>
+          <button class="node-action-btn last-used-action-btn${disabledClass}" data-last-used-index="${idx}" data-action-label="${escapeHtml(action.name || '')}" title="${escapeHtml(title)}" data-ai-disabled="${isDisabled ? 'true' : 'false'}"${disabledAttrs}>
             ${action.icon || defaultActionIcon}
-            <span>${action.name}</span>
+            <span>${escapeHtml(localizeActionString(action.name || ''))}</span>
           </button>
         `;
       });
@@ -3271,32 +3304,32 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (currentMode === 'ask') {
         // Always allow summarizing selection if something is selected
         html += `
-          <button class="node-action-btn" id="summarizeSelectionBtn" data-action="summarize-selection">
+          <button class="node-action-btn" id="summarizeSelectionBtn" data-action="summarize-selection" data-action-label="Summarize selection">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
               <path d="M8 9h8M8 13h5" />
             </svg>
-            <span>Summarize selection</span>
+            <span>${localizeActionString('Summarize selection')}</span>
           </button>
         `;
         // In Ask mode, allow extracting prompt if it's an image
         if (isSingleImage) {
           html += `
-            <button class="node-action-btn" id="extractPromptBtn" data-action="extract-prompt">
+            <button class="node-action-btn" id="extractPromptBtn" data-action="extract-prompt" data-action-label="Extract prompt">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
                 <path d="M21 11.929V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4.766"/>
                 <path d="M14.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>
                 <path d="m3 15 4.292-4.293a1 1 0 0 1 1.415 0l3.596 3.597"/>
                 <path d="M13.309 19h8.666m0 0-4-4m4 4-4 4"/>
               </svg>
-              <span>Extract prompt</span>
+              <span>${localizeActionString('Extract prompt')}</span>
             </button>
           `;
         }
         // In Ask mode, allow editing image when selection contains image node(s)
         if (hasImageFill) {
           html += `
-            <button class="node-action-btn" id="generateImageBtn" data-action="generate-image">
+            <button class="node-action-btn" id="generateImageBtn" data-action="generate-image" data-action-label="Edit image">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 8.929V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.766"/>
                 <path d="M14.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>
@@ -3304,14 +3337,14 @@ import { optimize as optimizeSvg } from 'svgo/browser';
                 <path d="M19.253 12.488c.182-.182.31-.24.547-.338a1.956 1.956 0 0 1 2.13.421 1.946 1.946 0 0 1 .422 2.131 1.962 1.962 0 0 1-.425.635l-6.314 6.311a.906.906 0 0 1-.42.238l-1.975.495a.905.905 0 0 1-1.098-1.097l.495-1.976a.905.905 0 0 1 .238-.42l6.4-6.4Z"/>
               </svg>
 
-              <span>Edit image</span>
+              <span>${localizeActionString('Edit image')}</span>
             </button>
           `;
         }
       } else if (currentMode === 'agent') {
         if (hasAnyDefault) {
           html += `
-            <button class="node-action-btn" id="smartRenameBtn" data-action="smart-rename">
+            <button class="node-action-btn" id="smartRenameBtn" data-action="smart-rename" data-action-label="Smart rename">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
                 <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -3319,35 +3352,35 @@ import { optimize as optimizeSvg } from 'svgo/browser';
                 <path d="M14 14h7M14 17h4M14 20h2"/>
                 <path d="M10 6h4M6 10v4"/>
               </svg>
-              <span>Smart rename</span>
+              <span>${localizeActionString('Smart rename')}</span>
             </button>
           `;
         }
 
         if (isSingleImage) {
           html += `
-            <button class="node-action-btn" id="extractPromptBtn" data-action="extract-prompt">
+            <button class="node-action-btn" id="extractPromptBtn" data-action="extract-prompt" data-action-label="Extract prompt">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
                 <path d="M21 11.929V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4.766"/>
                 <path d="M14.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>
                 <path d="m3 15 4.292-4.293a1 1 0 0 1 1.415 0l3.596 3.597"/>
                 <path d="M13.309 19h8.666m0 0-4-4m4 4-4 4"/>
               </svg>
-              <span>Extract prompt</span>
+              <span>${localizeActionString('Extract prompt')}</span>
             </button>
           `;
         }
 
         if (hasImageFill) {
           html += `
-            <button class="node-action-btn" id="generateImageBtn" data-action="generate-image">
+            <button class="node-action-btn" id="generateImageBtn" data-action="generate-image" data-action-label="Edit image">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 8.929V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.766"/>
                 <path d="M14.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/>
                 <path d="m3 15 4.292-4.293a1 1 0 0 1 1.415 0l3.596 3.597"/>
                 <path d="M19.253 12.488c.182-.182.31-.24.547-.338a1.956 1.956 0 0 1 2.13.421 1.946 1.946 0 0 1 .422 2.131 1.962 1.962 0 0 1-.425.635l-6.314 6.311a.906.906 0 0 1-.42.238l-1.975.495a.905.905 0 0 1-1.098-1.097l.495-1.976a.905.905 0 0 1 .238-.42l6.4-6.4Z"/>
               </svg>
-              <span>Edit image</span>
+              <span>${localizeActionString('Edit image')}</span>
             </button>
           `;
         }
@@ -28534,6 +28567,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     function createNoAiQuickActionUserElement(actionName, actionIcon) {
       const messageDiv = document.createElement('div');
       messageDiv.className = 'message user mode-ask no-ai-overlay-message';
+      messageDiv.dataset.actionName = actionName || 'Quick Action';
       const wrapperDiv = document.createElement('div');
       wrapperDiv.className = 'message-wrapper';
       const contentGroup = document.createElement('div');
@@ -28550,7 +28584,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
       const titleSpan = document.createElement('span');
       titleSpan.className = 'action-title';
-      titleSpan.textContent = actionName || 'Quick Action';
+      titleSpan.textContent = localizeActionString(actionName || 'Quick Action');
 
       quickActionDisplay.appendChild(iconSpan);
       quickActionDisplay.appendChild(titleSpan);
@@ -35485,7 +35519,7 @@ Example structure:
 
           const titleSpan = document.createElement('span');
           titleSpan.className = 'action-title';
-          titleSpan.textContent = actionData.name;
+          titleSpan.textContent = localizeActionString(actionData.name);
 
           quickActionDisplay.appendChild(iconSpan);
           quickActionDisplay.appendChild(titleSpan);
