@@ -8375,59 +8375,131 @@ function serializeSvgSegmentChain(segments: SvgAbsoluteSegment[]): string {
   return pieces.join(' ');
 }
 
-function splitTouchingLoopsInPathData(pathData: string, tolerancePx: number): string | null {
+function splitTouchingLoopsInSingleSubpath(
+  pathData: string,
+  tolerancePx: number
+): { subpaths: string[]; count: number } {
+  const trimmedPath = String(pathData || '').trim();
+  if (!trimmedPath) return { subpaths: [], count: 0 };
+
+  const parsed = parseSvgSubpathToAbsoluteSegments(trimmedPath);
+  if (!parsed || !parsed.closed || parsed.segments.length < 4) {
+    return { subpaths: [trimmedPath], count: 0 };
+  }
+
+  const duplicateGroups = new Map<string, number[]>();
+  parsed.segments.forEach((segment, index) => {
+    const key = svgPathSegmentKey(segment, Math.max(1e-4, tolerancePx / 100));
+    if (!key) return;
+    const group = duplicateGroups.get(key);
+    if (group) group.push(index);
+    else duplicateGroups.set(key, [index]);
+  });
+
+  for (const indices of duplicateGroups.values()) {
+    if (indices.length !== 2) continue;
+    const [firstIndex, secondIndex] = indices[0] < indices[1] ? indices : [indices[1], indices[0]];
+    const firstSegment = parsed.segments[firstIndex];
+    const secondSegment = parsed.segments[secondIndex];
+    if (!firstSegment || !secondSegment) continue;
+
+    const innerChain = parsed.segments.slice(firstIndex + 1, secondIndex);
+    const outerChain = [...parsed.segments.slice(secondIndex + 1), ...parsed.segments.slice(0, firstIndex)];
+    if (innerChain.length < 2 || outerChain.length < 2) continue;
+    if (!svgPathPointsEqual(innerChain[0].start, innerChain[innerChain.length - 1].end, tolerancePx)) continue;
+    if (!svgPathPointsEqual(outerChain[0].start, outerChain[outerChain.length - 1].end, tolerancePx)) continue;
+    if (Math.abs(buildSvgApproxChainArea(innerChain)) <= 1e-5 || Math.abs(buildSvgApproxChainArea(outerChain)) <= 1e-5) continue;
+
+    const rawReplacement = [serializeSvgSegmentChain(outerChain), serializeSvgSegmentChain(innerChain)].filter(Boolean);
+    if (rawReplacement.length < 2) continue;
+
+    const nested = rawReplacement.map((replacementPath) => splitTouchingLoopsInSingleSubpath(replacementPath, tolerancePx));
+    return {
+      subpaths: nested.reduce<string[]>((allSubpaths, entry) => allSubpaths.concat(entry.subpaths), []),
+      count: 1 + nested.reduce((total, entry) => total + entry.count, 0),
+    };
+  }
+
+  return { subpaths: [trimmedPath], count: 0 };
+}
+
+function countNearSharedSubpathPoints(
+  firstPoints: Array<{ x: number; y: number }>,
+  secondPoints: Array<{ x: number; y: number }>,
+  tolerancePx: number
+): number {
+  if (firstPoints.length === 0 || secondPoints.length === 0) return 0;
+  let count = 0;
+  const usedSecondIndices = new Set<number>();
+
+  for (const firstPoint of firstPoints) {
+    const matchIndex = secondPoints.findIndex(
+      (secondPoint, secondIndex) =>
+        !usedSecondIndices.has(secondIndex) && vectorFixDistance(firstPoint, secondPoint) <= tolerancePx
+    );
+    if (matchIndex >= 0) {
+      usedSecondIndices.add(matchIndex);
+      count++;
+    }
+  }
+
+  return count;
+}
+
+function removeTinyTouchingSubpaths(
+  subpaths: string[],
+  tolerancePx: number
+): { subpaths: string[]; count: number } {
+  if (subpaths.length <= 1) return { subpaths, count: 0 };
+
+  const effectiveTolerance = Math.max(tolerancePx, 1e-4);
+  const maxTinyArea = Math.max(1e-4, effectiveTolerance * effectiveTolerance * 0.5);
+  const subpathMeta = subpaths.map((subpath, index) => {
+    const points = extractSvgSubpathPoints(subpath);
+    const area = Math.abs(removeInnerHolesPolygonArea(points));
+    return { index, subpath, points, area };
+  });
+
+  const removedIndices = new Set<number>();
+
+  for (const candidate of subpathMeta) {
+    if (removedIndices.has(candidate.index)) continue;
+    if (candidate.points.length < 3) continue;
+    if (candidate.area > maxTinyArea) continue;
+
+    const touchesAnotherPath = subpathMeta.some((other) => {
+      if (other.index === candidate.index || removedIndices.has(other.index)) return false;
+      if (other.points.length < 3) return false;
+      if (other.area <= candidate.area) return false;
+      return countNearSharedSubpathPoints(candidate.points, other.points, effectiveTolerance) >= 2;
+    });
+
+    if (touchesAnotherPath) {
+      removedIndices.add(candidate.index);
+    }
+  }
+
+  return {
+    subpaths: subpathMeta.filter((entry) => !removedIndices.has(entry.index)).map((entry) => entry.subpath),
+    count: removedIndices.size,
+  };
+}
+
+function splitTouchingLoopsInPathData(pathData: string, tolerancePx: number): { data: string; count: number } | null {
   const subpaths = splitSvgPathIntoSubpaths(pathData);
   if (subpaths.length === 0) return null;
 
-  let changed = false;
-  const nextSubpaths: string[] = [];
+  const separated = subpaths.map((subpath) => splitTouchingLoopsInSingleSubpath(subpath, tolerancePx));
+  const flattenedSubpaths = separated.reduce<string[]>((allSubpaths, entry) => allSubpaths.concat(entry.subpaths), []);
+  const initialCount = separated.reduce((total, entry) => total + entry.count, 0);
+  const cleanupResult = removeTinyTouchingSubpaths(flattenedSubpaths, tolerancePx);
+  const count = initialCount + cleanupResult.count;
+  if (count <= 0) return null;
 
-  for (const subpath of subpaths) {
-    const parsed = parseSvgSubpathToAbsoluteSegments(subpath);
-    if (!parsed || !parsed.closed || parsed.segments.length < 4) {
-      nextSubpaths.push(subpath.trim());
-      continue;
-    }
-
-    const duplicateGroups = new Map<string, number[]>();
-    parsed.segments.forEach((segment, index) => {
-      const key = svgPathSegmentKey(segment, Math.max(1e-4, tolerancePx / 100));
-      if (!key) return;
-      const group = duplicateGroups.get(key);
-      if (group) group.push(index);
-      else duplicateGroups.set(key, [index]);
-    });
-
-    let replacement: string[] | null = null;
-
-    for (const indices of duplicateGroups.values()) {
-      if (indices.length !== 2) continue;
-      const [firstIndex, secondIndex] = indices[0] < indices[1] ? indices : [indices[1], indices[0]];
-      const firstSegment = parsed.segments[firstIndex];
-      const secondSegment = parsed.segments[secondIndex];
-      if (!firstSegment || !secondSegment) continue;
-
-      const innerChain = parsed.segments.slice(firstIndex + 1, secondIndex);
-      const outerChain = [...parsed.segments.slice(secondIndex + 1), ...parsed.segments.slice(0, firstIndex)];
-      if (innerChain.length < 2 || outerChain.length < 2) continue;
-      if (!svgPathPointsEqual(innerChain[0].start, innerChain[innerChain.length - 1].end, tolerancePx)) continue;
-      if (!svgPathPointsEqual(outerChain[0].start, outerChain[outerChain.length - 1].end, tolerancePx)) continue;
-      if (Math.abs(buildSvgApproxChainArea(innerChain)) <= 1e-5 || Math.abs(buildSvgApproxChainArea(outerChain)) <= 1e-5) continue;
-
-      replacement = [serializeSvgSegmentChain(outerChain), serializeSvgSegmentChain(innerChain)].filter(Boolean);
-      break;
-    }
-
-    if (!replacement || replacement.length < 2) {
-      nextSubpaths.push(subpath.trim());
-      continue;
-    }
-
-    changed = true;
-    nextSubpaths.push(...replacement);
-  }
-
-  return changed ? nextSubpaths.join(' ') : null;
+  return {
+    data: cleanupResult.subpaths.join(' '),
+    count,
+  };
 }
 
 function splitTouchingLoopsInVectorPaths(
@@ -8438,17 +8510,17 @@ function splitTouchingLoopsInVectorPaths(
 
   let separatedLoops = 0;
   const nextVectorPaths = vectorPaths.map((vectorPath) => {
-    const nextData = splitTouchingLoopsInPathData(vectorPath.data || '', tolerancePx);
-    if (!nextData) {
+    const splitResult = splitTouchingLoopsInPathData(vectorPath.data || '', tolerancePx);
+    if (!splitResult) {
       return {
         windingRule: vectorPath.windingRule,
         data: vectorPath.data,
       };
     }
-    separatedLoops++;
+    separatedLoops += splitResult.count;
     return {
       windingRule: 'EVENODD' as WindingRule,
-      data: nextData,
+      data: splitResult.data,
     };
   });
 
