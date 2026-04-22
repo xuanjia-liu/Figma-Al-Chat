@@ -13039,6 +13039,36 @@
       position: relative;
     }
 
+    .icon-browse-history {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .icon-browse-history-tabs {
+      max-width: 100%;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding: 2px;
+      gap: 2px;
+      scrollbar-width: thin;
+    }
+
+    .icon-browse-history-tabs::-webkit-scrollbar {
+      height: 6px;
+    }
+
+    .icon-browse-history-tabs::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+    }
+
+    .icon-browse-results-panel {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+    }
+
     .icon-browse-section {
       display: flex;
       flex-direction: column;

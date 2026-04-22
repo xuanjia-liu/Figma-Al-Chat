@@ -8745,6 +8745,9 @@ Rules:
     const iconifyCollectionSearchCache = new Map();
     const POPULAR_ICONIFY_LOCAL_SEARCH_PREFIXES = ['material-symbols', 'mdi', 'tabler', 'lucide', 'carbon', 'bi'];
     let createIconLazySearchRunId = 0;
+    const CREATE_ICON_DRAWER_HISTORY_LIMIT = 8;
+    let createIconDrawerHistoryTabs = [];
+    let activeCreateIconDrawerHistoryTabId = null;
 
     const builtInIconSets = {
       'material-symbols': {
@@ -23576,13 +23579,85 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       showToast('Choose an icon from the options above.', 'info');
     }
 
-    function renderCreateIconResultsInDrawer(matches, { size, useAiFallback, fallbackHint, actionMeta, iconApiSource, iconFontFamily, lazyState = null }) {
-      if (!Array.isArray(matches) || matches.length === 0) return;
+    function createIconDrawerHistoryLabel(value, fallback = 'Search') {
+      const normalized = String(value || '').trim().replace(/\s+/g, ' ');
+      if (!normalized) return fallback;
+      return normalized.length > 24 ? `${normalized.slice(0, 24)}...` : normalized;
+    }
 
-      cleanupBrowseState();
+    function createIconDrawerHistoryId() {
+      return `create-icon-history-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
 
-      const container = document.createElement('div');
-      container.className = 'icon-browse-container';
+    function upsertCreateIconDrawerHistoryTab({
+      historyTabId = null,
+      historyKey = '',
+      historyLabel = '',
+      matches = [],
+      renderOptions = {},
+      lazyState = null,
+      activate = true
+    }) {
+      const normalizedLabel = createIconDrawerHistoryLabel(historyLabel || renderOptions?.fallbackHint?.description || 'Search');
+      let targetIndex = -1;
+
+      if (historyTabId) {
+        targetIndex = createIconDrawerHistoryTabs.findIndex(tab => tab.id === historyTabId);
+      } else if (historyKey) {
+        targetIndex = createIconDrawerHistoryTabs.findIndex(tab => tab.historyKey === historyKey);
+      }
+
+      const existing = targetIndex >= 0 ? createIconDrawerHistoryTabs[targetIndex] : null;
+      const tabId = existing?.id || historyTabId || createIconDrawerHistoryId();
+      const nextTab = {
+        id: tabId,
+        historyKey: historyKey || existing?.historyKey || tabId,
+        label: normalizedLabel,
+        fullLabel: String(historyLabel || renderOptions?.fallbackHint?.description || normalizedLabel),
+        matches: Array.isArray(matches) ? matches : [],
+        renderOptions: { ...(existing?.renderOptions || {}), ...(renderOptions || {}) },
+        lazyState: lazyState || null
+      };
+
+      if (targetIndex >= 0) {
+        createIconDrawerHistoryTabs.splice(targetIndex, 1);
+      }
+      createIconDrawerHistoryTabs.unshift(nextTab);
+      createIconDrawerHistoryTabs = createIconDrawerHistoryTabs.slice(0, CREATE_ICON_DRAWER_HISTORY_LIMIT);
+
+      if (activate) {
+        activeCreateIconDrawerHistoryTabId = tabId;
+      } else if (!activeCreateIconDrawerHistoryTabId) {
+        activeCreateIconDrawerHistoryTabId = tabId;
+      }
+
+      return tabId;
+    }
+
+    function getActiveCreateIconDrawerHistoryTab() {
+      if (!createIconDrawerHistoryTabs.length) return null;
+      const active = createIconDrawerHistoryTabs.find(tab => tab.id === activeCreateIconDrawerHistoryTabId);
+      if (active) return active;
+      activeCreateIconDrawerHistoryTabId = createIconDrawerHistoryTabs[0].id;
+      return createIconDrawerHistoryTabs[0];
+    }
+
+    function buildCreateIconDrawerResultsPanel(tab) {
+      const matches = Array.isArray(tab?.matches) ? tab.matches : [];
+      if (!matches.length) return null;
+
+      const {
+        size,
+        useAiFallback,
+        fallbackHint,
+        actionMeta,
+        iconApiSource,
+        iconFontFamily,
+        lazyState = tab?.lazyState || null
+      } = tab.renderOptions || {};
+
+      const panel = document.createElement('div');
+      panel.className = 'icon-browse-results-panel';
 
       const statsEl = document.createElement('div');
       statsEl.className = 'icon-browse-stats';
@@ -23595,7 +23670,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       } else {
         statsEl.textContent = `Found ${matches.length} icons. Click an icon to insert.`;
       }
-      container.appendChild(statsEl);
+      panel.appendChild(statsEl);
 
       let isInserting = false;
       const textPrimaryColor = getResolvedTextPrimaryColor();
@@ -23722,13 +23797,92 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
             tierMatches.forEach(match => appendMatchItem(grid, match));
           }
 
-          container.appendChild(section);
+          panel.appendChild(section);
         });
+
+      return panel;
+    }
+
+    function renderCreateIconDrawerHistoryView() {
+      const activeTab = getActiveCreateIconDrawerHistoryTab();
+      if (!activeTab) return;
+
+      cleanupBrowseState();
+
+      const container = document.createElement('div');
+      container.className = 'icon-browse-container';
+
+      if (createIconDrawerHistoryTabs.length > 0) {
+        const historyWrap = document.createElement('div');
+        historyWrap.className = 'icon-browse-history';
+
+        const tabsWrap = document.createElement('div');
+        tabsWrap.className = 'pill-tab-container icon-browse-history-tabs';
+
+        createIconDrawerHistoryTabs.forEach(tab => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `pill-tab${tab.id === activeCreateIconDrawerHistoryTabId ? ' active' : ''}`;
+          btn.textContent = tab.label;
+          btn.title = tab.fullLabel || tab.label;
+          btn.addEventListener('click', () => {
+            activeCreateIconDrawerHistoryTabId = tab.id;
+            renderCreateIconDrawerHistoryView();
+          });
+          tabsWrap.appendChild(btn);
+        });
+
+        historyWrap.appendChild(tabsWrap);
+        container.appendChild(historyWrap);
+      }
+
+      const panel = buildCreateIconDrawerResultsPanel(activeTab);
+      if (panel) container.appendChild(panel);
 
       promptDrawerCustomContent.classList.remove('hidden');
       promptDrawerCustomContent.innerHTML = '';
       promptDrawerCustomContent.appendChild(container);
-      showToast('Search again with Run Action, or click any icon to insert.', 'info');
+    }
+
+    function renderCreateIconResultsInDrawer(matches, {
+      size,
+      useAiFallback,
+      fallbackHint,
+      actionMeta,
+      iconApiSource,
+      iconFontFamily,
+      lazyState = null,
+      historyTabId = null,
+      historyKey = '',
+      historyLabel = '',
+      activateHistoryTab = true,
+      showFeedback = true
+    }) {
+      if (!Array.isArray(matches) || matches.length === 0) return null;
+
+      const tabId = upsertCreateIconDrawerHistoryTab({
+        historyTabId,
+        historyKey,
+        historyLabel,
+        matches,
+        renderOptions: {
+          size,
+          useAiFallback,
+          fallbackHint,
+          actionMeta,
+          iconApiSource,
+          iconFontFamily,
+          lazyState
+        },
+        lazyState,
+        activate: activateHistoryTab
+      });
+
+      renderCreateIconDrawerHistoryView();
+      if (showFeedback) {
+        showToast('Search again with Run Action, or click any icon to insert.', 'info');
+      }
+      return tabId;
     }
 
     async function createIconFromId(iconId, { size, useAiFallback, fallbackHint, actionMeta, suppressThinkingIndicator = false }) {
@@ -25818,7 +25972,10 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       description,
       slug,
       searchQueries,
-      renderOptions
+      renderOptions,
+      historyTabId = null,
+      historyKey = '',
+      historyLabel = ''
     }) {
       try {
         const relatedMatches = await searchLazyCreateIconRelatedMatches({
@@ -25840,6 +25997,11 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
         renderCreateIconResultsInDrawer(mergedMatches, {
           ...renderOptions,
+          historyTabId,
+          historyKey,
+          historyLabel,
+          activateHistoryTab: false,
+          showFeedback: false,
           lazyState: { loading: false, addedCount }
         });
       } catch (error) {
@@ -25847,6 +26009,11 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         console.warn('Lazy create-icon related search failed', error);
         renderCreateIconResultsInDrawer(initialMatches, {
           ...renderOptions,
+          historyTabId,
+          historyKey,
+          historyLabel,
+          activateHistoryTab: false,
+          showFeedback: false,
           lazyState: { loading: false, addedCount: 0 }
         });
       }
@@ -26009,6 +26176,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
           if (useDrawerPicker) {
             const lazyEnabled = shouldLazyLoadCreateIconRelatedHits({ iconApiSource });
+            const normalizedHistoryKey = normalizeCreateIconSearchRaw(cleanDesc || slug || '');
+            const historyLabel = description || slug || 'Search';
+            const historyKey = `${iconApiSource}:${iconSet || 'any'}:${normalizedHistoryKey || 'search'}`;
             const renderOptions = {
               fallbackHint: aiContext,
               size,
@@ -26017,8 +26187,12 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
               iconApiSource,
               iconFontFamily
             };
-            renderCreateIconResultsInDrawer(matches, {
+            const historyTabId = renderCreateIconResultsInDrawer(matches, {
               ...renderOptions,
+              historyKey,
+              historyLabel,
+              activateHistoryTab: true,
+              showFeedback: true,
               lazyState: lazyEnabled ? { loading: true, addedCount: 0 } : null
             });
             const resultText = `Showing ${matches.length} icon result${matches.length === 1 ? '' : 's'} in the drawer. Click any icon to insert it.`;
@@ -26034,7 +26208,10 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
                 description,
                 slug,
                 searchQueries,
-                renderOptions
+                renderOptions,
+                historyTabId,
+                historyKey,
+                historyLabel
               });
             }
             return;
