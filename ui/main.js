@@ -19553,6 +19553,217 @@ Generate ONLY the reply text, nothing else.`;
     }
 
     function renderPromptFields(fields, preservedValues = null) {
+      const isFixShapeIssuesDrawer = currentPromptAction?.directAction === 'fixShapeIssues';
+      const visualExplainSizePresets = {
+        xsmall: {
+          cardPadding: 6,
+          titleSize: 9,
+          metaSize: 0,
+          labelSize: 8,
+          previewHeight: 26,
+          gap: 4,
+          textSize: 9,
+          textMarginTop: 4,
+          radius: 9,
+          innerRadius: 7,
+          showMeta: false,
+        },
+        small: {
+          cardPadding: 8,
+          titleSize: 10,
+          metaSize: 9,
+          labelSize: 9,
+          previewHeight: 38,
+          gap: 6,
+          textSize: 10,
+          textMarginTop: 6,
+          radius: 10,
+          innerRadius: 8,
+          showMeta: true,
+        },
+        medium: {
+          cardPadding: 10,
+          titleSize: 11,
+          metaSize: 10,
+          labelSize: 10,
+          previewHeight: 72,
+          gap: 8,
+          textSize: 11,
+          textMarginTop: 8,
+          radius: 12,
+          innerRadius: 10,
+          showMeta: true,
+        },
+        large: {
+          cardPadding: 12,
+          titleSize: 12,
+          metaSize: 10,
+          labelSize: 10,
+          previewHeight: 92,
+          gap: 10,
+          textSize: 11,
+          textMarginTop: 8,
+          radius: 14,
+          innerRadius: 12,
+          showMeta: true,
+        },
+      };
+
+      const renderVisualExplainBlock = ({
+        before,
+        after,
+        size = 'medium',
+        className = 'prompt-visual-explainer',
+      }) => {
+        if (!before && !after) return '';
+        const resolvedSize = visualExplainSizePresets[size] ? size : 'medium';
+        const normalizeVisualExplainSvg = (markup) => {
+          const source = typeof markup === 'string' ? markup.trim() : '';
+          if (!source) return '';
+          return source.replace(
+            /^<svg\b/,
+            '<svg class="prompt-visual-explainer-svg" preserveAspectRatio="xMidYMid meet"'
+          );
+        };
+        return `
+          <div class="${className} prompt-visual-explainer--${resolvedSize}">
+            <div class="prompt-visual-explainer__grid">
+              <div class="prompt-visual-explainer__panel prompt-visual-explainer__panel--before">
+                <div class="prompt-visual-explainer__label">${escapeHtml(tu('actions.fixShapeIssues.visual.before'))}</div>
+                <div class="prompt-visual-explainer__preview">${normalizeVisualExplainSvg(before)}</div>
+              </div>
+              <div class="prompt-visual-explainer__panel prompt-visual-explainer__panel--after">
+                <div class="prompt-visual-explainer__label">${escapeHtml(tu('actions.fixShapeIssues.visual.after'))}</div>
+                <div class="prompt-visual-explainer__preview">${normalizeVisualExplainSvg(after)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      };
+
+      const fixShapeIssueIllustrations = {
+        closeOpenShape: {
+          title: tu('actions.fixShapeIssues.visual.closeOpenShape.title'),
+          text: tu('actions.fixShapeIssues.visual.closeOpenShape.text'),
+          before: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M18 46 C18 26 34 14 48 14 C62 14 78 26 78 46" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round"/>
+              <circle cx="18" cy="46" r="4.5" fill="#ffffff" stroke="#F59E0B" stroke-width="2"/>
+              <circle cx="78" cy="46" r="4.5" fill="#ffffff" stroke="#F59E0B" stroke-width="2"/>
+            </svg>
+          `,
+          after: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M18 46 C18 26 34 14 48 14 C62 14 78 26 78 46 Z" fill="rgba(34,197,94,.18)" stroke="#22C55E" stroke-width="6" stroke-linejoin="round"/>
+            </svg>
+          `,
+        },
+        mergeDuplicatePoints: {
+          title: tu('actions.fixShapeIssues.visual.mergeDuplicatePoints.title'),
+          text: tu('actions.fixShapeIssues.visual.mergeDuplicatePoints.text'),
+          before: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M18 48 L42 16 L55 30 L78 48" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="47" cy="24" r="4.5" fill="#ffffff" stroke="#F59E0B" stroke-width="2"/>
+              <circle cx="51" cy="27" r="4.5" fill="#ffffff" stroke="#F59E0B" stroke-width="2"/>
+            </svg>
+          `,
+          after: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M18 48 L42 16 L55 30 L78 48" fill="none" stroke="#22C55E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="49" cy="25.5" r="5" fill="#ffffff" stroke="#22C55E" stroke-width="2"/>
+            </svg>
+          `,
+        },
+        separateTouchingLoops: {
+          title: tu('actions.fixShapeIssues.visual.separateTouchingLoops.title'),
+          text: tu('actions.fixShapeIssues.visual.separateTouchingLoops.text'),
+          before: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M14 32 C14 20 26 12 48 12 C70 12 82 20 82 32 C82 44 70 52 48 52 C26 52 14 44 14 32 Z M30 32 C30 25 37 21 48 21 C59 21 66 25 66 32 C66 39 59 43 48 43 C37 43 30 39 30 32 Z" fill="rgba(245,158,11,.14)" stroke="#F59E0B" stroke-width="4" fill-rule="evenodd"/>
+              <line x1="48" y1="12" x2="48" y2="21" stroke="#F59E0B" stroke-width="3"/>
+            </svg>
+          `,
+          after: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M14 32 C14 20 26 12 48 12 C70 12 82 20 82 32 C82 44 70 52 48 52 C26 52 14 44 14 32 Z M30 32 C30 25 37 21 48 21 C59 21 66 25 66 32 C66 39 59 43 48 43 C37 43 30 39 30 32 Z" fill="rgba(34,197,94,.18)" stroke="#22C55E" stroke-width="4" fill-rule="evenodd"/>
+            </svg>
+          `,
+        },
+        removeZeroLengthSegments: {
+          title: tu('actions.fixShapeIssues.visual.removeZeroLengthSegments.title'),
+          text: tu('actions.fixShapeIssues.visual.removeZeroLengthSegments.text'),
+          before: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M18 46 L38 18 L38 18 L58 18 L78 46" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="38" cy="18" r="5" fill="#ffffff" stroke="#F59E0B" stroke-width="2"/>
+            </svg>
+          `,
+          after: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M18 46 L38 18 L58 18 L78 46" fill="none" stroke="#22C55E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `,
+        },
+        removeTinySpikes: {
+          title: tu('actions.fixShapeIssues.visual.removeTinySpikes.title'),
+          text: tu('actions.fixShapeIssues.visual.removeTinySpikes.text'),
+          before: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M16 42 L34 22 L48 10 L58 22 L80 42" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `,
+          after: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M16 42 L48 18 L80 42" fill="none" stroke="#22C55E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `,
+        },
+        simplifyNearCollinearPoints: {
+          title: tu('actions.fixShapeIssues.visual.simplifyNearCollinearPoints.title'),
+          text: tu('actions.fixShapeIssues.visual.simplifyNearCollinearPoints.text'),
+          before: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M16 42 L34 30 L50 31.5 L66 30 L80 22" fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="50" cy="31.5" r="4.5" fill="#ffffff" stroke="#F59E0B" stroke-width="2"/>
+            </svg>
+          `,
+          after: `
+            <svg viewBox="0 0 96 64" aria-hidden="true">
+              <path d="M16 42 L34 30 L66 30 L80 22" fill="none" stroke="#22C55E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `,
+        },
+        normalizeWindingDirection: {
+          title: tu('actions.fixShapeIssues.visual.normalizeWindingDirection.title'),
+          text: tu('actions.fixShapeIssues.visual.normalizeWindingDirection.text'),
+          before: `
+            <svg width="96" height="64" fill="none" viewBox="0 0 96 64" aria-hidden="true">
+              <path stroke="#f59e0b" stroke-width="4" d="M20 32c0-12 12-18 28-18s28 6 28 18-12 18-28 18-28-6-28-18Z"/>
+              <path stroke="#f59e0b" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M47 6.752 54.248 14 47 21.248"/>
+            </svg>
+          `,
+          after: `
+            <svg width="96" height="64" fill="none" viewBox="0 0 96 64" aria-hidden="true">
+              <path stroke="#22c55e" stroke-width="4" d="M20 32c0-12 12-18 28-18s28 6 28 18-12 18-28 18-28-6-28-18Z"/>
+              <path stroke="#22c55e" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M47 6.752 39.752 14 47 21.248"/>
+            </svg>
+          `,
+        },
+      };
+
+      const renderFixShapeIssueCheckboxHelp = (fieldKey) => {
+        if (!isFixShapeIssuesDrawer || !fieldKey) return '';
+        const illustration = fixShapeIssueIllustrations[fieldKey];
+        if (!illustration) return '';
+        return renderVisualExplainBlock({
+          before: illustration.before,
+          after: illustration.after,
+          size: 'small',
+          className: 'prompt-visual-explainer fix-shape-issue-help',
+        });
+      };
+
       const renderLabelRowCheckboxes = (fieldId, checkboxDefs, disabledAttr = '') => {
         const defs = Array.isArray(checkboxDefs) ? checkboxDefs.filter(def => def && def.key) : [];
         if (defs.length === 0) return '';
@@ -19673,6 +19884,8 @@ Generate ONLY the reply text, nothing else.`;
                   <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
                 </div>
                 ${field.hint ? `<span class="prompt-field-hint checkbox-hint">${field.hint}</span>` : ''}
+                ${renderFixShapeIssueCheckboxHelp(field.key)}
+                ${isFixShapeIssuesDrawer && fixShapeIssueIllustrations[field.key]?.text ? `<span class="prompt-field-hint checkbox-hint">${escapeHtml(fixShapeIssueIllustrations[field.key].text)}</span>` : ''}
               </div>
             `;
           }
