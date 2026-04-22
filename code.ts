@@ -8084,6 +8084,377 @@ function extractSvgSubpathPoints(pathData: string): Array<{ x: number; y: number
   return points;
 }
 
+type SvgPathPoint = { x: number; y: number };
+type SvgAbsoluteSegment = {
+  command: 'L' | 'C' | 'Q' | 'A';
+  start: SvgPathPoint;
+  end: SvgPathPoint;
+  data: string;
+};
+type SvgParsedSubpath = {
+  start: SvgPathPoint;
+  segments: SvgAbsoluteSegment[];
+  closed: boolean;
+};
+
+function formatSvgPathNumber(value: number): string {
+  const normalized = Number(value.toFixed(6));
+  if (Object.is(normalized, -0)) return '0';
+  return `${normalized}`;
+}
+
+function svgPathDistance(a: SvgPathPoint, b: SvgPathPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function svgPathPointsEqual(a: SvgPathPoint, b: SvgPathPoint, tolerance = 1e-4): boolean {
+  return svgPathDistance(a, b) <= tolerance;
+}
+
+function svgPathSegmentKey(segment: SvgAbsoluteSegment, tolerance = 1e-4): string | null {
+  if (segment.command !== 'L') return null;
+  const quantize = (value: number) => `${Math.round(value / tolerance)}`;
+  const a = `${quantize(segment.start.x)},${quantize(segment.start.y)}`;
+  const b = `${quantize(segment.end.x)},${quantize(segment.end.y)}`;
+  return a <= b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function parseSvgSubpathToAbsoluteSegments(pathData: string): SvgParsedSubpath | null {
+  const tokens = tokenizeSvgPathData(pathData);
+  if (tokens.length === 0) return null;
+
+  let i = 0;
+  let command = '';
+  let current: SvgPathPoint = { x: 0, y: 0 };
+  let start: SvgPathPoint | null = null;
+  let closed = false;
+  let lastCubicControl: SvgPathPoint | null = null;
+  let lastQuadraticControl: SvgPathPoint | null = null;
+  let previousCommand = '';
+  const segments: SvgAbsoluteSegment[] = [];
+
+  const isCommandToken = (token: string) => /^[AaCcHhLlMmQqSsTtVvZz]$/.test(token);
+  const hasNumber = () => i < tokens.length && !isCommandToken(tokens[i]);
+  const readNumber = () => Number(tokens[i++]);
+  const toAbsolutePoint = (x: number, y: number, isRelative: boolean): SvgPathPoint =>
+    isRelative ? { x: current.x + x, y: current.y + y } : { x, y };
+  const pushLine = (end: SvgPathPoint) => {
+    segments.push({
+      command: 'L',
+      start: { ...current },
+      end: { ...end },
+      data: `L ${formatSvgPathNumber(end.x)} ${formatSvgPathNumber(end.y)}`,
+    });
+    current = end;
+    lastCubicControl = null;
+    lastQuadraticControl = null;
+  };
+
+  while (i < tokens.length) {
+    if (isCommandToken(tokens[i])) {
+      command = tokens[i++];
+    } else if (!command) {
+      break;
+    }
+
+    switch (command) {
+      case 'M':
+      case 'm': {
+        if (!hasNumber()) break;
+        const isRelative = command === 'm';
+        const firstPoint = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+        current = firstPoint;
+        start = { ...firstPoint };
+        closed = false;
+        lastCubicControl = null;
+        lastQuadraticControl = null;
+
+        while (hasNumber()) {
+          const nextPoint = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          pushLine(nextPoint);
+          previousCommand = 'L';
+        }
+        previousCommand = 'M';
+        break;
+      }
+      case 'L':
+      case 'l': {
+        const isRelative = command === 'l';
+        while (hasNumber()) {
+          pushLine(toAbsolutePoint(readNumber(), readNumber(), isRelative));
+          previousCommand = 'L';
+        }
+        break;
+      }
+      case 'H':
+      case 'h': {
+        const isRelative = command === 'h';
+        while (hasNumber()) {
+          const x = readNumber();
+          pushLine({ x: isRelative ? current.x + x : x, y: current.y });
+          previousCommand = 'L';
+        }
+        break;
+      }
+      case 'V':
+      case 'v': {
+        const isRelative = command === 'v';
+        while (hasNumber()) {
+          const y = readNumber();
+          pushLine({ x: current.x, y: isRelative ? current.y + y : y });
+          previousCommand = 'L';
+        }
+        break;
+      }
+      case 'C':
+      case 'c': {
+        const isRelative = command === 'c';
+        while (hasNumber()) {
+          if (i + 5 >= tokens.length) break;
+          const control1 = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          const control2 = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          const end = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          segments.push({
+            command: 'C',
+            start: { ...current },
+            end: { ...end },
+            data:
+              `C ${formatSvgPathNumber(control1.x)} ${formatSvgPathNumber(control1.y)} ` +
+              `${formatSvgPathNumber(control2.x)} ${formatSvgPathNumber(control2.y)} ` +
+              `${formatSvgPathNumber(end.x)} ${formatSvgPathNumber(end.y)}`,
+          });
+          current = end;
+          lastCubicControl = control2;
+          lastQuadraticControl = null;
+          previousCommand = 'C';
+        }
+        break;
+      }
+      case 'S':
+      case 's': {
+        const isRelative = command === 's';
+        while (hasNumber()) {
+          if (i + 3 >= tokens.length) break;
+          const reflected: SvgPathPoint =
+            (previousCommand === 'C' || previousCommand === 'S') && lastCubicControl
+              ? { x: current.x * 2 - lastCubicControl.x, y: current.y * 2 - lastCubicControl.y }
+              : { ...current };
+          const control2 = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          const end = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          segments.push({
+            command: 'C',
+            start: { ...current },
+            end: { ...end },
+            data:
+              `C ${formatSvgPathNumber(reflected.x)} ${formatSvgPathNumber(reflected.y)} ` +
+              `${formatSvgPathNumber(control2.x)} ${formatSvgPathNumber(control2.y)} ` +
+              `${formatSvgPathNumber(end.x)} ${formatSvgPathNumber(end.y)}`,
+          });
+          current = end;
+          lastCubicControl = control2;
+          lastQuadraticControl = null;
+          previousCommand = 'S';
+        }
+        break;
+      }
+      case 'Q':
+      case 'q': {
+        const isRelative = command === 'q';
+        while (hasNumber()) {
+          if (i + 3 >= tokens.length) break;
+          const control = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          const end = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          segments.push({
+            command: 'Q',
+            start: { ...current },
+            end: { ...end },
+            data:
+              `Q ${formatSvgPathNumber(control.x)} ${formatSvgPathNumber(control.y)} ` +
+              `${formatSvgPathNumber(end.x)} ${formatSvgPathNumber(end.y)}`,
+          });
+          current = end;
+          lastQuadraticControl = control;
+          lastCubicControl = null;
+          previousCommand = 'Q';
+        }
+        break;
+      }
+      case 'T':
+      case 't': {
+        const isRelative = command === 't';
+        while (hasNumber()) {
+          if (i + 1 >= tokens.length) break;
+          const reflected: SvgPathPoint =
+            (previousCommand === 'Q' || previousCommand === 'T') && lastQuadraticControl
+              ? { x: current.x * 2 - lastQuadraticControl.x, y: current.y * 2 - lastQuadraticControl.y }
+              : { ...current };
+          const end = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          segments.push({
+            command: 'Q',
+            start: { ...current },
+            end: { ...end },
+            data:
+              `Q ${formatSvgPathNumber(reflected.x)} ${formatSvgPathNumber(reflected.y)} ` +
+              `${formatSvgPathNumber(end.x)} ${formatSvgPathNumber(end.y)}`,
+          });
+          current = end;
+          lastQuadraticControl = reflected;
+          lastCubicControl = null;
+          previousCommand = 'T';
+        }
+        break;
+      }
+      case 'A':
+      case 'a': {
+        const isRelative = command === 'a';
+        while (hasNumber()) {
+          if (i + 6 >= tokens.length) break;
+          const rx = readNumber();
+          const ry = readNumber();
+          const angle = readNumber();
+          const largeArcFlag = readNumber();
+          const sweepFlag = readNumber();
+          const end = toAbsolutePoint(readNumber(), readNumber(), isRelative);
+          segments.push({
+            command: 'A',
+            start: { ...current },
+            end: { ...end },
+            data:
+              `A ${formatSvgPathNumber(rx)} ${formatSvgPathNumber(ry)} ${formatSvgPathNumber(angle)} ` +
+              `${Math.round(largeArcFlag)} ${Math.round(sweepFlag)} ` +
+              `${formatSvgPathNumber(end.x)} ${formatSvgPathNumber(end.y)}`,
+          });
+          current = end;
+          lastCubicControl = null;
+          lastQuadraticControl = null;
+          previousCommand = 'A';
+        }
+        break;
+      }
+      case 'Z':
+      case 'z': {
+        if (start && !svgPathPointsEqual(current, start, 1e-8)) {
+          pushLine({ ...start });
+        }
+        closed = true;
+        previousCommand = 'Z';
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  if (!start) return null;
+  return { start, segments, closed };
+}
+
+function buildSvgApproxChainArea(segments: SvgAbsoluteSegment[]): number {
+  if (segments.length === 0) return 0;
+  const points = [segments[0].start, ...segments.map((segment) => segment.end)];
+  let area = 0;
+  for (let index = 0; index < points.length - 1; index++) {
+    area += points[index].x * points[index + 1].y - points[index + 1].x * points[index].y;
+  }
+  return area * 0.5;
+}
+
+function serializeSvgSegmentChain(segments: SvgAbsoluteSegment[]): string {
+  if (segments.length === 0) return '';
+  const start = segments[0].start;
+  const end = segments[segments.length - 1].end;
+  const hasExplicitClosingLine =
+    segments[segments.length - 1].command === 'L' &&
+    svgPathPointsEqual(segments[segments.length - 1].end, start, 1e-4);
+  const drawableSegments = hasExplicitClosingLine ? segments.slice(0, -1) : segments;
+  const pieces = [`M ${formatSvgPathNumber(start.x)} ${formatSvgPathNumber(start.y)}`];
+  drawableSegments.forEach((segment) => pieces.push(segment.data));
+  if (svgPathPointsEqual(start, end, 1e-4)) {
+    pieces.push('Z');
+  }
+  return pieces.join(' ');
+}
+
+function splitTouchingLoopsInPathData(pathData: string, tolerancePx: number): string | null {
+  const subpaths = splitSvgPathIntoSubpaths(pathData);
+  if (subpaths.length === 0) return null;
+
+  let changed = false;
+  const nextSubpaths: string[] = [];
+
+  for (const subpath of subpaths) {
+    const parsed = parseSvgSubpathToAbsoluteSegments(subpath);
+    if (!parsed || !parsed.closed || parsed.segments.length < 4) {
+      nextSubpaths.push(subpath.trim());
+      continue;
+    }
+
+    const duplicateGroups = new Map<string, number[]>();
+    parsed.segments.forEach((segment, index) => {
+      const key = svgPathSegmentKey(segment, Math.max(1e-4, tolerancePx / 100));
+      if (!key) return;
+      const group = duplicateGroups.get(key);
+      if (group) group.push(index);
+      else duplicateGroups.set(key, [index]);
+    });
+
+    let replacement: string[] | null = null;
+
+    for (const indices of duplicateGroups.values()) {
+      if (indices.length !== 2) continue;
+      const [firstIndex, secondIndex] = indices[0] < indices[1] ? indices : [indices[1], indices[0]];
+      const firstSegment = parsed.segments[firstIndex];
+      const secondSegment = parsed.segments[secondIndex];
+      if (!firstSegment || !secondSegment) continue;
+
+      const innerChain = parsed.segments.slice(firstIndex + 1, secondIndex);
+      const outerChain = [...parsed.segments.slice(secondIndex + 1), ...parsed.segments.slice(0, firstIndex)];
+      if (innerChain.length < 2 || outerChain.length < 2) continue;
+      if (!svgPathPointsEqual(innerChain[0].start, innerChain[innerChain.length - 1].end, tolerancePx)) continue;
+      if (!svgPathPointsEqual(outerChain[0].start, outerChain[outerChain.length - 1].end, tolerancePx)) continue;
+      if (Math.abs(buildSvgApproxChainArea(innerChain)) <= 1e-5 || Math.abs(buildSvgApproxChainArea(outerChain)) <= 1e-5) continue;
+
+      replacement = [serializeSvgSegmentChain(outerChain), serializeSvgSegmentChain(innerChain)].filter(Boolean);
+      break;
+    }
+
+    if (!replacement || replacement.length < 2) {
+      nextSubpaths.push(subpath.trim());
+      continue;
+    }
+
+    changed = true;
+    nextSubpaths.push(...replacement);
+  }
+
+  return changed ? nextSubpaths.join(' ') : null;
+}
+
+function splitTouchingLoopsInVectorPaths(
+  vectorPaths: readonly VectorPath[] | undefined,
+  tolerancePx: number
+): { vectorPaths: VectorPath[]; separatedLoops: number } | null {
+  if (!Array.isArray(vectorPaths) || vectorPaths.length === 0) return null;
+
+  let separatedLoops = 0;
+  const nextVectorPaths = vectorPaths.map((vectorPath) => {
+    const nextData = splitTouchingLoopsInPathData(vectorPath.data || '', tolerancePx);
+    if (!nextData) {
+      return {
+        windingRule: vectorPath.windingRule,
+        data: vectorPath.data,
+      };
+    }
+    separatedLoops++;
+    return {
+      windingRule: 'EVENODD' as WindingRule,
+      data: nextData,
+    };
+  });
+
+  return separatedLoops > 0 ? { vectorPaths: nextVectorPaths, separatedLoops } : null;
+}
+
 function buildVectorPathsWithoutInnerHoles(vectorPaths: VectorPath[]): { vectorPaths: VectorPath[]; removedSubpaths: number } | null {
   if (!Array.isArray(vectorPaths) || vectorPaths.length === 0) return null;
 
@@ -8329,6 +8700,952 @@ async function runLocalRemoveInnerHoles(): Promise<void> {
       updated > 0
         ? `Filled ${removedLoops + removedSubpaths} inner hole${removedLoops + removedSubpaths === 1 ? '' : 's'} across ${updated} shape${updated === 1 ? '' : 's'}${skipped > 0 ? ` (${skipped} skipped)` : ''}.`
         : 'No inner holes found in the selected shapes.',
+  });
+
+  try {
+    figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
+  } catch (_error) {
+    // Ignore refresh issues.
+  }
+}
+
+const VECTOR_FIX_EPSILON = 1e-4;
+
+type VectorFixPoint = { x: number; y: number; cornerRadius?: number };
+type VectorFixSegment = {
+  start: number;
+  end: number;
+  tangentStart?: { x: number; y: number };
+  tangentEnd?: { x: number; y: number };
+};
+type VectorFixRegion = { windingRule: 'NONZERO' | 'EVENODD'; loops: number[][] };
+type VectorFixState = {
+  vertices: VectorFixPoint[];
+  segments: VectorFixSegment[];
+  regions: VectorFixRegion[];
+};
+type VectorFixVertexWithRadius = VectorVertex & { cornerRadius?: number };
+type VectorNodeWithNetwork = VectorNode & {
+  vectorNetwork?: VectorNetwork;
+  vectorPaths?: readonly VectorPath[];
+  setVectorNetworkAsync?: (vectorNetwork: VectorNetwork) => Promise<void>;
+};
+type WritableVectorNodePaths = VectorNode & {
+  vectorPaths: VectorPath[];
+};
+type VectorFixSummary = {
+  closedShapes: number;
+  mergedPoints: number;
+  separatedTouchingLoops: number;
+  removedZeroLengthSegments: number;
+  removedTinySpikes: number;
+  simplifiedPoints: number;
+  normalizedPaths: number;
+};
+type VectorFixOptions = {
+  tolerancePx: number;
+  closeOpenShape: boolean;
+  mergeDuplicatePoints: boolean;
+  separateTouchingLoops: boolean;
+  removeZeroLengthSegments: boolean;
+  removeTinySpikes: boolean;
+  simplifyNearCollinearPoints: boolean;
+  normalizeWindingDirection: boolean;
+};
+
+function createEmptyVectorFixSummary(): VectorFixSummary {
+  return {
+    closedShapes: 0,
+    mergedPoints: 0,
+    separatedTouchingLoops: 0,
+    removedZeroLengthSegments: 0,
+    removedTinySpikes: 0,
+    simplifiedPoints: 0,
+    normalizedPaths: 0,
+  };
+}
+
+function vectorFixDistance(a: VectorFixPoint, b: VectorFixPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function vectorFixCreateUndirectedSegmentKey(a: number, b: number): string {
+  return a <= b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+function vectorFixSegmentHasCurve(segment: VectorFixSegment): boolean {
+  const ts = segment.tangentStart || { x: 0, y: 0 };
+  const te = segment.tangentEnd || { x: 0, y: 0 };
+  return Math.max(Math.hypot(ts.x, ts.y), Math.hypot(te.x, te.y)) > VECTOR_FIX_EPSILON;
+}
+
+function vectorFixCloneState(vectorNetwork: VectorNetwork | null | undefined): VectorFixState | null {
+  if (
+    !vectorNetwork ||
+    !Array.isArray(vectorNetwork.vertices) ||
+    !Array.isArray(vectorNetwork.segments) ||
+    !Array.isArray(vectorNetwork.regions)
+  ) {
+    return null;
+  }
+
+  const vertices: VectorFixPoint[] = vectorNetwork.vertices.map((vertex) => {
+    const x = Number(vertex?.x);
+    const y = Number(vertex?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new Error('Invalid vector vertex coordinates');
+    }
+    const nextVertex: VectorFixPoint = { x, y };
+    const vertexWithRadius = vertex as VectorFixVertexWithRadius;
+    if (Number.isFinite(Number(vertexWithRadius.cornerRadius))) {
+      nextVertex.cornerRadius = Number(vertexWithRadius.cornerRadius);
+    }
+    return nextVertex;
+  });
+
+  const segments: VectorFixSegment[] = [];
+  for (const segment of vectorNetwork.segments) {
+    const start = Number(segment?.start);
+    const end = Number(segment?.end);
+    if (!Number.isInteger(start) || !Number.isInteger(end)) {
+      throw new Error('Invalid vector segment index');
+    }
+    const nextSegment: VectorFixSegment = { start, end };
+    if (segment?.tangentStart) {
+      nextSegment.tangentStart = {
+        x: Number(segment.tangentStart.x) || 0,
+        y: Number(segment.tangentStart.y) || 0,
+      };
+    }
+    if (segment?.tangentEnd) {
+      nextSegment.tangentEnd = {
+        x: Number(segment.tangentEnd.x) || 0,
+        y: Number(segment.tangentEnd.y) || 0,
+      };
+    }
+    segments.push(nextSegment);
+  }
+
+  const regions: VectorFixRegion[] = vectorNetwork.regions.map((region) => ({
+    windingRule: region?.windingRule === 'EVENODD' ? 'EVENODD' : 'NONZERO',
+    loops: Array.isArray(region?.loops)
+      ? region.loops.map((loop: readonly number[]) => (Array.isArray(loop) ? loop.map((index) => Number(index)).filter(Number.isInteger) : []))
+      : [],
+  }));
+
+  return compactVectorFixState({ vertices, segments, regions }, { dropStraightZeroLength: false }).state;
+}
+
+function vectorFixNormalizeLoop(loop: number[]): number[] {
+  const out: number[] = [];
+  loop.forEach((index) => {
+    if (!Number.isInteger(index)) return;
+    if (out.length === 0 || out[out.length - 1] !== index) {
+      out.push(index);
+    }
+  });
+  if (out.length > 1 && out[0] === out[out.length - 1]) {
+    out.pop();
+  }
+  return out;
+}
+
+function vectorFixResolveRemapIndex(remap: number[], index: number): number {
+  let current = index;
+  const seen = new Set<number>();
+  while (Number.isInteger(remap[current]) && remap[current] !== current && !seen.has(current)) {
+    seen.add(current);
+    current = remap[current];
+  }
+  return current;
+}
+
+function compactVectorFixState(
+  state: VectorFixState,
+  options: { dropStraightZeroLength?: boolean } = {}
+): { state: VectorFixState; removedZeroLengthSegments: number } {
+  const dropStraightZeroLength = options.dropStraightZeroLength === true;
+  const vertices = state.vertices.map((vertex) => ({ ...vertex }));
+  let removedZeroLengthSegments = 0;
+
+  const segments = state.segments.filter((segment) => {
+    if (!Number.isInteger(segment.start) || !Number.isInteger(segment.end)) return false;
+    if (segment.start < 0 || segment.end < 0 || segment.start >= vertices.length || segment.end >= vertices.length) return false;
+    if (!dropStraightZeroLength || vectorFixSegmentHasCurve(segment)) return true;
+    const sameIndex = segment.start === segment.end;
+    const isZeroLength = sameIndex || vectorFixDistance(vertices[segment.start], vertices[segment.end]) <= VECTOR_FIX_EPSILON;
+    if (isZeroLength) {
+      removedZeroLengthSegments++;
+      return false;
+    }
+    return true;
+  });
+
+  const regions = state.regions
+    .map((region) => {
+      const loops = region.loops
+        .map((loop) => vectorFixNormalizeLoop(loop.filter((index) => index >= 0 && index < vertices.length)))
+        .filter((loop) => loop.length >= 3);
+      return { windingRule: region.windingRule, loops };
+    })
+    .filter((region) => region.loops.length > 0);
+
+  const usedVertexIndices = new Set<number>();
+  segments.forEach((segment) => {
+    usedVertexIndices.add(segment.start);
+    usedVertexIndices.add(segment.end);
+  });
+  regions.forEach((region) => {
+    region.loops.forEach((loop) => {
+      loop.forEach((index) => usedVertexIndices.add(index));
+    });
+  });
+
+  const orderedIndices = Array.from(usedVertexIndices).sort((a, b) => a - b);
+  const vertexRemap = new Map<number, number>();
+  orderedIndices.forEach((index, nextIndex) => vertexRemap.set(index, nextIndex));
+
+  const nextVertices = orderedIndices.map((index) => ({ ...vertices[index] }));
+  const nextSegments = segments.map((segment) => ({
+    ...segment,
+    start: vertexRemap.get(segment.start) ?? segment.start,
+    end: vertexRemap.get(segment.end) ?? segment.end,
+  }));
+  const nextRegions = regions
+    .map((region) => {
+      const loops = region.loops
+        .map((loop) => vectorFixNormalizeLoop(loop.map((index) => vertexRemap.get(index) ?? index)))
+        .filter((loop) => loop.length >= 3);
+      return { windingRule: region.windingRule, loops };
+    })
+    .filter((region) => region.loops.length > 0);
+
+  return {
+    state: {
+      vertices: nextVertices,
+      segments: nextSegments,
+      regions: nextRegions,
+    },
+    removedZeroLengthSegments,
+  };
+}
+
+function remapVectorFixVertices(
+  state: VectorFixState,
+  remap: number[],
+  dropStraightZeroLength = true
+): { state: VectorFixState; removedZeroLengthSegments: number } {
+  const resolvedRemap = remap.map((_, index) => vectorFixResolveRemapIndex(remap, index));
+  return compactVectorFixState({
+    vertices: state.vertices.map((vertex) => ({ ...vertex })),
+    segments: state.segments.map((segment) => ({
+      ...segment,
+      start: resolvedRemap[segment.start] ?? segment.start,
+      end: resolvedRemap[segment.end] ?? segment.end,
+    })),
+    regions: state.regions.map((region) => ({
+      windingRule: region.windingRule,
+      loops: region.loops.map((loop) => loop.map((index) => resolvedRemap[index] ?? index)),
+    })),
+  }, { dropStraightZeroLength });
+}
+
+function buildVectorFixAdjacency(state: VectorFixState): Array<Array<{ other: number; segmentIndex: number }>> {
+  const adjacency = state.vertices.map(() => [] as Array<{ other: number; segmentIndex: number }>);
+  state.segments.forEach((segment, segmentIndex) => {
+    if (!adjacency[segment.start] || !adjacency[segment.end]) return;
+    adjacency[segment.start].push({ other: segment.end, segmentIndex });
+    adjacency[segment.end].push({ other: segment.start, segmentIndex });
+  });
+  return adjacency;
+}
+
+function collectVectorFixComponents(
+  state: VectorFixState,
+  adjacency: Array<Array<{ other: number; segmentIndex: number }>>
+): Array<{ segmentIndices: number[]; vertexIndices: number[] }> {
+  const visitedSegments = new Set<number>();
+  const components: Array<{ segmentIndices: number[]; vertexIndices: number[] }> = [];
+
+  state.segments.forEach((_segment, startSegmentIndex) => {
+    if (visitedSegments.has(startSegmentIndex)) return;
+    const pendingSegments = [startSegmentIndex];
+    const segmentIndices: number[] = [];
+    const vertexIndices = new Set<number>();
+
+    while (pendingSegments.length > 0) {
+      const currentSegmentIndex = pendingSegments.pop();
+      if (currentSegmentIndex === undefined || visitedSegments.has(currentSegmentIndex)) continue;
+      visitedSegments.add(currentSegmentIndex);
+      segmentIndices.push(currentSegmentIndex);
+      const segment = state.segments[currentSegmentIndex];
+      vertexIndices.add(segment.start);
+      vertexIndices.add(segment.end);
+
+      [segment.start, segment.end].forEach((vertexIndex) => {
+        (adjacency[vertexIndex] || []).forEach((entry) => {
+          if (!visitedSegments.has(entry.segmentIndex)) {
+            pendingSegments.push(entry.segmentIndex);
+          }
+        });
+      });
+    }
+
+    components.push({
+      segmentIndices,
+      vertexIndices: Array.from(vertexIndices).sort((a, b) => a - b),
+    });
+  });
+
+  return components;
+}
+
+function vectorFixPointToLineDistance(point: VectorFixPoint, start: VectorFixPoint, end: VectorFixPoint): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq <= VECTOR_FIX_EPSILON * VECTOR_FIX_EPSILON) {
+    return vectorFixDistance(point, start);
+  }
+  const t = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSq;
+  const clampedT = Math.max(0, Math.min(1, t));
+  const projected = {
+    x: start.x + dx * clampedT,
+    y: start.y + dy * clampedT,
+  };
+  return Math.hypot(point.x - projected.x, point.y - projected.y);
+}
+
+function vectorFixLoopSignedArea(loop: number[], vertices: VectorFixPoint[]): number {
+  let acc = 0;
+  for (let index = 0; index < loop.length; index++) {
+    const current = vertices[loop[index]];
+    const next = vertices[loop[(index + 1) % loop.length]];
+    if (!current || !next) return 0;
+    acc += current.x * next.y - next.x * current.y;
+  }
+  return acc * 0.5;
+}
+
+function removeZeroLengthSegmentsFromFixState(state: VectorFixState): { state: VectorFixState; count: number } {
+  const nextState = compactVectorFixState(state, { dropStraightZeroLength: true });
+  return { state: nextState.state, count: nextState.removedZeroLengthSegments };
+}
+
+function mergeDuplicatePointsInFixState(state: VectorFixState, tolerancePx: number): { state: VectorFixState; count: number } {
+  if (state.vertices.length <= 1) return { state, count: 0 };
+
+  const parent = state.vertices.map((_, index) => index);
+  const find = (index: number): number => {
+    let current = index;
+    while (parent[current] !== current) {
+      parent[current] = parent[parent[current]];
+      current = parent[current];
+    }
+    return current;
+  };
+  const union = (a: number, b: number) => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA === rootB) return;
+    const survivor = Math.min(rootA, rootB);
+    const merged = Math.max(rootA, rootB);
+    parent[merged] = survivor;
+  };
+
+  for (let index = 0; index < state.vertices.length; index++) {
+    for (let compareIndex = 0; compareIndex < index; compareIndex++) {
+      if (vectorFixDistance(state.vertices[index], state.vertices[compareIndex]) <= tolerancePx) {
+        union(index, compareIndex);
+      }
+    }
+  }
+
+  const remap = parent.map((_, index) => find(index));
+  const count = remap.reduce((total, nextIndex, index) => total + (nextIndex !== index ? 1 : 0), 0);
+  if (count <= 0) return { state, count: 0 };
+  return { state: remapVectorFixVertices(state, remap, true).state, count };
+}
+
+function closeOpenShapesInFixState(state: VectorFixState, tolerancePx: number): { state: VectorFixState; count: number } {
+  let nextState = state;
+  let count = 0;
+
+  while (true) {
+    const adjacency = buildVectorFixAdjacency(nextState);
+    const components = collectVectorFixComponents(nextState, adjacency);
+    const regionVertexSet = new Set<number>();
+    nextState.regions.forEach((region) => region.loops.forEach((loop) => loop.forEach((index) => regionVertexSet.add(index))));
+
+    let applied = false;
+    for (const component of components) {
+      const endpoints = component.vertexIndices.filter((vertexIndex) => adjacency[vertexIndex]?.length === 1);
+      if (endpoints.length !== 2) continue;
+      if (component.vertexIndices.some((vertexIndex) => regionVertexSet.has(vertexIndex))) continue;
+      const [a, b] = endpoints;
+      if (vectorFixDistance(nextState.vertices[a], nextState.vertices[b]) > tolerancePx) continue;
+
+      const survivor = Math.min(a, b);
+      const mergeFrom = Math.max(a, b);
+      const remap = nextState.vertices.map((_, index) => index);
+      remap[mergeFrom] = survivor;
+      nextState = remapVectorFixVertices(nextState, remap, true).state;
+      count++;
+      applied = true;
+      break;
+    }
+
+    if (!applied) break;
+  }
+
+  return { state: nextState, count };
+}
+
+function buildVectorFixClosedLoopsFromSegments(
+  vertexCount: number,
+  segments: VectorFixSegment[]
+): number[][] | null {
+  if (!Number.isInteger(vertexCount) || vertexCount <= 0 || segments.length === 0) return null;
+
+  const adjacency = Array.from({ length: vertexCount }, () => [] as Array<{ other: number; segmentIndex: number }>);
+  const usedVertices = new Set<number>();
+
+  segments.forEach((segment, segmentIndex) => {
+    if (
+      !Number.isInteger(segment.start) ||
+      !Number.isInteger(segment.end) ||
+      segment.start < 0 ||
+      segment.end < 0 ||
+      segment.start >= vertexCount ||
+      segment.end >= vertexCount
+    ) {
+      return;
+    }
+    adjacency[segment.start].push({ other: segment.end, segmentIndex });
+    adjacency[segment.end].push({ other: segment.start, segmentIndex });
+    usedVertices.add(segment.start);
+    usedVertices.add(segment.end);
+  });
+
+  if (usedVertices.size === 0) return null;
+  for (const vertexIndex of usedVertices) {
+    if ((adjacency[vertexIndex] || []).length !== 2) {
+      return null;
+    }
+  }
+
+  const visitedSegments = new Set<number>();
+  const loops: number[][] = [];
+
+  for (let startSegmentIndex = 0; startSegmentIndex < segments.length; startSegmentIndex++) {
+    if (visitedSegments.has(startSegmentIndex)) continue;
+    const startSegment = segments[startSegmentIndex];
+    if (!startSegment) return null;
+
+    const loop: number[] = [startSegment.start];
+    let currentVertex = startSegment.end;
+    let previousSegmentIndex = startSegmentIndex;
+    let guard = segments.length * 2 + 4;
+    visitedSegments.add(startSegmentIndex);
+
+    while (guard-- > 0) {
+      loop.push(currentVertex);
+      if (currentVertex === startSegment.start) break;
+
+      const entries = adjacency[currentVertex] || [];
+      if (entries.length !== 2) return null;
+      const nextEntry = entries[0].segmentIndex === previousSegmentIndex ? entries[1] : entries[0];
+      if (!nextEntry) return null;
+      if (visitedSegments.has(nextEntry.segmentIndex)) return null;
+
+      visitedSegments.add(nextEntry.segmentIndex);
+      previousSegmentIndex = nextEntry.segmentIndex;
+      currentVertex = nextEntry.other;
+    }
+
+    if (guard <= 0) return null;
+
+    const normalizedLoop = vectorFixNormalizeLoop(loop);
+    if (normalizedLoop.length < 3) return null;
+    loops.push(normalizedLoop);
+  }
+
+  return visitedSegments.size === segments.length ? loops : null;
+}
+
+function buildVectorFixEvenOddRegionFromLoops(state: VectorFixState, loops: number[][]): VectorFixRegion | null {
+  const normalizedLoops = loops
+    .map((loop) => vectorFixNormalizeLoop(loop))
+    .filter((loop) => loop.length >= 3)
+    .sort((a, b) => Math.abs(vectorFixLoopSignedArea(b, state.vertices)) - Math.abs(vectorFixLoopSignedArea(a, state.vertices)));
+
+  if (normalizedLoops.length === 0) return null;
+  return {
+    windingRule: 'EVENODD',
+    loops: normalizedLoops,
+  };
+}
+
+function removeRetracedBridgeSegmentsInFixState(state: VectorFixState): { state: VectorFixState; count: number } {
+  let nextState = state;
+  let count = 0;
+
+  while (true) {
+    const adjacency = buildVectorFixAdjacency(nextState);
+    const components = collectVectorFixComponents(nextState, adjacency);
+    let applied = false;
+
+    for (const component of components) {
+      const componentVertexSet = new Set<number>(component.vertexIndices);
+      const duplicateSegmentGroups = new Map<string, number[]>();
+
+      component.segmentIndices.forEach((segmentIndex) => {
+        const segment = nextState.segments[segmentIndex];
+        if (!segment) return;
+        const key = vectorFixCreateUndirectedSegmentKey(segment.start, segment.end);
+        const group = duplicateSegmentGroups.get(key);
+        if (group) {
+          group.push(segmentIndex);
+        } else {
+          duplicateSegmentGroups.set(key, [segmentIndex]);
+        }
+      });
+
+      for (const group of duplicateSegmentGroups.values()) {
+        if (group.length !== 2) continue;
+        const firstSegment = nextState.segments[group[0]];
+        const secondSegment = nextState.segments[group[1]];
+        if (!firstSegment || !secondSegment) continue;
+
+        const startDegree = (adjacency[firstSegment.start] || []).length;
+        const endDegree = (adjacency[firstSegment.end] || []).length;
+        if (startDegree !== 4 || endDegree !== 4) continue;
+
+        const remainingComponentSegments = component.segmentIndices
+          .filter((segmentIndex) => !group.includes(segmentIndex))
+          .map((segmentIndex) => nextState.segments[segmentIndex])
+          .filter((segment): segment is VectorFixSegment => !!segment)
+          .map((segment) => ({ ...segment }));
+
+        const loops = buildVectorFixClosedLoopsFromSegments(nextState.vertices.length, remainingComponentSegments);
+        if (!loops || loops.length < 2) continue;
+
+        const rebuiltRegion = buildVectorFixEvenOddRegionFromLoops(nextState, loops);
+        if (!rebuiltRegion) continue;
+
+        const nextSegments = nextState.segments
+          .filter((_segment, segmentIndex) => !group.includes(segmentIndex))
+          .map((segment) => ({ ...segment }));
+        const preservedRegions = nextState.regions
+          .filter((region) =>
+            region.loops.every((loop) => loop.every((vertexIndex) => !componentVertexSet.has(vertexIndex)))
+          )
+          .map((region) => ({
+            windingRule: region.windingRule,
+            loops: region.loops.map((loop) => loop.slice()),
+          }));
+
+        nextState = compactVectorFixState({
+          vertices: nextState.vertices.map((vertex) => ({ ...vertex })),
+          segments: nextSegments,
+          regions: [...preservedRegions, rebuiltRegion],
+        }, { dropStraightZeroLength: true }).state;
+        count++;
+        applied = true;
+        break;
+      }
+
+      if (applied) break;
+    }
+
+    if (!applied) break;
+  }
+
+  return { state: nextState, count };
+}
+
+function removeTinySpikesFromFixState(state: VectorFixState, tolerancePx: number): { state: VectorFixState; count: number } {
+  let nextState = state;
+  let count = 0;
+
+  while (true) {
+    const adjacency = buildVectorFixAdjacency(nextState);
+    let applied = false;
+
+    for (let vertexIndex = 0; vertexIndex < nextState.vertices.length; vertexIndex++) {
+      const entries = adjacency[vertexIndex] || [];
+      if (entries.length !== 2) continue;
+      const firstSegment = nextState.segments[entries[0].segmentIndex];
+      const secondSegment = nextState.segments[entries[1].segmentIndex];
+      if (!firstSegment || !secondSegment) continue;
+      if (vectorFixSegmentHasCurve(firstSegment) || vectorFixSegmentHasCurve(secondSegment)) continue;
+
+      const firstNeighbor = entries[0].other;
+      const secondNeighbor = entries[1].other;
+      const firstDegree = (adjacency[firstNeighbor] || []).length;
+      const secondDegree = (adjacency[secondNeighbor] || []).length;
+      if (firstDegree > 2 || secondDegree > 2) continue;
+
+      const v = nextState.vertices[vertexIndex];
+      const a = nextState.vertices[firstNeighbor];
+      const b = nextState.vertices[secondNeighbor];
+      if (!v || !a || !b) continue;
+
+      const lengthA = vectorFixDistance(v, a);
+      const lengthB = vectorFixDistance(v, b);
+      if (lengthA > tolerancePx * 2 || lengthB > tolerancePx * 2) continue;
+
+      let shouldCollapse = false;
+      if (firstNeighbor === secondNeighbor) {
+        shouldCollapse = true;
+      } else if (vectorFixDistance(a, b) <= tolerancePx) {
+        const vectorA = { x: a.x - v.x, y: a.y - v.y };
+        const vectorB = { x: b.x - v.x, y: b.y - v.y };
+        const magA = Math.hypot(vectorA.x, vectorA.y);
+        const magB = Math.hypot(vectorB.x, vectorB.y);
+        if (magA > VECTOR_FIX_EPSILON && magB > VECTOR_FIX_EPSILON) {
+          const cosine = (vectorA.x * vectorB.x + vectorA.y * vectorB.y) / (magA * magB);
+          shouldCollapse = cosine >= 0.8;
+        }
+      }
+
+      if (!shouldCollapse) continue;
+
+      const survivor = Math.min(firstNeighbor, secondNeighbor, vertexIndex);
+      const remap = nextState.vertices.map((_, index) => index);
+      remap[vertexIndex] = survivor;
+      if (firstNeighbor !== secondNeighbor && firstNeighbor !== survivor) remap[firstNeighbor] = survivor;
+      if (firstNeighbor !== secondNeighbor && secondNeighbor !== survivor) remap[secondNeighbor] = survivor;
+      nextState = remapVectorFixVertices(nextState, remap, true).state;
+      count++;
+      applied = true;
+      break;
+    }
+
+    if (!applied) break;
+  }
+
+  return { state: nextState, count };
+}
+
+function simplifyNearCollinearPointsInFixState(state: VectorFixState, tolerancePx: number): { state: VectorFixState; count: number } {
+  let nextState = state;
+  let count = 0;
+
+  while (true) {
+    const adjacency = buildVectorFixAdjacency(nextState);
+    let applied = false;
+
+    for (let vertexIndex = 0; vertexIndex < nextState.vertices.length; vertexIndex++) {
+      const entries = adjacency[vertexIndex] || [];
+      if (entries.length !== 2) continue;
+      const firstSegment = nextState.segments[entries[0].segmentIndex];
+      const secondSegment = nextState.segments[entries[1].segmentIndex];
+      if (!firstSegment || !secondSegment) continue;
+      if (vectorFixSegmentHasCurve(firstSegment) || vectorFixSegmentHasCurve(secondSegment)) continue;
+
+      const firstNeighbor = entries[0].other;
+      const secondNeighbor = entries[1].other;
+      if (firstNeighbor === secondNeighbor) continue;
+      const v = nextState.vertices[vertexIndex];
+      const a = nextState.vertices[firstNeighbor];
+      const b = nextState.vertices[secondNeighbor];
+      if (!v || !a || !b) continue;
+
+      const distance = vectorFixPointToLineDistance(v, a, b);
+      if (distance > tolerancePx) continue;
+
+      const vectorA = { x: a.x - v.x, y: a.y - v.y };
+      const vectorB = { x: b.x - v.x, y: b.y - v.y };
+      const magA = Math.hypot(vectorA.x, vectorA.y);
+      const magB = Math.hypot(vectorB.x, vectorB.y);
+      if (magA <= VECTOR_FIX_EPSILON || magB <= VECTOR_FIX_EPSILON) continue;
+      const cosine = (vectorA.x * vectorB.x + vectorA.y * vectorB.y) / (magA * magB);
+      if (cosine > -0.5) continue;
+
+      const survivor = Math.min(firstNeighbor, secondNeighbor);
+      const remap = nextState.vertices.map((_, index) => index);
+      remap[vertexIndex] = survivor;
+      nextState = remapVectorFixVertices(nextState, remap, true).state;
+      count++;
+      applied = true;
+      break;
+    }
+
+    if (!applied) break;
+  }
+
+  return { state: nextState, count };
+}
+
+function normalizeWindingDirectionInFixState(state: VectorFixState): { state: VectorFixState; count: number } {
+  if (state.regions.length === 0) return { state, count: 0 };
+
+  const adjacency = buildVectorFixAdjacency(state);
+  let count = 0;
+  const nextRegions = state.regions.map((region) => {
+    if (region.loops.length !== 1) return region;
+    const [loop] = region.loops;
+    if (!Array.isArray(loop) || loop.length < 3) return region;
+    if (new Set(loop).size !== loop.length) return region;
+    const hasCurves = loop.some((vertexIndex) =>
+      (adjacency[vertexIndex] || []).some((entry) => vectorFixSegmentHasCurve(state.segments[entry.segmentIndex]))
+    );
+    if (hasCurves) return region;
+    const isSimpleClosedLoop = loop.every((vertexIndex) => (adjacency[vertexIndex] || []).length === 2);
+    if (!isSimpleClosedLoop) return region;
+    const area = vectorFixLoopSignedArea(loop, state.vertices);
+    if (area >= 0) return region;
+    count++;
+    return {
+      windingRule: region.windingRule,
+      loops: [loop.slice().reverse()],
+    };
+  });
+
+  if (count <= 0) return { state, count: 0 };
+  return {
+    state: {
+      vertices: state.vertices.map((vertex) => ({ ...vertex })),
+      segments: state.segments.map((segment) => ({ ...segment })),
+      regions: nextRegions,
+    },
+    count,
+  };
+}
+
+function vectorFixStateToNetwork(state: VectorFixState): VectorNetwork {
+  return {
+    vertices: state.vertices.map((vertex) => {
+      const nextVertex: VectorFixVertexWithRadius = { x: vertex.x, y: vertex.y };
+      if (Number.isFinite(Number(vertex.cornerRadius))) {
+        nextVertex.cornerRadius = Number(vertex.cornerRadius);
+      }
+      return nextVertex;
+    }),
+    segments: state.segments.map((segment) => ({
+      start: segment.start,
+      end: segment.end,
+      ...(segment.tangentStart ? { tangentStart: { x: segment.tangentStart.x, y: segment.tangentStart.y } } : {}),
+      ...(segment.tangentEnd ? { tangentEnd: { x: segment.tangentEnd.x, y: segment.tangentEnd.y } } : {}),
+    })),
+    regions: state.regions.map((region) => ({
+      windingRule: region.windingRule,
+      loops: region.loops.map((loop) => loop.slice()),
+    })),
+  };
+}
+
+function buildFixShapeIssuesMessage(updatedNodes: number, skippedNodes: number, summary: VectorFixSummary): string {
+  if (updatedNodes <= 0) {
+    return 'No matching shape issues found in the selected shapes.';
+  }
+
+  const detailParts: string[] = [];
+  if (summary.closedShapes > 0) detailParts.push(`closed ${summary.closedShapes}`);
+  if (summary.mergedPoints > 0) detailParts.push(`merged ${summary.mergedPoints} point${summary.mergedPoints === 1 ? '' : 's'}`);
+  if (summary.separatedTouchingLoops > 0) {
+    detailParts.push(`separated ${summary.separatedTouchingLoops} touching loop${summary.separatedTouchingLoops === 1 ? '' : 's'}`);
+  }
+  if (summary.removedZeroLengthSegments > 0) detailParts.push(`removed ${summary.removedZeroLengthSegments} zero-length segment${summary.removedZeroLengthSegments === 1 ? '' : 's'}`);
+  if (summary.removedTinySpikes > 0) detailParts.push(`removed ${summary.removedTinySpikes} spike${summary.removedTinySpikes === 1 ? '' : 's'}`);
+  if (summary.simplifiedPoints > 0) detailParts.push(`simplified ${summary.simplifiedPoints} point${summary.simplifiedPoints === 1 ? '' : 's'}`);
+  if (summary.normalizedPaths > 0) detailParts.push(`normalized ${summary.normalizedPaths} path${summary.normalizedPaths === 1 ? '' : 's'}`);
+
+  return `Fixed ${updatedNodes} shape${updatedNodes === 1 ? '' : 's'}${detailParts.length > 0 ? `: ${detailParts.join(', ')}` : ''}${skippedNodes > 0 ? ` (${skippedNodes} skipped)` : ''}.`;
+}
+
+async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({ type: 'error', message: 'Please select at least one vector shape.' });
+    return;
+  }
+
+  const enabledFixes = [
+    options.removeZeroLengthSegments,
+    options.mergeDuplicatePoints,
+    options.separateTouchingLoops,
+    options.closeOpenShape,
+    options.removeTinySpikes,
+    options.simplifyNearCollinearPoints,
+    options.normalizeWindingDirection,
+  ];
+  if (!enabledFixes.some(Boolean)) {
+    figma.ui.postMessage({ type: 'error', message: 'Fix shape issues failed: Enable at least one repair option.' });
+    return;
+  }
+
+  const summary = createEmptyVectorFixSummary();
+  const updatedNodes: SceneNode[] = [];
+  let updatedNodeCount = 0;
+  let skippedNodes = 0;
+
+  for (const selectedNode of selection) {
+    let target: SceneNode = selectedNode;
+
+    if (target.type === 'BOOLEAN_OPERATION') {
+      try {
+        target = figma.flatten([target]);
+      } catch (error) {
+        console.warn('fixShapeIssues: flatten failed', target.id, error);
+        skippedNodes++;
+        continue;
+      }
+    }
+
+    if (target.type !== 'VECTOR') {
+      skippedNodes++;
+      continue;
+    }
+
+    try {
+      const vectorNode = target as VectorNodeWithNetwork;
+      const nodeSummary = createEmptyVectorFixSummary();
+
+      if (options.separateTouchingLoops) {
+        const pathRepair = splitTouchingLoopsInVectorPaths(vectorNode.vectorPaths, options.tolerancePx);
+        if (pathRepair) {
+          (vectorNode as WritableVectorNodePaths).vectorPaths = pathRepair.vectorPaths;
+          nodeSummary.separatedTouchingLoops += pathRepair.separatedLoops;
+        }
+      }
+      const pathSeparatedLoopCount = nodeSummary.separatedTouchingLoops;
+
+      const shouldRunNetworkFixes =
+        pathSeparatedLoopCount <= 0 &&
+        (
+          options.removeZeroLengthSegments ||
+          options.mergeDuplicatePoints ||
+          options.closeOpenShape ||
+          options.removeTinySpikes ||
+          options.simplifyNearCollinearPoints ||
+          options.normalizeWindingDirection ||
+          options.separateTouchingLoops
+        );
+
+      if (shouldRunNetworkFixes) {
+        const baseState = vectorFixCloneState(vectorNode.vectorNetwork);
+        if (!baseState) {
+          if (nodeSummary.separatedTouchingLoops > 0) {
+            summary.closedShapes += nodeSummary.closedShapes;
+            summary.mergedPoints += nodeSummary.mergedPoints;
+            summary.separatedTouchingLoops += nodeSummary.separatedTouchingLoops;
+            summary.removedZeroLengthSegments += nodeSummary.removedZeroLengthSegments;
+            summary.removedTinySpikes += nodeSummary.removedTinySpikes;
+            summary.simplifiedPoints += nodeSummary.simplifiedPoints;
+            summary.normalizedPaths += nodeSummary.normalizedPaths;
+            updatedNodeCount++;
+            updatedNodes.push(target);
+            continue;
+          }
+          skippedNodes++;
+          continue;
+        }
+
+        let nextState = baseState;
+
+        if (options.removeZeroLengthSegments) {
+          const result = removeZeroLengthSegmentsFromFixState(nextState);
+          nextState = result.state;
+          nodeSummary.removedZeroLengthSegments += result.count;
+        }
+        if (options.mergeDuplicatePoints) {
+          const result = mergeDuplicatePointsInFixState(nextState, options.tolerancePx);
+          nextState = result.state;
+          nodeSummary.mergedPoints += result.count;
+        }
+        if (options.separateTouchingLoops && nodeSummary.separatedTouchingLoops <= 0) {
+          const result = removeRetracedBridgeSegmentsInFixState(nextState);
+          nextState = result.state;
+          nodeSummary.separatedTouchingLoops += result.count;
+        }
+        if (options.closeOpenShape) {
+          const result = closeOpenShapesInFixState(nextState, options.tolerancePx);
+          nextState = result.state;
+          nodeSummary.closedShapes += result.count;
+        }
+        if (options.removeTinySpikes) {
+          const result = removeTinySpikesFromFixState(nextState, options.tolerancePx);
+          nextState = result.state;
+          nodeSummary.removedTinySpikes += result.count;
+        }
+        if (options.simplifyNearCollinearPoints) {
+          const result = simplifyNearCollinearPointsInFixState(nextState, options.tolerancePx);
+          nextState = result.state;
+          nodeSummary.simplifiedPoints += result.count;
+        }
+        if (options.normalizeWindingDirection) {
+          const result = normalizeWindingDirectionInFixState(nextState);
+          nextState = result.state;
+          nodeSummary.normalizedPaths += result.count;
+        }
+
+        const networkSeparatedLoopCount = Math.max(0, nodeSummary.separatedTouchingLoops - pathSeparatedLoopCount);
+        const networkChangeCount =
+          nodeSummary.closedShapes +
+          nodeSummary.mergedPoints +
+          networkSeparatedLoopCount +
+          nodeSummary.removedZeroLengthSegments +
+          nodeSummary.removedTinySpikes +
+          nodeSummary.simplifiedPoints +
+          nodeSummary.normalizedPaths;
+
+        if (networkChangeCount > 0) {
+          const nextNetwork = vectorFixStateToNetwork(nextState);
+          if (typeof vectorNode.setVectorNetworkAsync === 'function') {
+            await vectorNode.setVectorNetworkAsync(nextNetwork);
+          } else {
+            vectorNode.vectorNetwork = nextNetwork;
+          }
+        }
+      }
+
+      const totalNodeChanges =
+        nodeSummary.closedShapes +
+        nodeSummary.mergedPoints +
+        nodeSummary.separatedTouchingLoops +
+        nodeSummary.removedZeroLengthSegments +
+        nodeSummary.removedTinySpikes +
+        nodeSummary.simplifiedPoints +
+        nodeSummary.normalizedPaths;
+
+      if (totalNodeChanges <= 0) {
+        skippedNodes++;
+        continue;
+      }
+
+      summary.closedShapes += nodeSummary.closedShapes;
+      summary.mergedPoints += nodeSummary.mergedPoints;
+      summary.separatedTouchingLoops += nodeSummary.separatedTouchingLoops;
+      summary.removedZeroLengthSegments += nodeSummary.removedZeroLengthSegments;
+      summary.removedTinySpikes += nodeSummary.removedTinySpikes;
+      summary.simplifiedPoints += nodeSummary.simplifiedPoints;
+      summary.normalizedPaths += nodeSummary.normalizedPaths;
+      updatedNodeCount++;
+      updatedNodes.push(target);
+    } catch (error) {
+      console.warn('fixShapeIssues: update failed', target.id, error);
+      skippedNodes++;
+    }
+  }
+
+  if (updatedNodes.length > 0) {
+    figma.currentPage.selection = updatedNodes;
+  }
+
+  figma.ui.postMessage({
+    type: 'local-fix-shape-issues-result',
+    updatedNodes: updatedNodeCount,
+    skippedNodes,
+    closedShapes: summary.closedShapes,
+    mergedPoints: summary.mergedPoints,
+    separatedTouchingLoops: summary.separatedTouchingLoops,
+    removedZeroLengthSegments: summary.removedZeroLengthSegments,
+    removedTinySpikes: summary.removedTinySpikes,
+    simplifiedPoints: summary.simplifiedPoints,
+    normalizedPaths: summary.normalizedPaths,
+    message: buildFixShapeIssuesMessage(updatedNodeCount, skippedNodes, summary),
   });
 
   try {
@@ -8625,7 +9942,14 @@ figma.ui.onmessage = async (msg: {
   onlySelected?: boolean,
   includeInstances?: boolean,
   keepOriginal?: boolean,
-  target?: string
+  target?: string,
+  tolerancePx?: number,
+  closeOpenShape?: boolean,
+  mergeDuplicatePoints?: boolean,
+  removeZeroLengthSegments?: boolean,
+  removeTinySpikes?: boolean,
+  simplifyNearCollinearPoints?: boolean,
+  normalizeWindingDirection?: boolean
 }) => {
   // Handle cancellation requests immediately, before the switch
   if (msg.type === 'cancel-execution') {
@@ -10424,6 +11748,28 @@ figma.ui.onmessage = async (msg: {
         figma.ui.postMessage({
           type: 'error',
           message: `Remove inner holes failed: ${(error as Error)?.message || 'Unknown error'}`
+        });
+      }
+      break;
+    }
+
+    case 'local-fix-shape-issues': {
+      try {
+        await runLocalFixShapeIssues({
+          tolerancePx: Number.isFinite(Number(msg.tolerancePx)) && Number(msg.tolerancePx) > 0 ? Number(msg.tolerancePx) : 0.5,
+          closeOpenShape: msg.closeOpenShape === true,
+          mergeDuplicatePoints: msg.mergeDuplicatePoints === true,
+          separateTouchingLoops: 'separateTouchingLoops' in msg && msg.separateTouchingLoops === true,
+          removeZeroLengthSegments: msg.removeZeroLengthSegments === true,
+          removeTinySpikes: msg.removeTinySpikes === true,
+          simplifyNearCollinearPoints: msg.simplifyNearCollinearPoints === true,
+          normalizeWindingDirection: msg.normalizeWindingDirection === true,
+        });
+      } catch (error) {
+        console.error('local-fix-shape-issues failed', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: `Fix shape issues failed: ${(error as Error)?.message || 'Unknown error'}`
         });
       }
       break;

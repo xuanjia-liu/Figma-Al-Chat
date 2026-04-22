@@ -27342,6 +27342,56 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runFixShapeIssuesAction(values, actionMeta) {
+      try {
+        const rawTolerance = Number.parseFloat(String(values?.tolerancePx ?? 0.5));
+        const tolerancePx = Number.isFinite(rawTolerance) && rawTolerance > 0 ? rawTolerance : 0.5;
+        const result = await runLocalActionRequest({
+          requestType: 'local-fix-shape-issues',
+          resultType: 'local-fix-shape-issues-result',
+          payload: {
+            tolerancePx,
+            closeOpenShape: values?.closeOpenShape === true,
+            mergeDuplicatePoints: values?.mergeDuplicatePoints === true,
+            separateTouchingLoops: values?.separateTouchingLoops === true,
+            removeZeroLengthSegments: values?.removeZeroLengthSegments === true,
+            removeTinySpikes: values?.removeTinySpikes === true,
+            simplifyNearCollinearPoints: values?.simplifyNearCollinearPoints === true,
+            normalizeWindingDirection: values?.normalizeWindingDirection === true,
+          },
+          timeoutMs: 30000,
+          errorPrefixes: ['Fix shape issues failed', 'Please select at least one vector']
+        });
+
+        const updated = Number(result?.updatedNodes) || 0;
+        const skipped = Number(result?.skippedNodes) || 0;
+        const summaryParts = [];
+        [
+          ['closedShapes', 'closed'],
+          ['mergedPoints', 'merged'],
+          ['separatedTouchingLoops', 'separated'],
+          ['removedZeroLengthSegments', 'removed'],
+          ['removedTinySpikes', 'spikes'],
+          ['simplifiedPoints', 'simplified'],
+          ['normalizedPaths', 'normalized'],
+        ].forEach(([key, label]) => {
+          const value = Number(result?.[key]) || 0;
+          if (value > 0) summaryParts.push(`${label} ${value}`);
+        });
+
+        const message = typeof result?.message === 'string' && result.message.trim()
+          ? result.message
+          : (updated > 0
+            ? `Fixed ${updated} shape${updated === 1 ? '' : 's'}${summaryParts.length > 0 ? `: ${summaryParts.join(', ')}` : ''}${skipped > 0 ? ` (${skipped} skipped)` : ''}.`
+            : 'No matching shape issues found in the selected shapes.');
+
+        showToast(message, updated > 0 ? (skipped > 0 ? 'warning' : 'success') : 'warning');
+      } catch (error) {
+        console.error('Fix shape issues action failed:', error);
+        showToast(error?.message || `Failed to run ${actionMeta?.name || 'Fix shape issues'}`, 'error');
+      }
+    }
+
     function requestLocalStylesForFontMapping() {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -28111,6 +28161,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'removeInnerHoles':
           await runRemoveInnerHolesAction(values, actionMeta);
+          break;
+        case 'fixShapeIssues':
+          await runFixShapeIssuesAction(values, actionMeta);
           break;
         case 'createButtonComponentSet':
           await runCreateButtonComponentSetAction(values, actionMeta);

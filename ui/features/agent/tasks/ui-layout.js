@@ -856,6 +856,31 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
           directAction: 'removeInnerHoles',
         },
 {
+          name: 'Fix shape issues',
+          desc: 'Repair common vector/path problems in selected shapes',
+          help: 'Runs locally with no AI. Enable the fixes you want, then repair selected vector shapes using a shared tolerance.',
+          directAction: 'fixShapeIssues',
+          fields: [
+            {
+              key: 'tolerancePx',
+              type: 'slider',
+              label: 'Tolerance (px)',
+              default: 0.5,
+              min: 0.1,
+              max: 4,
+              step: 0.1,
+              hint: 'Shared snap/cleanup tolerance for close points and near-collinear cleanup. Slider stays within 0.1–4 px; the number input can go outside that range.'
+            },
+            { key: 'closeOpenShape', type: 'checkbox', label: 'Close open shape', default: true },
+            { key: 'mergeDuplicatePoints', type: 'checkbox', label: 'Merge duplicate points', default: true },
+            { key: 'separateTouchingLoops', type: 'checkbox', label: 'Separate touching loops', default: true },
+            { key: 'removeZeroLengthSegments', type: 'checkbox', label: 'Remove zero-length segments', default: true },
+            { key: 'removeTinySpikes', type: 'checkbox', label: 'Remove tiny spikes', default: false },
+            { key: 'simplifyNearCollinearPoints', type: 'checkbox', label: 'Simplify near-collinear points', default: false },
+            { key: 'normalizeWindingDirection', type: 'checkbox', label: 'Normalize winding direction', default: false }
+          ]
+        },
+{
           name: 'AI Component Factory',
           desc: 'Generate any complex component with variants',
           help: 'Describe a component (e.g. Card, Modal, Input) and AI will build a complete component set with variants for you.',
