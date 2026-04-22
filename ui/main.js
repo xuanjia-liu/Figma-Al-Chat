@@ -8742,6 +8742,7 @@ Rules:
     let iconCollectionsCache = null;
     let iconSetOptionsCache = [anyIconSetOption, defaultIconSetOption];
     let isLoadingIconSets = false;
+    const iconifyCollectionSearchCache = new Map();
 
     const builtInIconSets = {
       'material-symbols': {
@@ -23586,31 +23587,10 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       statsEl.textContent = `Found ${matches.length} icons. Click an icon to insert.`;
       container.appendChild(statsEl);
 
-      const grid = document.createElement('div');
-      grid.className = 'icon-browse-grid';
-      container.appendChild(grid);
-
       let isInserting = false;
       const textPrimaryColor = getResolvedTextPrimaryColor();
       const safeSize = clampNumber(size || 24, 16, 512);
-      let lastFontFamily = null;
-
-      matches.forEach((match) => {
-        if (!match || !match.id) return;
-
-        if (iconApiSource === 'iconfont' && match.fontFamily && match.fontFamily !== lastFontFamily) {
-          const title = document.createElement('div');
-          title.textContent = match.fontFamily;
-          title.style.gridColumn = '1 / -1';
-          title.style.margin = grid.children.length > 0 ? '12px 0 4px' : '0 0 4px';
-          title.style.fontSize = '11px';
-          title.style.fontWeight = '700';
-          title.style.letterSpacing = '0.02em';
-          title.style.color = 'var(--text-secondary)';
-          grid.appendChild(title);
-          lastFontFamily = match.fontFamily;
-        }
-
+      const appendMatchItem = (grid, match) => {
         const item = document.createElement('div');
         item.className = 'icon-browse-item';
         item.dataset.name = match.id;
@@ -23674,7 +23654,54 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         });
         grid.appendChild(item);
         fetchAndApplyBrowseItemKindBadge(item, match).catch(() => {});
+      };
+
+      const tieredMatches = new Map();
+      matches.forEach(match => {
+        if (!match || !match.id) return;
+        const tierKey = match.matchTier || 'single';
+        if (!tieredMatches.has(tierKey)) tieredMatches.set(tierKey, []);
+        tieredMatches.get(tierKey).push(match);
       });
+
+      Array.from(tieredMatches.entries())
+        .sort((a, b) => getCreateIconMatchTierOrder(a[0]) - getCreateIconMatchTierOrder(b[0]))
+        .forEach(([tierKey, tierMatches]) => {
+          const section = document.createElement('div');
+          section.className = 'icon-browse-section';
+
+          const sectionHeading = document.createElement('div');
+          sectionHeading.className = 'icon-browse-group-heading icon-browse-tier-heading';
+          sectionHeading.textContent = tierMatches[0]?.matchTierLabel || getCreateIconMatchTierLabel(tierKey);
+          section.appendChild(sectionHeading);
+
+          if (iconApiSource === 'iconfont') {
+            let lastFontFamily = null;
+            let currentGrid = null;
+            tierMatches.forEach((match) => {
+              const needsFamilyHeading = !currentGrid || match.fontFamily !== lastFontFamily;
+              if (needsFamilyHeading) {
+                const fontHeading = document.createElement('div');
+                fontHeading.className = 'icon-browse-group-heading icon-browse-font-family-heading';
+                fontHeading.textContent = match.fontFamily || 'Icon Font';
+                section.appendChild(fontHeading);
+
+                currentGrid = document.createElement('div');
+                currentGrid.className = 'icon-browse-grid';
+                section.appendChild(currentGrid);
+                lastFontFamily = match.fontFamily;
+              }
+              appendMatchItem(currentGrid, match);
+            });
+          } else {
+            const grid = document.createElement('div');
+            grid.className = 'icon-browse-grid';
+            section.appendChild(grid);
+            tierMatches.forEach(match => appendMatchItem(grid, match));
+          }
+
+          container.appendChild(section);
+        });
 
       promptDrawerCustomContent.classList.remove('hidden');
       promptDrawerCustomContent.innerHTML = '';
@@ -24167,11 +24194,16 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
     async function fetchIconifyCollection(prefix) {
       if (!prefix) return null;
+      if (iconifyCollectionSearchCache.has(prefix)) {
+        return iconifyCollectionSearchCache.get(prefix);
+      }
       try {
         const url = `https://api.iconify.design/collection?prefix=${prefix}`;
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return null;
-        return await res.json();
+        const data = await res.json();
+        iconifyCollectionSearchCache.set(prefix, data);
+        return data;
       } catch (err) {
         console.warn('Failed to fetch icon collection', prefix, err);
         return null;
@@ -24902,33 +24934,155 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return !/-rounded$/i.test(iconName) && !/-sharp$/i.test(iconName);
     }
 
-    function scoreMaterialIconName(name, query) {
-      const n = (name || '').toLowerCase();
-      const q = (query || '').toLowerCase().trim();
-      if (!q) return 0;
-      if (n === q) return 100;
-      if (n.startsWith(q)) return 80;
-      if (n.includes(q)) return 50;
-      const nq = q.replace(/[\s-]+/g, '_');
-      if (n === nq) return 95;
-      if (n.startsWith(nq)) return 75;
-      if (n.includes(nq)) return 45;
-      return 0;
+    function normalizeCreateIconSearchRaw(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/["']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
     }
 
-    function scoreGenericIconName(name, query) {
-      const n = (name || '').toLowerCase();
-      const q = (query || '').toLowerCase().trim();
-      if (!q) return 0;
-      if (n === q) return 100;
-      if (n.startsWith(q)) return 80;
-      if (n.includes(q)) return 50;
-      const hyphenated = q.replace(/[\s_]+/g, '-');
-      const underscored = q.replace(/[\s-]+/g, '_');
-      if (n === hyphenated || n === underscored) return 95;
-      if (n.startsWith(hyphenated) || n.startsWith(underscored)) return 75;
-      if (n.includes(hyphenated) || n.includes(underscored)) return 45;
-      return 0;
+    function tokenizeCreateIconSearch(value) {
+      return normalizeCreateIconSearchRaw(value)
+        .split(/[\s_-]+/)
+        .map(token => token.trim())
+        .filter(Boolean);
+    }
+
+    function normalizeCreateIconSearchCanonical(value) {
+      return tokenizeCreateIconSearch(value).join(' ');
+    }
+
+    function normalizeCreateIconSearchJoined(value) {
+      return tokenizeCreateIconSearch(value).join('');
+    }
+
+    function buildCreateIconPhraseVariants(...values) {
+      const seen = new Set();
+      const variants = [];
+      const push = (candidate) => {
+        const normalized = normalizeCreateIconSearchRaw(candidate);
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        variants.push(normalized);
+      };
+
+      values.forEach(value => {
+        const raw = normalizeCreateIconSearchRaw(value);
+        if (!raw) return;
+        push(raw);
+
+        const words = tokenizeCreateIconSearch(raw);
+        if (!words.length) return;
+
+        push(words.join(' '));
+        if (words.length > 1) {
+          push(words.join(''));
+          push(words.join('-'));
+          push(words.join('_'));
+        }
+      });
+
+      return variants;
+    }
+
+    function buildCreateIconSearchQueries(...values) {
+      return buildCreateIconPhraseVariants(...values);
+    }
+
+    const CREATE_ICON_MATCH_TIER_CONFIG = {
+      exact: { order: 0, label: 'Exact hit' },
+      connector: { order: 1, label: 'Connector variant' },
+      single: { order: 2, label: 'Single-word hit' },
+      generate: { order: 3, label: 'Generate' }
+    };
+
+    function getCreateIconMatchTierLabel(tierKey) {
+      return CREATE_ICON_MATCH_TIER_CONFIG[tierKey]?.label || 'Single-word hit';
+    }
+
+    function getCreateIconMatchTierOrder(tierKey) {
+      return CREATE_ICON_MATCH_TIER_CONFIG[tierKey]?.order ?? 99;
+    }
+
+    function getCreateIconMatchInfo(iconName, query) {
+      const queryRaw = normalizeCreateIconSearchRaw(query);
+      const iconRaw = normalizeCreateIconSearchRaw(iconName);
+      const queryWords = tokenizeCreateIconSearch(query);
+      const iconWords = tokenizeCreateIconSearch(iconName);
+      const queryJoined = normalizeCreateIconSearchJoined(query);
+      const iconJoined = normalizeCreateIconSearchJoined(iconName);
+
+      if (!queryWords.length || !iconWords.length) return null;
+
+      if (iconRaw === queryRaw) {
+        return {
+          tier: 'exact',
+          label: getCreateIconMatchTierLabel('exact'),
+          order: getCreateIconMatchTierOrder('exact'),
+          wordsMatched: queryWords.length,
+          score: 3000 + queryWords.length * 20
+        };
+      }
+
+      if (queryWords.length > 1 && queryJoined === iconJoined) {
+        return {
+          tier: 'connector',
+          label: getCreateIconMatchTierLabel('connector'),
+          order: getCreateIconMatchTierOrder('connector'),
+          wordsMatched: queryWords.length,
+          score: 2000 + queryWords.length * 20
+        };
+      }
+
+      let wordsMatched = 0;
+      let exactWordMatches = 0;
+      queryWords.forEach(word => {
+        if (!word) return;
+        if (iconWords.includes(word)) {
+          exactWordMatches += 1;
+          wordsMatched += 1;
+          return;
+        }
+        if (iconRaw.includes(word) || iconJoined.includes(word)) {
+          wordsMatched += 1;
+        }
+      });
+
+      if (queryWords.length === 1 && wordsMatched > 0) {
+        return {
+          tier: 'single',
+          label: getCreateIconMatchTierLabel('single'),
+          order: getCreateIconMatchTierOrder('single'),
+          wordsMatched,
+          score: 1000 + wordsMatched * 50 + exactWordMatches * 15 + (iconRaw.startsWith(queryWords[0]) ? 10 : 0)
+        };
+      }
+
+      if (queryWords.length > 1 && wordsMatched === 1) {
+        return {
+          tier: 'single',
+          label: getCreateIconMatchTierLabel('single'),
+          order: getCreateIconMatchTierOrder('single'),
+          wordsMatched,
+          score: 1000 + wordsMatched * 50 + exactWordMatches * 15
+        };
+      }
+
+      return null;
+    }
+
+    function getBestCreateIconMatchInfo(iconName, queries) {
+      const list = Array.isArray(queries) ? queries : [queries];
+      let best = null;
+      list.forEach(query => {
+        const info = getCreateIconMatchInfo(iconName, query);
+        if (!info) return;
+        if (!best || info.order < best.order || (info.order === best.order && info.score > best.score)) {
+          best = { ...info, query };
+        }
+      });
+      return best;
     }
 
     const ICON_FONT_SYNONYM_MAP = {
@@ -25031,59 +25185,181 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     }
 
     function scoreIconFontMatch(name, queries) {
-      const list = Array.isArray(queries) ? queries : [queries];
-      return list.reduce((best, query) => {
-        return Math.max(
-          best,
-          scoreGenericIconName(name, query),
-          scoreMaterialIconName(name, query)
-        );
-      }, 0);
+      const info = getBestCreateIconMatchInfo(name, queries);
+      return info ? info.score : 0;
+    }
+
+    function buildLocalIconFontId(fontFamily, name) {
+      const config = getIconFontConfig(fontFamily) || {};
+      const safeName = String(name || '').trim().toLowerCase().replace(/_/g, '-');
+      if (!safeName) return null;
+
+      if (fontFamily === 'Material Symbols Rounded') return `material-symbols:${safeName}-rounded`;
+      if (fontFamily === 'Material Symbols Sharp') return `material-symbols:${safeName}-sharp`;
+      if (fontFamily === 'Material Symbols Outlined' || fontFamily === 'Material Icons') return `material-symbols:${safeName}`;
+
+      const prefixes = Array.isArray(config.iconifyPrefixes) ? config.iconifyPrefixes : [];
+      if (!prefixes.length) return safeName;
+
+      let preferredPrefix = prefixes[0];
+      if (config.defaultStyle === 'Solid') {
+        preferredPrefix = prefixes.find(prefix => String(prefix || '').includes('solid')) || preferredPrefix;
+      } else if (config.defaultStyle === 'Regular') {
+        preferredPrefix = prefixes.find(prefix => String(prefix || '').includes('regular')) || preferredPrefix;
+      }
+      return `${preferredPrefix}:${safeName}`;
+    }
+
+    async function searchLocalIconFontNames(queries, limit = 20, fontFamily = null) {
+      const targetFamilies = fontFamily ? [fontFamily] : getConfiguredIconFontFamilies();
+      const results = [];
+
+      for (const family of targetFamilies) {
+        const unicodeMap = await loadIconFontUnicodeMap(family);
+        for (const [name] of unicodeMap.entries()) {
+          const matchInfo = getBestCreateIconMatchInfo(name, queries);
+          if (!matchInfo) continue;
+          const id = buildLocalIconFontId(family, name);
+          if (!id) continue;
+          results.push({
+            id,
+            label: `${normalizeFontLookupKey(family).replace(/\s+/g, '-')}:${name}`,
+            source: 'iconfont',
+            fontFamily: family,
+            score: matchInfo.score,
+            matchTier: matchInfo.tier,
+            matchTierLabel: matchInfo.label,
+            matchTierOrder: matchInfo.order,
+            matchWords: matchInfo.wordsMatched
+          });
+        }
+      }
+
+      results.sort((a, b) => {
+        if ((a.matchTierOrder ?? 99) !== (b.matchTierOrder ?? 99)) return (a.matchTierOrder ?? 99) - (b.matchTierOrder ?? 99);
+        const aFont = getIconFontConfig(a.fontFamily)?.sortOrder ?? 99;
+        const bFont = getIconFontConfig(b.fontFamily)?.sortOrder ?? 99;
+        if (aFont !== bFont) return aFont - bFont;
+        return (b.score || 0) - (a.score || 0) || String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
+      });
+
+      return results.slice(0, Math.max(1, limit));
     }
 
     async function searchMaterialIconsByCodepoints(query, limit = 20, fontFamily = 'Material Icons') {
-      const unicodeMap = await loadIconFontUnicodeMap(fontFamily);
-      const queryNormalized = (query || '').toLowerCase().trim();
-      if (!queryNormalized) return [];
-
-      const results = [];
-      for (const [name] of unicodeMap.entries()) {
-        const score = scoreMaterialIconName(name, queryNormalized);
-        if (score <= 0) continue;
-        results.push({
-          id: `material-symbols:${name.replace(/_/g, '-')}`,
-          label: `material-icons:${name}`,
-          source: 'iconfont',
-          fontFamily,
-          score
-        });
-      }
-
-      results.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
-      return results.slice(0, Math.max(1, limit));
+      return searchLocalIconFontNames([query], limit, fontFamily);
     }
 
     async function searchMaterialSymbolsByVariant(query, limit = 20, fontFamily = 'Material Symbols Outlined') {
-      const queryNormalized = (query || '').toLowerCase().trim();
-      if (!queryNormalized) return [];
+      return searchLocalIconFontNames([query], limit, fontFamily);
+    }
 
-      const rawResults = await searchIconifyAcrossPrefixes(['material-symbols'], queryNormalized, Math.max(limit * 4, 40), fontFamily);
+    function collectIconifyCollectionIconNames(collectionData) {
+      const iconsList = [];
+      const seen = new Set();
+      const push = (value) => {
+        const safe = String(value || '').trim();
+        if (!safe || seen.has(safe)) return;
+        seen.add(safe);
+        iconsList.push(safe);
+      };
+
+      if (collectionData?.uncategorized) {
+        collectionData.uncategorized.forEach(push);
+      }
+      if (collectionData?.icons && typeof collectionData.icons === 'object') {
+        Object.keys(collectionData.icons).forEach(push);
+      }
+      if (collectionData?.categories && typeof collectionData.categories === 'object') {
+        Object.values(collectionData.categories).forEach(list => {
+          (Array.isArray(list) ? list : []).forEach(push);
+        });
+      }
+
+      return iconsList;
+    }
+
+    async function searchIconifyCollectionLocal(prefix, queries, limit = 20) {
+      if (!prefix) return [];
+      const data = await fetchIconifyCollection(prefix);
+      if (!data) return [];
+
       const results = [];
-      rawResults.forEach(result => {
-        if (!matchesMaterialSymbolVariant(result.id, fontFamily)) return;
-        const iconName = parseIconNameFromId(result.id);
-        const score = scoreMaterialIconName(iconName, queryNormalized);
-        if (score <= 0) return;
+      collectIconifyCollectionIconNames(data).forEach(name => {
+        const matchInfo = getBestCreateIconMatchInfo(name, queries);
+        if (!matchInfo) return;
         results.push({
-          ...result,
-          label: `${normalizeFontLookupKey(fontFamily).replace(/\s+/g, '-')}:${iconName}`,
-          fontFamily,
-          score
+          prefix,
+          name,
+          id: `${prefix}:${name}`,
+          label: `${prefix}:${name}`,
+          score: matchInfo.score,
+          matchTier: matchInfo.tier,
+          matchTierLabel: matchInfo.label,
+          matchTierOrder: matchInfo.order,
+          matchWords: matchInfo.wordsMatched
         });
       });
 
-      results.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+      results.sort((a, b) => {
+        if ((a.matchTierOrder ?? 99) !== (b.matchTierOrder ?? 99)) return (a.matchTierOrder ?? 99) - (b.matchTierOrder ?? 99);
+        return (b.score || 0) - (a.score || 0) || String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
+      });
+
       return results.slice(0, Math.max(1, limit));
+    }
+
+    function attachCreateIconMatchMetadata(matches, queries) {
+      return (Array.isArray(matches) ? matches : [])
+        .map(match => {
+          if (!match || !match.id) return null;
+          if (match.id === '__generate__') {
+            return {
+              ...match,
+              matchTier: 'generate',
+              matchTierLabel: getCreateIconMatchTierLabel('generate'),
+              matchTierOrder: getCreateIconMatchTierOrder('generate'),
+              score: match.score || 0
+            };
+          }
+
+          const iconName = parseIconNameFromId(match.id);
+          const matchInfo = getBestCreateIconMatchInfo(iconName, queries);
+          if (!matchInfo) return null;
+          return {
+            ...match,
+            score: Math.max(match.score || 0, matchInfo.score),
+            matchTier: matchInfo.tier,
+            matchTierLabel: matchInfo.label,
+            matchTierOrder: matchInfo.order,
+            matchWords: matchInfo.wordsMatched
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function sortCreateIconMatches(matches, { iconApiSource } = {}) {
+      const list = Array.isArray(matches) ? [...matches] : [];
+      list.sort((a, b) => {
+        if ((a.matchTierOrder ?? 99) !== (b.matchTierOrder ?? 99)) return (a.matchTierOrder ?? 99) - (b.matchTierOrder ?? 99);
+
+        if (iconApiSource === 'iconfont') {
+          const aFont = getIconFontConfig(a.fontFamily)?.sortOrder ?? 99;
+          const bFont = getIconFontConfig(b.fontFamily)?.sortOrder ?? 99;
+          if (aFont !== bFont) return aFont - bFont;
+        }
+
+        const aId = String(a.id || '').toLowerCase();
+        const bId = String(b.id || '').toLowerCase();
+        const aPrefix = aId.includes(':') ? aId.split(':')[0] : '';
+        const bPrefix = bId.includes(':') ? bId.split(':')[0] : '';
+        const aIsLogo = aPrefix === 'logos';
+        const bIsLogo = bPrefix === 'logos';
+        if (aIsLogo !== bIsLogo) return aIsLogo ? 1 : -1;
+
+        return (b.score || 0) - (a.score || 0) || String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
+      });
+      return list;
     }
 
     async function createIconFontFromId(iconId, { size, fallbackHint, actionMeta, fontFamily }) {
@@ -25501,72 +25777,46 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
       // Clean up description for search to avoid noise
       const cleanDesc = (description || '').replace(/["']/g, '').trim();
-
-      const searchQuery = [
-        cleanDesc,
-        slug
-      ].filter(Boolean).join(' ').trim();
-      const iconFontSearchTerms = expandIconFontSynonymTerms(slug, cleanDesc, searchQuery).slice(0, 10);
+      const searchQueries = buildCreateIconSearchQueries(cleanDesc, slug);
+      const iconFontSearchTerms = expandIconFontSynonymTerms(...searchQueries).slice(0, 12);
 
       let matches = [];
       if (iconApiSource === 'antv') {
         console.log('[AntV] Action started. Description:', description);
-        // Try multiple queries for AntV to improve match rates, prioritized by specificity
-        const queries = [
-          slug,
-          cleanDesc,
-          searchQuery
-        ].filter(Boolean);
-
         const allResults = [];
-        for (const q of queries) {
+        for (const q of searchQueries) {
           const res = await searchAntVIcon(q, 20);
           if (res && res.length) allResults.push(...res);
         }
         matches = allResults;
       } else if (iconApiSource === 'iconfont') {
-        const iconFontSearchConfigs = getAllIconFontSearchConfigs();
-
-        const queries = iconFontSearchTerms.length
-          ? iconFontSearchTerms
-          : [
-            slug,
-            cleanDesc,
-            searchQuery,
-          ].filter(Boolean);
+        matches = await searchLocalIconFontNames(iconFontSearchTerms, 240);
+      } else if (iconSet) {
         const allResults = [];
-        for (const q of queries) {
-          for (const config of iconFontSearchConfigs) {
-            const res = config.searchMode === 'codepoints'
-              ? await searchMaterialIconsByCodepoints(q, 20, config.fontFamily)
-              : config.fontFamily.startsWith('Material Symbols')
-                ? await searchMaterialSymbolsByVariant(q, 20, config.fontFamily)
-                : await searchIconifyAcrossPrefixes(config.prefixes, q, 20, config.fontFamily);
-            if (res && res.length) allResults.push(...res);
+        const localCollectionMatches = await searchIconifyCollectionLocal(iconSet, searchQueries, 120);
+        if (localCollectionMatches.length) {
+          allResults.push(...localCollectionMatches);
+        } else {
+          for (const q of searchQueries) {
+            const foundName = await searchIconifyIcon(iconSet, q);
+            if (foundName) {
+              allResults.push({
+                id: `${iconSet}:${foundName}`,
+                label: `${iconSet}:${foundName}`
+              });
+            }
+          }
+          if (!allResults.length) {
+            allResults.push({
+              id: `${iconSet}:${slug}`,
+              label: `${iconSet}:${slug}`
+            });
           }
         }
         matches = allResults;
-      } else if (iconSet) {
-        const foundName = await searchIconifyIcon(iconSet, searchQuery || slug);
-        if (foundName) {
-          matches.push({
-            id: `${iconSet}:${foundName}`,
-            label: `${iconSet}:${foundName}`
-          });
-        } else {
-          matches.push({
-            id: `${iconSet}:${slug}`,
-            label: `${iconSet}:${slug}`
-          });
-        }
       } else {
-        const queries = [
-          slug,            // 1. AI suggested slug (most specific)
-          cleanDesc,       // 2. User description
-          searchQuery      // 3. Combined search
-        ].filter(Boolean);
         const allResults = [];
-        for (const q of queries) {
+        for (const q of searchQueries) {
           const res = await searchIconifyIconGlobal(q, 20);
           if (res && res.length) allResults.push(...res);
         }
@@ -25582,94 +25832,30 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           const newMatches = (loosened || []).filter(m => !existingIds.has(m.id));
           matches = [...matches, ...newMatches];
         } else if (iconApiSource === 'iconfont') {
-          const allFontConfigs = getAllIconFontSearchConfigs();
-
           const broadenedQuery = iconFontSearchTerms[0] || description || slug || 'icon';
           const broadenedTerms = expandIconFontSynonymTerms(broadenedQuery).slice(0, 6);
-          const loosenedGroups = await Promise.all(allFontConfigs.flatMap(config => (
-            broadenedTerms.map(term => (
-              config.searchMode === 'codepoints'
-                ? searchMaterialIconsByCodepoints(term, 30, config.fontFamily)
-                : config.fontFamily.startsWith('Material Symbols')
-                  ? searchMaterialSymbolsByVariant(term, 30, config.fontFamily)
-                : searchIconifyAcrossPrefixes(config.prefixes, term, 30, config.fontFamily)
-            ))
-          )));
-          matches = [...matches, ...loosenedGroups.flat().filter(Boolean)];
+          const loosened = await searchLocalIconFontNames(broadenedTerms, 240);
+          matches = [...matches, ...loosened];
         } else {
           const loosened = await searchIconifyIconGlobal(description || slug || 'icon', 30);
           matches = [...matches, ...(loosened || [])];
         }
       }
 
-      // Deduplicate and sort by relevance to the user's description
+      // Deduplicate and rank by explicit match tiers.
       matches = matches || [];
       const uniqueMap = new Map();
       matches.forEach(m => {
         if (m?.id) uniqueMap.set(`${m.fontFamily || ''}:${m.id}`, m);
       });
-      matches = Array.from(uniqueMap.values());
-
-      if (iconApiSource === 'iconfont') {
-        matches = matches.filter(match => {
-          const iconName = parseIconNameFromId(match.id);
-          const score = scoreIconFontMatch(iconName, iconFontSearchTerms);
-          return score > 0;
-        });
-      }
-
-      // Relevance sort: icons whose name contains the user's keyword rank higher
-      const descLower = (cleanDesc || slug || '').toLowerCase();
-      const slugLower = (slug || '').toLowerCase();
-      if (descLower) {
-        matches.sort((a, b) => {
-          if (iconApiSource === 'iconfont') {
-            const aFont = getIconFontConfig(a.fontFamily)?.sortOrder ?? 99;
-            const bFont = getIconFontConfig(b.fontFamily)?.sortOrder ?? 99;
-            if (aFont !== bFont) return aFont - bFont;
-          }
-
-          const aId = (a.id || '').toLowerCase();
-          const bId = (b.id || '').toLowerCase();
-          const aName = aId.includes(':') ? aId.split(':').pop() : aId;
-          const bName = bId.includes(':') ? bId.split(':').pop() : bId;
-          const aPrefix = aId.includes(':') ? aId.split(':')[0] : '';
-          const bPrefix = bId.includes(':') ? bId.split(':')[0] : '';
-
-          // Exact name match with description
-          const aExact = aName === descLower || aName === slugLower;
-          const bExact = bName === descLower || bName === slugLower;
-          if (aExact !== bExact) return aExact ? -1 : 1;
-
-          // Name starts with the description keyword
-          const aStarts = aName.startsWith(descLower) || aName.startsWith(slugLower);
-          const bStarts = bName.startsWith(descLower) || bName.startsWith(slugLower);
-          if (aStarts !== bStarts) return aStarts ? -1 : 1;
-
-          // Name contains the description keyword
-          const aContains = aName.includes(descLower) || aName.includes(slugLower);
-          const bContains = bName.includes(descLower) || bName.includes(slugLower);
-          if (aContains !== bContains) return aContains ? -1 : 1;
-
-          // Deprioritize "logos:" prefix icons — they're usually brand logos, not UI icons
-          const aIsLogo = aPrefix === 'logos';
-          const bIsLogo = bPrefix === 'logos';
-          if (aIsLogo !== bIsLogo) return aIsLogo ? 1 : -1;
-
-          return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
-        });
-      } else if (iconApiSource === 'iconfont') {
-        matches.sort((a, b) => {
-          const aFont = getIconFontConfig(a.fontFamily)?.sortOrder ?? 99;
-          const bFont = getIconFontConfig(b.fontFamily)?.sortOrder ?? 99;
-          if (aFont !== bFont) return aFont - bFont;
-          return String(a.label || a.id || '').localeCompare(String(b.label || b.id || ''));
-        });
-      }
+      matches = attachCreateIconMatchMetadata(Array.from(uniqueMap.values()), searchQueries);
+      matches = sortCreateIconMatches(matches, { iconApiSource });
 
       if (!isNoAiMode && iconApiSource !== 'iconfont' && !matches.find(m => m.id === '__generate__')) {
         matches.push({ id: '__generate__', label: 'Generate with AI' });
       }
+      matches = attachCreateIconMatchMetadata(matches, searchQueries);
+      matches = sortCreateIconMatches(matches, { iconApiSource });
       matches = matches.slice(0, 120); // keep a larger pool for paging
 
       const aiContext = {
