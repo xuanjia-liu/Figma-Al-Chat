@@ -27318,6 +27318,30 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runRemoveInnerHolesAction(_values, actionMeta) {
+      try {
+        const result = await runLocalActionRequest({
+          requestType: 'local-remove-inner-holes',
+          resultType: 'local-remove-inner-holes-result',
+          payload: {},
+          errorPrefixes: ['Remove inner holes failed', 'Please select at least one vector']
+        });
+
+        const updated = Number(result?.updated) || 0;
+        const skipped = Number(result?.skipped) || 0;
+        const message = typeof result?.message === 'string' && result.message.trim()
+          ? result.message
+          : (updated > 0
+            ? `Filled inner holes on ${updated} shape${updated === 1 ? '' : 's'}${skipped > 0 ? ` (${skipped} skipped)` : ''}.`
+            : 'No inner holes found in the selected shapes.');
+
+        showToast(message, updated > 0 ? (skipped > 0 ? 'warning' : 'success') : 'warning');
+      } catch (error) {
+        console.error('Remove inner holes action failed:', error);
+        showToast(error?.message || `Failed to run ${actionMeta?.name || 'Remove inner holes'}`, 'error');
+      }
+    }
+
     function requestLocalStylesForFontMapping() {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -28084,6 +28108,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'turnIntoComponentSet':
           await runTurnIntoComponentSetAction(values, actionMeta);
+          break;
+        case 'removeInnerHoles':
+          await runRemoveInnerHolesAction(values, actionMeta);
           break;
         case 'createButtonComponentSet':
           await runCreateButtonComponentSetAction(values, actionMeta);

@@ -61,6 +61,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'placeholderSet',
   'createAdvancedGrid',
   'turnIntoComponentSet',
+  'removeInnerHoles',
   'createButtonComponentSet',
   'duplicateWithInstructions',
   'randomizeSelectedInstances',

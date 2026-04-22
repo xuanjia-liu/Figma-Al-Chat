@@ -7856,6 +7856,488 @@ async function runLocalQuickDetach(msg: any): Promise<void> {
   }
 }
 
+function removeInnerHolesLoopPoints(loop: number[], vertices: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
+  return loop
+    .map((index) => vertices[index])
+    .filter((point): point is { x: number; y: number } => !!point && Number.isFinite(point.x) && Number.isFinite(point.y));
+}
+
+function removeInnerHolesPolygonArea(points: Array<{ x: number; y: number }>): number {
+  if (points.length < 3) return 0;
+  let area = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    area += a.x * b.y - b.x * a.y;
+  }
+  return area * 0.5;
+}
+
+function removeInnerHolesPolygonCentroid(points: Array<{ x: number; y: number }>): { x: number; y: number } {
+  if (points.length === 0) return { x: 0, y: 0 };
+  let areaFactor = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const cross = a.x * b.y - b.x * a.y;
+    areaFactor += cross;
+    cx += (a.x + b.x) * cross;
+    cy += (a.y + b.y) * cross;
+  }
+  if (Math.abs(areaFactor) < 1e-6) {
+    const sum = points.reduce((acc, point) => ({ x: acc.x + point.x, y: acc.y + point.y }), { x: 0, y: 0 });
+    return { x: sum.x / points.length, y: sum.y / points.length };
+  }
+  const factor = 1 / (3 * areaFactor);
+  return { x: cx * factor, y: cy * factor };
+}
+
+function removeInnerHolesPointInPolygon(point: { x: number; y: number }, polygon: Array<{ x: number; y: number }>): boolean {
+  if (polygon.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const pi = polygon[i];
+    const pj = polygon[j];
+    const intersects =
+      (pi.y > point.y) !== (pj.y > point.y) &&
+      point.x < ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || 1e-12) + pi.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function splitSvgPathIntoSubpaths(pathData: string): string[] {
+  const trimmed = String(pathData || '').trim();
+  if (!trimmed) return [];
+  const matchPattern = /[Mm]/g;
+  const matchIndexes: number[] = [];
+  let match: RegExpExecArray | null = null;
+  while ((match = matchPattern.exec(trimmed)) !== null) {
+    matchIndexes.push(match.index);
+  }
+  if (matchIndexes.length <= 1) return [trimmed];
+  const parts: string[] = [];
+  for (let i = 0; i < matchIndexes.length; i++) {
+    const start = matchIndexes[i];
+    const end = i + 1 < matchIndexes.length ? matchIndexes[i + 1] : trimmed.length;
+    const chunk = trimmed.slice(start, end).trim();
+    if (chunk) parts.push(chunk);
+  }
+  return parts;
+}
+
+function tokenizeSvgPathData(pathData: string): string[] {
+  const tokens = String(pathData || '').match(/[AaCcHhLlMmQqSsTtVvZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g);
+  return Array.isArray(tokens) ? tokens : [];
+}
+
+function extractSvgSubpathPoints(pathData: string): Array<{ x: number; y: number }> {
+  const tokens = tokenizeSvgPathData(pathData);
+  if (tokens.length === 0) return [];
+
+  const points: Array<{ x: number; y: number }> = [];
+  let i = 0;
+  let command = '';
+  let currentX = 0;
+  let currentY = 0;
+  let startX = 0;
+  let startY = 0;
+
+  const isCommandToken = (token: string) => /^[AaCcHhLlMmQqSsTtVvZz]$/.test(token);
+  const hasNumber = () => i < tokens.length && !isCommandToken(tokens[i]);
+  const readNumber = () => Number(tokens[i++]);
+
+  while (i < tokens.length) {
+    if (isCommandToken(tokens[i])) {
+      command = tokens[i++];
+    } else if (!command) {
+      break;
+    }
+
+    switch (command) {
+      case 'M':
+      case 'm': {
+        if (!hasNumber()) break;
+        const firstX = readNumber();
+        if (!hasNumber()) break;
+        const firstY = readNumber();
+        currentX = command === 'm' ? currentX + firstX : firstX;
+        currentY = command === 'm' ? currentY + firstY : firstY;
+        startX = currentX;
+        startY = currentY;
+        points.push({ x: currentX, y: currentY });
+        while (hasNumber()) {
+          const nextX = readNumber();
+          if (!hasNumber()) break;
+          const nextY = readNumber();
+          currentX = command === 'm' ? currentX + nextX : nextX;
+          currentY = command === 'm' ? currentY + nextY : nextY;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'L':
+      case 'l':
+      case 'T':
+      case 't': {
+        while (hasNumber()) {
+          const nextX = readNumber();
+          if (!hasNumber()) break;
+          const nextY = readNumber();
+          currentX = command === command.toLowerCase() ? currentX + nextX : nextX;
+          currentY = command === command.toLowerCase() ? currentY + nextY : nextY;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'H':
+      case 'h': {
+        while (hasNumber()) {
+          const nextX = readNumber();
+          currentX = command === 'h' ? currentX + nextX : nextX;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'V':
+      case 'v': {
+        while (hasNumber()) {
+          const nextY = readNumber();
+          currentY = command === 'v' ? currentY + nextY : nextY;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'C':
+      case 'c': {
+        while (hasNumber()) {
+          if (i + 5 >= tokens.length) break;
+          const x1 = readNumber();
+          const y1 = readNumber();
+          const x2 = readNumber();
+          const y2 = readNumber();
+          const nextX = readNumber();
+          const nextY = readNumber();
+          void x1;
+          void y1;
+          void x2;
+          void y2;
+          currentX = command === 'c' ? currentX + nextX : nextX;
+          currentY = command === 'c' ? currentY + nextY : nextY;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'S':
+      case 's':
+      case 'Q':
+      case 'q': {
+        while (hasNumber()) {
+          if (i + 3 >= tokens.length) break;
+          const x1 = readNumber();
+          const y1 = readNumber();
+          const nextX = readNumber();
+          const nextY = readNumber();
+          void x1;
+          void y1;
+          currentX = command === command.toLowerCase() ? currentX + nextX : nextX;
+          currentY = command === command.toLowerCase() ? currentY + nextY : nextY;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'A':
+      case 'a': {
+        while (hasNumber()) {
+          if (i + 6 >= tokens.length) break;
+          const rx = readNumber();
+          const ry = readNumber();
+          const angle = readNumber();
+          const largeArcFlag = readNumber();
+          const sweepFlag = readNumber();
+          const nextX = readNumber();
+          const nextY = readNumber();
+          void rx;
+          void ry;
+          void angle;
+          void largeArcFlag;
+          void sweepFlag;
+          currentX = command === 'a' ? currentX + nextX : nextX;
+          currentY = command === 'a' ? currentY + nextY : nextY;
+          points.push({ x: currentX, y: currentY });
+        }
+        break;
+      }
+      case 'Z':
+      case 'z': {
+        currentX = startX;
+        currentY = startY;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return points;
+}
+
+function buildVectorPathsWithoutInnerHoles(vectorPaths: VectorPath[]): { vectorPaths: VectorPath[]; removedSubpaths: number } | null {
+  if (!Array.isArray(vectorPaths) || vectorPaths.length === 0) return null;
+
+  const nextVectorPaths: VectorPath[] = [];
+  let removedSubpaths = 0;
+
+  vectorPaths.forEach((vectorPath) => {
+    const subpaths = splitSvgPathIntoSubpaths(vectorPath.data || '')
+      .map((data) => {
+        const points = extractSvgSubpathPoints(data);
+        if (points.length < 3) {
+          return { data, points, signedArea: 0, absArea: 0, keep: true };
+        }
+        const signedArea = removeInnerHolesPolygonArea(points);
+        return {
+          data,
+          points,
+          signedArea,
+          absArea: Math.abs(signedArea),
+          keep: true,
+        };
+      });
+
+    const areaSubpaths = subpaths.filter((entry) => entry.absArea > 1e-4);
+    if (areaSubpaths.length <= 1) {
+      nextVectorPaths.push(vectorPath);
+      return;
+    }
+
+    const dominant = areaSubpaths.reduce((best, entry) => (entry.absArea > best.absArea ? entry : best), areaSubpaths[0]);
+    const dominantSign = dominant.signedArea >= 0 ? 1 : -1;
+
+    const kept = subpaths.filter((entry) => entry.absArea <= 1e-4 || (entry.signedArea >= 0 ? 1 : -1) === dominantSign);
+    removedSubpaths += Math.max(0, subpaths.length - kept.length);
+
+    kept.forEach((entry) => {
+      nextVectorPaths.push({
+        windingRule: 'NONZERO',
+        data: entry.data.trim(),
+      });
+    });
+  });
+
+  if (removedSubpaths <= 0 || nextVectorPaths.length === 0) return null;
+  return { vectorPaths: nextVectorPaths, removedSubpaths };
+}
+
+function buildVectorNetworkWithoutInnerHoles(vectorNetwork: VectorNetwork): { vectorNetwork: VectorNetwork; removedLoops: number } | null {
+  if (
+    !vectorNetwork ||
+    !Array.isArray(vectorNetwork.vertices) ||
+    !Array.isArray(vectorNetwork.segments) ||
+    !Array.isArray(vectorNetwork.regions)
+  ) {
+    return null;
+  }
+
+  const vertices = vectorNetwork.vertices.map((vertex) => ({ x: Number(vertex.x), y: Number(vertex.y) }));
+  type HoleLoopMeta = {
+    loop: number[];
+    points: Array<{ x: number; y: number }>;
+    area: number;
+    centroid: { x: number; y: number };
+  };
+  type HoleRegionResult = {
+    region: VectorRegion;
+    removed: number;
+  };
+
+  const nextRegions: HoleRegionResult[] = vectorNetwork.regions.map((region) => {
+    const loops = Array.isArray(region?.loops) ? region.loops : [];
+    const loopMeta = loops
+      .map((loop: unknown): HoleLoopMeta | null => {
+        const normalizedLoop = Array.isArray(loop)
+          ? loop
+              .map((index: unknown) => Number(index))
+              .filter((index: number) => Number.isInteger(index) && index >= 0 && index < vertices.length)
+          : [];
+        const points = removeInnerHolesLoopPoints(normalizedLoop, vertices);
+        if (normalizedLoop.length < 3 || points.length < 3) return null;
+        return {
+          loop: normalizedLoop,
+          points,
+          area: Math.abs(removeInnerHolesPolygonArea(points)),
+          centroid: removeInnerHolesPolygonCentroid(points),
+        };
+      })
+      .filter((entry: HoleLoopMeta | null): entry is HoleLoopMeta => !!entry);
+
+    if (loopMeta.length <= 1) {
+      return { region: { ...region, loops: loopMeta.map((entry: HoleLoopMeta) => entry.loop), windingRule: 'NONZERO' as WindingRule }, removed: 0 };
+    }
+
+    const dominant = loopMeta.reduce((best: HoleLoopMeta, entry: HoleLoopMeta) =>
+      entry.area > best.area ? entry : best, loopMeta[0]
+    );
+    const dominantSign = removeInnerHolesPolygonArea(dominant.points) >= 0 ? 1 : -1;
+    const kept = loopMeta.filter((entry: HoleLoopMeta) =>
+      (removeInnerHolesPolygonArea(entry.points) >= 0 ? 1 : -1) === dominantSign
+    );
+
+    const nextLoops = (kept.length > 0 ? kept : [loopMeta.reduce((best: HoleLoopMeta, entry: HoleLoopMeta) => (entry.area > best.area ? entry : best), loopMeta[0])])
+      .map((entry: HoleLoopMeta) => entry.loop);
+
+    return {
+      region: { ...region, loops: nextLoops, windingRule: 'NONZERO' as WindingRule },
+      removed: Math.max(0, loopMeta.length - nextLoops.length),
+    };
+  });
+
+  const removedLoops = nextRegions.reduce((sum, entry) => sum + entry.removed, 0);
+  if (removedLoops <= 0) return null;
+
+  const usedVertexIndices = new Set<number>();
+  const usedEdgeKeys = new Set<string>();
+  const createEdgeKey = (a: number, b: number) => `${Math.min(a, b)}:${Math.max(a, b)}`;
+
+  nextRegions.forEach((entry) => {
+    entry.region.loops.forEach((loop) => {
+      for (let i = 0; i < loop.length; i++) {
+        const current = Number(loop[i]);
+        const next = Number(loop[(i + 1) % loop.length]);
+        if (!Number.isInteger(current) || !Number.isInteger(next)) continue;
+        usedVertexIndices.add(current);
+        usedVertexIndices.add(next);
+        usedEdgeKeys.add(createEdgeKey(current, next));
+      }
+    });
+  });
+
+  const keptSegments = vectorNetwork.segments.filter((segment) => {
+    const start = Number(segment.start);
+    const end = Number(segment.end);
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return false;
+    return usedEdgeKeys.has(createEdgeKey(start, end));
+  });
+
+  const orderedUsedVertices = Array.from(usedVertexIndices).sort((a, b) => a - b);
+  const vertexIndexRemap = new Map<number, number>();
+  orderedUsedVertices.forEach((vertexIndex, nextIndex) => {
+    vertexIndexRemap.set(vertexIndex, nextIndex);
+  });
+
+  const remappedVertices = orderedUsedVertices.map((vertexIndex) => vectorNetwork.vertices[vertexIndex]);
+  const remappedSegments = keptSegments.map((segment) => ({
+    ...segment,
+    start: vertexIndexRemap.get(Number(segment.start)) ?? 0,
+    end: vertexIndexRemap.get(Number(segment.end)) ?? 0,
+  }));
+  const remappedRegions = nextRegions.map((entry) => ({
+    ...entry.region,
+    loops: entry.region.loops.map((loop) =>
+      loop
+        .map((vertexIndex) => vertexIndexRemap.get(Number(vertexIndex)))
+        .filter((vertexIndex): vertexIndex is number => Number.isInteger(vertexIndex))
+    ),
+  }));
+
+  return {
+    vectorNetwork: {
+      vertices: remappedVertices,
+      segments: remappedSegments,
+      regions: remappedRegions,
+    },
+    removedLoops,
+  };
+}
+
+async function runLocalRemoveInnerHoles(): Promise<void> {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({ type: 'error', message: 'Please select at least one vector shape.' });
+    return;
+  }
+
+  const updatedNodes: SceneNode[] = [];
+  let updated = 0;
+  let skipped = 0;
+  let removedLoops = 0;
+  let removedSubpaths = 0;
+
+  for (const selectedNode of selection) {
+    let target: SceneNode = selectedNode;
+
+    if (target.type === 'BOOLEAN_OPERATION') {
+      try {
+        target = figma.flatten([target]);
+      } catch (error) {
+        console.warn('removeInnerHoles: flatten failed', target.id, error);
+        skipped++;
+        continue;
+      }
+    }
+
+    if (target.type !== 'VECTOR') {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const vectorNode = target as VectorNode & { vectorPaths?: VectorPath[]; vectorNetwork?: VectorNetwork };
+      const simplifiedPaths = Array.isArray((vectorNode as any).vectorPaths)
+        ? buildVectorPathsWithoutInnerHoles((vectorNode as any).vectorPaths as VectorPath[])
+        : null;
+      const simplifiedNetwork = simplifiedPaths ? null : buildVectorNetworkWithoutInnerHoles((vectorNode as any).vectorNetwork);
+
+      if (!simplifiedPaths && !simplifiedNetwork) {
+        skipped++;
+        continue;
+      }
+
+      if (simplifiedPaths) {
+        (vectorNode as any).vectorPaths = simplifiedPaths.vectorPaths;
+        removedSubpaths += simplifiedPaths.removedSubpaths;
+      } else if (simplifiedNetwork) {
+        if ('setVectorNetworkAsync' in target && typeof (target as any).setVectorNetworkAsync === 'function') {
+          await (target as any).setVectorNetworkAsync(simplifiedNetwork.vectorNetwork);
+        } else {
+          (target as VectorNode).vectorNetwork = simplifiedNetwork.vectorNetwork;
+        }
+        removedLoops += simplifiedNetwork.removedLoops;
+      }
+
+      updated++;
+      updatedNodes.push(target);
+    } catch (error) {
+      console.warn('removeInnerHoles: update failed', target.id, error);
+      skipped++;
+    }
+  }
+
+  if (updatedNodes.length > 0) {
+    figma.currentPage.selection = updatedNodes;
+  }
+
+  figma.ui.postMessage({
+    type: 'local-remove-inner-holes-result',
+    updated,
+    skipped,
+    removedLoops,
+    removedSubpaths,
+    message:
+      updated > 0
+        ? `Filled ${removedLoops + removedSubpaths} inner hole${removedLoops + removedSubpaths === 1 ? '' : 's'} across ${updated} shape${updated === 1 ? '' : 's'}${skipped > 0 ? ` (${skipped} skipped)` : ''}.`
+        : 'No inner holes found in the selected shapes.',
+  });
+
+  try {
+    figma.ui.postMessage({ type: 'selection-info', data: buildSelectionInfoWithDescendants(figma.currentPage.selection).items });
+  } catch (_error) {
+    // Ignore refresh issues.
+  }
+}
+
 type PerspectiveQuadPoint = { x: number; y: number };
 type PerspectiveDerivedQuad = {
   quad: PerspectiveQuadPoint[];
@@ -9929,6 +10411,19 @@ figma.ui.onmessage = async (msg: {
         figma.ui.postMessage({
           type: 'error',
           message: `Quick detach failed: ${(error as Error)?.message || 'Unknown error'}`
+        });
+      }
+      break;
+    }
+
+    case 'local-remove-inner-holes': {
+      try {
+        await runLocalRemoveInnerHoles();
+      } catch (error) {
+        console.error('local-remove-inner-holes failed', error);
+        figma.ui.postMessage({
+          type: 'error',
+          message: `Remove inner holes failed: ${(error as Error)?.message || 'Unknown error'}`
         });
       }
       break;

@@ -850,6 +850,12 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
           ]
         },
 {
+          name: 'Remove inner holes',
+          desc: 'Fill the white cutout parts inside a selected vector shape',
+          help: 'Runs locally with no AI. Keeps only the outer loops of each selected vector region so interior holes are filled in.',
+          directAction: 'removeInnerHoles',
+        },
+{
           name: 'AI Component Factory',
           desc: 'Generate any complex component with variants',
           help: 'Describe a component (e.g. Card, Modal, Input) and AI will build a complete component set with variants for you.',

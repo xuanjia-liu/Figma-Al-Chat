@@ -18,6 +18,7 @@ export function createAgentTasks(deps = {}) {
   const [
     placeholderSetTask,
     turnIntoComponentSetTask,
+    removeInnerHolesTask,
     aiComponentFactoryTask,
     cardComponentTask,
     modalDialogTask,
@@ -53,6 +54,7 @@ export function createAgentTasks(deps = {}) {
     'Quick Create': [
       placeholderSetTask,
       turnIntoComponentSetTask,
+      removeInnerHolesTask,
       aiComponentFactoryTask,
       cardComponentTask,
       modalDialogTask,
