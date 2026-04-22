@@ -8743,6 +8743,8 @@ Rules:
     let iconSetOptionsCache = [anyIconSetOption, defaultIconSetOption];
     let isLoadingIconSets = false;
     const iconifyCollectionSearchCache = new Map();
+    const POPULAR_ICONIFY_LOCAL_SEARCH_PREFIXES = ['material-symbols', 'mdi', 'tabler', 'lucide', 'carbon', 'bi'];
+    let createIconLazySearchRunId = 0;
 
     const builtInIconSets = {
       'material-symbols': {
@@ -23574,7 +23576,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       showToast('Choose an icon from the options above.', 'info');
     }
 
-    function renderCreateIconResultsInDrawer(matches, { size, useAiFallback, fallbackHint, actionMeta, iconApiSource, iconFontFamily }) {
+    function renderCreateIconResultsInDrawer(matches, { size, useAiFallback, fallbackHint, actionMeta, iconApiSource, iconFontFamily, lazyState = null }) {
       if (!Array.isArray(matches) || matches.length === 0) return;
 
       cleanupBrowseState();
@@ -23584,7 +23586,15 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
       const statsEl = document.createElement('div');
       statsEl.className = 'icon-browse-stats';
-      statsEl.textContent = `Found ${matches.length} icons. Click an icon to insert.`;
+      const isLazyLoading = !!lazyState?.loading;
+      const addedCount = Number(lazyState?.addedCount || 0);
+      if (isLazyLoading) {
+        statsEl.textContent = `Found ${matches.length} icons. Loading related hits...`;
+      } else if (addedCount > 0) {
+        statsEl.textContent = `Found ${matches.length} icons. Added ${addedCount} related hit${addedCount === 1 ? '' : 's'}.`;
+      } else {
+        statsEl.textContent = `Found ${matches.length} icons. Click an icon to insert.`;
+      }
       container.appendChild(statsEl);
 
       let isInserting = false;
@@ -23640,9 +23650,21 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           item.classList.add('selected');
           try {
             if (iconApiSource === 'iconfont') {
-              await createIconFontFromId(match.id, { size: safeSize, fallbackHint, actionMeta, fontFamily: match.fontFamily || iconFontFamily });
+              await createIconFontFromId(match.id, {
+                size: safeSize,
+                fallbackHint,
+                actionMeta,
+                fontFamily: match.fontFamily || iconFontFamily,
+                suppressThinkingIndicator: true
+              });
             } else {
-              await createIconFromId(match.id, { size: safeSize, useAiFallback, fallbackHint, actionMeta });
+              await createIconFromId(match.id, {
+                size: safeSize,
+                useAiFallback,
+                fallbackHint,
+                actionMeta,
+                suppressThinkingIndicator: true
+              });
             }
           } catch (err) {
             console.error('Drawer icon insert failed', err);
@@ -23709,7 +23731,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       showToast('Search again with Run Action, or click any icon to insert.', 'info');
     }
 
-    async function createIconFromId(iconId, { size, useAiFallback, fallbackHint, actionMeta }) {
+    async function createIconFromId(iconId, { size, useAiFallback, fallbackHint, actionMeta, suppressThinkingIndicator = false }) {
       if (iconId === '__generate__') {
         const desc = typeof fallbackHint === 'string' ? fallbackHint : (fallbackHint?.description || 'icon');
         const prompt = `Please generate a minimalist SVG icon for: "${desc}". Use the createNodeFromSvg tool to insert it into Figma at ${size}x${size}.`;
@@ -23734,7 +23756,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       let svg = null;
 
       console.log('[createIconFromId] Starting with:', { iconId, size, useAiFallback, fallbackHint: typeof fallbackHint });
-      showThinkingIndicator('Fetching icon...');
+      if (!suppressThinkingIndicator) {
+        showThinkingIndicator('Fetching icon...');
+      }
       try {
         if (iconId.startsWith('http')) {
           source = 'antv';
@@ -23800,7 +23824,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         console.error('createIconFromId failed', err);
         showToast('Failed to create icon.', 'error');
       } finally {
-        removeThinkingIndicator();
+        if (!suppressThinkingIndicator) {
+          removeThinkingIndicator();
+        }
       }
     }
 
@@ -25309,6 +25335,17 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return results.slice(0, Math.max(1, limit));
     }
 
+    async function searchPopularIconifyCollectionsLocal(queries, limit = 120) {
+      const prefixes = POPULAR_ICONIFY_LOCAL_SEARCH_PREFIXES.slice();
+      const perCollectionLimit = Math.max(20, Math.ceil(limit / Math.max(prefixes.length, 1)) * 2);
+      const groups = await Promise.all(prefixes.map(prefix => searchIconifyCollectionLocal(prefix, queries, perCollectionLimit)));
+      const unique = new Map();
+      groups.flat().forEach(item => {
+        if (item?.id && !unique.has(item.id)) unique.set(item.id, item);
+      });
+      return sortCreateIconMatches(Array.from(unique.values()), { iconApiSource: 'iconify' }).slice(0, Math.max(1, limit));
+    }
+
     function attachCreateIconMatchMetadata(matches, queries) {
       return (Array.isArray(matches) ? matches : [])
         .map(match => {
@@ -25362,11 +25399,35 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return list;
     }
 
-    async function createIconFontFromId(iconId, { size, fallbackHint, actionMeta, fontFamily }) {
+    function mergeCreateIconMatches(baseMatches, extraMatches, searchQueries, { iconApiSource } = {}) {
+      const uniqueMap = new Map();
+      [...(Array.isArray(baseMatches) ? baseMatches : []), ...(Array.isArray(extraMatches) ? extraMatches : [])].forEach(match => {
+        if (match?.id) uniqueMap.set(`${match.fontFamily || ''}:${match.id}`, match);
+      });
+      const merged = attachCreateIconMatchMetadata(Array.from(uniqueMap.values()), searchQueries);
+      return sortCreateIconMatches(merged, { iconApiSource }).slice(0, 120);
+    }
+
+    function shouldLazyLoadCreateIconRelatedHits({ iconApiSource }) {
+      return iconApiSource === 'iconify';
+    }
+
+    async function searchLazyCreateIconRelatedMatches({ iconApiSource, iconSet, description, slug, searchQueries }) {
+      if (!shouldLazyLoadCreateIconRelatedHits({ iconApiSource })) return [];
+      const broadenedQueries = buildCreateIconSearchQueries(description || slug || 'icon', ...searchQueries);
+      if (iconSet) {
+        return searchIconifyCollectionLocal(iconSet, broadenedQueries, 240);
+      }
+      return searchPopularIconifyCollectionsLocal(broadenedQueries, 240);
+    }
+
+    async function createIconFontFromId(iconId, { size, fallbackHint, actionMeta, fontFamily, suppressThinkingIndicator = false }) {
       const selectedFont = fontFamily || 'Font Awesome 6 Free';
       const fontStyle = getIconFontStyleForIconId(iconId, selectedFont);
 
-      showThinkingIndicator('Inserting icon font glyph...');
+      if (!suppressThinkingIndicator) {
+        showThinkingIndicator('Inserting icon font glyph...');
+      }
       try {
         const availabilityMap = await ensureIconFontAvailabilityMap();
         const figmaFromList = isIconFontFamilyAvailable(selectedFont, availabilityMap)
@@ -25394,9 +25455,11 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         }]);
 
         if (execResult && execResult.failed > 0 && execResult.error && execResult.error.message === 'ICON_FONT_LOAD_FAILED') {
-          removeThinkingIndicator();
+          if (!suppressThinkingIndicator) {
+            removeThinkingIndicator();
+          }
           showToast(`Could not load "${selectedFont}" in Figma (try activating the font in this file). Inserting ${iconId} as SVG.`, 'info');
-          await createIconFromId(iconId, { size, useAiFallback: false, fallbackHint, actionMeta });
+          await createIconFromId(iconId, { size, useAiFallback: false, fallbackHint, actionMeta, suppressThinkingIndicator });
           return;
         }
 
@@ -25416,7 +25479,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         chatHistory.push({ role: 'model', parts: [{ text: failText }] });
         await autoSaveAfterResponse();
       } finally {
-        removeThinkingIndicator();
+        if (!suppressThinkingIndicator) {
+          removeThinkingIndicator();
+        }
       }
     }
 
@@ -25745,7 +25810,50 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       }
     }
 
+    async function lazyLoadCreateIconDrawerRelatedMatches({
+      runId,
+      initialMatches,
+      iconApiSource,
+      iconSet,
+      description,
+      slug,
+      searchQueries,
+      renderOptions
+    }) {
+      try {
+        const relatedMatches = await searchLazyCreateIconRelatedMatches({
+          iconApiSource,
+          iconSet,
+          description,
+          slug,
+          searchQueries
+        });
+        if (runId !== createIconLazySearchRunId) return;
+        if (!promptDrawer.classList.contains('open') || currentPromptAction?.directAction !== 'createIcon') return;
+
+        const mergedMatches = mergeCreateIconMatches(initialMatches, relatedMatches, searchQueries, { iconApiSource });
+        const initialIds = new Set((Array.isArray(initialMatches) ? initialMatches : []).map(match => `${match?.fontFamily || ''}:${match?.id || ''}`));
+        const addedCount = mergedMatches.reduce((count, match) => {
+          const key = `${match?.fontFamily || ''}:${match?.id || ''}`;
+          return initialIds.has(key) ? count : count + 1;
+        }, 0);
+
+        renderCreateIconResultsInDrawer(mergedMatches, {
+          ...renderOptions,
+          lazyState: { loading: false, addedCount }
+        });
+      } catch (error) {
+        if (runId !== createIconLazySearchRunId) return;
+        console.warn('Lazy create-icon related search failed', error);
+        renderCreateIconResultsInDrawer(initialMatches, {
+          ...renderOptions,
+          lazyState: { loading: false, addedCount: 0 }
+        });
+      }
+    }
+
     async function runCreateIconAction(values, actionMeta) {
+      const currentCreateIconRunId = ++createIconLazySearchRunId;
       const rawIconSet = (values.iconSet || '').trim();
       const iconSet = rawIconSet; // empty means global search
       const size = clampNumber(values.size || 24, 16, 512);
@@ -25900,18 +26008,35 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
             && currentPromptAction?.directAction === 'createIcon';
 
           if (useDrawerPicker) {
-            renderCreateIconResultsInDrawer(matches, {
+            const lazyEnabled = shouldLazyLoadCreateIconRelatedHits({ iconApiSource });
+            const renderOptions = {
               fallbackHint: aiContext,
               size,
               useAiFallback,
               actionMeta,
               iconApiSource,
               iconFontFamily
+            };
+            renderCreateIconResultsInDrawer(matches, {
+              ...renderOptions,
+              lazyState: lazyEnabled ? { loading: true, addedCount: 0 } : null
             });
             const resultText = `Showing ${matches.length} icon result${matches.length === 1 ? '' : 's'} in the drawer. Click any icon to insert it.`;
             addMessage('bot', resultText);
             chatHistory.push({ role: 'model', parts: [{ text: resultText }] });
             await autoSaveAfterResponse();
+            if (lazyEnabled) {
+              void lazyLoadCreateIconDrawerRelatedMatches({
+                runId: currentCreateIconRunId,
+                initialMatches: matches,
+                iconApiSource,
+                iconSet,
+                description,
+                slug,
+                searchQueries,
+                renderOptions
+              });
+            }
             return;
           }
 
