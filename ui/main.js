@@ -4239,10 +4239,65 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const toast = document.getElementById('toast');
     const toastMessage = document.getElementById('toastMessage');
     const toastCloseBtn = document.getElementById('toastCloseBtn');
+    const DEFAULT_TOAST_DURATION = 2000;
     let toastTimeout;
+    let currentToastCopyText = '';
 
     // Toast close button event listener
     toastCloseBtn.addEventListener('click', hideToast);
+    toast.addEventListener('mouseenter', () => {
+      if (toast.classList.contains('show')) {
+        clearToastTimer();
+      }
+    });
+    toast.addEventListener('mouseleave', () => {
+      if (toast.classList.contains('show')) {
+        startToastHideTimer(DEFAULT_TOAST_DURATION);
+      }
+    });
+    toast.addEventListener('click', async (event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('#toastCloseBtn, #rerollBtn')
+      ) {
+        return;
+      }
+
+      const textToCopy = currentToastCopyText.trim();
+      if (!textToCopy) return;
+
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(textToCopy);
+        } else {
+          const tempInput = document.createElement('textarea');
+          tempInput.value = textToCopy;
+          tempInput.setAttribute('readonly', '');
+          tempInput.style.position = 'absolute';
+          tempInput.style.left = '-9999px';
+          document.body.appendChild(tempInput);
+          tempInput.select();
+          document.execCommand('copy');
+          document.body.removeChild(tempInput);
+        }
+      } catch (_error) {
+        // Copy failures should not interfere with the toast itself.
+      }
+    });
+
+    function clearToastTimer() {
+      if (toastTimeout) {
+        clearTimeout(toastTimeout);
+        toastTimeout = null;
+      }
+    }
+
+    function startToastHideTimer(duration = DEFAULT_TOAST_DURATION) {
+      clearToastTimer();
+      toastTimeout = setTimeout(() => {
+        hideToast();
+      }, duration);
+    }
 
     function rgbToHex(r, g, b) {
       const toHex = (n) => {
@@ -30740,8 +30795,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     }
 
     function showToastWithReroll(message) {
-      if (toastTimeout) clearTimeout(toastTimeout);
+      clearToastTimer();
 
+      currentToastCopyText = String(message ?? '');
       toastMessage.innerHTML = `${message} <button id="rerollBtn" style="
         margin-left: 8px;
         padding: 2px 8px;
@@ -30767,7 +30823,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         });
       }
 
-      toastTimeout = setTimeout(() => { hideToast(); }, 15000);
+      startToastHideTimer(15000);
     }
 
     function showImageAttribution(attributions) {
@@ -35225,10 +35281,8 @@ Example structure:
     // Hide toast
     function hideToast() {
       toast.classList.remove('show');
-      if (toastTimeout) {
-        clearTimeout(toastTimeout);
-        toastTimeout = null;
-      }
+      clearToastTimer();
+      currentToastCopyText = '';
     }
 
     // ========== Chat Archive Functions ==========
@@ -36039,11 +36093,9 @@ Example structure:
 
     // Show toast
     function showToast(message, type = 'success') {
-      // Clear any existing timeout
-      if (toastTimeout) {
-        clearTimeout(toastTimeout);
-      }
+      clearToastTimer();
 
+      currentToastCopyText = String(message ?? '');
       toastMessage.textContent = message;
       toast.className = 'toast ' + type;
 
@@ -36059,10 +36111,7 @@ Example structure:
 
       toast.classList.add('show');
 
-      // Set timeout to auto-hide after 8 seconds
-      toastTimeout = setTimeout(() => {
-        hideToast();
-      }, 8000);
+      startToastHideTimer();
     }
 
 
