@@ -8375,6 +8375,40 @@ function serializeSvgSegmentChain(segments: SvgAbsoluteSegment[]): string {
   return pieces.join(' ');
 }
 
+function closeOpenSubpathsInPathData(pathData: string, tolerancePx: number): { data: string; count: number } | null {
+  const subpaths = splitSvgPathIntoSubpaths(pathData);
+  if (subpaths.length === 0) return null;
+
+  let count = 0;
+  const nextSubpaths = subpaths.map((subpath) => {
+    const trimmedSubpath = String(subpath || '').trim();
+    if (!trimmedSubpath) return trimmedSubpath;
+
+    const parsed = parseSvgSubpathToAbsoluteSegments(trimmedSubpath);
+    if (!parsed || parsed.closed || parsed.segments.length === 0) return trimmedSubpath;
+
+    const end = parsed.segments[parsed.segments.length - 1]?.end;
+    if (!end || svgPathDistance(parsed.start, end) > tolerancePx) return trimmedSubpath;
+
+    const closedSegments = parsed.segments.slice();
+    if (!svgPathPointsEqual(end, parsed.start, 1e-4)) {
+      closedSegments.push({
+        command: 'L',
+        start: { ...end },
+        end: { ...parsed.start },
+        data: `L ${formatSvgPathNumber(parsed.start.x)} ${formatSvgPathNumber(parsed.start.y)}`,
+      });
+    }
+
+    const closedPath = serializeSvgSegmentChain(closedSegments);
+    if (!closedPath || closedPath === trimmedSubpath) return trimmedSubpath;
+    count++;
+    return closedPath;
+  });
+
+  return count > 0 ? { data: nextSubpaths.join(' '), count } : null;
+}
+
 function splitTouchingLoopsInSingleSubpath(
   pathData: string,
   tolerancePx: number
@@ -8525,6 +8559,28 @@ function splitTouchingLoopsInVectorPaths(
   });
 
   return separatedLoops > 0 ? { vectorPaths: nextVectorPaths, separatedLoops } : null;
+}
+
+function closeOpenSubpathsInVectorPaths(
+  vectorPaths: readonly VectorPath[] | undefined,
+  tolerancePx: number
+): { vectorPaths: VectorPath[]; closedSubpaths: number } | null {
+  if (!Array.isArray(vectorPaths) || vectorPaths.length === 0) return null;
+
+  let closedSubpaths = 0;
+  const nextVectorPaths = vectorPaths.map((vectorPath) => {
+    const closeResult = closeOpenSubpathsInPathData(vectorPath.data || '', tolerancePx);
+    if (!closeResult) {
+      return { ...vectorPath };
+    }
+    closedSubpaths += closeResult.count;
+    return {
+      ...vectorPath,
+      data: closeResult.data,
+    };
+  });
+
+  return closedSubpaths > 0 ? { vectorPaths: nextVectorPaths, closedSubpaths } : null;
 }
 
 function buildVectorPathsWithoutInnerHoles(vectorPaths: VectorPath[]): { vectorPaths: VectorPath[]; removedSubpaths: number } | null {
@@ -9527,9 +9583,39 @@ function buildFixShapeIssuesMessage(updatedNodes: number, skippedNodes: number, 
   return `Fixed ${updatedNodes} shape${updatedNodes === 1 ? '' : 's'}${detailParts.length > 0 ? `: ${detailParts.join(', ')}` : ''}${skippedNodes > 0 ? ` (${skippedNodes} skipped)` : ''}.`;
 }
 
+function collectFixShapeIssueTargets(selection: readonly SceneNode[]): SceneNode[] {
+  const visited = new Set<string>();
+  const targets: SceneNode[] = [];
+
+  const visit = (node: SceneNode) => {
+    if (!node || visited.has(node.id)) return;
+    visited.add(node.id);
+
+    if (node.type === 'VECTOR' || node.type === 'BOOLEAN_OPERATION') {
+      targets.push(node);
+      return;
+    }
+
+    if ('children' in node && Array.isArray((node as ChildrenMixin).children)) {
+      for (const child of (node as ChildrenMixin).children) {
+        visit(child as SceneNode);
+      }
+    }
+  };
+
+  selection.forEach((node) => visit(node));
+  return targets;
+}
+
 async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> {
   const selection = figma.currentPage.selection;
   if (selection.length === 0) {
+    figma.ui.postMessage({ type: 'error', message: 'Please select at least one vector shape.' });
+    return;
+  }
+
+  const targets = collectFixShapeIssueTargets(selection);
+  if (targets.length === 0) {
     figma.ui.postMessage({ type: 'error', message: 'Please select at least one vector shape.' });
     return;
   }
@@ -9553,7 +9639,7 @@ async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> 
   let updatedNodeCount = 0;
   let skippedNodes = 0;
 
-  for (const selectedNode of selection) {
+  for (const selectedNode of targets) {
     let target: SceneNode = selectedNode;
 
     if (target.type === 'BOOLEAN_OPERATION') {
@@ -9584,8 +9670,18 @@ async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> 
       }
       const pathSeparatedLoopCount = nodeSummary.separatedTouchingLoops;
 
+      if (options.closeOpenShape) {
+        const pathCloseResult = closeOpenSubpathsInVectorPaths(vectorNode.vectorPaths, options.tolerancePx);
+        if (pathCloseResult) {
+          (vectorNode as WritableVectorNodePaths).vectorPaths = pathCloseResult.vectorPaths;
+          nodeSummary.closedShapes += pathCloseResult.closedSubpaths;
+        }
+      }
+      const pathClosedShapeCount = nodeSummary.closedShapes;
+
       const shouldRunNetworkFixes =
         pathSeparatedLoopCount <= 0 &&
+        pathClosedShapeCount <= 0 &&
         (
           options.removeZeroLengthSegments ||
           options.mergeDuplicatePoints ||
@@ -9599,7 +9695,7 @@ async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> 
       if (shouldRunNetworkFixes) {
         const baseState = vectorFixCloneState(vectorNode.vectorNetwork);
         if (!baseState) {
-          if (nodeSummary.separatedTouchingLoops > 0) {
+          if (nodeSummary.separatedTouchingLoops > 0 || nodeSummary.closedShapes > 0) {
             summary.closedShapes += nodeSummary.closedShapes;
             summary.mergedPoints += nodeSummary.mergedPoints;
             summary.separatedTouchingLoops += nodeSummary.separatedTouchingLoops;
@@ -9653,9 +9749,10 @@ async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> 
           nodeSummary.normalizedPaths += result.count;
         }
 
+        const networkClosedShapeCount = Math.max(0, nodeSummary.closedShapes - pathClosedShapeCount);
         const networkSeparatedLoopCount = Math.max(0, nodeSummary.separatedTouchingLoops - pathSeparatedLoopCount);
         const networkChangeCount =
-          nodeSummary.closedShapes +
+          networkClosedShapeCount +
           nodeSummary.mergedPoints +
           networkSeparatedLoopCount +
           nodeSummary.removedZeroLengthSegments +
