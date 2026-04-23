@@ -2360,6 +2360,7 @@ const exactTranslations = {
     'Layer Naming': 'レイヤー命名',
     'Accessibility & Quality': 'アクセシビリティと品質',
     'Quick Create': 'クイック作成',
+    'Vector': 'ベクター',
     'User Research': 'ユーザーリサーチ',
     'Documents': 'ドキュメント',
     'Comments': 'コメント',
@@ -2488,6 +2489,27 @@ const exactTranslations = {
     'Repair common vector/path problems in selected shapes': '選択したシェイプの一般的なベクター/パス問題を修復',
     'Runs locally with no AI. Enable the fixes you want, then repair selected vector shapes using a shared tolerance.':
       'AI なしでローカル実行します。必要な修復を選び、共通の許容値で選択したベクターシェイプを修復します。',
+    'Close small gaps in selected vector shapes': '選択したベクターシェイプの小さな隙間を閉じる',
+    'Runs locally with no AI. Connects endpoints that are nearly touching so open outlines become closed shapes.':
+      'AI なしでローカル実行します。ほぼ接している端点同士をつなぎ、開いた輪郭を閉じたシェイプにします。',
+    'Merge stacked points in selected vector shapes': '選択したベクターシェイプの重なった点を結合',
+    'Runs locally with no AI. Combines nearby duplicate anchors into single clean points.':
+      'AI なしでローカル実行します。近接した重複アンカーを 1 つのきれいなポイントにまとめます。',
+    'Split bridged loops in selected vector shapes': '選択したベクターシェイプの橋付きループを分離',
+    'Runs locally with no AI. Separates touching inner and outer loops so fills behave like proper rings.':
+      'AI なしでローカル実行します。接触している内側と外側のループを分離し、塗りが正しいリングとして動作するようにします。',
+    'Delete zero-length edges in selected vector shapes': '選択したベクターシェイプの長さゼロの辺を削除',
+    'Runs locally with no AI. Removes segments whose start and end points overlap and do not affect the shape.':
+      'AI なしでローカル実行します。始点と終点が重なり、形状に影響しないセグメントを削除します。',
+    'Flatten tiny spikes in selected vector shapes': '選択したベクターシェイプの小さなトゲをならす',
+    'Runs locally with no AI. Deletes very small out-and-back spikes that usually come from editing mistakes.':
+      'AI なしでローカル実行します。編集ミスで生じやすい小さな往復スパイクを削除します。',
+    'Remove nearly straight extra points in selected vector shapes': '選択したベクターシェイプのほぼ一直線な余分な点を削除',
+    'Runs locally with no AI. Simplifies points that sit almost on the same line as their neighbors.':
+      'AI なしでローカル実行します。隣接点とほぼ同一直線上にあるポイントを簡略化します。',
+    'Align fill winding in selected vector shapes': '選択したベクターシェイプの塗り方向をそろえる',
+    'Runs locally with no AI. Normalizes loop direction so fills render more predictably.':
+      'AI なしでローカル実行します。ループ方向を正規化して、塗りの挙動を安定させます。',
     'Tolerance (px)': '許容値 (px)',
     'Shared snap/cleanup tolerance for close points and near-collinear cleanup. Slider stays within 0.1–4 px; the number input can go outside that range.':
       '近接点のスナップや、ほぼ一直線上の点の整理に使う共通許容値です。スライダーは 0.1〜4 px、数値入力はその範囲外も入力できます。',
@@ -2980,6 +3002,7 @@ const exactTranslations = {
     'Layer Naming': '图层命名',
     'Accessibility & Quality': '无障碍与质量',
     'Quick Create': '快速创建',
+    'Vector': '矢量',
     'User Research': '用户研究',
     'Documents': '文档',
     'Comments': '评论',
@@ -3105,6 +3128,27 @@ const exactTranslations = {
     'Repair common vector/path problems in selected shapes': '修复所选形状中常见的矢量/路径问题',
     'Runs locally with no AI. Enable the fixes you want, then repair selected vector shapes using a shared tolerance.':
       '完全本地运行，无需 AI。勾选需要的修复项后，用统一容差修复所选矢量形状。',
+    'Close small gaps in selected vector shapes': '闭合所选矢量形状中的小缝隙',
+    'Runs locally with no AI. Connects endpoints that are nearly touching so open outlines become closed shapes.':
+      '完全本地运行，无需 AI。连接几乎接触的端点，让开放轮廓变成闭合形状。',
+    'Merge stacked points in selected vector shapes': '合并所选矢量形状中重叠的点',
+    'Runs locally with no AI. Combines nearby duplicate anchors into single clean points.':
+      '完全本地运行，无需 AI。将彼此靠近的重复锚点合并为一个干净的点。',
+    'Split bridged loops in selected vector shapes': '分离所选矢量形状中桥接的环路',
+    'Runs locally with no AI. Separates touching inner and outer loops so fills behave like proper rings.':
+      '完全本地运行，无需 AI。分离彼此接触的内外环路，让填充像正确的圆环一样工作。',
+    'Delete zero-length edges in selected vector shapes': '删除所选矢量形状中的零长度边',
+    'Runs locally with no AI. Removes segments whose start and end points overlap and do not affect the shape.':
+      '完全本地运行，无需 AI。删除起点和终点重合且不会影响形状的线段。',
+    'Flatten tiny spikes in selected vector shapes': '压平所选矢量形状中的微小尖刺',
+    'Runs locally with no AI. Deletes very small out-and-back spikes that usually come from editing mistakes.':
+      '完全本地运行，无需 AI。删除通常由编辑失误产生的、非常小的往返尖刺。',
+    'Remove nearly straight extra points in selected vector shapes': '移除所选矢量形状中近乎直线的多余点',
+    'Runs locally with no AI. Simplifies points that sit almost on the same line as their neighbors.':
+      '完全本地运行，无需 AI。简化那些几乎与相邻点位于同一直线上的点。',
+    'Align fill winding in selected vector shapes': '统一所选矢量形状的填充绕向',
+    'Runs locally with no AI. Normalizes loop direction so fills render more predictably.':
+      '完全本地运行，无需 AI。统一环路方向，让填充表现更稳定可预测。',
     'Tolerance (px)': '容差 (px)',
     'Shared snap/cleanup tolerance for close points and near-collinear cleanup. Slider stays within 0.1–4 px; the number input can go outside that range.':
       '用于吸附接近点和清理近共线点的统一容差。滑块范围为 0.1–4 px，数字输入可超出该范围。',

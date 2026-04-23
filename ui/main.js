@@ -28203,6 +28203,18 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    function mergeDirectActionPresetValues(values, actionMeta) {
+      const presetValues = actionMeta?.presetValues;
+      const safeValues = values && typeof values === 'object' ? values : {};
+      if (!presetValues || typeof presetValues !== 'object' || Array.isArray(presetValues)) {
+        return safeValues;
+      }
+      return {
+        ...presetValues,
+        ...safeValues,
+      };
+    }
+
     function requestLocalStylesForFontMapping() {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -28907,105 +28919,106 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         showToast(getAiOffBlockedMessage(actionMeta?.name || 'This action'), 'error');
         return;
       }
+      const mergedValues = mergeDirectActionPresetValues(values, actionMeta);
       switch (actionKey) {
         case 'createIcon':
-          await runCreateIconAction(values, actionMeta);
+          await runCreateIconAction(mergedValues, actionMeta);
           break;
         case 'browseIconSet':
-          await runBrowseIconSetAction(values, actionMeta);
+          await runBrowseIconSetAction(mergedValues, actionMeta);
           break;
         case 'generatePalette':
-          await runGeneratePaletteAction(values, actionMeta);
+          await runGeneratePaletteAction(mergedValues, actionMeta);
           break;
         case 'createGridLines':
-          await runCreateGridLinesAction(values, actionMeta);
+          await runCreateGridLinesAction(mergedValues, actionMeta);
           break;
         case 'placeholderSet':
-          await runPlaceholderSetAction(values, actionMeta);
+          await runPlaceholderSetAction(mergedValues, actionMeta);
           break;
         case 'createAdvancedGrid':
-          await runCreateAdvancedGridAction(values, actionMeta);
+          await runCreateAdvancedGridAction(mergedValues, actionMeta);
           break;
         case 'flattenStructure':
-          await runFlattenStructureAction(values, actionMeta);
+          await runFlattenStructureAction(mergedValues, actionMeta);
           break;
         case 'easyWrapper':
-          await runEasyWrapperAction(values, actionMeta);
+          await runEasyWrapperAction(mergedValues, actionMeta);
           break;
         case 'generateImage':
-          await handleGenerateImage(values, actionMeta.name, actionMeta.icon);
+          await handleGenerateImage(mergedValues, actionMeta.name, actionMeta.icon);
           break;
         case 'generateVector':
-          await handleGenerateVector(values, actionMeta.name, actionMeta.icon);
+          await handleGenerateVector(mergedValues, actionMeta.name, actionMeta.icon);
           break;
         case 'duplicateWithInstructions':
-          await runDuplicateWithInstructionsAction(values, actionMeta);
+          await runDuplicateWithInstructionsAction(mergedValues, actionMeta);
           break;
         case 'randomizeSelectedInstances':
-          await runRandomizeSelectedInstancesAction(values, actionMeta);
+          await runRandomizeSelectedInstancesAction(mergedValues, actionMeta);
           break;
         case 'swapColors':
-          await runSwapColorsAction(values, actionMeta);
+          await runSwapColorsAction(mergedValues, actionMeta);
           break;
         case 'removeAllEffects':
-          await runRemoveAllEffectsAction(values, actionMeta);
+          await runRemoveAllEffectsAction(mergedValues, actionMeta);
           break;
         case 'simulateOklchGradient':
-          await runSimulateOklchGradientAction(values, actionMeta);
+          await runSimulateOklchGradientAction(mergedValues, actionMeta);
           break;
         case 'hueShift':
-          await runHueShiftAction(values, actionMeta);
+          await runHueShiftAction(mergedValues, actionMeta);
           break;
         case 'fontMapping':
-          await runFontMappingAction(values, actionMeta);
+          await runFontMappingAction(mergedValues, actionMeta);
           break;
         case 'textLinkColor':
-          await runTextLinkColorAction(values, actionMeta);
+          await runTextLinkColorAction(mergedValues, actionMeta);
           break;
         case 'addProperty':
-          await runAddPropertyAction(values, actionMeta);
+          await runAddPropertyAction(mergedValues, actionMeta);
           break;
         case 'removeUnusedProperties':
-          await runRemoveUnusedPropertiesAction(values, actionMeta);
+          await runRemoveUnusedPropertiesAction(mergedValues, actionMeta);
           break;
         case 'turnIntoComponentSet':
-          await runTurnIntoComponentSetAction(values, actionMeta);
+          await runTurnIntoComponentSetAction(mergedValues, actionMeta);
           break;
         case 'removeInnerHoles':
-          await runRemoveInnerHolesAction(values, actionMeta);
+          await runRemoveInnerHolesAction(mergedValues, actionMeta);
           break;
         case 'fixShapeIssues':
-          await runFixShapeIssuesAction(values, actionMeta);
+          await runFixShapeIssuesAction(mergedValues, actionMeta);
           break;
         case 'createButtonComponentSet':
-          await runCreateButtonComponentSetAction(values, actionMeta);
+          await runCreateButtonComponentSetAction(mergedValues, actionMeta);
           break;
         case 'summarizeComments':
-          await handleSummarizeComments(actionMeta.name, actionMeta.icon, values);
+          await handleSummarizeComments(actionMeta.name, actionMeta.icon, mergedValues);
           break;
         case 'extractDesignSystem':
-          await runExtractDesignSystemAction(values, actionMeta);
+          await runExtractDesignSystemAction(mergedValues, actionMeta);
           break;
         case 'setImageFillFromSelection':
-          await runSetImageFillFromSelectionAction(values, actionMeta);
+          await runSetImageFillFromSelectionAction(mergedValues, actionMeta);
           break;
         case 'fillFromOnlineImage':
-          await runFillFromOnlineImageAction(values, actionMeta);
+          await runFillFromOnlineImageAction(mergedValues, actionMeta);
           break;
         case 'imageTo4PointVector':
-          await runImageTo4PointVectorAction(values, actionMeta);
+          await runImageTo4PointVectorAction(mergedValues, actionMeta);
           break;
         case 'imageToAscii':
-          await runImageToAsciiAction(values, actionMeta);
+          await runImageToAsciiAction(mergedValues, actionMeta);
           break;
         case 'splitTextLocal':
-          await runSplitTextAction(values, actionMeta);
+          await runSplitTextAction(mergedValues, actionMeta);
           break;
         case 'quickDetach':
-          await runQuickDetachAction(values, actionMeta);
+          await runQuickDetachAction(mergedValues, actionMeta);
           break;
         case 'colorContrastChecker':
-          await runColorContrastCheckerAction(values, actionMeta);
+          await runColorContrastCheckerAction(mergedValues, actionMeta);
           break;
         default:
           showToast('Unknown action', 'error');

@@ -796,6 +796,28 @@ export const uiLayoutTasks = [
         }
 ];
 
+const vectorRepairToleranceField = {
+  key: 'tolerancePx',
+  type: 'slider',
+  label: 'Tolerance (px)',
+  default: 0.5,
+  min: 0.1,
+  max: 4,
+  step: 0.1,
+  hint: 'Shared snap/cleanup tolerance for close points and near-collinear cleanup. Slider stays within 0.1–4 px; the number input can go outside that range.'
+};
+
+function createVectorRepairTask({ name, desc, help, presetValues, withTolerance = true }) {
+  return {
+    name,
+    desc,
+    help,
+    directAction: 'fixShapeIssues',
+    presetValues,
+    ...(withTolerance ? { fields: [{ ...vectorRepairToleranceField }] } : {}),
+  };
+}
+
 export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
   return [
 {
@@ -855,31 +877,50 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
           help: 'Runs locally with no AI. Keeps only the outer loops of each selected vector region so interior holes are filled in.',
           directAction: 'removeInnerHoles',
         },
-{
-          name: 'Fix shape issues',
-          desc: 'Repair common vector/path problems in selected shapes',
-          help: 'Runs locally with no AI. Enable the fixes you want, then repair selected vector shapes using a shared tolerance.',
-          directAction: 'fixShapeIssues',
-          fields: [
-            {
-              key: 'tolerancePx',
-              type: 'slider',
-              label: 'Tolerance (px)',
-              default: 0.5,
-              min: 0.1,
-              max: 4,
-              step: 0.1,
-              hint: 'Shared snap/cleanup tolerance for close points and near-collinear cleanup. Slider stays within 0.1–4 px; the number input can go outside that range.'
-            },
-            { key: 'closeOpenShape', type: 'checkbox', label: 'Close open shape', default: true },
-            { key: 'mergeDuplicatePoints', type: 'checkbox', label: 'Merge duplicate points', default: true },
-            { key: 'separateTouchingLoops', type: 'checkbox', label: 'Separate touching loops', default: true },
-            { key: 'removeZeroLengthSegments', type: 'checkbox', label: 'Remove zero-length segments', default: true },
-            { key: 'removeTinySpikes', type: 'checkbox', label: 'Remove tiny spikes', default: false },
-            { key: 'simplifyNearCollinearPoints', type: 'checkbox', label: 'Simplify near-collinear points', default: false },
-            { key: 'normalizeWindingDirection', type: 'checkbox', label: 'Normalize winding direction', default: false }
-          ]
-        },
+        createVectorRepairTask({
+          name: 'Close open shape',
+          desc: 'Close small gaps in selected vector shapes',
+          help: 'Runs locally with no AI. Connects endpoints that are nearly touching so open outlines become closed shapes.',
+          presetValues: { closeOpenShape: true }
+        }),
+        createVectorRepairTask({
+          name: 'Merge duplicate points',
+          desc: 'Merge stacked points in selected vector shapes',
+          help: 'Runs locally with no AI. Combines nearby duplicate anchors into single clean points.',
+          presetValues: { mergeDuplicatePoints: true }
+        }),
+        createVectorRepairTask({
+          name: 'Separate touching loops',
+          desc: 'Split bridged loops in selected vector shapes',
+          help: 'Runs locally with no AI. Separates touching inner and outer loops so fills behave like proper rings.',
+          presetValues: { separateTouchingLoops: true }
+        }),
+        createVectorRepairTask({
+          name: 'Remove zero-length segments',
+          desc: 'Delete zero-length edges in selected vector shapes',
+          help: 'Runs locally with no AI. Removes segments whose start and end points overlap and do not affect the shape.',
+          presetValues: { removeZeroLengthSegments: true },
+          withTolerance: false
+        }),
+        createVectorRepairTask({
+          name: 'Remove tiny spikes',
+          desc: 'Flatten tiny spikes in selected vector shapes',
+          help: 'Runs locally with no AI. Deletes very small out-and-back spikes that usually come from editing mistakes.',
+          presetValues: { removeTinySpikes: true }
+        }),
+        createVectorRepairTask({
+          name: 'Simplify near-collinear points',
+          desc: 'Remove nearly straight extra points in selected vector shapes',
+          help: 'Runs locally with no AI. Simplifies points that sit almost on the same line as their neighbors.',
+          presetValues: { simplifyNearCollinearPoints: true }
+        }),
+        createVectorRepairTask({
+          name: 'Normalize winding direction',
+          desc: 'Align fill winding in selected vector shapes',
+          help: 'Runs locally with no AI. Normalizes loop direction so fills render more predictably.',
+          presetValues: { normalizeWindingDirection: true },
+          withTolerance: false
+        }),
 {
           name: 'AI Component Factory',
           desc: 'Generate any complex component with variants',

@@ -5,6 +5,7 @@ export const categoryIcons = {
   'Smart Text': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>',
   'Layer Naming': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2H2v10l9.29 9.29a1 1 0 0 0 1.41 0l6.59-6.59a1 1 0 0 0 0-1.41L12 2zM7 7h.01"/></svg>',
   'Quick Create': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>',
+  'Vector': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 7h6l3-3 5 5-3 3v6l-5 2-6-6V7z"/><path d="m11 7 6 6"/></svg>',
   // FigJam categories
   'FigJam': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><circle cx="17" cy="17" r="4"/><path d="M17 15v4M15 17h4"/></svg>',
   'Accessibility & Quality': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z"/><path stroke="currentColor" stroke-width="2" d="M13.895 7.263a1.895 1.895 0 1 1-3.79 0 1.895 1.895 0 0 1 3.79 0Zm3.789 2.842s-3.35 1.421-5.684 1.421c-2.333 0-5.684-1.42-5.684-1.42M12 12v1.376m0 0c0 .545.156 1.079.451 1.537l2.391 3.719M12 13.376c0 .545-.156 1.079-.45 1.537l-2.392 3.719"/></svg>',
