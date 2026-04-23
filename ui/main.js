@@ -23918,6 +23918,69 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return tabId;
     }
 
+    function renderCreateIconDrawerLoadingState(searchLabel = '') {
+      cleanupBrowseState();
+
+      const container = document.createElement('div');
+      container.className = 'icon-browse-container';
+
+      if (createIconDrawerHistoryTabs.length > 0) {
+        const historyWrap = document.createElement('div');
+        historyWrap.className = 'icon-browse-history';
+
+        const tabsWrap = document.createElement('div');
+        tabsWrap.className = 'pill-tab-container icon-browse-history-tabs';
+
+        createIconDrawerHistoryTabs.forEach(tab => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `pill-tab${tab.id === activeCreateIconDrawerHistoryTabId ? ' active' : ''}`;
+          btn.textContent = tab.label;
+          btn.title = tab.fullLabel || tab.label;
+          btn.addEventListener('click', () => {
+            activeCreateIconDrawerHistoryTabId = tab.id;
+            renderCreateIconDrawerHistoryView();
+          });
+          tabsWrap.appendChild(btn);
+        });
+
+        historyWrap.appendChild(tabsWrap);
+        container.appendChild(historyWrap);
+      }
+
+      const panel = document.createElement('div');
+      panel.className = 'icon-browse-results-panel';
+
+      const statsEl = document.createElement('div');
+      statsEl.className = 'icon-browse-stats';
+      statsEl.textContent = searchLabel
+        ? `Searching for icons matching "${searchLabel}"...`
+        : 'Searching for icons...';
+      panel.appendChild(statsEl);
+
+      const loadingEl = document.createElement('div');
+      loadingEl.className = 'phase2-outline-loading';
+      loadingEl.innerHTML = `
+        <div class="spinner" aria-hidden="true"></div>
+        <div>Results will appear here.</div>
+      `;
+      panel.appendChild(loadingEl);
+
+      container.appendChild(panel);
+      promptDrawerCustomContent.classList.remove('hidden');
+      promptDrawerCustomContent.innerHTML = '';
+      promptDrawerCustomContent.appendChild(container);
+    }
+
+    function clearCreateIconDrawerLoadingState() {
+      if (createIconDrawerHistoryTabs.length > 0) {
+        renderCreateIconDrawerHistoryView();
+        return;
+      }
+      promptDrawerCustomContent.classList.add('hidden');
+      promptDrawerCustomContent.innerHTML = '';
+    }
+
     async function createIconFromId(iconId, { size, useAiFallback, fallbackHint, actionMeta, suppressThinkingIndicator = false }) {
       if (iconId === '__generate__') {
         const desc = typeof fallbackHint === 'string' ? fallbackHint : (fallbackHint?.description || 'icon');
@@ -26070,6 +26133,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const useAiFallback = iconApiSource !== 'iconfont' && !isNoAiMode && values.useAiFallback !== false;
       const description = (values.iconDescription || '').trim();
       const strokeWidth = Number(values.strokeWidth || 0) || 2;
+      const useDrawerPicker = values.showResultsInDrawer !== false
+        && promptDrawer.classList.contains('open')
+        && currentPromptAction?.directAction === 'createIcon';
       const setMeta = (iconSetOptionsCache || []).find(opt => opt.value === iconSet) || {};
       const sampleIcons = Array.isArray(setMeta.samples) ? setMeta.samples : (iconCollectionsCache?.[iconSet]?.samples || []);
 
@@ -26190,10 +26256,17 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       chatHistory.push({ role: 'user', parts: [{ text: userText }] });
       await autoSaveAfterResponse();
 
-      showThinkingIndicator('Searching for icons...');
+      if (useDrawerPicker) {
+        renderCreateIconDrawerLoadingState(description || slug || '');
+      } else {
+        showThinkingIndicator('Searching for icons...');
+      }
       setSendButtonMode(true);
       try {
         if (!matches.length && iconApiSource === 'iconfont') {
+          if (useDrawerPicker) {
+            clearCreateIconDrawerLoadingState();
+          }
           const noMatchText = `No icon font matches found for "${description || slug}". Try a broader keyword.`;
           addMessage('bot', noMatchText);
           chatHistory.push({ role: 'model', parts: [{ text: noMatchText }] });
@@ -26203,10 +26276,6 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         }
 
         if (matches.length > 1) {
-          const useDrawerPicker = values.showResultsInDrawer !== false
-            && promptDrawer.classList.contains('open')
-            && currentPromptAction?.directAction === 'createIcon';
-
           if (useDrawerPicker) {
             const lazyEnabled = shouldLazyLoadCreateIconRelatedHits({ iconApiSource });
             const normalizedHistoryKey = normalizeCreateIconSearchRaw(cleanDesc || slug || '');
@@ -26294,6 +26363,11 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           showChoices(0);
           return;
         }
+
+        if (useDrawerPicker) {
+          clearCreateIconDrawerLoadingState();
+        }
+
         const target = matches[0];
         const iconId = target?.id || `${iconSet || 'mdi'}:${slug}`;
         if (iconApiSource === 'iconfont') {
@@ -26303,6 +26377,9 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         }
       } catch (err) {
         console.error('Create icon action failed', err);
+        if (useDrawerPicker) {
+          clearCreateIconDrawerLoadingState();
+        }
         showToast('Failed to create icon.', 'error');
         addMessage('bot', 'Failed to create icon.');
         chatHistory.push({ role: 'model', parts: [{ text: 'Failed to create icon.' }] });
