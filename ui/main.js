@@ -17135,6 +17135,10 @@ Generate ONLY the reply text, nothing else.`;
     let realtimePromptActionQueued = false;
     let realtimePromptActionRunId = 0;
     let realtimePromptActionWatchdogTimer = null;
+    let tinySpikeDetectionTimer = null;
+    let tinySpikeDetectionRunId = 0;
+    let touchingLoopDetectionTimer = null;
+    let touchingLoopDetectionRunId = 0;
     const REALTIME_PROMPT_ACTION_TIMEOUT_MS = 20000;
 
     // --- Multi-minimized-drawer state ---
@@ -18548,6 +18552,16 @@ Generate ONLY the reply text, nothing else.`;
 
     function closePromptDrawer() {
       clearRealtimePromptActionState();
+      if (tinySpikeDetectionTimer) {
+        clearTimeout(tinySpikeDetectionTimer);
+        tinySpikeDetectionTimer = null;
+      }
+      tinySpikeDetectionRunId++;
+      if (touchingLoopDetectionTimer) {
+        clearTimeout(touchingLoopDetectionTimer);
+        touchingLoopDetectionTimer = null;
+      }
+      touchingLoopDetectionRunId++;
       removeAiActionMenu();
       document.getElementById('componentsSelectionReloadFab')?.classList.add('hidden');
       if (typeof disposeGoogleFontPreview === 'function') {
@@ -20583,6 +20597,32 @@ Generate ONLY the reply text, nothing else.`;
               </div>
             </div>
           `;
+        } else if (field.type === 'detectedSpikes') {
+          fieldHtml += `
+            <div class="prompt-field prompt-detected-spikes${wrapperClass}"${conditionalAttrs}>
+              <div class="prompt-field-header">
+                <label class="prompt-field-label">${escapeHtml(field.label || 'Detected spikes')}</label>
+                <span class="prompt-detected-spikes__meta" data-detected-spikes-meta>Waiting for analysis...</span>
+              </div>
+              ${field.hint ? `<span class="prompt-field-hint">${escapeHtml(field.hint)}</span>` : ''}
+              <div class="prompt-detected-spikes__body" data-detected-spikes-body>
+                <div class="prompt-detected-spikes__empty">Adjust the tolerances to inspect removable spikes in the current selection.</div>
+              </div>
+            </div>
+          `;
+        } else if (field.type === 'detectedSeams') {
+          fieldHtml += `
+            <div class="prompt-field prompt-detected-spikes${wrapperClass}"${conditionalAttrs}>
+              <div class="prompt-field-header">
+                <label class="prompt-field-label">${escapeHtml(field.label || 'Detected seams')}</label>
+                <span class="prompt-detected-spikes__meta" data-detected-seams-meta>Waiting for analysis...</span>
+              </div>
+              ${field.hint ? `<span class="prompt-field-hint">${escapeHtml(field.hint)}</span>` : ''}
+              <div class="prompt-detected-spikes__body" data-detected-seams-body>
+                <div class="prompt-detected-spikes__empty">Adjust the tolerance to inspect removable seams in the current selection.</div>
+              </div>
+            </div>
+          `;
         } else if (field.type === 'cameraControl') {
           const isCamEnabled = !!(preservedValues && preservedValues.camEnabled);
           const camLockStyle = (preservedValues && preservedValues.camLockStyle !== undefined) ? !!preservedValues.camLockStyle : true; // Default to true
@@ -20916,6 +20956,13 @@ Generate ONLY the reply text, nothing else.`;
         teardownImageTo4PointQuadPreview();
       }
 
+      if (isRemoveTinySpikesPromptAction()) {
+        scheduleTinySpikeDetection(0);
+      }
+      if (isSeparateTouchingLoopsPromptAction()) {
+        scheduleTouchingLoopDetection(0);
+      }
+
       // Setup indicator delete button listeners
       setupIndicatorListeners();
 
@@ -20997,6 +21044,12 @@ Generate ONLY the reply text, nothing else.`;
         if (e.target.matches('input, textarea, select')) {
           savePromptHistory();
           updatePromptDrawerSubmitState();
+          if (isRemoveTinySpikesPromptAction()) {
+            scheduleTinySpikeDetection();
+          }
+          if (isSeparateTouchingLoopsPromptAction()) {
+            scheduleTouchingLoopDetection();
+          }
 
           // If user manually modified imageSubject or imageStyle, reset imagePreset to None
           if (!isApplyingPreset && (e.target.dataset.fieldKey === 'imageSubject' || e.target.dataset.fieldKey === 'imageStyle')) {
@@ -21040,6 +21093,12 @@ Generate ONLY the reply text, nothing else.`;
       promptDrawerFields.addEventListener('change', (e) => {
         savePromptHistory();
         updatePromptDrawerSubmitState();
+        if (isRemoveTinySpikesPromptAction()) {
+          scheduleTinySpikeDetection();
+        }
+        if (isSeparateTouchingLoopsPromptAction()) {
+          scheduleTouchingLoopDetection();
+        }
         if (isRealtimePromptAction()) {
           scheduleRealtimePromptAction();
         }
@@ -28157,11 +28216,16 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       try {
         const rawTolerance = Number.parseFloat(String(values?.tolerancePx ?? 0.5));
         const tolerancePx = Number.isFinite(rawTolerance) && rawTolerance > 0 ? rawTolerance : 0.5;
+        const rawSpikeAngleTolerance = Number.parseFloat(String(values?.spikeAngleToleranceDeg ?? 45));
+        const spikeAngleToleranceDeg = Number.isFinite(rawSpikeAngleTolerance) && rawSpikeAngleTolerance > 0
+          ? rawSpikeAngleTolerance
+          : 45;
         const result = await runLocalActionRequest({
           requestType: 'local-fix-shape-issues',
           resultType: 'local-fix-shape-issues-result',
           payload: {
             tolerancePx,
+            spikeAngleToleranceDeg,
             closeOpenShape: values?.closeOpenShape === true,
             mergeDuplicatePoints: values?.mergeDuplicatePoints === true,
             separateTouchingLoops: values?.separateTouchingLoops === true,
@@ -28176,6 +28240,8 @@ Return as JSON with colors array containing objects with hierarchical names. Use
 
         const updated = Number(result?.updatedNodes) || 0;
         const skipped = Number(result?.skippedNodes) || 0;
+        const failed = Number(result?.failedNodes) || 0;
+        const lastError = typeof result?.lastError === 'string' ? result.lastError : '';
         const summaryParts = [];
         [
           ['closedShapes', 'closed'],
@@ -28190,17 +28256,223 @@ Return as JSON with colors array containing objects with hierarchical names. Use
           if (value > 0) summaryParts.push(`${label} ${value}`);
         });
 
+        const fallbackFailureMessage = failed > 0
+          ? `Could not apply fixes to ${failed} shape${failed === 1 ? '' : 's'}${lastError ? ` (${lastError})` : ''}.`
+          : 'No matching shape issues found in the selected shapes.';
+
         const message = typeof result?.message === 'string' && result.message.trim()
           ? result.message
           : (updated > 0
-            ? `Fixed ${updated} shape${updated === 1 ? '' : 's'}${summaryParts.length > 0 ? `: ${summaryParts.join(', ')}` : ''}${skipped > 0 ? ` (${skipped} skipped)` : ''}.`
-            : 'No matching shape issues found in the selected shapes.');
+            ? `Fixed ${updated} shape${updated === 1 ? '' : 's'}${summaryParts.length > 0 ? `: ${summaryParts.join(', ')}` : ''}${skipped > 0 ? ` (${skipped} skipped)` : ''}${failed > 0 ? ` (${failed} failed${lastError ? `: ${lastError}` : ''})` : ''}.`
+            : fallbackFailureMessage);
 
-        showToast(message, updated > 0 ? (skipped > 0 ? 'warning' : 'success') : 'warning');
+        const toastKind = updated > 0
+          ? ((skipped > 0 || failed > 0) ? 'warning' : 'success')
+          : (failed > 0 ? 'error' : 'warning');
+        showToast(message, toastKind);
       } catch (error) {
         console.error('Fix shape issues action failed:', error);
         showToast(error?.message || `Failed to run ${actionMeta?.name || 'Fix shape issues'}`, 'error');
       }
+    }
+
+    function isRemoveTinySpikesPromptAction(action = currentPromptAction) {
+      return !!(
+        action &&
+        action.directAction === 'fixShapeIssues' &&
+        action.presetValues &&
+        action.presetValues.removeTinySpikes === true
+      );
+    }
+
+    function isSeparateTouchingLoopsPromptAction(action = currentPromptAction) {
+      return !!(
+        action &&
+        action.directAction === 'fixShapeIssues' &&
+        action.presetValues &&
+        action.presetValues.separateTouchingLoops === true
+      );
+    }
+
+    function renderTinySpikeDetectionState(state = {}) {
+      const body = promptDrawerFields?.querySelector('[data-detected-spikes-body]');
+      const meta = promptDrawerFields?.querySelector('[data-detected-spikes-meta]');
+      if (!body || !meta) return;
+
+      if (state.loading) {
+        meta.textContent = 'Checking selection...';
+        body.innerHTML = '<div class="prompt-detected-spikes__empty">Analyzing the current selection with these tolerances.</div>';
+        return;
+      }
+
+      if (state.error) {
+        meta.textContent = 'Could not analyze';
+        body.innerHTML = `<div class="prompt-detected-spikes__empty">${escapeHtml(String(state.error))}</div>`;
+        return;
+      }
+
+      const detectedSpikes = Number(state.detectedSpikes) || 0;
+      const analyzedNodes = Number(state.analyzedNodes) || 0;
+      const skippedNodes = Number(state.skippedNodes) || 0;
+      const spikes = Array.isArray(state.spikes) ? state.spikes : [];
+
+      meta.textContent = `${detectedSpikes} detected${analyzedNodes > 0 ? ` in ${analyzedNodes} shape${analyzedNodes === 1 ? '' : 's'}` : ''}${skippedNodes > 0 ? `, ${skippedNodes} skipped` : ''}`;
+
+      if (detectedSpikes <= 0) {
+        body.innerHTML = '<div class="prompt-detected-spikes__empty">No removable spikes detected at the current size and angle tolerances.</div>';
+        return;
+      }
+
+      body.innerHTML = `
+        <ul class="prompt-detected-spikes__list">
+          ${spikes.map((spike) => `
+            <li class="prompt-detected-spikes__item">
+              <div class="prompt-detected-spikes__title">${escapeHtml(String(spike.nodeName || 'Vector'))}</div>
+              <div class="prompt-detected-spikes__metrics">
+                angle ${escapeHtml((Number(spike.angleDeg) || 0).toFixed(1))}deg,
+                legs ${escapeHtml((Number(spike.lengthA) || 0).toFixed(2))}/${escapeHtml((Number(spike.lengthB) || 0).toFixed(2))} px,
+                base ${escapeHtml((Number(spike.baseDistance) || 0).toFixed(2))} px
+              </div>
+            </li>
+          `).join('')}
+        </ul>
+        ${detectedSpikes > spikes.length ? `<div class="prompt-detected-spikes__more">Showing ${spikes.length} of ${detectedSpikes} detected spikes.</div>` : ''}
+      `;
+    }
+
+    async function refreshTinySpikeDetection() {
+      if (!isRemoveTinySpikesPromptAction() || !promptDrawer.classList.contains('open')) return;
+      if (!promptDrawerFields?.querySelector('[data-detected-spikes-body]')) return;
+
+      const runId = ++tinySpikeDetectionRunId;
+      const values = getPromptFieldValues();
+      const rawTolerance = Number.parseFloat(String(values?.tolerancePx ?? 0.5));
+      const tolerancePx = Number.isFinite(rawTolerance) && rawTolerance > 0 ? rawTolerance : 0.5;
+      const rawSpikeAngleTolerance = Number.parseFloat(String(values?.spikeAngleToleranceDeg ?? 45));
+      const spikeAngleToleranceDeg = Number.isFinite(rawSpikeAngleTolerance) && rawSpikeAngleTolerance > 0
+        ? rawSpikeAngleTolerance
+        : 45;
+
+      renderTinySpikeDetectionState({ loading: true });
+
+      try {
+        const result = await runLocalActionRequest({
+          requestType: 'local-detect-tiny-spikes',
+          resultType: 'local-detect-tiny-spikes-result',
+          payload: {
+            tolerancePx,
+            spikeAngleToleranceDeg,
+          },
+          timeoutMs: 15000,
+          errorPrefixes: ['Detect tiny spikes failed']
+        });
+
+        if (runId !== tinySpikeDetectionRunId || !isRemoveTinySpikesPromptAction()) return;
+        renderTinySpikeDetectionState(result || {});
+      } catch (error) {
+        if (runId !== tinySpikeDetectionRunId || !isRemoveTinySpikesPromptAction()) return;
+        renderTinySpikeDetectionState({ error: error?.message || 'Analysis failed.' });
+      }
+    }
+
+    function scheduleTinySpikeDetection(delay = 120) {
+      if (tinySpikeDetectionTimer) {
+        clearTimeout(tinySpikeDetectionTimer);
+      }
+      if (!isRemoveTinySpikesPromptAction() || !promptDrawer.classList.contains('open')) return;
+      tinySpikeDetectionTimer = setTimeout(() => {
+        tinySpikeDetectionTimer = null;
+        refreshTinySpikeDetection().catch((error) => {
+          console.warn('Failed to refresh tiny spike detection:', error);
+        });
+      }, delay);
+    }
+
+    function renderTouchingLoopDetectionState(state = {}) {
+      const body = promptDrawerFields?.querySelector('[data-detected-seams-body]');
+      const meta = promptDrawerFields?.querySelector('[data-detected-seams-meta]');
+      if (!body || !meta) return;
+
+      if (state.loading) {
+        meta.textContent = 'Checking selection...';
+        body.innerHTML = '<div class="prompt-detected-spikes__empty">Analyzing the current selection with this tolerance.</div>';
+        return;
+      }
+
+      if (state.error) {
+        meta.textContent = 'Could not analyze';
+        body.innerHTML = `<div class="prompt-detected-spikes__empty">${escapeHtml(String(state.error))}</div>`;
+        return;
+      }
+
+      const detectedSeams = Number(state.detectedSeams) || 0;
+      const analyzedNodes = Number(state.analyzedNodes) || 0;
+      const skippedNodes = Number(state.skippedNodes) || 0;
+      const seams = Array.isArray(state.seams) ? state.seams : [];
+
+      meta.textContent = `${detectedSeams} detected${analyzedNodes > 0 ? ` in ${analyzedNodes} shape${analyzedNodes === 1 ? '' : 's'}` : ''}${skippedNodes > 0 ? `, ${skippedNodes} skipped` : ''}`;
+
+      if (detectedSeams <= 0) {
+        body.innerHTML = '<div class="prompt-detected-spikes__empty">No removable seams detected at the current tolerance.</div>';
+        return;
+      }
+
+      body.innerHTML = `
+        <ul class="prompt-detected-spikes__list">
+          ${seams.map((seam) => `
+            <li class="prompt-detected-spikes__item">
+              <div class="prompt-detected-spikes__title">${escapeHtml(String(seam.nodeName || 'Vector'))}</div>
+              <div class="prompt-detected-spikes__metrics">
+                ${escapeHtml(String(seam.seamCount || 0))} seam${Number(seam.seamCount) === 1 ? '' : 's'} detected via ${escapeHtml(String(seam.mode || 'path'))} analysis
+              </div>
+            </li>
+          `).join('')}
+        </ul>
+        ${detectedSeams > seams.reduce((sum, seam) => sum + (Number(seam.seamCount) || 0), 0) ? `<div class="prompt-detected-spikes__more">Additional seams were detected beyond the preview list.</div>` : ''}
+      `;
+    }
+
+    async function refreshTouchingLoopDetection() {
+      if (!isSeparateTouchingLoopsPromptAction() || !promptDrawer.classList.contains('open')) return;
+      if (!promptDrawerFields?.querySelector('[data-detected-seams-body]')) return;
+
+      const runId = ++touchingLoopDetectionRunId;
+      const values = getPromptFieldValues();
+      const rawTolerance = Number.parseFloat(String(values?.tolerancePx ?? 0.5));
+      const tolerancePx = Number.isFinite(rawTolerance) && rawTolerance > 0 ? rawTolerance : 0.5;
+
+      renderTouchingLoopDetectionState({ loading: true });
+
+      try {
+        const result = await runLocalActionRequest({
+          requestType: 'local-detect-touching-loops',
+          resultType: 'local-detect-touching-loops-result',
+          payload: {
+            tolerancePx,
+          },
+          timeoutMs: 15000,
+          errorPrefixes: ['Detect touching loops failed']
+        });
+
+        if (runId !== touchingLoopDetectionRunId || !isSeparateTouchingLoopsPromptAction()) return;
+        renderTouchingLoopDetectionState(result || {});
+      } catch (error) {
+        if (runId !== touchingLoopDetectionRunId || !isSeparateTouchingLoopsPromptAction()) return;
+        renderTouchingLoopDetectionState({ error: error?.message || 'Analysis failed.' });
+      }
+    }
+
+    function scheduleTouchingLoopDetection(delay = 120) {
+      if (touchingLoopDetectionTimer) {
+        clearTimeout(touchingLoopDetectionTimer);
+      }
+      if (!isSeparateTouchingLoopsPromptAction() || !promptDrawer.classList.contains('open')) return;
+      touchingLoopDetectionTimer = setTimeout(() => {
+        touchingLoopDetectionTimer = null;
+        refreshTouchingLoopDetection().catch((error) => {
+          console.warn('Failed to refresh touching loop detection:', error);
+        });
+      }, delay);
     }
 
     function mergeDirectActionPresetValues(values, actionMeta) {

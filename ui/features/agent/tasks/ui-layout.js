@@ -807,14 +807,27 @@ const vectorRepairToleranceField = {
   hint: 'Shared snap/cleanup tolerance for close points and near-collinear cleanup. Slider stays within 0.1–4 px; the number input can go outside that range.'
 };
 
-function createVectorRepairTask({ name, desc, help, presetValues, withTolerance = true }) {
+const vectorRepairSpikeAngleField = {
+  key: 'spikeAngleToleranceDeg',
+  type: 'slider',
+  label: 'Angle tolerance (deg)',
+  default: 45,
+  min: 5,
+  max: 120,
+  step: 1,
+  hint: 'Maximum tip angle treated as a spike. Higher values remove wider protrusions.'
+};
+
+function createVectorRepairTask({ name, desc, help, presetValues, withTolerance = true, extraFields = [] }) {
   return {
     name,
     desc,
     help,
     directAction: 'fixShapeIssues',
     presetValues,
-    ...(withTolerance ? { fields: [{ ...vectorRepairToleranceField }] } : {}),
+    ...((withTolerance || extraFields.length > 0)
+      ? { fields: [ ...(withTolerance ? [{ ...vectorRepairToleranceField }] : []), ...extraFields.map((field) => ({ ...field })) ] }
+      : {}),
   };
 }
 
@@ -893,7 +906,15 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
           name: 'Separate touching loops',
           desc: 'Split bridged loops in selected vector shapes',
           help: 'Runs locally with no AI. Separates touching inner and outer loops so fills behave like proper rings.',
-          presetValues: { separateTouchingLoops: true }
+          presetValues: { separateTouchingLoops: true },
+          extraFields: [
+            {
+              key: 'detectedSeams',
+              type: 'detectedSeams',
+              label: 'Detected seams',
+              hint: 'Updates from the current selection when the tolerance changes.'
+            }
+          ]
         }),
         createVectorRepairTask({
           name: 'Remove zero-length segments',
@@ -906,7 +927,16 @@ export function createQuickCreateUiTasks({ getCustomStyleCategories } = {}) {
           name: 'Remove tiny spikes',
           desc: 'Flatten tiny spikes in selected vector shapes',
           help: 'Runs locally with no AI. Deletes very small out-and-back spikes that usually come from editing mistakes.',
-          presetValues: { removeTinySpikes: true }
+          presetValues: { removeTinySpikes: true },
+          extraFields: [
+            { ...vectorRepairSpikeAngleField },
+            {
+              key: 'detectedTinySpikes',
+              type: 'detectedSpikes',
+              label: 'Detected spikes',
+              hint: 'Updates from the current selection when the size or angle tolerance changes.'
+            }
+          ]
         }),
         createVectorRepairTask({
           name: 'Simplify near-collinear points',
