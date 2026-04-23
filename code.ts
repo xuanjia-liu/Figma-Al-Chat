@@ -1282,13 +1282,34 @@ function buildSelectionInfoLite(selection: readonly SceneNode[]): SelectionInfoP
     if ('fills' in node && Array.isArray(node.fills)) {
       hasImageFill = node.fills.some((fill: Paint) => fill.type === 'IMAGE');
     }
-    return {
+    const item: any = {
       name: node.name,
       type: node.type,
       id: node.id,
       description: typeof (node as any).description === 'string' ? (node as any).description : undefined,
       hasImageFill,
     };
+
+    if ('width' in node) item.width = Math.round(node.width);
+    if ('height' in node) item.height = Math.round(node.height);
+
+    if (node.type === 'TEXT') {
+      const textNode = node as TextNode;
+      item.characters = textNode.characters;
+      item.textAutoResize = textNode.textAutoResize;
+
+      if (typeof textNode.fontSize === 'number') {
+        item.fontSize = textNode.fontSize;
+      }
+      if (textNode.lineHeight !== figma.mixed) {
+        item.lineHeight = textNode.lineHeight as LineHeight;
+      }
+      if (textNode.letterSpacing !== figma.mixed) {
+        item.letterSpacing = textNode.letterSpacing as LetterSpacing;
+      }
+    }
+
+    return item;
   });
   return { items };
 }

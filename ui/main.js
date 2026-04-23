@@ -3581,6 +3581,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         }, 120);
       }
 
+      if (promptDrawer.classList.contains('open') && currentPromptAction?.name === 'Adjust length') {
+        updateAdjustLengthDrawerMetrics();
+      }
+
       // Trigger a background update of selection data size for the token counter
       // Caching: Only request if selection IDs have changed to avoid freezing on simple drags
       const currentIds = items.map(i => i.id).join(',');
@@ -3655,6 +3659,340 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (promptDrawer.classList.contains('open')) {
         applyPromptFieldVisibility();
       }
+    }
+
+    function flattenSelectionNodes(items = []) {
+      const out = [];
+      const walk = (node) => {
+        if (!node || typeof node !== 'object') return;
+        out.push(node);
+        if (Array.isArray(node.children)) {
+          node.children.forEach(walk);
+        }
+      };
+      items.forEach(walk);
+      return out;
+    }
+
+    function getFirstSelectedTextNode(items = lastKnownSelectionItems || []) {
+      const nodes = flattenSelectionNodes(items);
+      return nodes.find((node) => node && node.type === 'TEXT' && typeof node.characters === 'string') || null;
+    }
+
+    function isAdjustLengthPromptOpen() {
+      return promptDrawer.classList.contains('open') && currentPromptAction?.name === 'Adjust length';
+    }
+
+    function adjustLengthIsCjkChar(char) {
+      if (!char) return false;
+      const code = char.codePointAt(0) || 0;
+      return (
+        (code >= 0x4E00 && code <= 0x9FFF) ||
+        (code >= 0x3400 && code <= 0x4DBF) ||
+        (code >= 0x3040 && code <= 0x309F) ||
+        (code >= 0x30A0 && code <= 0x30FF) ||
+        (code >= 0xAC00 && code <= 0xD7AF) ||
+        (code >= 0x1100 && code <= 0x11FF) ||
+        (code >= 0x3130 && code <= 0x318F)
+      );
+    }
+
+    function adjustLengthAnalyzeText(text) {
+      const rawText = String(text || '').replace(/\r/g, '');
+      const visibleChars = Array.from(rawText).filter((char) => !/\s/.test(char));
+
+      let kanjiCount = 0;
+      let hiraganaCount = 0;
+      let katakanaCount = 0;
+      let hangulCount = 0;
+      let alphabetCount = 0;
+      let numberCount = 0;
+
+      visibleChars.forEach((char) => {
+        const code = char.codePointAt(0) || 0;
+        if ((code >= 0x4E00 && code <= 0x9FFF) || (code >= 0x3400 && code <= 0x4DBF)) {
+          kanjiCount += 1;
+          return;
+        }
+        if (code >= 0x3040 && code <= 0x309F) {
+          hiraganaCount += 1;
+          return;
+        }
+        if (code >= 0x30A0 && code <= 0x30FF) {
+          katakanaCount += 1;
+          return;
+        }
+        if ((code >= 0xAC00 && code <= 0xD7AF) || (code >= 0x1100 && code <= 0x11FF) || (code >= 0x3130 && code <= 0x318F)) {
+          hangulCount += 1;
+          return;
+        }
+        if (/[A-Za-z]/.test(char)) {
+          alphabetCount += 1;
+          return;
+        }
+        if (/[0-9０-９]/.test(char)) {
+          numberCount += 1;
+        }
+      });
+
+      const cjkCount = kanjiCount + hiraganaCount + katakanaCount + hangulCount;
+      const normalizedWordCount = rawText.trim()
+        ? rawText.trim().split(/\s+/).filter(Boolean).length
+        : 0;
+      const dominantCjk = cjkCount > 0 && cjkCount >= alphabetCount;
+
+      const typeParts = [];
+      if (kanjiCount > 0) typeParts.push('漢字');
+      if (hiraganaCount > 0) typeParts.push('あぁ');
+      if (katakanaCount > 0) typeParts.push('アァ');
+      if (hangulCount > 0) typeParts.push('한글');
+      if (alphabetCount > 0) typeParts.push('Aa');
+      if (numberCount > 0) typeParts.push('0-9');
+
+      return {
+        rawText,
+        visibleChars,
+        kanjiCount,
+        hiraganaCount,
+        katakanaCount,
+        hangulCount,
+        alphabetCount,
+        numberCount,
+        cjkCount,
+        normalizedWordCount,
+        dominantCjk,
+        countUnit: dominantCjk ? 'character' : 'word',
+        currentCount: dominantCjk ? visibleChars.length : normalizedWordCount,
+        typeLabel: typeParts.length ? typeParts.join('、') : 'Mixed'
+      };
+    }
+
+    function adjustLengthParseLetterSpacingPx(textNode) {
+      const value = textNode?.letterSpacing;
+      const fontSize = typeof textNode?.fontSize === 'number' ? textNode.fontSize : 16;
+      if (typeof value === 'number') return value;
+      if (value && typeof value === 'object') {
+        if (value.unit === 'PIXELS') return Number(value.value) || 0;
+        if (value.unit === 'PERCENT') return fontSize * ((Number(value.value) || 0) / 100);
+      }
+      return 0;
+    }
+
+    function adjustLengthParseLineHeightPx(textNode) {
+      const fontSize = typeof textNode?.fontSize === 'number' ? textNode.fontSize : 16;
+      const value = textNode?.lineHeight;
+      if (typeof value === 'number') return fontSize * value;
+      if (value && typeof value === 'object') {
+        if (value.unit === 'PIXELS') return Number(value.value) || fontSize * 1.2;
+        if (value.unit === 'PERCENT') return fontSize * ((Number(value.value) || 120) / 100);
+      }
+      return fontSize * 1.2;
+    }
+
+    function adjustLengthCharWidth(textNode, char) {
+      const fontSize = typeof textNode?.fontSize === 'number' ? textNode.fontSize : 16;
+      const letterSpacing = adjustLengthParseLetterSpacingPx(textNode);
+      if (!char || /\s/.test(char)) return Math.max(1, fontSize * 0.35);
+      if (adjustLengthIsCjkChar(char) || (char.codePointAt(0) || 0) > 255) return fontSize + letterSpacing;
+      if (/[A-Za-z0-9]/.test(char)) return fontSize * 0.5 + letterSpacing;
+      return fontSize * 0.6 + letterSpacing;
+    }
+
+    function adjustLengthSimulateRenderedLines(textNode) {
+      const text = String(textNode?.characters || '').replace(/\r/g, '');
+      const paragraphs = text.split('\n');
+      if (!paragraphs.length) return 1;
+      if (textNode?.textAutoResize === 'WIDTH_AND_HEIGHT') return paragraphs.length;
+
+      const availableWidth = Math.max(1, Number(textNode?.width) || 1);
+      let renderedLines = 0;
+
+      paragraphs.forEach((paragraph) => {
+        if (!paragraph) {
+          renderedLines += 1;
+          return;
+        }
+        let currentWidth = 0;
+        let currentLines = 1;
+        let currentToken = '';
+        let currentTokenWidth = 0;
+
+        const flushToken = () => {
+          if (!currentToken) return;
+          if (currentWidth > 0 && currentWidth + currentTokenWidth > availableWidth) {
+            currentLines += 1;
+            currentWidth = 0;
+          }
+          currentWidth += currentTokenWidth;
+          currentToken = '';
+          currentTokenWidth = 0;
+        };
+
+        for (const char of Array.from(paragraph)) {
+          if (/\s/.test(char)) {
+            flushToken();
+            continue;
+          }
+
+          const width = adjustLengthCharWidth(textNode, char);
+          if (adjustLengthIsCjkChar(char)) {
+            flushToken();
+            if (currentWidth > 0 && currentWidth + width > availableWidth) {
+              currentLines += 1;
+              currentWidth = 0;
+            }
+            currentWidth += width;
+            continue;
+          }
+
+          currentToken += char;
+          currentTokenWidth += width;
+
+          if (currentTokenWidth > availableWidth && currentToken.length > 1) {
+            const lastChar = currentToken.slice(-1);
+            const lastWidth = adjustLengthCharWidth(textNode, lastChar);
+            currentToken = lastChar;
+            currentTokenWidth = lastWidth;
+            flushToken();
+          }
+        }
+
+        flushToken();
+        renderedLines += currentLines;
+      });
+
+      return Math.max(1, renderedLines);
+    }
+
+    function buildAdjustLengthMetrics(textNode) {
+      if (!textNode) return null;
+      const analysis = adjustLengthAnalyzeText(textNode.characters || '');
+      const { visibleChars } = analysis;
+
+      const renderedLines = adjustLengthSimulateRenderedLines(textNode);
+      const explicitLines = String(textNode.characters || '').replace(/\r/g, '').split('\n').length;
+      const fontSize = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
+      const lineHeightPx = adjustLengthParseLineHeightPx(textNode);
+      const maxLines = textNode.textAutoResize === 'NONE'
+        ? Math.max(1, Math.floor((Number(textNode.height) || lineHeightPx) / lineHeightPx))
+        : renderedLines;
+
+      const charsPerLineBase = analysis.dominantCjk
+        ? Math.max(1, Math.floor((Number(textNode.width) || fontSize) / (fontSize + adjustLengthParseLetterSpacingPx(textNode))))
+        : Math.max(1, Math.floor((Number(textNode.width) || fontSize) / (fontSize * 0.5 + adjustLengthParseLetterSpacingPx(textNode))));
+      const estimatedMaxChars = Math.max(visibleChars.length, charsPerLineBase * Math.max(renderedLines, maxLines));
+
+      return {
+        types: analysis.typeLabel,
+        charsPerLine: charsPerLineBase,
+        totalChars: visibleChars.length,
+        wordCount: analysis.normalizedWordCount,
+        countUnit: analysis.countUnit,
+        targetCountCurrent: analysis.currentCount,
+        estimatedMaxChars,
+        remainingChars: Math.max(0, estimatedMaxChars - visibleChars.length),
+        currentLines: renderedLines,
+        explicitLines,
+        textAutoResize: textNode.textAutoResize || 'NONE'
+      };
+    }
+
+    function buildAdjustLengthPromptContext(values, textNode = getFirstSelectedTextNode()) {
+      if (!textNode) return { ...values };
+
+      const metrics = buildAdjustLengthMetrics(textNode);
+      if (!metrics) return { ...values };
+
+      const countUnitPlural = metrics.countUnit === 'character' ? 'characters' : 'words';
+      const currentCountSummary = `${metrics.targetCountCurrent} ${countUnitPlural}`;
+      const currentLengthMetricsSummary = [
+        `Measured node info: text kinds ${metrics.types}.`,
+        `Current count: ${currentCountSummary}.`,
+        `Current rendered lines: ${metrics.currentLines}.`,
+        `Characters per line estimate: ${metrics.charsPerLine}.`,
+        `Estimated max visible characters in this node: ${metrics.estimatedMaxChars}.`,
+        `Remaining estimated visible characters before overflow: ${metrics.remainingChars}.`,
+        `Explicit line breaks: ${metrics.explicitLines}.`,
+        `Text auto resize: ${metrics.textAutoResize}.`
+      ].join(' ');
+
+      return {
+        ...values,
+        currentCountUnit: metrics.countUnit,
+        currentCountUnitPlural: countUnitPlural,
+        currentCountValue: metrics.targetCountCurrent,
+        currentCountSummary,
+        currentRenderedLines: metrics.currentLines,
+        currentExplicitLines: metrics.explicitLines,
+        currentCharsPerLine: metrics.charsPerLine,
+        currentEstimatedMaxChars: metrics.estimatedMaxChars,
+        currentRemainingChars: metrics.remainingChars,
+        currentTextKinds: metrics.types,
+        currentWordCount: metrics.wordCount,
+        currentVisibleCharCount: metrics.totalChars,
+        currentLengthMetricsSummary
+      };
+    }
+
+    function ensureAdjustLengthMetricsContainer() {
+      if (!isAdjustLengthPromptOpen()) return null;
+      let el = document.getElementById('adjustLengthMetrics');
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'adjustLengthMetrics';
+      el.className = 'adjust-length-metrics';
+      promptDrawerFields.prepend(el);
+      return el;
+    }
+
+    function updateAdjustLengthDrawerMetrics() {
+      const container = ensureAdjustLengthMetricsContainer();
+      if (!container) return;
+      const textNode = getFirstSelectedTextNode();
+      const metrics = buildAdjustLengthMetrics(textNode);
+
+      if (!metrics) {
+        container.innerHTML = `
+          <div class="adjust-length-metrics-title">Live text metrics</div>
+          <div class="adjust-length-metrics-subtitle">Select a text node to see real-time length guidance for this action.</div>
+        `;
+        return;
+      }
+
+      const subtitle = metrics.explicitLines !== metrics.currentLines
+        ? `Rendered lines: ${metrics.currentLines} (explicit breaks: ${metrics.explicitLines}, auto resize: ${escapeHtml(String(metrics.textAutoResize))})`
+        : `Auto resize: ${escapeHtml(String(metrics.textAutoResize))}`;
+
+      container.innerHTML = `
+        <div class="adjust-length-metrics-title">Live text metrics</div>
+        <div class="adjust-length-metrics-subtitle">${subtitle}</div>
+        <div class="adjust-length-metrics-grid">
+          <div class="adjust-length-metrics-row">
+            <span class="adjust-length-metrics-label">文字の種類</span>
+            <span class="adjust-length-metrics-value">${escapeHtml(metrics.types)}</span>
+          </div>
+          <div class="adjust-length-metrics-row">
+            <span class="adjust-length-metrics-label">1行あたりの文字数</span>
+            <span class="adjust-length-metrics-value">${metrics.charsPerLine}</span>
+          </div>
+          <div class="adjust-length-metrics-row">
+            <span class="adjust-length-metrics-label">総文字数</span>
+            <span class="adjust-length-metrics-value">${metrics.totalChars}</span>
+          </div>
+          <div class="adjust-length-metrics-row">
+            <span class="adjust-length-metrics-label">最大推定文字数</span>
+            <span class="adjust-length-metrics-value">${metrics.estimatedMaxChars}</span>
+          </div>
+          <div class="adjust-length-metrics-row">
+            <span class="adjust-length-metrics-label">残り文字数</span>
+            <span class="adjust-length-metrics-value">${metrics.remainingChars}</span>
+          </div>
+          <div class="adjust-length-metrics-row">
+            <span class="adjust-length-metrics-label">現在の行数</span>
+            <span class="adjust-length-metrics-value">${metrics.currentLines}</span>
+          </div>
+        </div>
+      `;
     }
 
     function getSelectionDescendantsSignature(items = lastKnownSelectionItems || []) {
@@ -18042,6 +18380,10 @@ Generate ONLY the reply text, nothing else.`;
           if (actionData.name === 'Swap colors') {
             prewarmColorSwapSourceCaches();
           }
+          if (actionData.name === 'Adjust length') {
+            updateAdjustLengthDrawerMetrics();
+            parent.postMessage({ pluginMessage: { type: 'get-selection-info' } }, '*');
+          }
         }
 
         // Cache hydrated fields for Direct UI "Back" button and Outline editor
@@ -31990,7 +32332,11 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         }
 
         const normalizedCustomQuickAction = normalizeCustomQuickActionFieldValues(action, rawValues);
-        const values = normalizedCustomQuickAction.values;
+        let values = normalizedCustomQuickAction.values;
+
+        if (action.name === 'Adjust length') {
+          values = buildAdjustLengthPromptContext(values);
+        }
 
         if (action.directAction === 'generateImage' && values.applyToSelection) {
           try {

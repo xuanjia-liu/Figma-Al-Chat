@@ -98,7 +98,73 @@ export const smartTextTasks = [
               ]
             },
           ],
-          promptTemplate: 'Rewrite the selected text with length instructions. Mode: {lengthMode}. If mode is fitLines, aim for about {lineCount} lines. If mode is limitWords, keep within {wordCount} words (or characters for CJK). If mode is exactWords, make it exactly {wordCount} words/chars. If mode is longer, expand meaningfully; if shorter, compress while keeping key info; if continue, keep style and continue the text. Preserve meaning and tone unless changed by other instructions.'
+          promptTemplate: function (values) {
+            const lengthMode = values.lengthMode || 'fitLines';
+            const lineCount = Math.max(1, Number(values.lineCount) || 3);
+            const wordCount = Math.max(1, Number(values.wordCount) || 30);
+
+            const sharedRules = [
+              'Rewrite each selected TEXT node independently.',
+              'Use the node\\\'s existing text plus any available selection metadata such as width, height, textAutoResize, fontSize, lineHeight, letterSpacing, and explicit line breaks.',
+              'Use the measured node metrics provided in this prompt as the source of truth for counting and fit decisions.',
+              'Preserve the original language, meaning, product intent, and tone unless another instruction explicitly changes them.',
+              'Do not add new features, UI flows, or extra explanatory filler just to hit a target.',
+              'When multiple nodes are selected, satisfy the constraint for each node separately rather than averaging across them.',
+              '{currentLengthMetricsSummary}',
+            ].join(' ');
+
+            const countingRules = [
+              'Use this measured counting basis for the current node:',
+              '- If currentCountUnit is "character", count CHARACTERS and ignore spaces, tabs, and line breaks.',
+              '- If currentCountUnit is "word", count WORDS using normalized whitespace.',
+              '- Treat punctuation as part of nearby words/characters; do not count empty tokens.',
+              'Current measured count: {currentCountValue} {currentCountUnitPlural}.',
+            ].join(' ');
+
+            if (lengthMode === 'fitLines') {
+              return [
+                `Rewrite the selected text to fit about ${lineCount} rendered lines.`,
+                sharedRules,
+                `Current measured rendered lines: {currentRenderedLines}. Current estimated characters per line: {currentCharsPerLine}.`,
+                'This is a layout-first task: use the node\\\'s actual text box constraints and measured metrics, not a rough summary.',
+                'Respect explicit line breaks when they help, but rewrite or rebalance line breaks if needed to make the text fit naturally.',
+                'For space-delimited languages, prefer wrapping at spaces or punctuation instead of awkward mid-word breaks unless unavoidable. For Japanese/CJK, assume character-level wrapping is allowed.',
+                `Target: the rewritten result should likely render in ${lineCount} lines or fewer in the current node. If an exact visual guarantee is impossible, produce the closest natural fit and bias slightly shorter rather than overflowing.`,
+                'Avoid making the text unnecessarily terse; keep it as full and natural as possible while still fitting.',
+              ].join(' ');
+            }
+
+            if (lengthMode === 'limitWords') {
+              return [
+                `Rewrite the selected text so each node stays within ${wordCount} count units.`,
+                sharedRules,
+                countingRules,
+                `Target: each rewritten node must be at most ${wordCount} words for English-like text, or at most ${wordCount} characters for CJK text.`,
+                'Prefer compact but natural phrasing. Keep key facts and actions, remove fluff first, and avoid changing the intended message.',
+              ].join(' ');
+            }
+
+            if (lengthMode === 'exactWords') {
+              return [
+                `Rewrite the selected text so each node is exactly ${wordCount} count units.`,
+                sharedRules,
+                countingRules,
+                `Target: each rewritten node must be exactly ${wordCount} words for English-like text, or exactly ${wordCount} characters for CJK text.`,
+                'Count carefully before finalizing the text.',
+                'If exact matching conflicts with elegance, still satisfy the exact count while keeping the result as natural as possible.',
+              ].join(' ');
+            }
+
+            if (lengthMode === 'longer') {
+              return 'Rewrite the selected text to be meaningfully longer. Preserve the original language, tone, and intent. Add useful detail, not fluff.';
+            }
+
+            if (lengthMode === 'shorter') {
+              return 'Rewrite the selected text to be shorter while keeping the key meaning, tone, and important details intact.';
+            }
+
+            return 'Continue the selected text in the same language, tone, and style. Preserve continuity and do not abruptly change the topic.';
+          }
         },
 {
           name: 'Change tone',

@@ -8,10 +8,10 @@
       --bg-secondary: #18181b;
       --bg-tertiary: #27272a;
       --accent: #0066FF;
-      --accent-agent: #7800FF;
+      --accent-agent: #7700ff;
       --accent-audit: #009539;
       --accent-hover: #00BBFF;
-      --accent-hover-agent: #c235ff;
+      --accent-hover-agent: #a435ff;
       --accent-hover-audit: #00db3a;
       --accent-glow: #0066FF4d;
       --accent-glow-audit: #0095394d;
@@ -13020,6 +13020,57 @@
     .prompt-drawer-help-examples code:hover {
       background: var(--accent);
       color: var(--text-on-accent);
+    }
+
+    .adjust-length-metrics {
+      margin-top: var(--space-sm);
+      padding: var(--space-md);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-tertiary);
+      display: grid;
+      gap: var(--space-sm);
+    }
+
+    .adjust-length-metrics.hidden {
+      display: none;
+    }
+
+    .adjust-length-metrics-title {
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .adjust-length-metrics-subtitle {
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
+
+    .adjust-length-metrics-grid {
+      display: grid;
+      gap: var(--space-xs);
+    }
+
+    .adjust-length-metrics-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: var(--space-md);
+      font-size: var(--text-sm);
+    }
+
+    .adjust-length-metrics-label {
+      color: var(--text-secondary);
+      min-width: 0;
+    }
+
+    .adjust-length-metrics-value {
+      color: var(--text-primary);
+      font-weight: 600;
+      text-align: right;
+      word-break: break-word;
     }
 
     .prompt-drawer-fields {
