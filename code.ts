@@ -9314,79 +9314,87 @@ function buildVectorFixEvenOddRegionFromLoops(state: VectorFixState, loops: numb
   };
 }
 
-function removeRetracedBridgeSegmentsInFixState(state: VectorFixState): { state: VectorFixState; count: number } {
+function removeRetracedBridgeSegmentsOnceInFixState(state: VectorFixState, tolerancePx: number): { state: VectorFixState; count: number } {
+  const analysisState =
+    tolerancePx > VECTOR_FIX_EPSILON
+      ? mergeDuplicatePointsInFixState(state, tolerancePx).state
+      : state;
+  const adjacency = buildVectorFixAdjacency(analysisState);
+  const components = collectVectorFixComponents(analysisState, adjacency);
+
+  for (const component of components) {
+    const componentVertexSet = new Set<number>(component.vertexIndices);
+    const duplicateSegmentGroups = new Map<string, number[]>();
+
+    component.segmentIndices.forEach((segmentIndex) => {
+      const segment = analysisState.segments[segmentIndex];
+      if (!segment) return;
+      const key = vectorFixCreateUndirectedSegmentKey(segment.start, segment.end);
+      const group = duplicateSegmentGroups.get(key);
+      if (group) {
+        group.push(segmentIndex);
+      } else {
+        duplicateSegmentGroups.set(key, [segmentIndex]);
+      }
+    });
+
+    for (const group of duplicateSegmentGroups.values()) {
+      if (group.length !== 2) continue;
+      const firstSegment = analysisState.segments[group[0]];
+      const secondSegment = analysisState.segments[group[1]];
+      if (!firstSegment || !secondSegment) continue;
+
+      const startDegree = (adjacency[firstSegment.start] || []).length;
+      const endDegree = (adjacency[firstSegment.end] || []).length;
+      if (startDegree !== 4 || endDegree !== 4) continue;
+
+      const remainingComponentSegments = component.segmentIndices
+        .filter((segmentIndex) => !group.includes(segmentIndex))
+        .map((segmentIndex) => analysisState.segments[segmentIndex])
+        .filter((segment): segment is VectorFixSegment => !!segment)
+        .map((segment) => ({ ...segment }));
+
+      const loops = buildVectorFixClosedLoopsFromSegments(analysisState.vertices.length, remainingComponentSegments);
+      if (!loops || loops.length < 2) continue;
+
+      const rebuiltRegion = buildVectorFixEvenOddRegionFromLoops(analysisState, loops);
+      if (!rebuiltRegion) continue;
+
+      const nextSegments = analysisState.segments
+        .filter((_segment, segmentIndex) => !group.includes(segmentIndex))
+        .map((segment) => ({ ...segment }));
+      const preservedRegions = analysisState.regions
+        .filter((region) =>
+          region.loops.every((loop) => loop.every((vertexIndex) => !componentVertexSet.has(vertexIndex)))
+        )
+        .map((region) => ({
+          windingRule: region.windingRule,
+          loops: region.loops.map((loop) => loop.slice()),
+        }));
+
+      return {
+        state: compactVectorFixState({
+          vertices: analysisState.vertices.map((vertex) => ({ ...vertex })),
+          segments: nextSegments,
+          regions: [...preservedRegions, rebuiltRegion],
+        }, { dropStraightZeroLength: true }).state,
+        count: 1,
+      };
+    }
+  }
+
+  return { state, count: 0 };
+}
+
+function removeRetracedBridgeSegmentsInFixState(state: VectorFixState, tolerancePx: number): { state: VectorFixState; count: number } {
   let nextState = state;
   let count = 0;
 
   while (true) {
-    const adjacency = buildVectorFixAdjacency(nextState);
-    const components = collectVectorFixComponents(nextState, adjacency);
-    let applied = false;
-
-    for (const component of components) {
-      const componentVertexSet = new Set<number>(component.vertexIndices);
-      const duplicateSegmentGroups = new Map<string, number[]>();
-
-      component.segmentIndices.forEach((segmentIndex) => {
-        const segment = nextState.segments[segmentIndex];
-        if (!segment) return;
-        const key = vectorFixCreateUndirectedSegmentKey(segment.start, segment.end);
-        const group = duplicateSegmentGroups.get(key);
-        if (group) {
-          group.push(segmentIndex);
-        } else {
-          duplicateSegmentGroups.set(key, [segmentIndex]);
-        }
-      });
-
-      for (const group of duplicateSegmentGroups.values()) {
-        if (group.length !== 2) continue;
-        const firstSegment = nextState.segments[group[0]];
-        const secondSegment = nextState.segments[group[1]];
-        if (!firstSegment || !secondSegment) continue;
-
-        const startDegree = (adjacency[firstSegment.start] || []).length;
-        const endDegree = (adjacency[firstSegment.end] || []).length;
-        if (startDegree !== 4 || endDegree !== 4) continue;
-
-        const remainingComponentSegments = component.segmentIndices
-          .filter((segmentIndex) => !group.includes(segmentIndex))
-          .map((segmentIndex) => nextState.segments[segmentIndex])
-          .filter((segment): segment is VectorFixSegment => !!segment)
-          .map((segment) => ({ ...segment }));
-
-        const loops = buildVectorFixClosedLoopsFromSegments(nextState.vertices.length, remainingComponentSegments);
-        if (!loops || loops.length < 2) continue;
-
-        const rebuiltRegion = buildVectorFixEvenOddRegionFromLoops(nextState, loops);
-        if (!rebuiltRegion) continue;
-
-        const nextSegments = nextState.segments
-          .filter((_segment, segmentIndex) => !group.includes(segmentIndex))
-          .map((segment) => ({ ...segment }));
-        const preservedRegions = nextState.regions
-          .filter((region) =>
-            region.loops.every((loop) => loop.every((vertexIndex) => !componentVertexSet.has(vertexIndex)))
-          )
-          .map((region) => ({
-            windingRule: region.windingRule,
-            loops: region.loops.map((loop) => loop.slice()),
-          }));
-
-        nextState = compactVectorFixState({
-          vertices: nextState.vertices.map((vertex) => ({ ...vertex })),
-          segments: nextSegments,
-          regions: [...preservedRegions, rebuiltRegion],
-        }, { dropStraightZeroLength: true }).state;
-        count++;
-        applied = true;
-        break;
-      }
-
-      if (applied) break;
-    }
-
-    if (!applied) break;
+    const result = removeRetracedBridgeSegmentsOnceInFixState(nextState, tolerancePx);
+    if (result.count <= 0) break;
+    nextState = result.state;
+    count += result.count;
   }
 
   return { state: nextState, count };
@@ -9724,7 +9732,7 @@ async function runLocalFixShapeIssues(options: VectorFixOptions): Promise<void> 
           nodeSummary.mergedPoints += result.count;
         }
         if (options.separateTouchingLoops && nodeSummary.separatedTouchingLoops <= 0) {
-          const result = removeRetracedBridgeSegmentsInFixState(nextState);
+          const result = removeRetracedBridgeSegmentsInFixState(nextState, options.tolerancePx);
           nextState = result.state;
           nodeSummary.separatedTouchingLoops += result.count;
         }
