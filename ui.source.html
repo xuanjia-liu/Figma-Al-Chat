@@ -163,7 +163,17 @@
               <div class="header-settings-menu-section" role="none">
                 <div class="setting-label-row header-settings-scale-label-row">
                   <div class="header-settings-menu-label" data-i18n="settings.appearance.uiScaleLabel">UI Scale</div>
-                  <span class="setting-range-value" id="headerUiScaleValue">100%</span>
+                  <div class="header-settings-ui-scale-value-group">
+                    <button type="button" class="ui-scale-reset-btn" id="headerUiScaleResetBtn" data-i18n-title="settings.appearance.uiScaleResetTitle" data-i18n-aria-label="settings.appearance.uiScaleResetTitle">
+                      <span class="setting-range-value ui-scale-reset-btn-value" id="headerUiScaleValue">100%</span>
+                      <span class="ui-scale-reset-btn-icon" aria-hidden="true">
+                        <svg class="ui-scale-reset-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="1 4 1 10 7 10" />
+                          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                        </svg>
+                      </span>
+                    </button>
+                  </div>
                 </div>
                 <div class="setting-range-row header-settings-scale-row">
                   <span class="setting-range-end">80%</span>
@@ -1396,7 +1406,17 @@
           <div class="header-settings-menu-section" role="none">
             <div class="setting-label-row header-settings-scale-label-row">
               <div class="header-settings-menu-label" data-i18n="settings.appearance.uiScaleLabel">UI Scale</div>
-              <span class="setting-range-value" id="drawerUiScaleValue">100%</span>
+              <div class="header-settings-ui-scale-value-group">
+                <button type="button" class="ui-scale-reset-btn" id="drawerUiScaleResetBtn" data-i18n-title="settings.appearance.uiScaleResetTitle" data-i18n-aria-label="settings.appearance.uiScaleResetTitle">
+                  <span class="setting-range-value ui-scale-reset-btn-value" id="drawerUiScaleValue">100%</span>
+                  <span class="ui-scale-reset-btn-icon" aria-hidden="true">
+                    <svg class="ui-scale-reset-btn-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="1 4 1 10 7 10" />
+                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                  </span>
+                </button>
+              </div>
             </div>
             <div class="setting-range-row header-settings-scale-row">
               <span class="setting-range-end">80%</span>

@@ -118,6 +118,8 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let aiOffMode = false;
     let lightMode = false;
     let currentUiScale = 100;
+    /** When set (scale factor 0.8–1.5), the header quick-settings menu stays visually at this scale while the user drags the header UI scale slider. */
+    let headerMenuScaleLock = null;
     let geminiApiKey = '';
     let geminiModel = DEFAULT_GEMINI_CHAT_MODEL;
     let openaiApiKey = '';
@@ -515,6 +517,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       document.querySelectorAll('[data-i18n-title]').forEach((element) => {
         element.title = t(element.dataset.i18nTitle);
+      });
+
+      document.querySelectorAll('[data-i18n-aria-label]').forEach((element) => {
+        const key = element.dataset.i18nAriaLabel;
+        if (key) element.setAttribute('aria-label', t(key));
       });
 
       document.querySelectorAll('[data-i18n-html]').forEach((element) => {
@@ -4215,6 +4222,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (drawerUiScaleInput) drawerUiScaleInput.value = String(currentUiScale);
       if (headerUiScaleValue) headerUiScaleValue.textContent = `${currentUiScale}%`;
       if (drawerUiScaleValue) drawerUiScaleValue.textContent = `${currentUiScale}%`;
+      const offDefault = currentUiScale !== 100;
+      [headerUiScaleValue, drawerUiScaleValue].forEach((el) => {
+        const btn = el && el.closest && el.closest('.ui-scale-reset-btn');
+        if (btn) btn.classList.toggle('ui-scale-reset-btn--off-default', offDefault);
+      });
     }
 
     function applyTheme(isLight) {
@@ -4227,6 +4239,33 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const parsed = Number.parseInt(String(value), 10);
       if (!Number.isFinite(parsed)) return 100;
       return Math.min(150, Math.max(80, Math.round(parsed / 5) * 5));
+    }
+
+    function syncHeaderMenuCompensation() {
+      if (headerMenuScaleLock == null) {
+        document.documentElement.style.removeProperty('--ui-scale-header-menu-compensate');
+        document.body.classList.remove('header-settings-menu-scale-pending');
+        return;
+      }
+      const s = currentUiScale / 100;
+      if (!(s > 0)) return;
+      const ratio = headerMenuScaleLock / s;
+      const q = Math.round(ratio * 1e5) / 1e5;
+      document.documentElement.style.setProperty('--ui-scale-header-menu-compensate', String(q));
+      document.body.classList.add('header-settings-menu-scale-pending');
+    }
+
+    function beginHeaderMenuScaleDrag() {
+      if (headerMenuScaleLock != null) return;
+      headerMenuScaleLock = currentUiScale / 100;
+      syncHeaderMenuCompensation();
+    }
+
+    function endHeaderMenuScaleDrag() {
+      if (headerMenuScaleLock == null) return;
+      headerMenuScaleLock = null;
+      document.documentElement.style.removeProperty('--ui-scale-header-menu-compensate');
+      document.body.classList.remove('header-settings-menu-scale-pending');
     }
 
     function applyUiScale(value) {
@@ -4245,6 +4284,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       document.documentElement.style.setProperty('--ui-scale-medium-modal-min-width', `${360 * inverse}px`);
       document.documentElement.style.setProperty('--ui-scale-small-modal-max-width', `${360 * inverse}px`);
       syncQuickSettingsMenusFromForm();
+      syncHeaderMenuCompensation();
     }
 
     /** Light/dark tokens live on body.light-mode; :root keeps dark defaults, so read from body for Iconify ?color= */
@@ -4255,6 +4295,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     }
 
     function closeAllHeaderSettingsMenus() {
+      endHeaderMenuScaleDrag();
       if (headerSettingsMenu) headerSettingsMenu.classList.remove('show');
       if (drawerSettingsMenu) drawerSettingsMenu.classList.remove('show');
       if (openSettingsBtn) openSettingsBtn.setAttribute('aria-expanded', 'false');
@@ -35263,13 +35304,45 @@ Example structure:
       toggle.addEventListener('change', () => applyQuickThemeChange(toggle.checked));
     }
 
-    function bindQuickUiScaleSlider(slider) {
+    function bindQuickUiScaleSlider(slider, options = {}) {
       if (!slider) return;
+      const { freezeHeaderMenuWhileDragging = false } = options;
       slider.addEventListener('input', () => applyUiScale(slider.value));
       slider.addEventListener('change', () => {
+        if (freezeHeaderMenuWhileDragging) {
+          endHeaderMenuScaleDrag();
+        }
         applyUiScale(slider.value);
         saveSettings({ closeModal: false });
       });
+      if (freezeHeaderMenuWhileDragging) {
+        slider.addEventListener('pointerdown', () => {
+          beginHeaderMenuScaleDrag();
+        });
+        slider.addEventListener('pointerup', () => {
+          endHeaderMenuScaleDrag();
+        });
+        slider.addEventListener('pointercancel', () => {
+          endHeaderMenuScaleDrag();
+        });
+        slider.addEventListener('blur', () => {
+          endHeaderMenuScaleDrag();
+        });
+        slider.addEventListener('keydown', (e) => {
+          if (
+            e.key === 'ArrowLeft' ||
+            e.key === 'ArrowRight' ||
+            e.key === 'ArrowUp' ||
+            e.key === 'ArrowDown' ||
+            e.key === 'Home' ||
+            e.key === 'End' ||
+            e.key === 'PageUp' ||
+            e.key === 'PageDown'
+          ) {
+            beginHeaderMenuScaleDrag();
+          }
+        });
+      }
     }
 
     bindQuickLanguageSelect(headerLanguageSelect);
@@ -35278,8 +35351,24 @@ Example structure:
     bindQuickAiToggle(drawerAiEnabledToggle);
     bindQuickLightModeToggle(headerLightModeToggle);
     bindQuickLightModeToggle(drawerLightModeToggle);
-    bindQuickUiScaleSlider(headerUiScaleInput);
+    bindQuickUiScaleSlider(headerUiScaleInput, { freezeHeaderMenuWhileDragging: true });
     bindQuickUiScaleSlider(drawerUiScaleInput);
+
+    function applyQuickUiScaleReset() {
+      applyUiScale(100);
+      saveSettings({ closeModal: false });
+    }
+
+    function bindUiScaleResetButton(btn) {
+      if (!btn) return;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        applyQuickUiScaleReset();
+      });
+    }
+
+    bindUiScaleResetButton(document.getElementById('headerUiScaleResetBtn'));
+    bindUiScaleResetButton(document.getElementById('drawerUiScaleResetBtn'));
 
     if (headerOpenFullSettingsBtn) {
       headerOpenFullSettingsBtn.addEventListener('click', (e) => {
