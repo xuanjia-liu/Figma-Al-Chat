@@ -65,6 +65,7 @@ const SETTINGS_KEYS = {
   PEXELS_API_KEY: 'figma-pexels-api-key',
   UI_LANGUAGE: 'figma-ui-language',
   LIGHT_MODE: 'figma-light-mode',
+  UI_SCALE: 'figma-ui-scale',
   FONT_PREVIEW_BOOKMARKS: 'figma-font-preview-bookmarks'
 };
 
@@ -73,6 +74,12 @@ const FONT_PREVIEW_BOOKMARKS_LIMITS = {
   MAX_NAME_LEN: 80,
   MAX_FAMILIES_PER_LIST: 500
 };
+
+function normalizeUiScale(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.min(150, Math.max(80, Math.round(parsed / 5) * 5));
+}
 
 /** Vertical text: caps & helpers avoid unbounded nodes / O(n²) wrap that freeze or crash Figma. */
 const VERTICAL_TEXT_MAX_COLUMNS = 100;
@@ -10767,6 +10774,7 @@ figma.ui.onmessage = async (msg: {
         const pexelsApiKey = await figma.clientStorage.getAsync(SETTINGS_KEYS.PEXELS_API_KEY) || '';
         const language = await figma.clientStorage.getAsync(SETTINGS_KEYS.UI_LANGUAGE) || 'en';
         const lightMode = await figma.clientStorage.getAsync(SETTINGS_KEYS.LIGHT_MODE) === true;
+        const uiScale = normalizeUiScale(await figma.clientStorage.getAsync(SETTINGS_KEYS.UI_SCALE));
         const replyTemplates = await figma.clientStorage.getAsync(SETTINGS_KEYS.REPLY_TEMPLATES) || [];
         const hiddenPromptCommentsByFile = await figma.clientStorage.getAsync(SETTINGS_KEYS.HIDDEN_PROMPT_COMMENTS) || {};
         const bookmarkedPromptCommentsByFile = await figma.clientStorage.getAsync(SETTINGS_KEYS.BOOKMARKED_PROMPT_COMMENTS) || {};
@@ -10778,14 +10786,14 @@ figma.ui.onmessage = async (msg: {
 
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, customQuickActions, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, promptHistory, replyTemplates, hiddenPromptCommentsByFile, bookmarkedPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
+          data: { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, auditSettings, auditPresets, chatArchives, customTones, customImagePresets, customReStylePresets, customSmartRenamePresets, customStyleCategories, customQuickActions, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, uiScale, promptHistory, replyTemplates, hiddenPromptCommentsByFile, bookmarkedPromptCommentsByFile, lastChatId, lastCommandsCategory, maximizedPromptDrawerData },
           archivesSize: archivesSize
         });
       } catch (error) {
         console.error('Failed to load settings:', error);
         figma.ui.postMessage({
           type: 'settings-loaded',
-          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', ollamaBaseUrl: 'http://localhost:11434/v1', ollamaModel: 'llama3.2', ollamaApiKey: '', ollamaShowLocalModelsInAssistantMenu: true, anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], customQuickActions: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en' }
+          data: { provider: 'gemini', aiOffMode: false, geminiApiKey: '', geminiModel: 'gemini-3-flash-preview', openaiApiKey: '', openaiModel: 'gpt-5', ollamaBaseUrl: 'http://localhost:11434/v1', ollamaModel: 'llama3.2', ollamaApiKey: '', ollamaShowLocalModelsInAssistantMenu: true, anthropicApiKey: '', anthropicModel: 'claude-sonnet-4-20250514', cssFormat: 'classes', selectionSizeLimit: 200, auditSettings: null, auditPresets: {}, chatArchives: [], customTones: [], customImagePresets: [], customReStylePresets: [], customSmartRenamePresets: [], customStyleCategories: [], customQuickActions: [], enabledModels: null, figmaPersonalToken: '', quiverApiKey: '', language: 'en', uiScale: 100 }
         });
       }
       break;
@@ -10997,7 +11005,7 @@ figma.ui.onmessage = async (msg: {
           return;
         }
 
-        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode } = msg.settings;
+        const { provider, aiOffMode, geminiApiKey, geminiModel, openaiApiKey, openaiModel, ollamaBaseUrl, ollamaModel, ollamaApiKey, ollamaShowLocalModelsInAssistantMenu, anthropicApiKey, anthropicModel, cssFormat, selectionSizeLimit, enabledModels, figmaPersonalToken, quiverApiKey, unsplashApiKey, pixabayApiKey, pexelsApiKey, language, lightMode, uiScale } = msg.settings;
 
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PROVIDER, provider || 'gemini');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.AI_OFF_MODE, aiOffMode === true);
@@ -11022,6 +11030,7 @@ figma.ui.onmessage = async (msg: {
         await figma.clientStorage.setAsync(SETTINGS_KEYS.PEXELS_API_KEY, pexelsApiKey || '');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.UI_LANGUAGE, language || 'en');
         await figma.clientStorage.setAsync(SETTINGS_KEYS.LIGHT_MODE, lightMode === true);
+        await figma.clientStorage.setAsync(SETTINGS_KEYS.UI_SCALE, normalizeUiScale(uiScale));
 
         figma.ui.postMessage({ type: 'settings-saved' });
       } catch (error) {

@@ -117,6 +117,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     let selectedProvider = 'gemini';
     let aiOffMode = false;
     let lightMode = false;
+    let currentUiScale = 100;
     let geminiApiKey = '';
     let geminiModel = DEFAULT_GEMINI_CHAT_MODEL;
     let openaiApiKey = '';
@@ -3025,6 +3026,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         language: languageSelect?.value || DEFAULT_SETTINGS_LOCALE,
         provider: providerSelect.value || 'gemini',
         aiOffMode: noAiModeToggle?.checked === true,
+        uiScale: currentUiScale,
         geminiApiKey: geminiApiKeyInput.value || '',
         geminiModel: geminiModelSelect.value || DEFAULT_GEMINI_CHAT_MODEL,
         openaiApiKey: openaiApiKeyInput.value || '',
@@ -3052,6 +3054,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       return a.language === b.language &&
         a.provider === b.provider &&
         a.aiOffMode === b.aiOffMode &&
+        normalizeUiScale(a.uiScale) === normalizeUiScale(b.uiScale) &&
         a.geminiApiKey === b.geminiApiKey &&
         a.geminiModel === b.geminiModel &&
         a.openaiApiKey === b.openaiApiKey &&
@@ -3086,6 +3089,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (noAiModeToggle) {
         noAiModeToggle.checked = lastSavedSettings.aiOffMode === true;
       }
+      applyUiScale(lastSavedSettings.uiScale ?? 100);
       geminiApiKeyInput.value = lastSavedSettings.geminiApiKey || '';
       populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, lastSavedSettings.geminiModel || DEFAULT_GEMINI_CHAT_MODEL);
       openaiApiKeyInput.value = lastSavedSettings.openaiApiKey || '';
@@ -4152,6 +4156,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const drawerOpenFullSettingsBtn = document.getElementById('drawerOpenFullSettingsBtn');
     const headerLightModeToggle = document.getElementById('headerLightModeToggle');
     const drawerLightModeToggle = document.getElementById('drawerLightModeToggle');
+    const headerUiScaleInput = document.getElementById('headerUiScaleInput');
+    const drawerUiScaleInput = document.getElementById('drawerUiScaleInput');
+    const headerUiScaleValue = document.getElementById('headerUiScaleValue');
+    const drawerUiScaleValue = document.getElementById('drawerUiScaleValue');
     const providerSelect = document.getElementById('providerSelect');
     const chatContainer = document.querySelector('.chat-container');
     const geminiSettings = document.getElementById('geminiSettings');
@@ -4203,11 +4211,39 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       if (drawerAiEnabledToggle) drawerAiEnabledToggle.checked = aiOn;
       if (headerLightModeToggle) headerLightModeToggle.checked = lightMode;
       if (drawerLightModeToggle) drawerLightModeToggle.checked = lightMode;
+      if (headerUiScaleInput) headerUiScaleInput.value = String(currentUiScale);
+      if (drawerUiScaleInput) drawerUiScaleInput.value = String(currentUiScale);
+      if (headerUiScaleValue) headerUiScaleValue.textContent = `${currentUiScale}%`;
+      if (drawerUiScaleValue) drawerUiScaleValue.textContent = `${currentUiScale}%`;
     }
 
     function applyTheme(isLight) {
       lightMode = !!isLight;
       document.body.classList.toggle('light-mode', lightMode);
+      syncQuickSettingsMenusFromForm();
+    }
+
+    function normalizeUiScale(value) {
+      const parsed = Number.parseInt(String(value), 10);
+      if (!Number.isFinite(parsed)) return 100;
+      return Math.min(150, Math.max(80, Math.round(parsed / 5) * 5));
+    }
+
+    function applyUiScale(value) {
+      currentUiScale = normalizeUiScale(value);
+      const scale = currentUiScale / 100;
+      const inverse = 1 / scale;
+      document.documentElement.style.setProperty('--ui-scale', String(scale));
+      document.documentElement.style.setProperty('--ui-scale-inverse', String(inverse));
+      document.documentElement.style.setProperty('--ui-scale-body-width', `${100 * inverse}%`);
+      document.documentElement.style.setProperty('--ui-scale-body-height', `${100 * inverse}%`);
+      document.documentElement.style.setProperty('--ui-scale-modal-viewport-height', `${90 * inverse}vh`);
+      document.documentElement.style.setProperty('--ui-scale-modal-padding', `${20 * inverse}px`);
+      document.documentElement.style.setProperty('--ui-scale-settings-modal-max-width', `${640 * inverse}px`);
+      document.documentElement.style.setProperty('--ui-scale-settings-modal-max-height', `${720 * inverse}px`);
+      document.documentElement.style.setProperty('--ui-scale-medium-modal-max-width', `${560 * inverse}px`);
+      document.documentElement.style.setProperty('--ui-scale-medium-modal-min-width', `${360 * inverse}px`);
+      document.documentElement.style.setProperty('--ui-scale-small-modal-max-width', `${360 * inverse}px`);
       syncQuickSettingsMenusFromForm();
     }
 
@@ -34027,8 +34063,10 @@ Example structure:
       const savedProvider = settings?.provider || 'gemini';
       const normalizedProvider = savedProvider === 'off' ? 'gemini' : savedProvider;
       const savedAiOffMode = settings?.aiOffMode === true || savedProvider === 'off';
+      const savedUiScale = normalizeUiScale(settings?.uiScale ?? 100);
       selectedProvider = normalizedProvider;
       aiOffMode = savedAiOffMode;
+      currentUiScale = savedUiScale;
       geminiApiKey = settings?.geminiApiKey || '';
       geminiModel = settings?.geminiModel || DEFAULT_GEMINI_CHAT_MODEL;
       openaiApiKey = settings?.openaiApiKey || '';
@@ -34092,6 +34130,7 @@ Example structure:
         noAiModeToggle.checked = aiOffMode;
       }
       providerSelect.value = selectedProvider;
+      applyUiScale(savedUiScale);
       geminiApiKeyInput.value = geminiApiKey;
       populateGeminiModelSelect(DEFAULT_GEMINI_MODELS, geminiModel);
       openaiApiKeyInput.value = openaiApiKey;
@@ -34154,6 +34193,7 @@ Example structure:
         language: currentSettingsLocale,
         provider: selectedProvider,
         aiOffMode,
+        uiScale: savedUiScale,
         geminiApiKey,
         geminiModel,
         openaiApiKey,
@@ -34297,8 +34337,10 @@ Example structure:
     }
 
     // Save settings to Figma clientStorage
-    function saveSettings() {
+    function saveSettings(options = {}) {
+      const shouldCloseSettingsModal = options?.closeModal !== false;
       const selectionSizeLimitKB = parseInt(selectionSizeLimitSelect.value) || 200;
+      const uiScale = currentUiScale;
 
       // Update enabledModels from checklists and normalize/deduplicate them
       enabledModels = {
@@ -34312,6 +34354,7 @@ Example structure:
         language: normalizeSettingsLocale(languageSelect?.value || currentSettingsLocale),
         provider: providerSelect.value || 'gemini',
         aiOffMode: noAiModeToggle?.checked === true,
+        uiScale,
         geminiApiKey: geminiApiKeyInput.value || '',
         geminiModel: geminiModelSelect.value || DEFAULT_GEMINI_CHAT_MODEL,
         openaiApiKey: openaiApiKeyInput.value || '',
@@ -34348,6 +34391,7 @@ Example structure:
       applySettingsLocale(currentSettingsLocale);
       selectedProvider = settings.provider;
       aiOffMode = settings.aiOffMode === true;
+      applyUiScale(settings.uiScale);
       geminiApiKey = settings.geminiApiKey;
       geminiModel = settings.geminiModel;
       openaiApiKey = settings.openaiApiKey;
@@ -34388,7 +34432,9 @@ Example structure:
       populateChatModelDropdown();
 
       // Close settings modal after saving
-      settingsModal.classList.remove('show');
+      if (shouldCloseSettingsModal) {
+        settingsModal.classList.remove('show');
+      }
     }
 
     // ============================================
@@ -35217,12 +35263,23 @@ Example structure:
       toggle.addEventListener('change', () => applyQuickThemeChange(toggle.checked));
     }
 
+    function bindQuickUiScaleSlider(slider) {
+      if (!slider) return;
+      slider.addEventListener('input', () => applyUiScale(slider.value));
+      slider.addEventListener('change', () => {
+        applyUiScale(slider.value);
+        saveSettings({ closeModal: false });
+      });
+    }
+
     bindQuickLanguageSelect(headerLanguageSelect);
     bindQuickLanguageSelect(drawerLanguageSelect);
     bindQuickAiToggle(headerAiEnabledToggle);
     bindQuickAiToggle(drawerAiEnabledToggle);
     bindQuickLightModeToggle(headerLightModeToggle);
     bindQuickLightModeToggle(drawerLightModeToggle);
+    bindQuickUiScaleSlider(headerUiScaleInput);
+    bindQuickUiScaleSlider(drawerUiScaleInput);
 
     if (headerOpenFullSettingsBtn) {
       headerOpenFullSettingsBtn.addEventListener('click', (e) => {

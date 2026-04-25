@@ -3,6 +3,8 @@
     :root {
       /* Colors */
       --bg-primary: #0d0d0f;
+      --ui-scale: 1;
+      --ui-scale-inverse: 1;
       /* Comma-separated RGB for rgba(var(--header-fade-rgb), a) header gradient */
       --header-fade-rgb: 13, 13, 15;
       --bg-secondary: #18181b;
@@ -172,11 +174,14 @@
       font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      height: 100%;
+      width: var(--ui-scale-body-width, 100%);
+      height: var(--ui-scale-body-height, 100%);
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      transform: scale(var(--ui-scale));
+      transform-origin: top left;
     }
 
     .spacer {
@@ -343,6 +348,7 @@
       top: calc(100% + 8px);
       right: 0;
       min-width: 180px;
+      max-width: min(260px, calc(100vw - 16px));
       background: var(--bg-primary);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -356,6 +362,14 @@
       pointer-events: none;
       transition: opacity 0.15s ease, transform 0.15s ease;
       z-index: 20;
+    }
+
+    .header-settings-scale-label-row {
+      margin-bottom: 0;
+    }
+
+    .header-settings-scale-row {
+      gap: var(--space-sm);
     }
 
     .header-settings-menu.show {
@@ -3051,6 +3065,96 @@
       font-weight: 500;
       color: var(--text-secondary);
       margin-bottom: var(--space-sm);
+    }
+
+    .setting-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-md);
+      margin-bottom: var(--space-sm);
+    }
+
+    .setting-label-row .setting-label {
+      margin-bottom: 0;
+    }
+
+    .setting-range-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-md);
+    }
+
+    .setting-range,
+    .setting-range::-webkit-slider-runnable-track {
+      appearance: none;
+    }
+
+    .setting-range {
+      width: 100%;
+      height: 18px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .setting-range::-webkit-slider-runnable-track {
+      height: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-full);
+    }
+
+    .setting-range::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      margin-top: -6px;
+      background: var(--accent);
+      border: 2px solid var(--bg-secondary);
+      border-radius: var(--radius-full);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .setting-range:hover::-webkit-slider-thumb,
+    .setting-range:focus-visible::-webkit-slider-thumb {
+      transform: scale(1.08);
+      box-shadow: 0 0 0 4px var(--accent-glow);
+    }
+
+    .setting-range::-moz-range-track {
+      height: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-full);
+    }
+
+    .setting-range::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: var(--accent);
+      border: 2px solid var(--bg-secondary);
+      border-radius: var(--radius-full);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+      cursor: pointer;
+    }
+
+    .setting-range:focus-visible {
+      outline: none;
+    }
+
+    .setting-range-value,
+    .setting-range-end {
+      font-family: 'Space Mono', monospace;
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .setting-range-value {
+      color: var(--text-primary);
+      font-weight: 600;
     }
 
     .check-all-toggle {
@@ -6811,6 +6915,7 @@
       pointer-events: none;
       transition: opacity 0.2s ease;
       padding: var(--space-2xl);
+      padding: var(--ui-scale-modal-padding, var(--space-2xl));
     }
 
     .code-editor-modal.show {
@@ -11067,7 +11172,7 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.3s ease;
-      padding: var(--space-2xl);
+      padding: var(--ui-scale-modal-padding, var(--space-2xl));
     }
 
     .image-preview-modal.show {
@@ -11228,7 +11333,7 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.3s ease;
-      padding: var(--space-2xl);
+      padding: var(--ui-scale-modal-padding, var(--space-2xl));
     }
 
     .settings-modal.show,
@@ -11240,9 +11345,9 @@
 
     .settings-modal-content {
       width: 100%;
-      max-width: 640px;
-      height: min(90vh, 720px);
-      max-height: 90vh;
+      max-width: var(--ui-scale-settings-modal-max-width, 640px);
+      height: min(var(--ui-scale-modal-viewport-height, 90vh), var(--ui-scale-settings-modal-max-height, 720px));
+      max-height: var(--ui-scale-modal-viewport-height, 90vh);
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
@@ -11256,9 +11361,9 @@
     .add-option-modal-content,
     .custom-quick-action-modal-content {
       width: 84%;
-      max-width: 560px;
-      min-width: 360px;
-      max-height: 90vh;
+      max-width: var(--ui-scale-medium-modal-max-width, 560px);
+      min-width: min(var(--ui-scale-medium-modal-min-width, 360px), 100%);
+      max-height: var(--ui-scale-modal-viewport-height, 90vh);
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius-xl);
@@ -11271,7 +11376,7 @@
     /* Compact add-option modal styled like AI assistant popup */
     .add-option-modal {
       background: rgba(0, 0, 0, 0.65);
-      padding: var(--space-lg);
+      padding: var(--ui-scale-modal-padding, var(--space-lg));
     }
 
     .custom-quick-action-modal {
@@ -11281,7 +11386,7 @@
       align-items: center;
       justify-content: center;
       background: rgba(0, 0, 0, 0.85);
-      padding: var(--space-2xl);
+      padding: var(--ui-scale-modal-padding, var(--space-2xl));
       z-index: 1400;
       opacity: 0;
       pointer-events: none;
@@ -11294,8 +11399,8 @@
     }
 
     .add-option-modal-content {
-      max-width: 360px;
-      max-height: 84vh;
+      max-width: var(--ui-scale-small-modal-max-width, 360px);
+      max-height: var(--ui-scale-modal-viewport-height, 84vh);
       background: var(--bg-primary);
       border: 1px solid var(--border-intense);
       border-radius: var(--radius-lg);
@@ -11311,7 +11416,7 @@
       animation: slideUp 0.25s ease;
       display: flex;
       flex-direction: column;
-      max-height: min(90vh, 860px);
+      max-height: var(--ui-scale-modal-viewport-height, 90vh);
     }
 
     @keyframes slideUp {
@@ -12692,7 +12797,7 @@
       position: fixed;
       top: var(--space-sm);
       bottom: var(--space-sm);
-      right: -100%;
+      right: var(--space-sm);
       width: 80vw;
       max-width: 560px;
       min-width: 348px;
@@ -12704,10 +12809,17 @@
       z-index: 1101;
       box-shadow: -4px 0 24px rgba(0, 0, 0, 0.15);
       overflow: hidden;
+      transform: translateX(calc(100% + var(--space-3xl)));
+      visibility: hidden;
+      pointer-events: none;
+      transition: transform 0.25s ease, visibility 0s linear 0.25s;
     }
 
     .prompt-drawer.open {
-      right: var(--space-sm);
+      transform: translateX(0);
+      visibility: visible;
+      pointer-events: auto;
+      transition: transform 0.25s ease;
     }
 
     .prompt-drawer-header {
@@ -12774,10 +12886,15 @@
     }
 
     .prompt-drawer.minimized {
-      right: -100% !important;
+      transform: translateX(calc(100% + var(--space-3xl))) !important;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .prompt-drawer.maximized {
+      transform: translateX(0) !important;
+      visibility: visible;
+      pointer-events: auto;
       top: 0 !important;
       bottom: 0 !important;
       right: 0 !important;

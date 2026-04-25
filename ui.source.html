@@ -160,6 +160,17 @@
                   <span class="toggle-label" data-i18n="settings.headerMenu.lightMode">Light Mode</span>
                 </label>
               </div>
+              <div class="header-settings-menu-section" role="none">
+                <div class="setting-label-row header-settings-scale-label-row">
+                  <div class="header-settings-menu-label" data-i18n="settings.appearance.uiScaleLabel">UI Scale</div>
+                  <span class="setting-range-value" id="headerUiScaleValue">100%</span>
+                </div>
+                <div class="setting-range-row header-settings-scale-row">
+                  <span class="setting-range-end">80%</span>
+                  <input type="range" class="setting-range" id="headerUiScaleInput" min="80" max="150" step="5" value="100" />
+                  <span class="setting-range-end">150%</span>
+                </div>
+              </div>
               <div class="header-settings-menu-divider" role="separator"></div>
               <button type="button" class="header-settings-menu-item" id="headerOpenFullSettingsBtn" role="menuitem"
                 data-i18n="settings.headerMenu.allSettings">Settings</button>
@@ -576,6 +587,7 @@
 
             </div>
 
+            <!-- Appearance Category -->
             <!-- Export Category -->
             <div class="settings-category-panel" id="category-export">
               <div class="settings-group-title" data-i18n="settings.export.groupTitle">Export Settings</div>
@@ -1380,6 +1392,17 @@
               <input type="checkbox" id="drawerLightModeToggle" />
               <span class="toggle-label" data-i18n="settings.headerMenu.lightMode">Light Mode</span>
             </label>
+          </div>
+          <div class="header-settings-menu-section" role="none">
+            <div class="setting-label-row header-settings-scale-label-row">
+              <div class="header-settings-menu-label" data-i18n="settings.appearance.uiScaleLabel">UI Scale</div>
+              <span class="setting-range-value" id="drawerUiScaleValue">100%</span>
+            </div>
+            <div class="setting-range-row header-settings-scale-row">
+              <span class="setting-range-end">80%</span>
+              <input type="range" class="setting-range" id="drawerUiScaleInput" min="80" max="150" step="5" value="100" />
+              <span class="setting-range-end">150%</span>
+            </div>
           </div>
           <div class="header-settings-menu-divider" role="separator"></div>
           <button type="button" class="header-settings-menu-item" id="drawerOpenFullSettingsBtn" role="menuitem"
