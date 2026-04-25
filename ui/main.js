@@ -4268,14 +4268,40 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       document.body.classList.remove('header-settings-menu-scale-pending');
     }
 
+    /**
+     * Host size for the pre-scale `body` (CSS variables `--plugin-vw` / `--plugin-vh` and layout dimensions).
+     * Use `innerWidth` / `innerHeight` only — they match the iframe (or browser tab) viewport.
+     * Avoid `Math.max` with `documentElement.client*` or `visualViewport`: in Chrome (zoom, HiDPI, devtools) those
+     * can be tens of px larger than the layout viewport, inflating the pre-scale body so `html { overflow: hidden }`
+     * clips from the bottom; the whole UI then looks “shifted up” by that amount.
+     */
+    function syncPluginViewportSize(explicitScale) {
+      let w = window.innerWidth;
+      let h = window.innerHeight;
+      if (w <= 0) w = document.documentElement.clientWidth;
+      if (h <= 0) h = document.documentElement.clientHeight;
+      if (w > 0 && h > 0) {
+        document.documentElement.style.setProperty('--plugin-vw', `${w}px`);
+        document.documentElement.style.setProperty('--plugin-vh', `${h}px`);
+        const s =
+          typeof explicitScale === 'number' && Number.isFinite(explicitScale) && explicitScale > 0
+            ? explicitScale
+            : currentUiScale / 100;
+        if (s > 0) {
+          document.documentElement.style.setProperty('--ui-scale-body-lw', `${w / s}px`);
+          document.documentElement.style.setProperty('--ui-scale-body-lh', `${h / s}px`);
+        }
+      }
+    }
+
     function applyUiScale(value) {
       currentUiScale = normalizeUiScale(value);
       const scale = currentUiScale / 100;
       const inverse = 1 / scale;
       document.documentElement.style.setProperty('--ui-scale', String(scale));
       document.documentElement.style.setProperty('--ui-scale-inverse', String(inverse));
-      document.documentElement.style.setProperty('--ui-scale-body-width', `${100 * inverse}%`);
-      document.documentElement.style.setProperty('--ui-scale-body-height', `${100 * inverse}%`);
+      document.documentElement.style.setProperty('--ui-scale-commands-drawer-inset', `${8 * inverse}px`);
+      document.documentElement.style.setProperty('--ui-scale-commands-drawer-wide-inset', `${24 * inverse}px`);
       document.documentElement.style.setProperty('--ui-scale-modal-viewport-height', `${90 * inverse}vh`);
       document.documentElement.style.setProperty('--ui-scale-modal-padding', `${20 * inverse}px`);
       document.documentElement.style.setProperty('--ui-scale-settings-modal-max-width', `${640 * inverse}px`);
@@ -4285,6 +4311,15 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       document.documentElement.style.setProperty('--ui-scale-small-modal-max-width', `${360 * inverse}px`);
       syncQuickSettingsMenusFromForm();
       syncHeaderMenuCompensation();
+      syncPluginViewportSize(scale);
+    }
+
+    function onPluginViewportEvent() {
+      syncPluginViewportSize();
+    }
+    window.addEventListener('resize', onPluginViewportEvent);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', onPluginViewportEvent);
     }
 
     /** Light/dark tokens live on body.light-mode; :root keeps dark defaults, so read from body for Iconify ?color= */
@@ -16451,6 +16486,7 @@ Generate ONLY the reply text, nothing else.`;
       if (selectedCategory) {
         parent.postMessage({ pluginMessage: { type: 'save-last-commands-category', category: selectedCategory } }, '*');
       }
+      requestAnimationFrame(() => syncPluginViewportSize());
     }
 
     function closeCommandsDrawer() {
@@ -16461,6 +16497,7 @@ Generate ONLY the reply text, nothing else.`;
       commandsDrawerOverlay.classList.remove('show');
       commandsDrawerBtn.classList.remove('active');
       chatInputContainer.classList.remove('hidden');
+      requestAnimationFrame(() => syncPluginViewportSize());
     }
 
     // Drawer event listeners

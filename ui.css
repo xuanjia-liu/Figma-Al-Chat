@@ -166,20 +166,28 @@
 
     /* Lock the document to the plugin iframe — avoid stacking 100vh on body + .app-layout (extra scroll / drift). */
     html {
+      width: 100%;
       height: 100%;
       overflow: hidden;
+      overscroll-behavior: none;
+      background: var(--bg-primary);
     }
 
     body {
       font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
-      width: var(--ui-scale-body-width, 100%);
-      height: var(--ui-scale-body-height, 100%);
+      position: fixed;
+      top: 0;
+      left: 0;
+      /* Exact pre-scale px from syncPluginViewportSize (avoids float drift in calc); fall back to plugin size × inverse */
+      width: var(--ui-scale-body-lw, calc(var(--plugin-vw, 100vw) * var(--ui-scale-inverse, 1)));
+      height: var(--ui-scale-body-lh, calc(var(--plugin-vh, 100vh) * var(--ui-scale-inverse, 1)));
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      overscroll-behavior: none;
       transform: scale(var(--ui-scale));
       transform-origin: top left;
     }
@@ -8541,7 +8549,10 @@
         padding: var(--space-lg) var(--space-xl);
       }
       .commands-drawer {
-        bottom: 24px;
+        bottom: var(--ui-scale-commands-drawer-wide-inset, 24px);
+        height: min(75%, calc(100% - var(--ui-scale-commands-drawer-wide-inset, 24px)));
+        max-height: min(75%, calc(100% - var(--ui-scale-commands-drawer-wide-inset, 24px)));
+        min-height: min(300px, calc(100% - var(--ui-scale-commands-drawer-wide-inset, 24px)));
       }
     }
 
@@ -12315,13 +12326,16 @@
 
     .commands-drawer {
       position: fixed;
-      bottom: 8px;
+      bottom: var(--ui-scale-commands-drawer-inset, 8px);
       left: 8px;
       right: 8px;
       margin-left: auto;
       margin-right: auto;
-      height: 75vh;
-      min-height: 300px;
+      /* 75vh is iframe pixels; with UI scale, fixed content is in the body box.
+         Use percentages plus an inverse-scaled inset so the visual bottom gap stays stable. */
+      height: min(75%, calc(100% - var(--ui-scale-commands-drawer-inset, 8px)));
+      max-height: min(75%, calc(100% - var(--ui-scale-commands-drawer-inset, 8px)));
+      min-height: min(300px, calc(100% - var(--ui-scale-commands-drawer-inset, 8px)));
       max-width: 720px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
