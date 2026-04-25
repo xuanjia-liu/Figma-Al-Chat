@@ -4110,11 +4110,12 @@
     #promptCommentsListContainer {
       overflow-y: auto;
       overflow-x: hidden;
-      max-height: calc(100vh - 200px);
+      /* 100vh is iframe pixels; unscaled body is wider/taller by 1/scale (see --ui-scale-inverse) */
+      max-height: max(0px, calc(100vh * var(--ui-scale-inverse, 1) - 200px));
     }
 
     .prompt-drawer.maximized #promptCommentsListContainer {
-      max-height: calc(100vh - 140px);
+      max-height: max(0px, calc(100vh * var(--ui-scale-inverse, 1) - 140px));
     }
 
     /* Comments toolbar */
@@ -12798,9 +12799,10 @@
       top: var(--space-sm);
       bottom: var(--space-sm);
       right: var(--space-sm);
-      width: 80vw;
-      max-width: 560px;
-      min-width: 348px;
+      /* Match scaled body, not raw iframe vw (avoids <100% gaps and >100% overflow) */
+      width: 80%;
+      max-width: min(560px, 100%);
+      min-width: min(348px, 100%);
       background: var(--bg-primary);
       border-radius: var(--radius-xl);
       border: 1px solid var(--border);
@@ -12850,7 +12852,7 @@
       color: var(--text-primary);
     }
 
-    .prompt-dr awer-title-icon svg {
+    .prompt-drawer-title-icon svg {
       width: 14px;
       height: 14px;
     }
@@ -12895,12 +12897,11 @@
       transform: translateX(0) !important;
       visibility: visible;
       pointer-events: auto;
-      top: 0 !important;
-      bottom: 0 !important;
-      right: 0 !important;
-      width: 100vw !important;
-      max-width: 100vw !important;
-      min-width: 100vw !important;
+      inset: 0 !important;
+      width: auto !important;
+      max-width: none !important;
+      min-width: 0 !important;
+      height: auto !important;
       border-radius: 0 !important;
       border: none !important;
       box-shadow: none !important;
@@ -13028,6 +13029,7 @@
 
     .prompt-drawer-body {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
       padding: var(--space-lg);
