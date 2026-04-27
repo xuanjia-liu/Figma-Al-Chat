@@ -5611,6 +5611,7 @@
       width: 100%;
       overflow: auto;
       overflow-x: hidden;
+      scrollbar-gutter: stable;
     }
 
     .chat-messages {
@@ -8443,6 +8444,13 @@
         gap 0.35s cubic-bezier(0.4, 0, 0.2, 1),
         box-shadow 0.2s ease-in-out;
       overflow: visible;
+    }
+
+    /* Keep layout footprint while commands drawer is open — `display:none` removed the flex row and made .content jump. */
+    .chat-input-container.commands-drawer-suppresses-input {
+      visibility: hidden;
+      pointer-events: none;
+      user-select: none;
     }
 
     /* Stroke ring: static accent palette revealed by a rotating conic mask window. */

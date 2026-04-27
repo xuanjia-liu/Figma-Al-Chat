@@ -4289,7 +4289,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
             : currentUiScale / 100;
         if (s > 0) {
           document.documentElement.style.setProperty('--ui-scale-body-lw', `${w / s}px`);
-          document.documentElement.style.setProperty('--ui-scale-body-lh', `${h / s}px`);
+          // Float + compositor drift grows with scale; below ~125% inner×inverse is enough, above that add a few host px.
+          let hHost = h;
+          if (s >= 1.25) {
+            hHost = h + 1 + Math.min(14, Math.round((s - 1.25) * 36));
+          }
+          document.documentElement.style.setProperty('--ui-scale-body-lh', `${hHost / s}px`);
         }
       }
     }
@@ -16466,7 +16471,11 @@ Generate ONLY the reply text, nothing else.`;
       commandsDrawer.classList.add('show');
       commandsDrawerOverlay.classList.add('show');
       commandsDrawerBtn.classList.add('active');
-      chatInputContainer.classList.add('hidden');
+      chatInputContainer.classList.add('commands-drawer-suppresses-input');
+      chatInputContainer.setAttribute('aria-hidden', 'true');
+      if (typeof HTMLElement !== 'undefined' && 'inert' in HTMLElement.prototype) {
+        chatInputContainer.inert = true;
+      }
       closeSlashActionsMenu();
       if (!keepSelection) {
         if (category) {
@@ -16486,7 +16495,6 @@ Generate ONLY the reply text, nothing else.`;
       if (selectedCategory) {
         parent.postMessage({ pluginMessage: { type: 'save-last-commands-category', category: selectedCategory } }, '*');
       }
-      requestAnimationFrame(() => syncPluginViewportSize());
     }
 
     function closeCommandsDrawer() {
@@ -16496,8 +16504,11 @@ Generate ONLY the reply text, nothing else.`;
       commandsDrawer.classList.remove('show');
       commandsDrawerOverlay.classList.remove('show');
       commandsDrawerBtn.classList.remove('active');
-      chatInputContainer.classList.remove('hidden');
-      requestAnimationFrame(() => syncPluginViewportSize());
+      chatInputContainer.classList.remove('commands-drawer-suppresses-input');
+      chatInputContainer.removeAttribute('aria-hidden');
+      if (typeof HTMLElement !== 'undefined' && 'inert' in HTMLElement.prototype) {
+        chatInputContainer.inert = false;
+      }
     }
 
     // Drawer event listeners
