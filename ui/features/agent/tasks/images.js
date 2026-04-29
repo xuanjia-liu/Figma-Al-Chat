@@ -123,23 +123,77 @@ export const stylingImageTasks = [
                 { value: 'unsplash', label: 'Unsplash (high-quality, needs API key)' },
                 { value: 'pixabay', label: 'Pixabay (free, needs API key)' },
                 { value: 'pexels', label: 'Pexels (free, needs API key)' },
+                { value: 'itunes', label: 'Apple iTunes artwork (music, apps, podcasts — no API key)' },
                 { value: 'loremflickr', label: 'LoremFlickr (keyword search)' },
                 { value: 'picsum', label: 'Lorem Picsum (random high-quality)' },
                 { value: 'placehold', label: 'Placeholder (solid color)' }
               ]
             },
             {
+              key: 'media', type: 'select', label: 'Apple media type',
+              default: 'music',
+              showWhen: { field: 'service', equals: 'itunes' },
+              options: [
+                { value: 'music', label: 'Music' },
+                { value: 'software', label: 'Apps (software)' },
+                { value: 'podcast', label: 'Podcasts' }
+              ]
+            },
+            {
+              key: 'itunesAppImage',
+              type: 'select',
+              label: 'App image',
+              default: 'icon',
+              hint: 'App Store marketing screenshots are only returned for apps; icon uses the app artwork.',
+              showWhen: [
+                { field: 'service', equals: 'itunes' },
+                { field: 'media', equals: 'software' },
+              ],
+              options: [
+                { value: 'icon', label: 'Icon / artwork' },
+                { value: 'iphoneScreenshot', label: 'iPhone screenshot' },
+                { value: 'ipadScreenshot', label: 'iPad screenshot' },
+              ],
+            },
+            {
+              key: 'entity', type: 'select', label: 'Apple search entity',
+              default: 'album',
+              hint: 'Defaults match the media type if needed: albums/songs for music, software for apps, podcast for shows.',
+              showWhen: { field: 'service', equals: 'itunes' },
+              options: [
+                { value: 'album', label: 'Album (music)' },
+                { value: 'song', label: 'Song (music)' },
+                { value: 'software', label: 'App (software)' },
+                { value: 'podcast', label: 'Podcast' }
+              ]
+            },
+            {
+              key: 'country', type: 'text', label: 'Country (iTunes store)',
+              default: 'US',
+              placeholder: 'e.g. US, GB, JP',
+              showWhen: { field: 'service', equals: 'itunes' }
+            },
+            {
+              key: 'explicit', type: 'select', label: 'Explicit content',
+              default: 'No',
+              showWhen: { field: 'service', equals: 'itunes' },
+              options: [
+                { value: 'No', label: 'No (exclude explicit)' },
+                { value: 'Yes', label: 'Yes (allow explicit)' }
+              ]
+            },
+            {
               key: 'autoDetect', type: 'checkbox',
               label: 'AI auto-detect keywords from selection',
               default: false,
-              showWhen: { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels'] }
+              showWhen: { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes'] }
             },
             {
               key: 'keywords', type: 'text',
               label: 'Subject / Keywords',
               placeholder: 'e.g. nature, city, food',
               showWhen: [
-                { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels'] },
+                { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes'] },
                 { field: 'autoDetect', equals: 'false' }
               ]
             },

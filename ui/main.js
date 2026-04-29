@@ -30896,13 +30896,114 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       };
     }
 
-    const API_IMAGE_SERVICES = ['unsplash', 'pixabay', 'pexels'];
+    const ITUNES_ARTWORK_SIZE_STEPS = [100, 200, 300, 400, 500, 600, 1000, 1200, 2048];
+    const ITUNES_ARTWORK_MAX = 2048;
 
-    async function fetchApiPhoto(service, query, width, height) {
+    function upgradeItunesArtworkUrl(url, width, height) {
+      if (!url || typeof url !== 'string') return url;
+      const maxSide = Math.max(Number(width) || 400, Number(height) || 400, 64);
+      let target = Math.min(Math.max(Math.ceil(maxSide), 100), ITUNES_ARTWORK_MAX);
+      const side = ITUNES_ARTWORK_SIZE_STEPS.find((s) => s >= target) || ITUNES_ARTWORK_MAX;
+      return url.replace(/\d+x\d+bb/g, `${side}x${side}bb`);
+    }
+
+    function normalizeItunesEntityForMedia(media, entity) {
+      const defaults = { music: 'album', software: 'software', podcast: 'podcast' };
+      const allowed = {
+        music: new Set(['album', 'song']),
+        software: new Set(['software']),
+        podcast: new Set(['podcast']),
+      };
+      const set = allowed[media];
+      if (set && entity && set.has(String(entity))) return String(entity);
+      return defaults[media] || 'album';
+    }
+
+    /**
+     * Apple iTunes Search API (keyless). options: media, entity, country, explicit, itunesAppImage (+ saved UI values).
+     */
+    async function fetchItunesArtwork(query, width, height, options = {}) {
+      const term = (query || '').trim();
+      if (!term) throw new Error('Search keywords required for Apple iTunes.');
+
+      const media = options.media || 'music';
+      const entity = normalizeItunesEntityForMedia(media, options.entity);
+      const country = String(options.country || 'US').trim().slice(0, 2).toUpperCase() || 'US';
+      const explicitRaw = options.explicit;
+      const explicit = explicitRaw === 'Yes' || explicitRaw === true ? 'Yes' : 'No';
+      const appImage = String(options.itunesAppImage || 'icon');
+
+      const params = new URLSearchParams({
+        term,
+        country,
+        media,
+        entity,
+        limit: '25',
+        explicit,
+      });
+
+      const resp = await fetch(`https://itunes.apple.com/search?${params.toString()}`);
+      if (!resp.ok) throw new Error(`iTunes Search error (${resp.status})`);
+
+      const data = await resp.json();
+      if (!data.results || data.results.length === 0) throw new Error('No iTunes results for this query.');
+
+      const item = data.results[Math.floor(Math.random() * data.results.length)];
+
+      let imageUrl;
+      let screenshotKind = null;
+      const isIphoneShot = media === 'software' && appImage === 'iphoneScreenshot';
+      const isIpadShot = media === 'software' && appImage === 'ipadScreenshot';
+
+      if (isIphoneShot || isIpadShot) {
+        let urls;
+        if (isIpadShot) {
+          urls = item.ipadScreenshotUrls;
+          screenshotKind = 'iPad';
+        } else {
+          urls = item.screenshotUrls;
+          screenshotKind = 'iPhone';
+        }
+        const list = Array.isArray(urls) ? urls.filter((u) => typeof u === 'string' && u) : [];
+        if (list.length === 0) {
+          const label = isIpadShot ? 'iPad screenshots' : 'iPhone screenshots';
+          throw new Error(`No ${label} in this App Store result.`);
+        }
+        imageUrl = list[Math.floor(Math.random() * list.length)];
+      } else {
+        const rawArt = item.artworkUrl600 || item.artworkUrl100 || item.artworkUrl60 || '';
+        if (!rawArt) throw new Error('No artwork in iTunes result.');
+        imageUrl = upgradeItunesArtworkUrl(rawArt, width, height);
+      }
+
+      const title = item.trackName || item.collectionName || item.name || 'Untitled';
+      const artist = item.artistName || item.sellerName || '';
+      let photographerName = artist ? `${title} — ${artist}` : title;
+      if (screenshotKind) {
+        photographerName += ` — App screenshot (${screenshotKind})`;
+      }
+
+      const photographerUrl = item.artistViewUrl || item.collectionViewUrl || 'https://www.apple.com/';
+      const photoUrl = item.trackViewUrl || item.collectionViewUrl || photographerUrl;
+
+      return {
+        service: 'Apple iTunes',
+        imageUrl,
+        photographerName,
+        photographerUrl,
+        photoUrl,
+        sourceUrl: 'https://www.apple.com/itunes/',
+      };
+    }
+
+    const API_IMAGE_SERVICES = ['unsplash', 'pixabay', 'pexels', 'itunes'];
+
+    async function fetchApiPhoto(service, query, width, height, fillOptions = {}) {
       switch (service) {
         case 'unsplash': return fetchUnsplashPhoto(query, width, height);
         case 'pixabay': return fetchPixabayPhoto(query, width, height);
         case 'pexels': return fetchPexelsPhoto(query, width, height);
+        case 'itunes': return fetchItunesArtwork(query, width, height, fillOptions);
         default: throw new Error(`Unknown API service: ${service}`);
       }
     }
@@ -30930,11 +31031,18 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
         let successCount = 0;
         const attributions = [];
+        const itunesFillOptions = service === 'itunes' ? {
+          media: values.media,
+          entity: values.entity,
+          country: values.country,
+          explicit: values.explicit,
+          itunesAppImage: values.itunesAppImage,
+        } : {};
 
         for (const node of nodes) {
           try {
             if (isApiService) {
-              const photo = await fetchApiPhoto(service, keywords, node.width, node.height);
+              const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
               const base64 = await fetchImageAsBase64(photo.imageUrl);
               await applyImageToNodeWithScale(base64, node.id, scaleMode);
               attributions.push({ nodeName: node.name, nodeId: node.id, ...photo });
@@ -30955,7 +31063,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           return;
         }
 
-        lastFillFromOnlineParams = { service, scaleMode, keywords, nodes };
+        lastFillFromOnlineParams = { service, scaleMode, keywords, nodes, actionValues: { ...values } };
 
         const serviceName = isApiService ? (attributions[0]?.service || service) : 'online';
         const msg = successCount === nodes.length
@@ -30977,8 +31085,16 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         showToast('No previous fill to re-roll.', 'warning');
         return;
       }
-      const { service, scaleMode, keywords, nodes } = lastFillFromOnlineParams;
+      const { service, scaleMode, keywords, nodes, actionValues } = lastFillFromOnlineParams;
       const isApiService = API_IMAGE_SERVICES.includes(service);
+      const saved = actionValues || {};
+      const itunesFillOptions = service === 'itunes' ? {
+        media: saved.media,
+        entity: saved.entity,
+        country: saved.country,
+        explicit: saved.explicit,
+        itunesAppImage: saved.itunesAppImage,
+      } : {};
       showToast('Re-rolling images...', 'info');
 
       let successCount = 0;
@@ -30986,7 +31102,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       for (const node of nodes) {
         try {
           if (isApiService) {
-            const photo = await fetchApiPhoto(service, keywords, node.width, node.height);
+            const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
             const base64 = await fetchImageAsBase64(photo.imageUrl);
             await applyImageToNodeWithScale(base64, node.id, scaleMode);
             attributions.push({ nodeName: node.name, nodeId: node.id, ...photo });
@@ -31046,19 +31162,31 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     function showImageAttribution(attributions) {
       const serviceName = attributions[0]?.service || 'online';
-      const summary = `Filled ${attributions.length} node${attributions.length > 1 ? 's' : ''} with ${serviceName} photos`;
+      const isItunesAttrib = serviceName === 'Apple iTunes';
+      const noun = isItunesAttrib ? 'artwork' : 'photos';
+      const summary = `Filled ${attributions.length} node${attributions.length > 1 ? 's' : ''} with ${serviceName} ${noun}`;
       const messageDiv = addMessage('bot', summary);
       if (!messageDiv) return;
 
-      const items = attributions.map(a => ({
-        label: `Photo by <a href="${a.photographerUrl}" target="_blank" style="color:var(--accent)">${a.photographerName}</a> on <a href="${a.sourceUrl}" target="_blank" style="color:var(--accent)">${a.service}</a>`,
-        value: `Applied to "${a.nodeName}"`,
-        nodeId: a.nodeId,
-        status: 'success',
-        details: `<a href="${a.photoUrl}" target="_blank" style="color:var(--accent);font-size:11px">View photo on ${a.service} →</a>`
-      }));
+      const items = attributions.map(a => {
+        const isItunes = a.service === 'Apple iTunes';
+        const label = isItunes
+          ? `Artwork (promotional): <a href="${a.photographerUrl}" target="_blank" style="color:var(--accent)">${a.photographerName}</a> · <a href="${a.sourceUrl}" target="_blank" style="color:var(--accent)">${a.service}</a>`
+          : `Photo by <a href="${a.photographerUrl}" target="_blank" style="color:var(--accent)">${a.photographerName}</a> on <a href="${a.sourceUrl}" target="_blank" style="color:var(--accent)">${a.service}</a>`;
+        const detailsHref = `<a href="${a.photoUrl}" target="_blank" style="color:var(--accent);font-size:11px">${isItunes ? 'View on App Store / iTunes →' : `View photo on ${a.service} →`}</a>`;
+        return {
+          label,
+          value: `Applied to "${a.nodeName}"`,
+          nodeId: a.nodeId,
+          status: 'success',
+          details: detailsHref,
+        };
+      });
 
-      attachExecutionDetails(messageDiv, `${attributions.length} photo${attributions.length > 1 ? 's' : ''} attributed`, items);
+      const detailTitle = isItunesAttrib
+        ? `${attributions.length} artwork source${attributions.length > 1 ? 's' : ''} (attribution)`
+        : `${attributions.length} photo${attributions.length > 1 ? 's' : ''} attributed`;
+      attachExecutionDetails(messageDiv, detailTitle, items);
     }
 
     // ==========================================

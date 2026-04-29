@@ -46,6 +46,8 @@
       "https://pixabay.com",
       "https://api.pexels.com",
       "https://images.pexels.com",
+      "https://itunes.apple.com",
+      "https://*.mzstatic.com",
       "http://localhost:11434",
       "http://host.docker.internal:11434"
     ]
