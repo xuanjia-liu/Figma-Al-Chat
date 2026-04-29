@@ -273,8 +273,10 @@ export function createPromptDrawerHelpers({
 
       const key = el.dataset.fieldKey;
       const wrapper = el.closest('.prompt-field');
-      if (wrapper && wrapper.dataset.showWhenField && wrapper.style.display === 'none') {
-        return;
+      if (wrapper && wrapper.style.display === 'none') {
+        if (wrapper.dataset.showWhenField || wrapper.dataset.showWhenJson) {
+          return;
+        }
       }
 
       if (el.classList.contains('prompt-custom-select')) {
