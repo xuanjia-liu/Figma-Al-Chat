@@ -2444,7 +2444,7 @@ const exactTranslations = {
     'When off, style detaches and instance detaches apply to the selection and all descendants.':
       'オフのとき、スタイルの解除とインスタンスのデタッチは選択範囲とすべての子孫に適用されます。',
     'Set image fill': '画像塗りを設定',
-    'Fill with stock photos': 'ストック写真で塗りつぶす',
+    'Stock photos': 'ストック写真（選択へ適用・キャンバスに追加）',
     'Perspective tool': 'パースペクティブツール',
     'Warp an image onto a four-corner target with perspective.':
       'パースペクティブで画像を四隅のターゲットにワープします。',
@@ -3085,7 +3085,7 @@ const exactTranslations = {
     'When off, style detaches and instance detaches apply to the selection and all descendants.':
       '关闭时，样式解除与实例分离会应用到选区及其所有子级。',
     'Set image fill': '设置图像填充',
-    'Fill with stock photos': '用图库照片填充',
+    'Stock photos': '库存照片（填充选中或添加到画布）',
     'Perspective tool': '透视工具',
     'Warp an image onto a four-corner target with perspective.': '以透视方式将图像贴合到四角目标。',
     'Perspective warp: map an image to four corners (image to 4-point vector). Keywords: perspective, image warp, distort, mockup.':

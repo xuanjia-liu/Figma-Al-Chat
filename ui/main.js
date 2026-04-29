@@ -20515,6 +20515,9 @@ Generate ONLY the reply text, nothing else.`;
         if (field.hideWhenNoSelection) {
           conditionalAttrs += ' data-hide-when-no-selection="true"';
         }
+        if (field.showWhenNoSelection) {
+          conditionalAttrs += ' data-show-when-no-selection="true"';
+        }
         const disabledAttr = (field.disabled || forceDisabled) ? ' disabled' : '';
 
         if (field.type === 'divider') {
@@ -23296,6 +23299,16 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         if (!hasSelection) {
           const checkbox = fieldEl.querySelector('input[type="checkbox"][data-field-key="applyToSelection"]');
           if (checkbox) checkbox.checked = false;
+        }
+      });
+
+      promptDrawerFields.querySelectorAll('.prompt-field[data-show-when-no-selection="true"]').forEach(fieldEl => {
+        if (hasSelection) {
+          fieldEl.style.display = 'none';
+        } else if (fieldEl.dataset.showWhenJson || fieldEl.dataset.showWhenField) {
+          fieldEl.style.display = evaluatePromptCondition(fieldEl, 'showWhen') ? '' : 'none';
+        } else {
+          fieldEl.style.display = '';
         }
       });
 
@@ -30768,6 +30781,58 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       });
     }
 
+    const STOCK_CANVAS_DEFAULT_W = 800;
+    const STOCK_CANVAS_DEFAULT_H = 600;
+    const STOCK_CANVAS_GAP = 24;
+
+    async function createStockImageOnCanvas(base64Data, width, height, scaleMode, index) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Timeout creating stock image on canvas'));
+        }, 30000);
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (msg && msg.type === 'commands-executed') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            if (msg.success > 0) {
+              const detail = (msg.commands || []).find((c) => c.action === 'createRectangleWithImage' && c.nodeId);
+              if (!detail || !detail.nodeId) {
+                reject(new Error('Stock image created but node id missing'));
+                return;
+              }
+              resolve({
+                id: detail.nodeId,
+                name: detail.name || `Stock photo ${index + 1}`,
+                width,
+                height,
+                parentName: '',
+              });
+            } else {
+              reject(new Error((msg.error && msg.error.message) || msg.error || msg.message || 'Failed to create stock image'));
+            }
+          }
+        };
+        window.addEventListener('message', handler);
+        const off = index * STOCK_CANVAS_GAP;
+        parent.postMessage({
+          pluginMessage: {
+            type: 'execute-commands',
+            commands: [{
+              action: 'createRectangleWithImage',
+              width,
+              height,
+              imageData: base64ToBytes(base64Data),
+              name: `Stock photo ${index + 1}`,
+              scaleMode: scaleMode || 'FILL',
+              offsetX: off,
+              offsetY: off,
+            }],
+          },
+        }, '*');
+      });
+    }
+
     async function autoDetectKeywords(nodes) {
       const nodeDescriptions = nodes.map(n =>
         `"${n.name}" (${n.type}, ${n.width}x${n.height}, parent: "${n.parentName}")`
@@ -31019,18 +31084,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
       try {
         const nodes = await getSelectionForFill();
-        if (!nodes || nodes.length === 0) {
-          showToast('Please select at least one node first.', 'error');
-          return;
-        }
+        const hasSelection = Array.isArray(nodes) && nodes.length > 0;
 
         if ((service === 'loremflickr' || isApiService) && autoDetect) {
-          showToast('Detecting keywords with AI...', 'info');
-          keywords = await autoDetectKeywords(nodes);
+          if (!hasSelection) {
+            showToast('AI keyword detection needs a selected layer. Using your keywords.', 'warning');
+          } else {
+            showToast('Detecting keywords with AI...', 'info');
+            keywords = await autoDetectKeywords(nodes);
+          }
         }
 
-        let successCount = 0;
-        const attributions = [];
         const itunesFillOptions = service === 'itunes' ? {
           media: values.media,
           entity: values.entity,
@@ -31039,40 +31103,118 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           itunesAppImage: values.itunesAppImage,
         } : {};
 
-        for (const node of nodes) {
-          try {
-            if (isApiService) {
-              const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
-              const base64 = await fetchImageAsBase64(photo.imageUrl);
-              await applyImageToNodeWithScale(base64, node.id, scaleMode);
-              attributions.push({ nodeName: node.name, nodeId: node.id, ...photo });
-              successCount++;
-            } else {
-              const url = buildOnlineImageUrl(service, node.width, node.height, keywords);
-              const base64 = await fetchImageAsBase64(url);
-              await applyImageToNodeWithScale(base64, node.id, scaleMode);
-              successCount++;
+        let successCount = 0;
+        const attributions = [];
+        let nodesForReroll = nodes;
+
+        if (hasSelection) {
+          for (const node of nodes) {
+            try {
+              if (isApiService) {
+                const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
+                const base64 = await fetchImageAsBase64(photo.imageUrl);
+                await applyImageToNodeWithScale(base64, node.id, scaleMode);
+                attributions.push({ nodeName: node.name, nodeId: node.id, ...photo });
+                successCount++;
+              } else {
+                const url = buildOnlineImageUrl(service, node.width, node.height, keywords);
+                const base64 = await fetchImageAsBase64(url);
+                await applyImageToNodeWithScale(base64, node.id, scaleMode);
+                successCount++;
+              }
+            } catch (e) {
+              console.error(`Failed to fill node "${node.name}":`, e);
             }
-          } catch (e) {
-            console.error(`Failed to fill node "${node.name}":`, e);
           }
-        }
 
-        if (successCount === 0) {
-          showToast('Failed to fill any nodes.', 'error');
-          return;
-        }
+          if (successCount === 0) {
+            showToast('Failed to fill any nodes.', 'error');
+            return;
+          }
 
-        lastFillFromOnlineParams = { service, scaleMode, keywords, nodes, actionValues: { ...values } };
+          lastFillFromOnlineParams = {
+            service,
+            scaleMode,
+            keywords,
+            nodes: nodesForReroll,
+            actionValues: { ...values },
+            insertMode: 'selection',
+          };
 
-        const serviceName = isApiService ? (attributions[0]?.service || service) : 'online';
-        const msg = successCount === nodes.length
-          ? `Filled ${successCount} node${successCount > 1 ? 's' : ''} with ${serviceName} images`
-          : `Filled ${successCount}/${nodes.length} nodes`;
-        showToastWithReroll(msg);
+          const serviceName = isApiService ? (attributions[0]?.service || service) : 'online';
+          const msg = successCount === nodes.length
+            ? `Filled ${successCount} node${successCount > 1 ? 's' : ''} with ${serviceName} images`
+            : `Filled ${successCount}/${nodes.length} nodes`;
+          showToastWithReroll(msg);
 
-        if (isApiService && attributions.length > 0) {
-          showImageAttribution(attributions);
+          if (isApiService && attributions.length > 0) {
+            showImageAttribution(attributions);
+          }
+        } else {
+          const rawCount = Number(values.stockCanvasCount);
+          const canvasCount = Math.min(12, Math.max(1, Number.isFinite(rawCount) ? rawCount : 1));
+
+          if (service === 'itunes' && !String(keywords || '').trim()) {
+            showToast('Enter search keywords for Apple Store.', 'error');
+            return;
+          }
+
+          const w = STOCK_CANVAS_DEFAULT_W;
+          const h = STOCK_CANVAS_DEFAULT_H;
+          const createdMeta = [];
+
+          for (let i = 0; i < canvasCount; i++) {
+            try {
+              if (isApiService) {
+                const photo = await fetchApiPhoto(service, keywords, w, h, itunesFillOptions);
+                const base64 = await fetchImageAsBase64(photo.imageUrl);
+                const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
+                createdMeta.push(meta);
+                attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photo });
+                successCount++;
+              } else {
+                const url = buildOnlineImageUrl(service, w, h, keywords);
+                const base64 = await fetchImageAsBase64(url);
+                const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
+                createdMeta.push(meta);
+                successCount++;
+              }
+            } catch (e) {
+              console.error(`Failed to add stock image ${i + 1} to canvas:`, e);
+            }
+          }
+
+          if (successCount === 0) {
+            showToast('Failed to add images to the canvas.', 'error');
+            return;
+          }
+
+          nodesForReroll = createdMeta.map((m) => ({
+            id: m.id,
+            name: m.name,
+            width: m.width,
+            height: m.height,
+            parentName: m.parentName || '',
+          }));
+
+          lastFillFromOnlineParams = {
+            service,
+            scaleMode,
+            keywords,
+            nodes: nodesForReroll,
+            actionValues: { ...values },
+            insertMode: 'canvas',
+          };
+
+          const serviceName = isApiService ? (attributions[0]?.service || service) : 'online';
+          const msg = successCount === canvasCount
+            ? `Added ${successCount} stock image${successCount > 1 ? 's' : ''} to canvas (${serviceName})`
+            : `Added ${successCount}/${canvasCount} stock images to canvas`;
+          showToastWithReroll(msg);
+
+          if (isApiService && attributions.length > 0) {
+            showImageAttribution(attributions, { addedToCanvas: true });
+          }
         }
       } catch (e) {
         console.error('Fill from online image failed:', e);
@@ -31085,7 +31227,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         showToast('No previous fill to re-roll.', 'warning');
         return;
       }
-      const { service, scaleMode, keywords, nodes, actionValues } = lastFillFromOnlineParams;
+      const { service, scaleMode, keywords, nodes, actionValues, insertMode } = lastFillFromOnlineParams;
       const isApiService = API_IMAGE_SERVICES.includes(service);
       const saved = actionValues || {};
       const itunesFillOptions = service === 'itunes' ? {
@@ -31121,10 +31263,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (successCount > 0) {
         showToastWithReroll(`Re-rolled ${successCount} node${successCount > 1 ? 's' : ''}`);
         if (isApiService && attributions.length > 0) {
-          showImageAttribution(attributions);
+          showImageAttribution(attributions, { addedToCanvas: insertMode === 'canvas' });
         }
-      } else {
-        showToast('Re-roll failed for all nodes.', 'error');
       }
     }
 
@@ -31160,11 +31300,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       startToastHideTimer(15000);
     }
 
-    function showImageAttribution(attributions) {
+    function showImageAttribution(attributions, opts = {}) {
+      const addedToCanvas = opts.addedToCanvas === true;
       const serviceName = attributions[0]?.service || 'online';
       const isItunesAttrib = serviceName === 'Apple iTunes';
       const noun = isItunesAttrib ? 'artwork' : 'photos';
-      const summary = `Filled ${attributions.length} node${attributions.length > 1 ? 's' : ''} with ${serviceName} ${noun}`;
+      const summary = addedToCanvas
+        ? `Added ${attributions.length} ${noun} from ${serviceName} on the canvas`
+        : `Filled ${attributions.length} node${attributions.length > 1 ? 's' : ''} with ${serviceName} ${noun}`;
       const messageDiv = addMessage('bot', summary);
       if (!messageDiv) return;
 
@@ -31176,7 +31319,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         const detailsHref = `<a href="${a.photoUrl}" target="_blank" style="color:var(--accent);font-size:11px">${isItunes ? 'View on App Store / iTunes →' : `View photo on ${a.service} →`}</a>`;
         return {
           label,
-          value: `Applied to "${a.nodeName}"`,
+          value: addedToCanvas ? `Canvas: "${a.nodeName}"` : `Applied to "${a.nodeName}"`,
           nodeId: a.nodeId,
           status: 'success',
           details: detailsHref,

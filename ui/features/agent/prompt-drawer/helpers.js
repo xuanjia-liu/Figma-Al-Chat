@@ -274,7 +274,12 @@ export function createPromptDrawerHelpers({
       const key = el.dataset.fieldKey;
       const wrapper = el.closest('.prompt-field');
       if (wrapper && wrapper.style.display === 'none') {
-        if (wrapper.dataset.showWhenField || wrapper.dataset.showWhenJson) {
+        if (
+          wrapper.dataset.showWhenField ||
+          wrapper.dataset.showWhenJson ||
+          wrapper.dataset.showWhenNoSelection === 'true' ||
+          wrapper.dataset.hideWhenNoSelection === 'true'
+        ) {
           return;
         }
       }

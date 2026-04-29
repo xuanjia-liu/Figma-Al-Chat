@@ -178,8 +178,10 @@ export const stylingImageTasks = [
           ]
         },
 {
-          name: 'Fill with stock photos',
-          desc: 'Fill selected nodes with free stock photos / images',
+          name: 'Stock photos',
+          desc: 'Fill selection or add stock images to the canvas (Unsplash, Pixabay, Pexels, Apple Store, LoremFlickr, Picsum, placeholders)',
+          searchKeywords: 'Unsplash, Pixabay, Pexels, Apple Store, fill, image, random, stock, LoremFlickr, Picsum, placeholder',
+          noSelection: true,
           directAction: 'fillFromOnlineImage',
           fields: [
             {
@@ -195,6 +197,18 @@ export const stylingImageTasks = [
                 { value: 'picsum', label: 'Lorem Picsum (random)', hintText: 'random high-quality' },
                 { value: 'placehold', label: 'solid color Placeholder', hintText: 'solid color' }
               ]
+            },
+            {
+              key: 'stockCanvasCount',
+              type: 'slider',
+              label: 'Number on canvas',
+              default: 1,
+              min: 1,
+              max: 12,
+              step: 1,
+              numberWithSlider: true,
+              hint: 'When nothing is selected, creates this many rectangles with the image fill on the current page.',
+              showWhenNoSelection: true,
             },
             {
               key: 'media', type: 'select', label: 'Apple media type',
@@ -257,6 +271,7 @@ export const stylingImageTasks = [
               key: 'autoDetect', type: 'checkbox',
               label: 'AI auto-detect keywords from selection',
               default: false,
+              hideWhenNoSelection: true,
               showWhen: { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes'] }
             },
             {
