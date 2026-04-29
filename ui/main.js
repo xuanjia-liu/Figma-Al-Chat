@@ -1091,11 +1091,84 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       };
     }
 
+    const OPENAI_GPT_IMAGE_MODEL_FALLBACK = 'gpt-image-1.5';
+    const OPENAI_GPT_IMAGE_RATIOS = ['1:1', '3:2', '2:3'];
+    const OPENAI_GPT_IMAGE_2_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '5:4', '4:5', '2:1', '1:2', '21:9', '9:21', '3:1', '1:3'];
+    const OPENAI_GPT_IMAGE_2_RESOLUTIONS = ['1K', '2K', '4K'];
+    const OPENAI_DALLE3_RATIOS = ['1:1', '16:9', '9:16'];
+
+    function isGPTImageModelName(modelName) {
+      if (!modelName) return false;
+      const lower = modelName.toLowerCase();
+      return lower.includes('gpt-image') || lower.includes('chatgpt-image') || lower.includes('image-latest');
+    }
+
+    function isGPTImage2ModelName(modelName) {
+      if (!modelName) return false;
+      const lower = modelName.toLowerCase();
+      return lower.includes('gpt-image-2') || lower.includes('chatgpt-image-2') || lower.includes('images-2') || lower.includes('image-2');
+    }
+
+    function getClosestOpenAIGPTImageRatio(ratio) {
+      const ratioMap = {
+        '16:9': '3:2',
+        '21:9': '3:2',
+        '4:3': '3:2',
+        '5:4': '3:2',
+        '4:1': '3:2',
+        '8:1': '3:2',
+        '9:16': '2:3',
+        '3:4': '2:3',
+        '4:5': '2:3',
+        '1:4': '2:3',
+        '1:8': '2:3'
+      };
+      return ratioMap[ratio] || '1:1';
+    }
+
+    function getOpenAICustomDimensions(ratio, resolution) {
+      const dim = baseImageDimensions[ratio] || baseImageDimensions['1:1'];
+      const factor = resolution === '4K' ? 4 : resolution === '2K' ? 2 : 1;
+      let width = dim.w * factor;
+      let height = dim.h * factor;
+
+      const maxEdge = 3840;
+      const maxPixels = 8294400;
+      const minPixels = 655360;
+
+      const scaleDownTo = (limit) => {
+        if (width <= limit && height <= limit) return;
+        const scale = limit / Math.max(width, height);
+        width *= scale;
+        height *= scale;
+      };
+
+      scaleDownTo(maxEdge);
+
+      const pixels = width * height;
+      if (pixels > maxPixels) {
+        const scale = Math.sqrt(maxPixels / pixels);
+        width *= scale;
+        height *= scale;
+      } else if (pixels < minPixels) {
+        const scale = Math.sqrt(minPixels / pixels);
+        width *= scale;
+        height *= scale;
+        scaleDownTo(maxEdge);
+      }
+
+      return {
+        width: Math.max(16, Math.round(width / 16) * 16),
+        height: Math.max(16, Math.round(height / 16) * 16)
+      };
+    }
+
     // Get dimensions for OpenAI Images API (fixed sizes, no resolution scaling)
-    // GPT Image models support: 1:1 (1024x1024), 3:2 (1536x1024), 2:3 (1024x1536)
+    // GPT Image models, including forward-compatible gpt-image-2* IDs, support:
+    // 1:1 (1024x1024), 3:2 (1536x1024), 2:3 (1024x1536)
     // DALL-E 3 supports: 1:1 (1024x1024), 16:9 (1792x1024), 9:16 (1024x1792)
     // DALL-E 2 supports: 1:1 (1024x1024)
-    function getOpenAIDimensions(ratio, model) {
+    function getOpenAIDimensions(ratio, model, resolution = '1K') {
       const modelLower = (model || '').toLowerCase();
 
       // DALL-E 3 high-end models
@@ -1105,8 +1178,11 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         return { width: 1024, height: 1024 };
       }
 
-      // GPT Image models / chatgpt-image models (1.5, 1-mini, etc.)
-      if (modelLower.includes('gpt-image') || modelLower.includes('chatgpt-image')) {
+      // GPT Image models / chatgpt-image models (1.5, 2, 1-mini, latest, etc.)
+      if (isGPTImageModelName(modelLower)) {
+        if (isGPTImage2ModelName(modelLower)) {
+          return getOpenAICustomDimensions(ratio, resolution);
+        }
         if (ratio === '3:2') return { width: 1536, height: 1024 };
         if (ratio === '2:3') return { width: 1024, height: 1536 };
         return { width: 1024, height: 1024 };
@@ -1119,10 +1195,13 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     function getOpenAISupportedRatios(model) {
       const modelLower = (model || '').toLowerCase();
       if (modelLower.includes('dall-e-3') || modelLower.includes('dalle-3')) {
-        return ['1:1', '16:9', '9:16'];
+        return OPENAI_DALLE3_RATIOS;
       }
-      if (modelLower.includes('gpt-image') || modelLower.includes('chatgpt-image')) {
-        return ['1:1', '3:2', '2:3'];
+      if (isGPTImage2ModelName(modelLower)) {
+        return OPENAI_GPT_IMAGE_2_RATIOS;
+      }
+      if (isGPTImageModelName(modelLower)) {
+        return OPENAI_GPT_IMAGE_RATIOS;
       }
       return ['1:1'];
     }
@@ -1135,12 +1214,16 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       const supports = getOpenAISupportedRatios(normalizedModel);
       if (!supports.includes(normalizedRatio)) {
         changed = true;
-        if (normalizedRatio === '16:9' || normalizedRatio === '9:16') {
+        if (isGPTImage2ModelName(normalizedModel)) {
+          normalizedRatio = normalizedRatio.startsWith('1:') ? '1:3' : '3:1';
+        } else if (isGPTImageModelName(normalizedModel)) {
+          normalizedRatio = getClosestOpenAIGPTImageRatio(normalizedRatio);
+        } else if (normalizedRatio === '16:9' || normalizedRatio === '9:16') {
           normalizedModel = 'dall-e-3';
         } else if (normalizedRatio === '3:2' || normalizedRatio === '2:3') {
           const lower = (normalizedModel || '').toLowerCase();
-          if (!lower.includes('gpt-image') && !lower.includes('chatgpt-image')) {
-            normalizedModel = 'gpt-image-1.5';
+          if (!isGPTImageModelName(lower)) {
+            normalizedModel = OPENAI_GPT_IMAGE_MODEL_FALLBACK;
           }
         }
         const updatedSupports = getOpenAISupportedRatios(normalizedModel);
@@ -1156,7 +1239,7 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     function isOpenAIImageModelName(modelName) {
       if (!modelName) return false;
       const lower = modelName.toLowerCase();
-      return lower.includes('gpt-image') || lower.includes('chatgpt-image') || lower.includes('dall-e') || lower.includes('dalle') || lower.includes('image-1') || lower.includes('image-latest');
+      return lower.includes('gpt-image') || lower.includes('chatgpt-image') || lower.includes('dall-e') || lower.includes('dalle') || lower.includes('image-1') || lower.includes('image-2') || lower.includes('image-latest');
     }
 
     function getBestAspectRatio(width, height) {
@@ -1172,7 +1255,12 @@ import { optimize as optimizeSvg } from 'svgo/browser';
         '3:2': 3 / 2,
         '4:5': 4 / 5,
         '5:4': 5 / 4,
-        '21:9': 21 / 9
+        '2:1': 2,
+        '1:2': 1 / 2,
+        '21:9': 21 / 9,
+        '9:21': 9 / 21,
+        '3:1': 3,
+        '1:3': 1 / 3
       };
 
       let bestMatch = '1:1';
@@ -9507,6 +9595,7 @@ Rules:
       if (openaiApiKey) {
         modelOptions.push({ value: '__provider_header_openai__', label: 'OpenAI', isProviderHeader: true, provider: 'openai' });
         modelOptions.push({ value: 'gpt-image-1.5', label: 'GPT Image 1.5', provider: 'openai' });
+        modelOptions.push({ value: 'gpt-image-2', label: 'GPT Image 2', provider: 'openai' });
         modelOptions.push({ value: 'dall-e-3', label: 'DALL-E 3', provider: 'openai' });
       }
 
@@ -9514,6 +9603,7 @@ Rules:
       if (modelOptions.length === 0) {
         modelOptions = provider === 'openai' ? [
           { value: 'gpt-image-1.5', label: 'GPT Image 1.5', provider: 'openai' },
+          { value: 'gpt-image-2', label: 'GPT Image 2', provider: 'openai' },
           { value: 'dall-e-3', label: 'DALL-E 3 (Latest)', provider: 'openai' }
         ] : [
           { value: 'imagen-3.0-generate-002', label: 'Imagen 3 (Balanced)', provider: 'gemini' },
@@ -15374,7 +15464,7 @@ Generate ONLY the reply text, nothing else.`;
       // Use OpenAI-specific dimensions for OpenAI models (no resolution scaling)
       // Use regular dimensions for Gemini/Imagen models
       const dimensions = isOpenAIImageModelName(selectedModel)
-        ? getOpenAIDimensions(selectedRatio, selectedModel)
+        ? getOpenAIDimensions(selectedRatio, selectedModel, selectedRes)
         : getDimensions(selectedRatio, selectedRes);
 
       // Show thinking indicator
@@ -15497,7 +15587,7 @@ Generate ONLY the reply text, nothing else.`;
               // OpenAI Edit API requires exactly 1024x1024 for DALL-E 2,
               // but we want to honor the selected aspect ratio for gpt-image models if possible.
               // Note: Most OpenAI edit endpoints are strictly square.
-              const dims = getOpenAIDimensions(selectedRatio, selectedModel);
+              const dims = getOpenAIDimensions(selectedRatio, selectedModel, selectedRes);
               const size = (selectedModel.toLowerCase().includes('gpt-image') || selectedModel.toLowerCase().includes('chatgpt-image'))
                 ? `${dims.width}x${dims.height}`
                 : '1024x1024';
@@ -15541,7 +15631,7 @@ Generate ONLY the reply text, nothing else.`;
               return { image: b64, raw: data, info: { revised_prompt: data.data?.[0]?.revised_prompt } };
             } else {
               // Get dimensions for OpenAI model
-              const dims = getOpenAIDimensions(selectedRatio, selectedModel);
+              const dims = getOpenAIDimensions(selectedRatio, selectedModel, selectedRes);
               const size = `${dims.width}x${dims.height}`;
 
               // Ensure dimensions used for Figma creation match the API size
@@ -23325,8 +23415,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       // and resolution options are not applicable
       const imageModelValue = getPromptVisibilityValue('imageModel');
       const isOpenAIImageModel = imageModelValue && (
-        imageModelValue.toLowerCase().includes('gpt-image') ||
-        imageModelValue.toLowerCase().includes('chatgpt-image') ||
+        isGPTImageModelName(imageModelValue) ||
         imageModelValue.toLowerCase().includes('dall-e') ||
         imageModelValue.toLowerCase().includes('dalle')
       );
@@ -23358,15 +23447,17 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
 
       // Determine supported aspect ratios per model
-      const allRatios = ['1:1', '16:9', '9:16', '4:3', '3:4', '2:3', '3:2', '4:5', '5:4', '21:9', '4:1', '1:4', '8:1', '1:8'];
+      const allRatios = ['1:1', '16:9', '9:16', '4:3', '3:4', '2:3', '3:2', '4:5', '5:4', '2:1', '1:2', '21:9', '9:21', '3:1', '1:3', '4:1', '1:4', '8:1', '1:8'];
       const standardRatios = ['1:1', '16:9', '9:16', '4:3', '3:4', '2:3', '3:2', '4:5', '5:4', '21:9'];
       let supportedRatios = allRatios;
 
       if (isOpenAIImageModel) {
         if (modelLowerForVis.includes('dall-e-3')) {
-          supportedRatios = ['1:1', '16:9', '9:16'];
-        } else if (modelLowerForVis.includes('gpt-image') || modelLowerForVis.includes('chatgpt-image')) {
-          supportedRatios = ['1:1', '3:2', '2:3'];
+          supportedRatios = OPENAI_DALLE3_RATIOS;
+        } else if (isGPTImage2ModelName(modelLowerForVis)) {
+          supportedRatios = OPENAI_GPT_IMAGE_2_RATIOS;
+        } else if (isGPTImageModelName(modelLowerForVis)) {
+          supportedRatios = OPENAI_GPT_IMAGE_RATIOS;
         } else {
           supportedRatios = ['1:1'];
         }
@@ -23381,7 +23472,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       let supportedResolutions = allResolutions;
       let hideResolution = false;
 
-      if (isOpenAIImageModel || isImagenModel) {
+      if (isGPTImage2ModelName(modelLowerForVis)) {
+        supportedResolutions = OPENAI_GPT_IMAGE_2_RESOLUTIONS;
+      } else if (isOpenAIImageModel || isImagenModel) {
         hideResolution = true;
       } else if (isGemini25Flash) {
         supportedResolutions = ['1K'];
@@ -41510,7 +41603,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
         }
       }
       const dimensions = isOpenAIImageModelName(selectedModel)
-        ? getOpenAIDimensions(selectedRatio, selectedModel)
+        ? getOpenAIDimensions(selectedRatio, selectedModel, selectedRes)
         : getDimensions(selectedRatio, selectedRes);
 
       // Determine final pixel dimensions for generation/resizing
@@ -41622,7 +41715,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
               // OpenAI Edit API requires exactly 1024x1024 for DALL-E 2,
               // but we want to honor the selected aspect ratio for gpt-image models if possible.
               // Note: Most OpenAI edit endpoints are strictly square.
-              const dims = getOpenAIDimensions(selectedRatio, selectedModel);
+              const dims = getOpenAIDimensions(selectedRatio, selectedModel, selectedRes);
               const size = (selectedModel.toLowerCase().includes('gpt-image') || selectedModel.toLowerCase().includes('chatgpt-image'))
                 ? `${dims.width}x${dims.height}`
                 : '1024x1024';
@@ -41666,7 +41759,7 @@ IMPORTANT: You MUST also translate the format titles (Judgment, Evidence, Ration
               return { image: b64, raw: data, info: { revised_prompt: data.data?.[0]?.revised_prompt } };
             } else {
               // Get dimensions for OpenAI model
-              const dims = getOpenAIDimensions(selectedRatio, selectedModel);
+              const dims = getOpenAIDimensions(selectedRatio, selectedModel, selectedRes);
               const size = `${dims.width}x${dims.height}`;
 
               // Ensure dimensions used for Figma creation match the API size
@@ -42867,7 +42960,7 @@ AVAILABLE COMMANDS:
 |- generateImage: { "action": "generateImage", "subject": "A serene mountain landscape at sunset", "style": "concept art, wide lens, golden hour", "model": "imagen-4.0-fast-generate-001", "aspectRatio": "1:1", "imageResolution": "1K", "width": 1024, "height": 1024, "applyToSelection": false, "nodeId": "xxx", "parentId": "yyy", "parentName": "Hero Section", "refId": "zzz" } 
   - Generates an image using AI.
   - IMPORTANT FOR MODIFICATIONS: If you are modifying an existing image (selected or provided in chat), focus the "subject" ONLY on the CHANGES requested (e.g., "add a small cat to the background") and use "style" to request preservation of the original (e.g., "preserve original style, colors, and composition"). The model will receive the image pixels as a reference.
-  - model: optional; aspectRatio: "1:1"/"16:9"/"9:16"/"4:3"/"3:4"/"2:3"/"3:2"/"4:5"/"5:4"/"21:9" (optional); imageResolution: "1K"/"2K"/"4K" (optional).
+  - model: optional; aspectRatio: "1:1"/"16:9"/"9:16"/"4:3"/"3:4"/"2:3"/"3:2"/"4:5"/"5:4"/"2:1"/"1:2"/"21:9"/"9:21"/"3:1"/"1:3" (optional); imageResolution: "1K"/"2K"/"4K" (optional).
   - if applyToSelection is true and nodeId is provided, applies to that node.
   - use parentName (frame name) or parentId to specify the parent frame; refId identifies the new node.
 - createImage: { "action": "createImage", "base64": "<BASE64_DATA>" }
