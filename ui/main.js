@@ -18451,6 +18451,7 @@ Generate ONLY the reply text, nothing else.`;
     async function openPromptDrawer(actionData, options = {}) {
       const skipHistory = options.skipHistory === true;
       clearRealtimePromptActionState();
+      setPromptDrawerStockPhotosLayout(false);
       clearStockPhotoPreviewSession();
       if (actionData && actionData.name) {
         recordQuickActionUsage(actionData.name);
@@ -19217,6 +19218,8 @@ Generate ONLY the reply text, nothing else.`;
       hoveredPromptImageUpload = null;
 
       parent.postMessage({ pluginMessage: { type: 'clear-maximized-drawer' } }, '*');
+
+      setPromptDrawerStockPhotosLayout(false);
 
       if (chartSizeUpdateTimeout) {
         clearTimeout(chartSizeUpdateTimeout);
@@ -21606,7 +21609,11 @@ Generate ONLY the reply text, nothing else.`;
       applyPromptFieldVisibility();
 
       if (currentPromptAction?.directAction === 'fillFromOnlineImage') {
+        setPromptDrawerStockPhotosLayout(true);
         stockPhotoPreviewInvalidateIfStale();
+        if (!stockPhotoPreviewSession) {
+          clearStockPhotoPreviewUI({ hidePanel: false });
+        }
         updateStockPhotoPreviewSubmitLabel();
         updatePromptDrawerSubmitState();
       }
@@ -30793,7 +30800,22 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return JSON.stringify(payload);
     }
 
-    function clearStockPhotoPreviewUI() {
+    function hideStockPhotoPreviewEmptyEl() {
+      const emptyEl = document.getElementById('stockPhotoPreviewEmpty');
+      if (emptyEl) {
+        emptyEl.classList.add('hidden');
+        emptyEl.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    function setPromptDrawerStockPhotosLayout(enabled) {
+      const body = document.getElementById('promptDrawerBody');
+      if (!body) return;
+      body.classList.toggle('prompt-drawer-body--stock-photos', !!enabled);
+    }
+
+    function clearStockPhotoPreviewUI(opts) {
+      const hidePanel = !opts || opts.hidePanel !== false;
       const panel = document.getElementById('stockPhotoPreviewPanel');
       const grid = document.getElementById('stockPhotoPreviewGrid');
       const status = document.getElementById('stockPhotoPreviewStatus');
@@ -30803,7 +30825,24 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const countsEl = document.getElementById('stockPhotoPreviewCounts');
       const loadWrap = document.getElementById('stockPhotoPreviewLoadMoreWrap');
       const loadBtn = document.getElementById('stockPhotoPreviewLoadMore');
-      if (panel) panel.classList.add('hidden');
+      const emptyEl = document.getElementById('stockPhotoPreviewEmpty');
+      if (hidePanel) {
+        if (panel) panel.classList.add('hidden');
+        if (emptyEl) {
+          emptyEl.classList.add('hidden');
+          emptyEl.setAttribute('aria-hidden', 'true');
+        }
+      } else {
+        if (panel) panel.classList.remove('hidden');
+        if (emptyEl) {
+          emptyEl.classList.remove('hidden');
+          emptyEl.setAttribute('aria-hidden', 'false');
+          const idleTitle = document.getElementById('stockPhotoPreviewEmptyTitle');
+          const idleHint = document.getElementById('stockPhotoPreviewEmptyHint');
+          if (idleTitle) idleTitle.textContent = tu('actions.stock.previewIdleTitle');
+          if (idleHint) idleHint.textContent = tu('actions.stock.previewIdleHint');
+        }
+      }
       if (grid) grid.innerHTML = '';
       if (status) {
         status.textContent = '';
@@ -30823,9 +30862,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
     }
 
-    function clearStockPhotoPreviewSession() {
+    function clearStockPhotoPreviewSession(opts) {
       stockPhotoPreviewSession = null;
-      clearStockPhotoPreviewUI();
+      clearStockPhotoPreviewUI(opts);
       if (typeof updatePromptDrawerSubmitState === 'function') {
         updatePromptDrawerSubmitState();
       }
@@ -30920,7 +30959,11 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (!stockPhotoPreviewSession || !isStockPhotosPromptAction()) return;
       const key = typeof getPromptFieldValues === 'function' ? buildStockPhotoValuesKey(getPromptFieldValues()) : '';
       if (stockPhotoPreviewSession.valuesKey !== key) {
-        clearStockPhotoPreviewSession();
+        stockPhotoPreviewSession = null;
+        clearStockPhotoPreviewUI({ hidePanel: false });
+        if (typeof updatePromptDrawerSubmitState === 'function') updatePromptDrawerSubmitState();
+        if (typeof updateStockPhotoPreviewSubmitLabel === 'function') updateStockPhotoPreviewSubmitLabel();
+        if (typeof refreshStockPhotoPreviewCounts === 'function') refreshStockPhotoPreviewCounts();
       }
     }
 
@@ -31383,6 +31426,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     function renderStockPhotoPreviewGrid(candidates) {
       const grid = document.getElementById('stockPhotoPreviewGrid');
       if (!grid) return;
+      hideStockPhotoPreviewEmptyEl();
       grid.innerHTML = '';
       const sess = stockPhotoPreviewSession;
       const selectedUrls = sess && sess.selectedUrls instanceof Set ? sess.selectedUrls : null;
@@ -31476,12 +31520,18 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
 
       if (service === 'itunes' && !String(keywords || '').trim()) {
+        if (panel) panel.classList.remove('hidden');
+        hideStockPhotoPreviewEmptyEl();
         if (status) {
           status.textContent = tu('actions.stock.previewItunesKeywords');
           status.classList.add('stock-photo-preview-panel__status--error');
         }
         return false;
       }
+
+      hideStockPhotoPreviewEmptyEl();
+      const gridClearEarly = document.getElementById('stockPhotoPreviewGrid');
+      if (gridClearEarly) gridClearEarly.innerHTML = '';
 
       const itunesFillOptions = service === 'itunes' ? {
         media: values.media,
@@ -31514,6 +31564,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         firstPage = await fetchStockPhotoPreviewFirstPage(service, keywords, targetW, targetH, itunesFillOptions);
       } catch (err) {
         console.error('Stock preview search failed:', err);
+        hideStockPhotoPreviewEmptyEl();
         if (status) {
           status.textContent = err?.message || tu('actions.stock.previewError');
           status.classList.add('stock-photo-preview-panel__status--error');

@@ -1469,7 +1469,7 @@
         </button>
       </div>
     </div>
-    <div class="prompt-drawer-body">
+    <div class="prompt-drawer-body" id="promptDrawerBody">
       <div class="prompt-drawer-help" id="promptDrawerHelp">
         <div class="prompt-drawer-help-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1491,7 +1491,18 @@
         <p class="stock-photo-preview-panel__hint hidden" id="stockPhotoPreviewHint"></p>
         <div class="stock-photo-preview-panel__status" id="stockPhotoPreviewStatus"></div>
         <div class="stock-photo-preview-panel__counts hidden" id="stockPhotoPreviewCounts" aria-live="polite"></div>
-        <div class="stock-photo-preview-grid" id="stockPhotoPreviewGrid"></div>
+        <div class="stock-photo-preview-panel__body">
+          <div class="stock-photo-preview-empty hidden" id="stockPhotoPreviewEmpty" role="status">
+            <svg class="stock-photo-preview-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <path d="M21 15l-5-5L5 21"/>
+            </svg>
+            <p class="stock-photo-preview-empty__title" id="stockPhotoPreviewEmptyTitle"></p>
+            <p class="stock-photo-preview-empty__hint" id="stockPhotoPreviewEmptyHint"></p>
+          </div>
+          <div class="stock-photo-preview-grid" id="stockPhotoPreviewGrid"></div>
+        </div>
         <div class="stock-photo-preview-panel__loadmore-wrap hidden" id="stockPhotoPreviewLoadMoreWrap">
           <button type="button" class="stock-photo-preview-panel__loadmore" id="stockPhotoPreviewLoadMore"></button>
         </div>

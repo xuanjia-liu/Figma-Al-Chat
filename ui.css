@@ -620,6 +620,7 @@
       flex-direction: column;
       flex: 1;
       min-height: 0;
+      margin: -12px;
     }
 
     .gfp-root {
@@ -630,10 +631,7 @@
       width: 100%;
       flex: 1;
       min-height: 0;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
       overflow: hidden;
-      background: var(--bg-secondary);
     }
 
     /* Fill prompt drawer body height when Font preview is open */
@@ -13153,6 +13151,62 @@
       position: relative;
     }
 
+    /* Stock photos — split drawer (settings left, preview right), mirrors Font preview gfp-root */
+    .prompt-drawer-body--stock-photos {
+      flex-direction: row;
+      align-items: stretch;
+      gap: 0;
+      overflow: hidden;
+      flex: 1;
+      min-height: 0;
+      margin: -12px;
+    }
+
+    .prompt-drawer-body--stock-photos > .prompt-drawer-fields {
+      width: 24vw;
+      min-width: 160px;
+      max-width: 280px;
+      flex-shrink: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding: var(--space-md);
+      border-right: 1px solid var(--border);
+      background: var(--bg-tertiary);
+    }
+
+    .prompt-drawer-body--stock-photos > .stock-photo-preview-panel {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      margin-top: 0;
+      padding: var(--space-lg);
+      background: var(--bg-secondary);
+    }
+
+    @media (max-width: 440px) {
+      .prompt-drawer-body--stock-photos {
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .prompt-drawer-body--stock-photos > .prompt-drawer-fields {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        max-height: min(28vh, 200px);
+        flex-shrink: 0;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+      }
+
+      .prompt-drawer-body--stock-photos > .stock-photo-preview-panel {
+        flex: 1;
+        min-height: 0;
+        border-radius: 0 0 var(--radius-md) var(--radius-md);
+      }
+    }
+
     .components-selection-reload-fab {
       position: sticky;
       bottom: var(--space-md);
@@ -13326,7 +13380,6 @@
       gap: var(--space-sm);
       margin-top: var(--space-md);
       padding-top: var(--space-md);
-      border-top: 1px solid var(--border);
     }
 
     .stock-photo-preview-panel.hidden {
@@ -13416,12 +13469,70 @@
       cursor: not-allowed;
     }
 
+    .stock-photo-preview-panel__body {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: 0;
+    }
+
+    .stock-photo-preview-empty {
+      flex: 1;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      padding: var(--space-lg);
+      text-align: center;
+    }
+
+    .stock-photo-preview-empty.hidden {
+      display: none;
+    }
+
+    .stock-photo-preview-empty__icon {
+      width: 40px;
+      height: 40px;
+      opacity: 0.4;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .stock-photo-preview-empty__title {
+      margin: 0;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .stock-photo-preview-empty__hint {
+      margin: 0;
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      line-height: 1.45;
+      max-width: 260px;
+    }
+
     .stock-photo-preview-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
       gap: var(--space-sm);
       max-height: 280px;
       overflow-y: auto;
+    }
+
+    .prompt-drawer-body--stock-photos .stock-photo-preview-panel__body {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .prompt-drawer-body--stock-photos .stock-photo-preview-grid {
+      max-height: none;
+      flex: 1;
+      min-height: 0;
     }
 
     .stock-photo-preview-card {
