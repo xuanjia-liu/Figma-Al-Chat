@@ -30807,6 +30807,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     var lastFillFromOnlineParams = null;
     var stockPhotoPreviewSession = null;
+    var stockPhotoItunesGalleryUiBound = false;
+    var stockPhotoItunesGalleryContext = null;
     const STOCK_PREVIEW_PAGE_SIZE = 12;
     const STOCK_PREVIEW_MAX = STOCK_PREVIEW_PAGE_SIZE;
     const API_IMAGE_SERVICES = ['unsplash', 'pixabay', 'pexels', 'itunes'];
@@ -30910,6 +30912,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           if (idleHint) idleHint.textContent = tu('actions.stock.previewIdleHint');
         }
       }
+      closeStockPhotoItunesGallery({ skipMainGridRefresh: true });
       if (grid) grid.innerHTML = '';
       resetStockPhotoPreviewMetaState();
       if (hint) {
@@ -30995,10 +30998,262 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return Array.from({ length: N }, (_, i) => photos[i % M]);
     }
 
+    function registerStockPhotoCandidatesInSessionMap(sess, candidates) {
+      if (!sess || !Array.isArray(candidates)) return;
+      if (!(sess.candidateByUrl instanceof Map)) sess.candidateByUrl = new Map();
+      for (let i = 0; i < candidates.length; i++) {
+        const c = candidates[i];
+        if (c && c.imageUrl) sess.candidateByUrl.set(c.imageUrl, c);
+      }
+    }
+
+    function stockPhotoPreviewCardCoversSelectedUrl(c, selectedUrls) {
+      if (!c || !c.imageUrl || !selectedUrls || selectedUrls.size === 0) return false;
+      if (selectedUrls.has(c.imageUrl)) return true;
+      const g = c.itunesGallery;
+      if (!g) return false;
+      if (g.iconImageUrl && selectedUrls.has(g.iconImageUrl)) return true;
+      const iphone = g.iphoneScreenshotUrls || [];
+      for (let i = 0; i < iphone.length; i++) {
+        if (selectedUrls.has(iphone[i])) return true;
+      }
+      const ipad = g.ipadScreenshotUrls || [];
+      for (let j = 0; j < ipad.length; j++) {
+        if (selectedUrls.has(ipad[j])) return true;
+      }
+      return false;
+    }
+
+    function itunesGalleryTileCandidate(mainRecord, url, kind, index) {
+      const g = mainRecord && mainRecord.itunesGallery;
+      const title = (g && g.trackName) || '';
+      const artist = (g && g.sellerName) || '';
+      const photoUrl = (g && g.trackViewUrl) || mainRecord.photoUrl;
+      const photographerUrl = mainRecord.photographerUrl;
+      const nameBase = artist ? `${title} — ${artist}` : title;
+      let suffix = '';
+      let w = 600;
+      let h = 600;
+      if (kind === 'icon') {
+        suffix = ` — ${tu('actions.stock.itunesGalleryIcon')}`;
+      } else if (kind === 'iphone') {
+        w = 390;
+        h = 844;
+        suffix = ` — ${tu('actions.stock.itunesGalleryIphone')} ${index}`;
+      } else if (kind === 'ipad') {
+        w = 1024;
+        h = 1366;
+        suffix = ` — ${tu('actions.stock.itunesGalleryIpad')} ${index}`;
+      }
+      return {
+        service: 'Apple iTunes',
+        imageUrl: url,
+        thumbUrl: url,
+        photographerName: nameBase + suffix,
+        photographerUrl,
+        photoUrl,
+        sourceUrl: mainRecord.sourceUrl || 'https://www.apple.com/itunes/',
+        width: w,
+        height: h,
+      };
+    }
+
+    function syncStockPhotoItunesGalleryHeaderIcon() {
+      const btn = document.getElementById('stockPhotoItunesGalleryIconBtn');
+      if (!btn || btn.classList.contains('hidden')) return;
+      const g = stockPhotoItunesGalleryContext && stockPhotoItunesGalleryContext.itunesGallery;
+      const iconUrl = g && g.iconImageUrl;
+      if (!iconUrl) return;
+      const set = stockPhotoPreviewSession && stockPhotoPreviewSession.selectedUrls;
+      btn.classList.toggle('stock-photo-itunes-gallery__icon-btn--selected', !!(set && set.has(iconUrl)));
+    }
+
+    function toggleItunesGalleryUrlInSession(mainCandidate, url, kind, index, tileEl) {
+      if (!stockPhotoPreviewSession || !url || !mainCandidate) return;
+      const set = stockPhotoPreviewSession.selectedUrls || new Set();
+      stockPhotoPreviewSession.selectedUrls = set;
+      if (!(stockPhotoPreviewSession.candidateByUrl instanceof Map)) {
+        stockPhotoPreviewSession.candidateByUrl = new Map();
+      }
+      const urlMap = stockPhotoPreviewSession.candidateByUrl;
+      if (set.has(url)) {
+        set.delete(url);
+        urlMap.delete(url);
+      } else {
+        const sub = itunesGalleryTileCandidate(mainCandidate, url, kind, index);
+        urlMap.set(url, sub);
+        set.add(url);
+      }
+      stockPhotoPreviewSession.phase = set.size > 0 ? 'ready' : 'needs_pick';
+      if (tileEl) tileEl.classList.toggle('stock-photo-itunes-gallery__tile--selected', set.has(url));
+      renderStockPhotoPreviewGrid(stockPhotoPreviewSession.candidates);
+      updatePromptDrawerSubmitState();
+      updateStockPhotoPreviewSubmitLabel();
+      refreshStockPhotoPreviewCounts();
+      syncStockPhotoItunesGalleryHeaderIcon();
+    }
+
+    function ensureStockPhotoItunesGalleryUiBound() {
+      if (stockPhotoItunesGalleryUiBound) return;
+      stockPhotoItunesGalleryUiBound = true;
+      const backdrop = document.getElementById('stockPhotoItunesGalleryBackdrop');
+      const closeBtn = document.getElementById('stockPhotoItunesGalleryClose');
+      const close = () => {
+        closeStockPhotoItunesGallery();
+      };
+      if (closeBtn) {
+        closeBtn.setAttribute('aria-label', tu('actions.prompt.close'));
+        closeBtn.addEventListener('click', close);
+      }
+      if (backdrop) backdrop.addEventListener('click', close);
+      const iconBtn = document.getElementById('stockPhotoItunesGalleryIconBtn');
+      if (iconBtn) {
+        iconBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const ctx = stockPhotoItunesGalleryContext;
+          const url = ctx && ctx.itunesGallery && ctx.itunesGallery.iconImageUrl;
+          if (!ctx || !url) return;
+          toggleItunesGalleryUrlInSession(ctx, url, 'icon', 1, null);
+        });
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const root = document.getElementById('stockPhotoItunesGallery');
+        if (root && !root.classList.contains('hidden')) close();
+      });
+    }
+
+    function populateStockPhotoItunesGalleryGrid(mainCandidate) {
+      const gridEl = document.getElementById('stockPhotoItunesGalleryGrid');
+      if (!gridEl || !mainCandidate || !mainCandidate.itunesGallery) return;
+      gridEl.innerHTML = '';
+      const g = mainCandidate.itunesGallery;
+      const sess = stockPhotoPreviewSession;
+      const sel = sess && sess.selectedUrls instanceof Set ? sess.selectedUrls : new Set();
+
+      const tiles = [];
+      const iphone = g.iphoneScreenshotUrls || [];
+      for (let i = 0; i < iphone.length; i++) {
+        tiles.push({ url: iphone[i], kind: 'iphone', index: i + 1 });
+      }
+      const ipad = g.ipadScreenshotUrls || [];
+      for (let j = 0; j < ipad.length; j++) {
+        tiles.push({ url: ipad[j], kind: 'ipad', index: j + 1 });
+      }
+
+      for (let t = 0; t < tiles.length; t++) {
+        const tile = tiles[t];
+        const tileWrap = document.createElement('button');
+        tileWrap.type = 'button';
+        tileWrap.className = 'stock-photo-itunes-gallery__tile';
+        tileWrap.dataset.galleryUrl = tile.url;
+        if (sel.has(tile.url)) tileWrap.classList.add('stock-photo-itunes-gallery__tile--selected');
+
+        const frame = document.createElement('div');
+        frame.className = 'stock-photo-itunes-gallery__tile-frame';
+        const img = document.createElement('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = tile.url;
+        frame.appendChild(img);
+        const cap = document.createElement('div');
+        cap.className = 'stock-photo-itunes-gallery__tile-cap';
+        if (tile.kind === 'iphone') {
+          cap.textContent = `${tu('actions.stock.itunesGalleryIphone')} ${tile.index}`;
+        } else cap.textContent = `${tu('actions.stock.itunesGalleryIpad')} ${tile.index}`;
+
+        tileWrap.appendChild(frame);
+        tileWrap.appendChild(cap);
+        tileWrap.addEventListener('click', () => {
+          toggleItunesGalleryUrlInSession(mainCandidate, tile.url, tile.kind, tile.index, tileWrap);
+        });
+        gridEl.appendChild(tileWrap);
+      }
+    }
+
+    function openStockPhotoItunesGallery(mainCandidate) {
+      if (!mainCandidate || !mainCandidate.itunesGallery) return;
+      stockPhotoItunesGalleryContext = mainCandidate;
+      ensureStockPhotoItunesGalleryUiBound();
+      const root = document.getElementById('stockPhotoItunesGallery');
+      const headingEl = document.getElementById('stockPhotoItunesGalleryHeading');
+      const subEl = document.getElementById('stockPhotoItunesGallerySubtitle');
+      const linkEl = document.getElementById('stockPhotoItunesGalleryLink');
+      const iconBtn = document.getElementById('stockPhotoItunesGalleryIconBtn');
+      const iconImg = document.getElementById('stockPhotoItunesGalleryIconImg');
+      const g = mainCandidate.itunesGallery;
+      if (headingEl) {
+        const name = g.trackName || tu('actions.stock.itunesGalleryTitle');
+        headingEl.textContent = name;
+      }
+      if (subEl) {
+        const seller = g.sellerName || '';
+        subEl.textContent = seller;
+        subEl.classList.toggle('hidden', !seller);
+      }
+      if (linkEl) {
+        const href = g.trackViewUrl || '';
+        linkEl.href = href;
+        linkEl.textContent = tu('actions.stock.itunesGalleryStoreLink');
+        linkEl.classList.toggle('hidden', !href);
+      }
+      if (g.iconImageUrl && iconBtn && iconImg) {
+        iconImg.src = g.iconImageUrl;
+        iconImg.alt = tu('actions.stock.itunesGalleryIcon');
+        iconBtn.classList.remove('hidden');
+        iconBtn.setAttribute('aria-label', tu('actions.stock.itunesGalleryIcon'));
+        syncStockPhotoItunesGalleryHeaderIcon();
+      } else if (iconBtn && iconImg) {
+        iconBtn.classList.add('hidden');
+        iconImg.removeAttribute('src');
+        iconImg.alt = '';
+      }
+      populateStockPhotoItunesGalleryGrid(mainCandidate);
+      if (root) {
+        root.classList.remove('hidden');
+        root.setAttribute('aria-hidden', 'false');
+      }
+    }
+
+    function closeStockPhotoItunesGallery(opts) {
+      const skipMain = opts && opts.skipMainGridRefresh === true;
+      stockPhotoItunesGalleryContext = null;
+      const iconBtn = document.getElementById('stockPhotoItunesGalleryIconBtn');
+      const iconImg = document.getElementById('stockPhotoItunesGalleryIconImg');
+      if (iconBtn) {
+        iconBtn.classList.add('hidden');
+        iconBtn.classList.remove('stock-photo-itunes-gallery__icon-btn--selected');
+      }
+      if (iconImg) {
+        iconImg.removeAttribute('src');
+        iconImg.alt = '';
+      }
+      const root = document.getElementById('stockPhotoItunesGallery');
+      if (root) {
+        root.classList.add('hidden');
+        root.setAttribute('aria-hidden', 'true');
+      }
+      const gridEl = document.getElementById('stockPhotoItunesGalleryGrid');
+      if (gridEl) gridEl.innerHTML = '';
+      if (!skipMain && stockPhotoPreviewSession && Array.isArray(stockPhotoPreviewSession.candidates)) {
+        renderStockPhotoPreviewGrid(stockPhotoPreviewSession.candidates);
+      }
+      refreshStockPhotoPreviewCounts();
+    }
+
     function getOrderedSelectedStockPhotos(sess) {
-      if (!sess || !Array.isArray(sess.candidates) || !sess.selectedUrls || sess.selectedUrls.size === 0) return [];
-      const set = sess.selectedUrls;
-      return sess.candidates.filter((c) => c && c.imageUrl && set.has(c.imageUrl));
+      if (!sess || !sess.selectedUrls || sess.selectedUrls.size === 0) return [];
+      const map = sess.candidateByUrl instanceof Map ? sess.candidateByUrl : null;
+      const out = [];
+      for (const url of sess.selectedUrls) {
+        if (!url) continue;
+        let c = map && map.get(url);
+        if (!c && Array.isArray(sess.candidates)) {
+          c = sess.candidates.find((x) => x && x.imageUrl === url);
+        }
+        if (c) out.push(c);
+      }
+      return out;
     }
 
     function updateStockPhotoPreviewSubmitLabel() {
@@ -31267,6 +31522,11 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     function itunesItemToPhotoRecord(item, width, height, media, appImage) {
       if (!item) return null;
+      const title = item.trackName || item.collectionName || item.name || 'Untitled';
+      const artist = item.artistName || item.sellerName || '';
+      const photographerUrl = item.artistViewUrl || item.collectionViewUrl || 'https://www.apple.com/';
+      const photoUrl = item.trackViewUrl || item.collectionViewUrl || photographerUrl;
+
       let imageUrl;
       let screenshotKind = null;
       const isIphoneShot = media === 'software' && appImage === 'iphoneScreenshot';
@@ -31290,8 +31550,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         imageUrl = upgradeItunesArtworkUrl(rawArt, width, height);
       }
 
-      const title = item.trackName || item.collectionName || item.name || 'Untitled';
-      const artist = item.artistName || item.sellerName || '';
       let photographerName = artist ? `${title} — ${artist}` : title;
       let nw = 600;
       let nh = 600;
@@ -31305,8 +31563,28 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         nh = 1366;
       }
 
-      const photographerUrl = item.artistViewUrl || item.collectionViewUrl || 'https://www.apple.com/';
-      const photoUrl = item.trackViewUrl || item.collectionViewUrl || photographerUrl;
+      let itunesGallery = null;
+      if (media === 'software') {
+        const iphoneList = Array.isArray(item.screenshotUrls) ? item.screenshotUrls.filter((u) => typeof u === 'string' && u) : [];
+        const ipadList = Array.isArray(item.ipadScreenshotUrls) ? item.ipadScreenshotUrls.filter((u) => typeof u === 'string' && u) : [];
+        const rawArt = item.artworkUrl600 || item.artworkUrl100 || item.artworkUrl60 || '';
+        const iconImageUrl = rawArt ? upgradeItunesArtworkUrl(rawArt, width, height) : '';
+        let primaryKind = 'icon';
+        if (isIphoneShot) primaryKind = 'iphone';
+        else if (isIpadShot) primaryKind = 'ipad';
+        if (iconImageUrl || iphoneList.length > 0 || ipadList.length > 0) {
+          itunesGallery = {
+            trackId: item.trackId,
+            trackName: title,
+            sellerName: artist,
+            trackViewUrl: photoUrl,
+            iconImageUrl,
+            iphoneScreenshotUrls: iphoneList,
+            ipadScreenshotUrls: ipadList,
+            primaryKind,
+          };
+        }
+      }
 
       return {
         service: 'Apple iTunes',
@@ -31318,6 +31596,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         sourceUrl: 'https://www.apple.com/itunes/',
         width: nw,
         height: nh,
+        ...(itunesGallery ? { itunesGallery } : {}),
       };
     }
 
@@ -31452,6 +31731,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         sess.hasMore = hasMore;
         if (items.length) {
           sess.candidates = sess.candidates.concat(items);
+          registerStockPhotoCandidatesInSessionMap(sess, items);
           renderStockPhotoPreviewGrid(sess.candidates);
         } else {
           sess.hasMore = false;
@@ -31474,7 +31754,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     function cloneStockPhotoForApply(candidate) {
       if (!candidate || !candidate.imageUrl) return null;
-      const { unsplashPhoto, thumbUrl, width, height, ...rest } = candidate;
+      const { unsplashPhoto, thumbUrl, itunesGallery: _omitGallery, width, height, ...rest } = candidate;
       return { ...rest, imageUrl: candidate.imageUrl, width, height };
     }
 
@@ -31495,39 +31775,71 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const selectedUrls = sess && sess.selectedUrls instanceof Set ? sess.selectedUrls : null;
 
       candidates.forEach((c) => {
-        const card = document.createElement('button');
-        card.type = 'button';
-        const isSel = selectedUrls && c.imageUrl && selectedUrls.has(c.imageUrl);
-        card.className = 'stock-photo-preview-card' + (isSel ? ' stock-photo-preview-card--selected' : '');
-        const frame = document.createElement('div');
-        frame.className = 'stock-photo-preview-card__frame';
-        const img = document.createElement('img');
-        img.className = 'stock-photo-preview-card__img';
-        img.alt = '';
-        img.loading = 'lazy';
-        img.src = c.thumbUrl || c.imageUrl;
-        frame.appendChild(img);
-        const cap = document.createElement('div');
-        cap.className = 'stock-photo-preview-card__caption';
-        cap.textContent = c.photographerName || c.service || '';
-        card.appendChild(frame);
-        card.appendChild(cap);
-        card.addEventListener('click', () => {
-          if (!stockPhotoPreviewSession || !c.imageUrl) return;
-          const set = stockPhotoPreviewSession.selectedUrls || new Set();
-          stockPhotoPreviewSession.selectedUrls = set;
-          if (set.has(c.imageUrl)) {
-            set.delete(c.imageUrl);
-          } else {
-            set.add(c.imageUrl);
-          }
-          stockPhotoPreviewSession.phase = set.size > 0 ? 'ready' : 'needs_pick';
-          card.classList.toggle('stock-photo-preview-card--selected', set.has(c.imageUrl));
-          updatePromptDrawerSubmitState();
-          updateStockPhotoPreviewSubmitLabel();
-          refreshStockPhotoPreviewCounts();
-        });
-        grid.appendChild(card);
+        const pushCard = (rootEl) => {
+          const card = document.createElement('button');
+          card.type = 'button';
+          const isSel = stockPhotoPreviewCardCoversSelectedUrl(c, selectedUrls);
+          card.className = 'stock-photo-preview-card' + (isSel ? ' stock-photo-preview-card--selected' : '');
+          const frame = document.createElement('div');
+          frame.className = 'stock-photo-preview-card__frame';
+          const img = document.createElement('img');
+          img.className = 'stock-photo-preview-card__img';
+          img.alt = '';
+          img.loading = 'lazy';
+          img.src = c.thumbUrl || c.imageUrl;
+          frame.appendChild(img);
+          const cap = document.createElement('div');
+          cap.className = 'stock-photo-preview-card__caption';
+          cap.textContent = c.photographerName || c.service || '';
+          card.appendChild(frame);
+          card.appendChild(cap);
+          card.addEventListener('click', () => {
+            if (!stockPhotoPreviewSession || !c.imageUrl) return;
+            const set = stockPhotoPreviewSession.selectedUrls || new Set();
+            stockPhotoPreviewSession.selectedUrls = set;
+            if (set.has(c.imageUrl)) {
+              set.delete(c.imageUrl);
+              if (stockPhotoPreviewSession.candidateByUrl instanceof Map) {
+                stockPhotoPreviewSession.candidateByUrl.delete(c.imageUrl);
+              }
+            } else {
+              set.add(c.imageUrl);
+              if (stockPhotoPreviewSession.candidateByUrl instanceof Map) {
+                stockPhotoPreviewSession.candidateByUrl.set(c.imageUrl, c);
+              }
+            }
+            stockPhotoPreviewSession.phase = set.size > 0 ? 'ready' : 'needs_pick';
+            card.classList.toggle(
+              'stock-photo-preview-card--selected',
+              stockPhotoPreviewCardCoversSelectedUrl(c, set)
+            );
+            updatePromptDrawerSubmitState();
+            updateStockPhotoPreviewSubmitLabel();
+            refreshStockPhotoPreviewCounts();
+          });
+          rootEl.appendChild(card);
+        };
+
+        if (c.itunesGallery) {
+          const wrap = document.createElement('div');
+          wrap.className = 'stock-photo-preview-card-wrap';
+          pushCard(wrap);
+          const expandBtn = document.createElement('button');
+          expandBtn.type = 'button';
+          expandBtn.className = 'stock-photo-preview-card__expand';
+          expandBtn.setAttribute('aria-label', tu('actions.stock.itunesViewGallery'));
+          expandBtn.innerHTML =
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+          expandBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openStockPhotoItunesGallery(c);
+          });
+          wrap.appendChild(expandBtn);
+          grid.appendChild(wrap);
+        } else {
+          pushCard(grid);
+        }
       });
       refreshStockPhotoPreviewCounts();
     }
@@ -31617,6 +31929,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       stockPhotoPreviewSession = {
         phase: 'needs_pick',
         candidates,
+        candidateByUrl: new Map(),
         selectedUrls: new Set(),
         valuesKey,
         keywordsSnapshot: keywords,
@@ -31631,6 +31944,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         itunesPool: firstPage.itunesPool || null,
         itunesOffset: firstPage.itunesOffset != null ? firstPage.itunesOffset : candidates.length,
       };
+      registerStockPhotoCandidatesInSessionMap(stockPhotoPreviewSession, candidates);
       renderStockPhotoPreviewGrid(candidates);
       setStockPhotoPreviewMetaStatus(
         tu('actions.stock.previewResultsShort', { count: String(candidates.length) }),
