@@ -13377,6 +13377,45 @@
       color: #ef4444;
     }
 
+    .stock-photo-preview-panel__counts {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .stock-photo-preview-panel__counts.hidden {
+      display: none;
+    }
+
+    .stock-photo-preview-panel__loadmore-wrap {
+      display: flex;
+      justify-content: center;
+      padding-top: var(--space-xs);
+    }
+
+    .stock-photo-preview-panel__loadmore-wrap.hidden {
+      display: none;
+    }
+
+    .stock-photo-preview-panel__loadmore {
+      font-size: 11px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .stock-photo-preview-panel__loadmore:hover:not(:disabled) {
+      border-color: var(--border-strong, var(--border));
+    }
+
+    .stock-photo-preview-panel__loadmore:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
     .stock-photo-preview-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));

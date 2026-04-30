@@ -3757,6 +3757,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       if (promptDrawer.classList.contains('open')) {
         applyPromptFieldVisibility();
+        if (isStockPhotosPromptAction()) {
+          refreshStockPhotoPreviewCounts();
+        }
       }
     }
 
@@ -17972,12 +17975,13 @@ Generate ONLY the reply text, nothing else.`;
       if (isStockPhotosPromptAction()) {
         const key = buildStockPhotoValuesKey(nextValues);
         const sess = stockPhotoPreviewSession;
-        if (sess && sess.valuesKey === key && sess.phase === 'needs_pick') {
+        const numSel = sess && sess.selectedUrls ? sess.selectedUrls.size : 0;
+        if (sess && sess.valuesKey === key && Array.isArray(sess.candidates) && sess.candidates.length > 0 && numSel === 0) {
           promptDrawerSubmit.disabled = true;
           promptDrawerSubmit.title = tu('actions.stock.previewSelectTitle');
           return;
         }
-        if (sess && sess.valuesKey === key && sess.phase === 'ready') {
+        if (sess && sess.valuesKey === key && numSel > 0) {
           promptDrawerSubmit.disabled = false;
           promptDrawerSubmit.title = '';
           updateStockPhotoPreviewSubmitLabel();
@@ -30764,7 +30768,8 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     var lastFillFromOnlineParams = null;
     var stockPhotoPreviewSession = null;
-    const STOCK_PREVIEW_MAX = 12;
+    const STOCK_PREVIEW_PAGE_SIZE = 12;
+    const STOCK_PREVIEW_MAX = STOCK_PREVIEW_PAGE_SIZE;
     const API_IMAGE_SERVICES = ['unsplash', 'pixabay', 'pexels', 'itunes'];
 
     function isStockPhotosPromptAction() {
@@ -30795,6 +30800,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const hint = document.getElementById('stockPhotoPreviewHint');
       const titleEl = document.getElementById('stockPhotoPreviewTitle');
       const againBtn = document.getElementById('stockPhotoPreviewSearchAgain');
+      const countsEl = document.getElementById('stockPhotoPreviewCounts');
+      const loadWrap = document.getElementById('stockPhotoPreviewLoadMoreWrap');
+      const loadBtn = document.getElementById('stockPhotoPreviewLoadMore');
       if (panel) panel.classList.add('hidden');
       if (grid) grid.innerHTML = '';
       if (status) {
@@ -30804,6 +30812,15 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (hint) hint.classList.add('hidden');
       if (titleEl) titleEl.textContent = '';
       if (againBtn) againBtn.classList.add('hidden');
+      if (countsEl) {
+        countsEl.textContent = '';
+        countsEl.classList.add('hidden');
+      }
+      if (loadWrap) loadWrap.classList.add('hidden');
+      if (loadBtn) {
+        loadBtn.disabled = false;
+        loadBtn.textContent = tu('actions.stock.previewLoadMore');
+      }
     }
 
     function clearStockPhotoPreviewSession() {
@@ -30812,14 +30829,84 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (typeof updatePromptDrawerSubmitState === 'function') {
         updatePromptDrawerSubmitState();
       }
+      if (typeof updateStockPhotoPreviewSubmitLabel === 'function') {
+        updateStockPhotoPreviewSubmitLabel();
+      }
+    }
+
+    function getStockPhotoTargetCountForUi() {
+      const nSel = Array.isArray(lastKnownSelectionItems) ? lastKnownSelectionItems.length : 0;
+      if (nSel > 0) return nSel;
+      const v = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+      const raw = Number(v.stockCanvasCount);
+      return Math.min(12, Math.max(1, Number.isFinite(raw) ? raw : 1));
+    }
+
+    function refreshStockPhotoPreviewCounts() {
+      const el = document.getElementById('stockPhotoPreviewCounts');
+      const panel = document.getElementById('stockPhotoPreviewPanel');
+      if (!el) return;
+      if (!stockPhotoPreviewSession || (panel && panel.classList.contains('hidden'))) {
+        el.textContent = '';
+        el.classList.add('hidden');
+        return;
+      }
+      const imgCount = stockPhotoPreviewSession.selectedUrls ? stockPhotoPreviewSession.selectedUrls.size : 0;
+      const nodeCount = getStockPhotoTargetCountForUi();
+      el.textContent = tu('actions.stock.previewCountLine', { images: String(imgCount), nodes: String(nodeCount) });
+      el.classList.remove('hidden');
+    }
+
+    function updateStockPhotoLoadMoreUi() {
+      const wrap = document.getElementById('stockPhotoPreviewLoadMoreWrap');
+      const btn = document.getElementById('stockPhotoPreviewLoadMore');
+      const sess = stockPhotoPreviewSession;
+      if (!wrap || !btn) return;
+      if (!sess || !sess.hasMore) {
+        wrap.classList.add('hidden');
+        return;
+      }
+      wrap.classList.remove('hidden');
+      btn.textContent = sess.loadingMore ? tu('actions.stock.previewLoadingMore') : tu('actions.stock.previewLoadMore');
+      btn.disabled = !!sess.loadingMore;
+    }
+
+    function shuffleIntRangeSize(m) {
+      const idx = Array.from({ length: m }, (_, i) => i);
+      for (let i = m - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = idx[i];
+        idx[i] = idx[j];
+        idx[j] = t;
+      }
+      return idx;
+    }
+
+    function assignStockPhotosToTargets(selectedPhotos, targetCount) {
+      const photos = Array.isArray(selectedPhotos) ? selectedPhotos.filter((p) => p && p.imageUrl) : [];
+      const M = photos.length;
+      const N = Math.max(0, Number(targetCount) || 0);
+      if (M === 0 || N === 0) return [];
+      if (M >= N) {
+        const order = shuffleIntRangeSize(M);
+        return Array.from({ length: N }, (_, i) => photos[order[i]]);
+      }
+      return Array.from({ length: N }, (_, i) => photos[i % M]);
+    }
+
+    function getOrderedSelectedStockPhotos(sess) {
+      if (!sess || !Array.isArray(sess.candidates) || !sess.selectedUrls || sess.selectedUrls.size === 0) return [];
+      const set = sess.selectedUrls;
+      return sess.candidates.filter((c) => c && c.imageUrl && set.has(c.imageUrl));
     }
 
     function updateStockPhotoPreviewSubmitLabel() {
       if (!promptDrawerSubmit || !isStockPhotosPromptAction()) return;
       const key = typeof getPromptFieldValues === 'function' ? buildStockPhotoValuesKey(getPromptFieldValues()) : '';
       const sess = stockPhotoPreviewSession;
-      const ready = sess && sess.phase === 'ready' && sess.valuesKey === key;
-      const hasResults = sess && sess.phase === 'needs_pick' && Array.isArray(sess.candidates) && sess.candidates.length > 0;
+      const numSel = sess && sess.selectedUrls ? sess.selectedUrls.size : 0;
+      const ready = sess && sess.valuesKey === key && numSel > 0;
+      const hasResults = sess && sess.valuesKey === key && Array.isArray(sess.candidates) && sess.candidates.length > 0;
       if (ready) {
         promptDrawerSubmit.textContent = tu('actions.stock.previewApply');
       } else if (hasResults) {
@@ -30889,6 +30976,22 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }).catch(() => { });
     }
 
+    function triggerUnsplashDownloadsForStockPool(values, apiKey) {
+      if (!apiKey || !values) return;
+      const seen = new Set();
+      const arr = Array.isArray(values._forcedStockPhotos) ? values._forcedStockPhotos : [];
+      for (const p of arr) {
+        if (p && p.unsplashPhoto && p.imageUrl && !seen.has(p.imageUrl)) {
+          seen.add(p.imageUrl);
+          triggerUnsplashDownload(p.unsplashPhoto, apiKey);
+        }
+      }
+      const one = values._forcedStockPhoto;
+      if (one && one.unsplashPhoto && one.imageUrl && !seen.has(one.imageUrl)) {
+        triggerUnsplashDownload(one.unsplashPhoto, apiKey);
+      }
+    }
+
     function unsplashPhotoToCandidate(photo) {
       const w = Number(photo?.width) || 4000;
       const h = Number(photo?.height) || 3000;
@@ -30906,42 +31009,48 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       };
     }
 
-    async function fetchUnsplashPhotoCandidates(query, width, height) {
+    async function fetchUnsplashPreviewPage(query, width, height, page) {
       const key = unsplashApiKeyInput ? unsplashApiKeyInput.value.trim() : unsplashApiKey;
       if (!key) throw new Error('Unsplash API key not configured. Add it in Settings → Image APIs.');
 
-      let photos;
+      const perPage = STOCK_PREVIEW_PAGE_SIZE;
       const q = (query || '').trim();
       if (q) {
-        const params = new URLSearchParams({ query: q, per_page: String(STOCK_PREVIEW_MAX) });
+        const params = new URLSearchParams({ query: q, per_page: String(perPage), page: String(page) });
         const resp = await fetch(`https://api.unsplash.com/search/photos?${params.toString()}`, {
           headers: { 'Authorization': `Client-ID ${key}` }
         });
         if (resp.status === 403) throw new Error('Unsplash API key is invalid or rate-limited.');
         if (!resp.ok) throw new Error(`Unsplash API error (${resp.status})`);
         const data = await resp.json();
-        photos = Array.isArray(data.results) ? data.results : [];
-      } else {
-        const params = new URLSearchParams({ per_page: String(STOCK_PREVIEW_MAX) });
-        const resp = await fetch(`https://api.unsplash.com/photos?${params.toString()}`, {
-          headers: { 'Authorization': `Client-ID ${key}` }
-        });
-        if (resp.status === 403) throw new Error('Unsplash API key is invalid or rate-limited.');
-        if (!resp.ok) throw new Error(`Unsplash API error (${resp.status})`);
-        photos = await resp.json();
-        if (!Array.isArray(photos)) photos = [];
+        const photos = Array.isArray(data.results) ? data.results : [];
+        const items = photos.map(unsplashPhotoToCandidate).filter((c) => c.imageUrl);
+        const totalPages = Number(data.total_pages) || 0;
+        const hasMore = page < totalPages;
+        return { items, hasMore };
       }
-      if (!photos.length) throw new Error('No Unsplash results for this query.');
-      return photos.slice(0, STOCK_PREVIEW_MAX).map(unsplashPhotoToCandidate).filter((c) => c.imageUrl);
+      const params = new URLSearchParams({ per_page: String(perPage), page: String(page) });
+      const resp = await fetch(`https://api.unsplash.com/photos?${params.toString()}`, {
+        headers: { 'Authorization': `Client-ID ${key}` }
+      });
+      if (resp.status === 403) throw new Error('Unsplash API key is invalid or rate-limited.');
+      if (!resp.ok) throw new Error(`Unsplash API error (${resp.status})`);
+      const photos = await resp.json();
+      const arr = Array.isArray(photos) ? photos : [];
+      const items = arr.map(unsplashPhotoToCandidate).filter((c) => c.imageUrl);
+      const hasMore = arr.length >= perPage;
+      return { items, hasMore };
     }
 
-    async function fetchPixabayPhotoCandidates(query, width, height) {
+    async function fetchPixabayPreviewPage(query, width, height, page) {
       const key = pixabayApiKeyInput ? pixabayApiKeyInput.value.trim() : pixabayApiKey;
       if (!key) throw new Error('Pixabay API key not configured. Add it in Settings → Image APIs.');
 
+      const perPage = STOCK_PREVIEW_PAGE_SIZE;
       const params = new URLSearchParams({
         key: key,
-        per_page: String(STOCK_PREVIEW_MAX),
+        per_page: String(perPage),
+        page: String(page),
         image_type: 'photo',
         safesearch: 'true'
       });
@@ -30952,9 +31061,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (!resp.ok) throw new Error(`Pixabay API error (${resp.status})`);
 
       const data = await resp.json();
-      if (!data.hits || data.hits.length === 0) throw new Error('No Pixabay results for this query.');
+      if (!data.hits || data.hits.length === 0) {
+        if (page === 1) throw new Error('No Pixabay results for this query.');
+        return { items: [], hasMore: false };
+      }
 
-      return data.hits.slice(0, STOCK_PREVIEW_MAX).map((photo) => ({
+      const total = Number(data.totalHits) || 0;
+      const hasMore = page * perPage < total;
+      const items = data.hits.map((photo) => ({
         service: 'Pixabay',
         imageUrl: photo.largeImageURL,
         thumbUrl: photo.previewURL || photo.webformatURL || photo.largeImageURL,
@@ -30965,18 +31079,21 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         width: Number(photo.imageWidth) || 1200,
         height: Number(photo.imageHeight) || 800,
       })).filter((c) => c.imageUrl);
+      return { items, hasMore };
     }
 
-    async function fetchPexelsPhotoCandidates(query, width, height) {
+    async function fetchPexelsPreviewPage(query, width, height, page) {
       const key = pexelsApiKeyInput ? pexelsApiKeyInput.value.trim() : pexelsApiKey;
       if (!key) throw new Error('Pexels API key not configured. Add it in Settings → Image APIs.');
 
+      const perPage = STOCK_PREVIEW_PAGE_SIZE;
       let url;
       if (query) {
-        const params = new URLSearchParams({ query: query, per_page: String(STOCK_PREVIEW_MAX), orientation: 'landscape' });
+        const params = new URLSearchParams({ query: query, per_page: String(perPage), page: String(page), orientation: 'landscape' });
         url = `https://api.pexels.com/v1/search?${params.toString()}`;
       } else {
-        url = `https://api.pexels.com/v1/curated?per_page=${STOCK_PREVIEW_MAX}`;
+        const params = new URLSearchParams({ per_page: String(perPage), page: String(page) });
+        url = `https://api.pexels.com/v1/curated?${params.toString()}`;
       }
 
       const resp = await fetch(url, {
@@ -30986,9 +31103,12 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (!resp.ok) throw new Error(`Pexels API error (${resp.status})`);
 
       const data = await resp.json();
-      if (!data.photos || data.photos.length === 0) throw new Error('No Pexels results for this query.');
+      if (!data.photos || data.photos.length === 0) {
+        if (page === 1) throw new Error('No Pexels results for this query.');
+        return { items: [], hasMore: false, nextUrl: null };
+      }
 
-      return data.photos.slice(0, STOCK_PREVIEW_MAX).map((photo) => {
+      const items = data.photos.map((photo) => {
         const w = Number(photo.width) || 4000;
         const h = Number(photo.height) || 3000;
         return {
@@ -31003,6 +31123,38 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           height: h,
         };
       }).filter((c) => c.imageUrl);
+      const nextUrl = data.next_page || null;
+      return { items, hasMore: !!nextUrl, nextUrl };
+    }
+
+    async function fetchPexelsPreviewByUrl(nextUrl) {
+      const key = pexelsApiKeyInput ? pexelsApiKeyInput.value.trim() : pexelsApiKey;
+      if (!key || !nextUrl) return { items: [], hasMore: false, nextUrl: null };
+      const resp = await fetch(nextUrl, {
+        headers: { 'Authorization': key }
+      });
+      if (resp.status === 401 || resp.status === 403) throw new Error('Pexels API key is invalid.');
+      if (!resp.ok) throw new Error(`Pexels API error (${resp.status})`);
+
+      const data = await resp.json();
+      const photos = data.photos || [];
+      const items = photos.map((photo) => {
+        const w = Number(photo.width) || 4000;
+        const h = Number(photo.height) || 3000;
+        return {
+          service: 'Pexels',
+          imageUrl: photo.src.large2x || photo.src.large || photo.src.original,
+          thumbUrl: photo.src.medium || photo.src.small || photo.src.tiny,
+          photographerName: photo.photographer,
+          photographerUrl: photo.photographer_url,
+          photoUrl: photo.url,
+          sourceUrl: 'https://www.pexels.com/',
+          width: w,
+          height: h,
+        };
+      }).filter((c) => c.imageUrl);
+      const next = data.next_page || null;
+      return { items, nextUrl: next, hasMore: !!next && items.length > 0 };
     }
 
     function itunesItemToPhotoRecord(item, width, height, media, appImage) {
@@ -31061,7 +31213,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       };
     }
 
-    async function fetchItunesPhotoCandidates(query, width, height, options = {}) {
+    async function fetchItunesPhotoPool(query, width, height, options = {}) {
       const term = (query || '').trim();
       if (!term) throw new Error('Search keywords required for Apple iTunes.');
 
@@ -31077,7 +31229,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         country,
         media,
         entity,
-        limit: '25',
+        limit: '200',
         explicit,
       });
 
@@ -31088,7 +31240,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (!data.results || data.results.length === 0) throw new Error('No iTunes results for this query.');
 
       const out = [];
-      for (let i = 0; i < data.results.length && out.length < STOCK_PREVIEW_MAX; i++) {
+      for (let i = 0; i < data.results.length; i++) {
         const rec = itunesItemToPhotoRecord(data.results[i], width, height, media, appImage);
         if (rec) out.push(rec);
       }
@@ -31096,15 +31248,122 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return out;
     }
 
-    async function fetchStockPhotoCandidates(service, keywords, w, h, itunesFillOptions) {
-      if (service === 'unsplash') return fetchUnsplashPhotoCandidates(keywords, w, h);
-      if (service === 'pixabay') return fetchPixabayPhotoCandidates(keywords, w, h);
-      if (service === 'pexels') return fetchPexelsPhotoCandidates(keywords, w, h);
-      if (service === 'itunes') return fetchItunesPhotoCandidates(keywords, w, h, itunesFillOptions || {});
-      if (['loremflickr', 'picsum', 'placehold'].includes(service)) {
-        return buildOnlinePhotoCandidates(service, w, h, keywords, STOCK_PREVIEW_MAX);
+    async function fetchStockPhotoPreviewFirstPage(service, keywords, w, h, itunesFillOptions) {
+      if (service === 'unsplash') {
+        const r = await fetchUnsplashPreviewPage(keywords, w, h, 1);
+        if (!r.items.length) throw new Error('No Unsplash results for this query.');
+        return { items: r.items, hasMore: r.hasMore, apiNextPage: 2 };
       }
-      return buildOnlinePhotoCandidates('picsum', w, h, keywords, STOCK_PREVIEW_MAX);
+      if (service === 'pixabay') {
+        const r = await fetchPixabayPreviewPage(keywords, w, h, 1);
+        return { items: r.items, hasMore: r.hasMore, apiNextPage: 2 };
+      }
+      if (service === 'pexels') {
+        const r = await fetchPexelsPreviewPage(keywords, w, h, 1);
+        return {
+          items: r.items,
+          hasMore: r.hasMore && !!r.nextUrl,
+          pexelsNextUrl: r.nextUrl || null,
+          apiNextPage: 2,
+        };
+      }
+      if (service === 'itunes') {
+        const pool = await fetchItunesPhotoPool(keywords, w, h, itunesFillOptions || {});
+        const items = pool.slice(0, STOCK_PREVIEW_PAGE_SIZE);
+        if (!items.length) throw new Error('No usable artwork in iTunes results.');
+        return {
+          items,
+          hasMore: pool.length > STOCK_PREVIEW_PAGE_SIZE,
+          itunesPool: pool,
+          itunesOffset: items.length,
+        };
+      }
+      if (['loremflickr', 'picsum', 'placehold'].includes(service)) {
+        return {
+          items: buildOnlinePhotoCandidates(service, w, h, keywords, STOCK_PREVIEW_PAGE_SIZE),
+          hasMore: true,
+        };
+      }
+      return {
+        items: buildOnlinePhotoCandidates('picsum', w, h, keywords, STOCK_PREVIEW_PAGE_SIZE),
+        hasMore: true,
+      };
+    }
+
+    async function fetchStockPhotoPreviewNextPage(sess) {
+      const svc = sess.service;
+      const w = sess.targetW;
+      const h = sess.targetH;
+      const kw = sess.keywordsSnapshot;
+      const ito = sess.itunesFillOptions || {};
+
+      if (svc === 'unsplash') {
+        const page = sess.apiNextPage;
+        const r = await fetchUnsplashPreviewPage(kw, w, h, page);
+        sess.apiNextPage = page + 1;
+        return { items: r.items, hasMore: r.hasMore };
+      }
+      if (svc === 'pixabay') {
+        const page = sess.apiNextPage;
+        const r = await fetchPixabayPreviewPage(kw, w, h, page);
+        sess.apiNextPage = page + 1;
+        return { items: r.items, hasMore: r.hasMore };
+      }
+      if (svc === 'pexels') {
+        if (!sess.pexelsNextUrl) return { items: [], hasMore: false };
+        const r = await fetchPexelsPreviewByUrl(sess.pexelsNextUrl);
+        sess.pexelsNextUrl = r.nextUrl || null;
+        return { items: r.items, hasMore: !!r.nextUrl && r.items.length > 0 };
+      }
+      if (svc === 'itunes') {
+        const pool = sess.itunesPool;
+        const off = sess.itunesOffset;
+        const items = pool.slice(off, off + STOCK_PREVIEW_PAGE_SIZE);
+        sess.itunesOffset = off + items.length;
+        return { items, hasMore: sess.itunesOffset < pool.length };
+      }
+      if (['loremflickr', 'picsum', 'placehold'].includes(svc)) {
+        return {
+          items: buildOnlinePhotoCandidates(svc, w, h, kw, STOCK_PREVIEW_PAGE_SIZE),
+          hasMore: true,
+        };
+      }
+      return {
+        items: buildOnlinePhotoCandidates('picsum', w, h, kw, STOCK_PREVIEW_PAGE_SIZE),
+        hasMore: true,
+      };
+    }
+
+    async function appendStockPhotoPreviewPage() {
+      const sess = stockPhotoPreviewSession;
+      const status = document.getElementById('stockPhotoPreviewStatus');
+      if (!sess || sess.loadingMore || !sess.hasMore) return;
+      sess.loadingMore = true;
+      updateStockPhotoLoadMoreUi();
+      try {
+        const { items, hasMore } = await fetchStockPhotoPreviewNextPage(sess);
+        sess.hasMore = hasMore;
+        if (items.length) {
+          sess.candidates = sess.candidates.concat(items);
+          renderStockPhotoPreviewGrid(sess.candidates);
+        } else {
+          sess.hasMore = false;
+        }
+        if (status && stockPhotoPreviewSession) {
+          status.textContent = tu('actions.stock.previewResultsCount', { count: String(sess.candidates.length) });
+          status.classList.remove('stock-photo-preview-panel__status--error');
+        }
+        refreshStockPhotoPreviewCounts();
+      } catch (e) {
+        console.error('Load more stock preview failed:', e);
+        if (status) {
+          status.textContent = e?.message || tu('actions.stock.previewError');
+          status.classList.add('stock-photo-preview-panel__status--error');
+        }
+      } finally {
+        if (stockPhotoPreviewSession) stockPhotoPreviewSession.loadingMore = false;
+        updateStockPhotoLoadMoreUi();
+      }
     }
 
     function cloneStockPhotoForApply(candidate) {
@@ -31117,6 +31376,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (!values || typeof values !== 'object') return values;
       const next = { ...values };
       delete next._forcedStockPhoto;
+      delete next._forcedStockPhotos;
       return next;
     }
 
@@ -31124,12 +31384,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const grid = document.getElementById('stockPhotoPreviewGrid');
       if (!grid) return;
       grid.innerHTML = '';
-      const selIdx = stockPhotoPreviewSession?.selectedIndex;
+      const sess = stockPhotoPreviewSession;
+      const selectedUrls = sess && sess.selectedUrls instanceof Set ? sess.selectedUrls : null;
 
-      candidates.forEach((c, index) => {
+      candidates.forEach((c) => {
         const card = document.createElement('button');
         card.type = 'button';
-        card.className = 'stock-photo-preview-card' + (selIdx === index ? ' stock-photo-preview-card--selected' : '');
+        const isSel = selectedUrls && c.imageUrl && selectedUrls.has(c.imageUrl);
+        card.className = 'stock-photo-preview-card' + (isSel ? ' stock-photo-preview-card--selected' : '');
         const arW = Math.max(1, Number(c.width) || 4);
         const arH = Math.max(1, Number(c.height) || 3);
         card.style.setProperty('--stock-preview-ar', `${arW} / ${arH}`);
@@ -31147,19 +31409,28 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         card.appendChild(frame);
         card.appendChild(cap);
         card.addEventListener('click', () => {
-          if (!stockPhotoPreviewSession) return;
-          stockPhotoPreviewSession.selectedIndex = index;
-          stockPhotoPreviewSession.phase = 'ready';
-          grid.querySelectorAll('.stock-photo-preview-card').forEach((el, i) => {
-            el.classList.toggle('stock-photo-preview-card--selected', i === index);
-          });
+          if (!stockPhotoPreviewSession || !c.imageUrl) return;
+          const set = stockPhotoPreviewSession.selectedUrls || new Set();
+          stockPhotoPreviewSession.selectedUrls = set;
+          if (set.has(c.imageUrl)) {
+            set.delete(c.imageUrl);
+          } else {
+            set.add(c.imageUrl);
+          }
+          stockPhotoPreviewSession.phase = set.size > 0 ? 'ready' : 'needs_pick';
+          card.classList.toggle('stock-photo-preview-card--selected', set.has(c.imageUrl));
           const hint = document.getElementById('stockPhotoPreviewHint');
-          if (hint) hint.classList.add('hidden');
+          if (hint) {
+            if (set.size > 0) hint.classList.add('hidden');
+            else hint.classList.remove('hidden');
+          }
           updatePromptDrawerSubmitState();
           updateStockPhotoPreviewSubmitLabel();
+          refreshStockPhotoPreviewCounts();
         });
         grid.appendChild(card);
       });
+      refreshStockPhotoPreviewCounts();
     }
 
     function getSelectionForFill() {
@@ -31238,9 +31509,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         againBtn.classList.remove('hidden');
       }
 
-      let candidates;
+      let firstPage;
       try {
-        candidates = await fetchStockPhotoCandidates(service, keywords, targetW, targetH, itunesFillOptions);
+        firstPage = await fetchStockPhotoPreviewFirstPage(service, keywords, targetW, targetH, itunesFillOptions);
       } catch (err) {
         console.error('Stock preview search failed:', err);
         if (status) {
@@ -31251,16 +31522,33 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
 
       const valuesKey = buildStockPhotoValuesKey(values);
+      const candidates = firstPage.items;
       stockPhotoPreviewSession = {
         phase: 'needs_pick',
         candidates,
-        selectedIndex: null,
+        selectedUrls: new Set(),
         valuesKey,
         keywordsSnapshot: keywords,
+        service,
+        itunesFillOptions,
+        targetW,
+        targetH,
+        hasMore: !!firstPage.hasMore,
+        loadingMore: false,
+        apiNextPage: firstPage.apiNextPage != null ? firstPage.apiNextPage : 2,
+        pexelsNextUrl: firstPage.pexelsNextUrl || null,
+        itunesPool: firstPage.itunesPool || null,
+        itunesOffset: firstPage.itunesOffset != null ? firstPage.itunesOffset : candidates.length,
       };
       renderStockPhotoPreviewGrid(candidates);
       if (status) {
         status.textContent = tu('actions.stock.previewResultsCount', { count: String(candidates.length) });
+      }
+      updateStockPhotoLoadMoreUi();
+
+      const loadBtn = document.getElementById('stockPhotoPreviewLoadMore');
+      if (loadBtn) {
+        loadBtn.onclick = () => { appendStockPhotoPreviewPage(); };
       }
 
       if (againBtn) {
@@ -31275,6 +31563,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
       updatePromptDrawerSubmitState();
       updateStockPhotoPreviewSubmitLabel();
+      refreshStockPhotoPreviewCounts();
       return true;
     }
 
@@ -31531,9 +31820,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     }
 
     async function fetchItunesArtwork(query, width, height, options = {}) {
-      const list = await fetchItunesPhotoCandidates(query, width, height, options);
-      if (!list.length) throw new Error('No iTunes results for this query.');
-      return list[Math.floor(Math.random() * list.length)];
+      const pool = await fetchItunesPhotoPool(query, width, height, options);
+      if (!pool.length) throw new Error('No iTunes results for this query.');
+      return pool[Math.floor(Math.random() * pool.length)];
     }
 
     async function fetchApiPhoto(service, query, width, height, fillOptions = {}) {
@@ -31552,10 +31841,12 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const autoDetect = values.autoDetect === true || values.autoDetect === 'true';
       let keywords = values.keywords || '';
       const isApiService = API_IMAGE_SERVICES.includes(service);
-      const forcedRaw = values._forcedStockPhoto;
-      const forcedPhoto = forcedRaw && forcedRaw.imageUrl ? forcedRaw : null;
+      const forcedListRaw = Array.isArray(values._forcedStockPhotos) ? values._forcedStockPhotos.filter((p) => p && p.imageUrl) : [];
+      const singleForced = values._forcedStockPhoto && values._forcedStockPhoto.imageUrl ? values._forcedStockPhoto : null;
+      const forcedPool = forcedListRaw.length ? forcedListRaw : (singleForced ? [singleForced] : []);
+      const hasForcedPreview = forcedPool.length > 0;
 
-      if (!forcedPhoto) {
+      if (!hasForcedPreview) {
         showToast('Fetching images...', 'info');
       }
 
@@ -31563,7 +31854,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         const nodes = await getSelectionForFill();
         const hasSelection = Array.isArray(nodes) && nodes.length > 0;
 
-        if (!forcedPhoto && (service === 'loremflickr' || isApiService) && autoDetect) {
+        if (!hasForcedPreview && (service === 'loremflickr' || isApiService) && autoDetect) {
           if (!hasSelection) {
             showToast('AI keyword detection needs a selected layer. Using your keywords.', 'warning');
           } else {
@@ -31590,15 +31881,21 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         };
 
         if (hasSelection) {
-          for (const node of nodes) {
+          const assignment = hasForcedPreview ? assignStockPhotosToTargets(forcedPool, nodes.length) : null;
+          for (let ni = 0; ni < nodes.length; ni++) {
+            const node = nodes[ni];
             try {
-              if (forcedPhoto || isApiService) {
-                const photo = forcedPhoto || await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
+              if (assignment) {
+                const photo = assignment[ni];
                 const base64 = await fetchImageAsBase64(photo.imageUrl);
                 await applyImageToNodeWithScale(base64, node.id, scaleMode);
-                if (isApiService || forcedPhoto) {
-                  attributions.push({ nodeName: node.name, nodeId: node.id, ...photoForAttribution(photo) });
-                }
+                attributions.push({ nodeName: node.name, nodeId: node.id, ...photoForAttribution(photo) });
+                successCount++;
+              } else if (isApiService) {
+                const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
+                const base64 = await fetchImageAsBase64(photo.imageUrl);
+                await applyImageToNodeWithScale(base64, node.id, scaleMode);
+                attributions.push({ nodeName: node.name, nodeId: node.id, ...photoForAttribution(photo) });
                 successCount++;
               } else {
                 const url = buildOnlineImageUrl(service, node.width, node.height, keywords);
@@ -31617,9 +31914,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           }
 
           const actionValues = stripStockPhotoInternalFields(values);
-          if (forcedPhoto) {
-            actionValues.forcedStockPhoto = cloneStockPhotoForApply(forcedPhoto);
+          if (forcedPool.length) {
+            actionValues.forcedStockPhotos = forcedPool.map((p) => cloneStockPhotoForApply(p)).filter(Boolean);
           }
+
           lastFillFromOnlineParams = {
             service,
             scaleMode,
@@ -31630,11 +31928,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           };
 
           const uk = unsplashApiKeyInput ? unsplashApiKeyInput.value.trim() : unsplashApiKey;
-          if (uk && forcedRaw && forcedRaw.unsplashPhoto) {
-            triggerUnsplashDownload(forcedRaw.unsplashPhoto, uk);
-          }
+          triggerUnsplashDownloadsForStockPool(values, uk);
 
-          const serviceName = isApiService ? (attributions[0]?.service || service) : (forcedPhoto ? forcedPhoto.service : 'online');
+          const serviceName = isApiService ? (attributions[0]?.service || service) : (hasForcedPreview ? (attributions[0]?.service || service) : 'online');
           const msg = successCount === nodes.length
             ? `Filled ${successCount} node${successCount > 1 ? 's' : ''} with ${serviceName} images`
             : `Filled ${successCount}/${nodes.length} nodes`;
@@ -31647,7 +31943,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           const rawCount = Number(values.stockCanvasCount);
           const canvasCount = Math.min(12, Math.max(1, Number.isFinite(rawCount) ? rawCount : 1));
 
-          if (!forcedPhoto && service === 'itunes' && !String(keywords || '').trim()) {
+          if (!hasForcedPreview && service === 'itunes' && !String(keywords || '').trim()) {
             showToast('Enter search keywords for Apple Store.', 'error');
             return;
           }
@@ -31656,16 +31952,22 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           const h = STOCK_CANVAS_DEFAULT_H;
           const createdMeta = [];
 
+          const assignment = hasForcedPreview ? assignStockPhotosToTargets(forcedPool, canvasCount) : null;
           for (let i = 0; i < canvasCount; i++) {
             try {
-              if (forcedPhoto || isApiService) {
-                const photo = forcedPhoto || await fetchApiPhoto(service, keywords, w, h, itunesFillOptions);
+              if (assignment) {
+                const photo = assignment[i];
                 const base64 = await fetchImageAsBase64(photo.imageUrl);
                 const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
                 createdMeta.push(meta);
-                if (isApiService || forcedPhoto) {
-                  attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photoForAttribution(photo) });
-                }
+                attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photoForAttribution(photo) });
+                successCount++;
+              } else if (isApiService) {
+                const photo = await fetchApiPhoto(service, keywords, w, h, itunesFillOptions);
+                const base64 = await fetchImageAsBase64(photo.imageUrl);
+                const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
+                createdMeta.push(meta);
+                attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photoForAttribution(photo) });
                 successCount++;
               } else {
                 const url = buildOnlineImageUrl(service, w, h, keywords);
@@ -31693,9 +31995,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           }));
 
           const actionValues = stripStockPhotoInternalFields(values);
-          if (forcedPhoto) {
-            actionValues.forcedStockPhoto = cloneStockPhotoForApply(forcedPhoto);
+          if (forcedPool.length) {
+            actionValues.forcedStockPhotos = forcedPool.map((p) => cloneStockPhotoForApply(p)).filter(Boolean);
           }
+
           lastFillFromOnlineParams = {
             service,
             scaleMode,
@@ -31706,11 +32009,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           };
 
           const uk2 = unsplashApiKeyInput ? unsplashApiKeyInput.value.trim() : unsplashApiKey;
-          if (uk2 && forcedRaw && forcedRaw.unsplashPhoto) {
-            triggerUnsplashDownload(forcedRaw.unsplashPhoto, uk2);
-          }
+          triggerUnsplashDownloadsForStockPool(values, uk2);
 
-          const serviceName = isApiService ? (attributions[0]?.service || service) : (forcedPhoto ? forcedPhoto.service : 'online');
+          const serviceName = isApiService ? (attributions[0]?.service || service) : (hasForcedPreview ? (attributions[0]?.service || service) : 'online');
           const msg = successCount === canvasCount
             ? `Added ${successCount} stock image${successCount > 1 ? 's' : ''} to canvas (${serviceName})`
             : `Added ${successCount}/${canvasCount} stock images to canvas`;
@@ -31744,17 +32045,22 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         explicit: saved.explicit,
         itunesAppImage: saved.itunesAppImage,
       } : {};
-      const forced = saved.forcedStockPhoto && saved.forcedStockPhoto.imageUrl ? saved.forcedStockPhoto : null;
+      const poolFromArr = Array.isArray(saved.forcedStockPhotos) ? saved.forcedStockPhotos.filter((p) => p && p.imageUrl) : [];
+      const single = saved.forcedStockPhoto && saved.forcedStockPhoto.imageUrl ? saved.forcedStockPhoto : null;
+      const pool = poolFromArr.length ? poolFromArr : (single ? [single] : []);
+      const assignment = pool.length ? assignStockPhotosToTargets(pool, nodes.length) : null;
       showToast('Re-rolling images...', 'info');
 
       let successCount = 0;
       const attributions = [];
-      for (const node of nodes) {
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         try {
-          if (forced) {
-            const base64 = await fetchImageAsBase64(forced.imageUrl);
+          if (assignment) {
+            const photo = assignment[i];
+            const base64 = await fetchImageAsBase64(photo.imageUrl);
             await applyImageToNodeWithScale(base64, node.id, scaleMode);
-            attributions.push({ nodeName: node.name, nodeId: node.id, ...forced });
+            attributions.push({ nodeName: node.name, nodeId: node.id, ...photo });
             successCount++;
           } else if (isApiService) {
             const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
@@ -33523,17 +33829,15 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         if (action.directAction === 'fillFromOnlineImage') {
           const previewKey = buildStockPhotoValuesKey(values);
           const sess = stockPhotoPreviewSession;
-          const pick = sess && sess.phase === 'ready' && sess.valuesKey === previewKey && sess.selectedIndex != null
-            ? sess.candidates[sess.selectedIndex]
-            : null;
-          const ready = pick && pick.imageUrl;
+          const ordered = sess && sess.valuesKey === previewKey ? getOrderedSelectedStockPhotos(sess) : [];
+          const ready = ordered.length > 0;
           if (!ready) {
             showToast(tu('actions.stock.previewSearching'), 'info');
             const ok = await runStockPhotoPreviewSearch(values);
             if (!ok) return;
             return;
           }
-          values = { ...values, _forcedStockPhoto: pick };
+          values = { ...values, _forcedStockPhotos: ordered };
         }
 
         if (action.directAction) {
