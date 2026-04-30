@@ -199,17 +199,6 @@ export const stylingImageTasks = [
               ]
             },
             {
-              key: 'stockCanvasCount',
-              type: 'slider',
-              label: 'Number on canvas',
-              default: 1,
-              min: 1,
-              max: 12,
-              step: 1,
-              numberWithSlider: true,
-              showWhenNoSelection: true,
-            },
-            {
               key: 'media', type: 'select', label: 'Apple media type',
               default: 'music',
               showWhen: { field: 'service', equals: 'itunes' },

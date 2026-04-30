@@ -30865,7 +30865,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         explicit: values.explicit === true || values.explicit === 'Yes' ? 'Yes' : 'No',
         itunesAppImage: values.itunesAppImage || '',
         autoDetect: values.autoDetect === true || values.autoDetect === 'true' ? '1' : '0',
-        stockCanvasCount: String(values.stockCanvasCount ?? ''),
       };
       return JSON.stringify(payload);
     }
@@ -30937,14 +30936,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       }
     }
 
-    function getStockPhotoTargetCountForUi() {
-      const nSel = Array.isArray(lastKnownSelectionItems) ? lastKnownSelectionItems.length : 0;
-      if (nSel > 0) return nSel;
-      const v = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
-      const raw = Number(v.stockCanvasCount);
-      return Math.min(12, Math.max(1, Number.isFinite(raw) ? raw : 1));
-    }
-
     function refreshStockPhotoPreviewCounts() {
       const panel = document.getElementById('stockPhotoPreviewPanel');
       if (!stockPhotoPreviewSession || (panel && panel.classList.contains('hidden'))) {
@@ -30953,11 +30944,17 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         return;
       }
       const imgCount = stockPhotoPreviewSession.selectedUrls ? stockPhotoPreviewSession.selectedUrls.size : 0;
-      const nodeCount = getStockPhotoTargetCountForUi();
-      stockPhotoPreviewMetaState.countsCompact = tu('actions.stock.previewSelectionShort', {
-        images: String(imgCount),
-        nodes: String(nodeCount),
-      });
+      const nSel = Array.isArray(lastKnownSelectionItems) ? lastKnownSelectionItems.length : 0;
+      if (imgCount === 0 && nSel === 0) {
+        stockPhotoPreviewMetaState.countsCompact = '';
+      } else if (nSel > 0) {
+        stockPhotoPreviewMetaState.countsCompact = tu('actions.stock.previewSelectionShort', {
+          images: String(imgCount),
+          nodes: String(nSel),
+        });
+      } else {
+        stockPhotoPreviewMetaState.countsCompact = tu('actions.stock.previewPickedCount', { count: String(imgCount) });
+      }
       syncStockPhotoPreviewMeta();
     }
 
@@ -32032,8 +32029,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             showImageAttribution(attributions);
           }
         } else {
-          const rawCount = Number(values.stockCanvasCount);
-          const canvasCount = Math.min(12, Math.max(1, Number.isFinite(rawCount) ? rawCount : 1));
+          let canvasCount = 1;
+          if (hasForcedPreview) {
+            canvasCount = Math.max(1, forcedPool.length);
+          }
 
           if (!hasForcedPreview && service === 'itunes' && !String(keywords || '').trim()) {
             showToast('Enter search keywords for Apple Store.', 'error');
