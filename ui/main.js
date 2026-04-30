@@ -17969,6 +17969,21 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawerSubmit.title = qd.valid ? '' : qd.message;
         return;
       }
+      if (isStockPhotosPromptAction()) {
+        const key = buildStockPhotoValuesKey(nextValues);
+        const sess = stockPhotoPreviewSession;
+        if (sess && sess.valuesKey === key && sess.phase === 'needs_pick') {
+          promptDrawerSubmit.disabled = true;
+          promptDrawerSubmit.title = tu('actions.stock.previewSelectTitle');
+          return;
+        }
+        if (sess && sess.valuesKey === key && sess.phase === 'ready') {
+          promptDrawerSubmit.disabled = false;
+          promptDrawerSubmit.title = '';
+          updateStockPhotoPreviewSubmitLabel();
+          return;
+        }
+      }
       if (!isSubmittingPrompt) {
         promptDrawerSubmit.disabled = false;
         promptDrawerSubmit.title = '';
@@ -18432,6 +18447,7 @@ Generate ONLY the reply text, nothing else.`;
     async function openPromptDrawer(actionData, options = {}) {
       const skipHistory = options.skipHistory === true;
       clearRealtimePromptActionState();
+      clearStockPhotoPreviewSession();
       if (actionData && actionData.name) {
         recordQuickActionUsage(actionData.name);
       }
@@ -19164,6 +19180,7 @@ Generate ONLY the reply text, nothing else.`;
 
     function closePromptDrawer() {
       clearRealtimePromptActionState();
+      clearStockPhotoPreviewSession();
       if (tinySpikeDetectionTimer) {
         clearTimeout(tinySpikeDetectionTimer);
         tinySpikeDetectionTimer = null;
@@ -21479,6 +21496,42 @@ Generate ONLY the reply text, nothing else.`;
             </div>
           ` : '';
 
+          const camToggle = field.labelRowCameraToggle;
+          const camToggleKey = camToggle && typeof camToggle.key === 'string' ? camToggle.key : '';
+          let labelRowCameraToggleHtml = '';
+          if (camToggleKey) {
+            let exChecked = camToggle.default === true || camToggle.default === 'Yes';
+            if (preservedValues && preservedValues[camToggleKey] !== undefined) {
+              const pv = preservedValues[camToggleKey];
+              exChecked = pv === true || pv === 'Yes' || String(pv).toLowerCase() === 'yes';
+            }
+            const toggleTitle = escapeHtml(tu((camToggle && camToggle.titleKey) || 'actions.stock.explicitToggleTitle'));
+            labelRowCameraToggleHtml = `
+        <label class="camera-toggle-switch" data-stock-explicit-toggle-wrap="true" title="${toggleTitle}">
+          <input type="checkbox" data-field-key="${escapeHtml(camToggleKey)}" ${exChecked ? 'checked' : ''}${disabledAttr}>
+          <span class="camera-toggle-label">${exChecked ? tu('actions.camera.on') : tu('actions.camera.off')}</span>
+        </label>`;
+          }
+
+          const textFieldHeaderHtml = camToggleKey
+            ? `
+              <div class="prompt-field-label-row">
+                <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                ${labelRowCameraToggleHtml}
+                ${headerActionButtonsHtml}
+                ${actionButtonHtml}
+                ${translateBtnHtml}
+              </div>
+            `
+            : `
+              <div class="prompt-field-header">
+                <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+                ${headerActionButtonsHtml}
+                ${actionButtonHtml}
+                ${translateBtnHtml}
+              </div>
+            `;
+
           const textInputHtml = field.selectionPicker === 'splitPattern' ? `
               <div class="prompt-text-input-with-action">
                 <input type="text" id="${fieldId}" data-field-key="${field.key}" 
@@ -21502,12 +21555,7 @@ Generate ONLY the reply text, nothing else.`;
 
           fieldHtml += `
             <div class="prompt-field${wrapperClass}${field.disabled || forceDisabled ? ' disabled' : ''}"${conditionalAttrs}>
-              <div class="prompt-field-header">
-                <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
-                ${headerActionButtonsHtml}
-                ${actionButtonHtml}
-                ${translateBtnHtml}
-              </div>
+              ${textFieldHeaderHtml}
               ${field.hint ? `<span class="prompt-field-hint">${field.hint}</span>` : ''}
               ${textInputHtml}
             </div>
@@ -21552,6 +21600,21 @@ Generate ONLY the reply text, nothing else.`;
       setupPromptTextareaColorListeners();
       // Apply initial visibility rules
       applyPromptFieldVisibility();
+
+      if (currentPromptAction?.directAction === 'fillFromOnlineImage') {
+        stockPhotoPreviewInvalidateIfStale();
+        updateStockPhotoPreviewSubmitLabel();
+        updatePromptDrawerSubmitState();
+      }
+
+      promptDrawerFields.querySelectorAll('[data-stock-explicit-toggle-wrap] input[type="checkbox"]').forEach((input) => {
+        const syncLabel = () => {
+          const span = input.parentElement && input.parentElement.querySelector('.camera-toggle-label');
+          if (span) span.textContent = input.checked ? tu('actions.camera.on') : tu('actions.camera.off');
+        };
+        input.addEventListener('change', syncLabel);
+        syncLabel();
+      });
 
       // Sync custom select states (important for searchable ones and restoring values)
       promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
@@ -23263,6 +23326,11 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       promptDrawerFields.querySelectorAll('.prompt-field[data-show-when-field], .prompt-field[data-show-when-json]').forEach(fieldEl => {
         const match = evaluatePromptCondition(fieldEl, 'showWhen');
         fieldEl.style.display = match ? '' : 'none';
+      });
+
+      const serviceVal = getPromptVisibilityValue('service');
+      promptDrawerFields.querySelectorAll('[data-stock-explicit-toggle-wrap="true"]').forEach((wrap) => {
+        wrap.style.display = serviceVal === 'itunes' ? '' : 'none';
       });
 
       promptDrawerFields.querySelectorAll('.prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]').forEach(fieldEl => {
@@ -30695,6 +30763,404 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     // ==========================================
 
     var lastFillFromOnlineParams = null;
+    var stockPhotoPreviewSession = null;
+    const STOCK_PREVIEW_MAX = 12;
+    const API_IMAGE_SERVICES = ['unsplash', 'pixabay', 'pexels', 'itunes'];
+
+    function isStockPhotosPromptAction() {
+      return currentPromptAction?.directAction === 'fillFromOnlineImage';
+    }
+
+    function buildStockPhotoValuesKey(values) {
+      if (!values || typeof values !== 'object') return '';
+      const trim = (x) => (x == null ? '' : String(x)).trim();
+      const payload = {
+        service: values.service || '',
+        keywords: trim(values.keywords),
+        media: values.media || '',
+        entity: values.entity || '',
+        country: values.country || '',
+        explicit: values.explicit === true || values.explicit === 'Yes' ? 'Yes' : 'No',
+        itunesAppImage: values.itunesAppImage || '',
+        autoDetect: values.autoDetect === true || values.autoDetect === 'true' ? '1' : '0',
+        stockCanvasCount: String(values.stockCanvasCount ?? ''),
+      };
+      return JSON.stringify(payload);
+    }
+
+    function clearStockPhotoPreviewUI() {
+      const panel = document.getElementById('stockPhotoPreviewPanel');
+      const grid = document.getElementById('stockPhotoPreviewGrid');
+      const status = document.getElementById('stockPhotoPreviewStatus');
+      const hint = document.getElementById('stockPhotoPreviewHint');
+      const titleEl = document.getElementById('stockPhotoPreviewTitle');
+      const againBtn = document.getElementById('stockPhotoPreviewSearchAgain');
+      if (panel) panel.classList.add('hidden');
+      if (grid) grid.innerHTML = '';
+      if (status) {
+        status.textContent = '';
+        status.classList.remove('stock-photo-preview-panel__status--error');
+      }
+      if (hint) hint.classList.add('hidden');
+      if (titleEl) titleEl.textContent = '';
+      if (againBtn) againBtn.classList.add('hidden');
+    }
+
+    function clearStockPhotoPreviewSession() {
+      stockPhotoPreviewSession = null;
+      clearStockPhotoPreviewUI();
+      if (typeof updatePromptDrawerSubmitState === 'function') {
+        updatePromptDrawerSubmitState();
+      }
+    }
+
+    function updateStockPhotoPreviewSubmitLabel() {
+      if (!promptDrawerSubmit || !isStockPhotosPromptAction()) return;
+      const key = typeof getPromptFieldValues === 'function' ? buildStockPhotoValuesKey(getPromptFieldValues()) : '';
+      const sess = stockPhotoPreviewSession;
+      const ready = sess && sess.phase === 'ready' && sess.valuesKey === key;
+      const hasResults = sess && sess.phase === 'needs_pick' && Array.isArray(sess.candidates) && sess.candidates.length > 0;
+      if (ready) {
+        promptDrawerSubmit.textContent = tu('actions.stock.previewApply');
+      } else if (hasResults) {
+        promptDrawerSubmit.textContent = tu('actions.stock.previewPickLabel');
+      } else {
+        promptDrawerSubmit.textContent = tu('actions.stock.previewSearch');
+      }
+    }
+
+    function stockPhotoPreviewInvalidateIfStale() {
+      if (!stockPhotoPreviewSession || !isStockPhotosPromptAction()) return;
+      const key = typeof getPromptFieldValues === 'function' ? buildStockPhotoValuesKey(getPromptFieldValues()) : '';
+      if (stockPhotoPreviewSession.valuesKey !== key) {
+        clearStockPhotoPreviewSession();
+      }
+    }
+
+    function buildOnlineImageUrl(service, width, height, keywords) {
+      return buildOnlineImageUrlWithBuster(service, width, height, keywords, Math.floor(Math.random() * 1e9));
+    }
+
+    function buildOnlineImageUrlWithBuster(service, width, height, keywords, cacheBuster) {
+      const w = Math.max(width || 400, 10);
+      const h = Math.max(height || 400, 10);
+      switch (service) {
+        case 'loremflickr': {
+          const kw = (keywords || 'random').split(/[,\s]+/).filter(Boolean).join(',');
+          return `https://loremflickr.com/${w}/${h}/${encodeURIComponent(kw)}?random=${cacheBuster}`;
+        }
+        case 'picsum':
+          return `https://picsum.photos/${w}/${h}?random=${cacheBuster}`;
+        case 'placehold':
+          return `https://placehold.co/${w}x${h}/png?r=${cacheBuster}`;
+        default:
+          return `https://picsum.photos/${w}/${h}?random=${cacheBuster}`;
+      }
+    }
+
+    function buildOnlinePhotoCandidates(service, w, h, keywords, count) {
+      const wc = Math.max(w || 400, 10);
+      const hc = Math.max(h || 400, 10);
+      const n = Math.min(STOCK_PREVIEW_MAX, Math.max(1, count || STOCK_PREVIEW_MAX));
+      const out = [];
+      const label = service === 'loremflickr' ? 'LoremFlickr' : service === 'picsum' ? 'Lorem Picsum' : 'Placeholder';
+      for (let i = 0; i < n; i++) {
+        const buster = Math.floor(Math.random() * 1e9) + i * 997;
+        const url = buildOnlineImageUrlWithBuster(service, wc, hc, keywords, buster);
+        out.push({
+          service: label,
+          imageUrl: url,
+          thumbUrl: url,
+          photographerName: `${label} (${i + 1})`,
+          photographerUrl: 'https://picsum.photos/',
+          photoUrl: url,
+          sourceUrl: url,
+          width: wc,
+          height: hc,
+        });
+      }
+      return out;
+    }
+
+    function triggerUnsplashDownload(photo, apiKey) {
+      if (!photo?.links?.download_location || !apiKey) return;
+      fetch(photo.links.download_location, {
+        headers: { 'Authorization': `Client-ID ${apiKey}` }
+      }).catch(() => { });
+    }
+
+    function unsplashPhotoToCandidate(photo) {
+      const w = Number(photo?.width) || 4000;
+      const h = Number(photo?.height) || 3000;
+      return {
+        service: 'Unsplash',
+        imageUrl: photo.urls?.regular || photo.urls?.full || photo.urls?.small,
+        thumbUrl: photo.urls?.small || photo.urls?.thumb || photo.urls?.regular,
+        photographerName: photo.user?.name || 'Unsplash',
+        photographerUrl: (photo.user?.links?.html || 'https://unsplash.com/') + '?utm_source=figma_gemini&utm_medium=referral',
+        photoUrl: (photo.links?.html || 'https://unsplash.com/') + '?utm_source=figma_gemini&utm_medium=referral',
+        sourceUrl: 'https://unsplash.com/?utm_source=figma_gemini&utm_medium=referral',
+        width: w,
+        height: h,
+        unsplashPhoto: photo,
+      };
+    }
+
+    async function fetchUnsplashPhotoCandidates(query, width, height) {
+      const key = unsplashApiKeyInput ? unsplashApiKeyInput.value.trim() : unsplashApiKey;
+      if (!key) throw new Error('Unsplash API key not configured. Add it in Settings → Image APIs.');
+
+      let photos;
+      const q = (query || '').trim();
+      if (q) {
+        const params = new URLSearchParams({ query: q, per_page: String(STOCK_PREVIEW_MAX) });
+        const resp = await fetch(`https://api.unsplash.com/search/photos?${params.toString()}`, {
+          headers: { 'Authorization': `Client-ID ${key}` }
+        });
+        if (resp.status === 403) throw new Error('Unsplash API key is invalid or rate-limited.');
+        if (!resp.ok) throw new Error(`Unsplash API error (${resp.status})`);
+        const data = await resp.json();
+        photos = Array.isArray(data.results) ? data.results : [];
+      } else {
+        const params = new URLSearchParams({ per_page: String(STOCK_PREVIEW_MAX) });
+        const resp = await fetch(`https://api.unsplash.com/photos?${params.toString()}`, {
+          headers: { 'Authorization': `Client-ID ${key}` }
+        });
+        if (resp.status === 403) throw new Error('Unsplash API key is invalid or rate-limited.');
+        if (!resp.ok) throw new Error(`Unsplash API error (${resp.status})`);
+        photos = await resp.json();
+        if (!Array.isArray(photos)) photos = [];
+      }
+      if (!photos.length) throw new Error('No Unsplash results for this query.');
+      return photos.slice(0, STOCK_PREVIEW_MAX).map(unsplashPhotoToCandidate).filter((c) => c.imageUrl);
+    }
+
+    async function fetchPixabayPhotoCandidates(query, width, height) {
+      const key = pixabayApiKeyInput ? pixabayApiKeyInput.value.trim() : pixabayApiKey;
+      if (!key) throw new Error('Pixabay API key not configured. Add it in Settings → Image APIs.');
+
+      const params = new URLSearchParams({
+        key: key,
+        per_page: String(STOCK_PREVIEW_MAX),
+        image_type: 'photo',
+        safesearch: 'true'
+      });
+      if (query) params.set('q', query);
+
+      const resp = await fetch(`https://pixabay.com/api/?${params.toString()}`);
+      if (resp.status === 401 || resp.status === 403) throw new Error('Pixabay API key is invalid.');
+      if (!resp.ok) throw new Error(`Pixabay API error (${resp.status})`);
+
+      const data = await resp.json();
+      if (!data.hits || data.hits.length === 0) throw new Error('No Pixabay results for this query.');
+
+      return data.hits.slice(0, STOCK_PREVIEW_MAX).map((photo) => ({
+        service: 'Pixabay',
+        imageUrl: photo.largeImageURL,
+        thumbUrl: photo.previewURL || photo.webformatURL || photo.largeImageURL,
+        photographerName: photo.user,
+        photographerUrl: `https://pixabay.com/users/${photo.user}-${photo.user_id}/`,
+        photoUrl: photo.pageURL,
+        sourceUrl: 'https://pixabay.com/',
+        width: Number(photo.imageWidth) || 1200,
+        height: Number(photo.imageHeight) || 800,
+      })).filter((c) => c.imageUrl);
+    }
+
+    async function fetchPexelsPhotoCandidates(query, width, height) {
+      const key = pexelsApiKeyInput ? pexelsApiKeyInput.value.trim() : pexelsApiKey;
+      if (!key) throw new Error('Pexels API key not configured. Add it in Settings → Image APIs.');
+
+      let url;
+      if (query) {
+        const params = new URLSearchParams({ query: query, per_page: String(STOCK_PREVIEW_MAX), orientation: 'landscape' });
+        url = `https://api.pexels.com/v1/search?${params.toString()}`;
+      } else {
+        url = `https://api.pexels.com/v1/curated?per_page=${STOCK_PREVIEW_MAX}`;
+      }
+
+      const resp = await fetch(url, {
+        headers: { 'Authorization': key }
+      });
+      if (resp.status === 401 || resp.status === 403) throw new Error('Pexels API key is invalid.');
+      if (!resp.ok) throw new Error(`Pexels API error (${resp.status})`);
+
+      const data = await resp.json();
+      if (!data.photos || data.photos.length === 0) throw new Error('No Pexels results for this query.');
+
+      return data.photos.slice(0, STOCK_PREVIEW_MAX).map((photo) => {
+        const w = Number(photo.width) || 4000;
+        const h = Number(photo.height) || 3000;
+        return {
+          service: 'Pexels',
+          imageUrl: photo.src.large2x || photo.src.large || photo.src.original,
+          thumbUrl: photo.src.medium || photo.src.small || photo.src.tiny,
+          photographerName: photo.photographer,
+          photographerUrl: photo.photographer_url,
+          photoUrl: photo.url,
+          sourceUrl: 'https://www.pexels.com/',
+          width: w,
+          height: h,
+        };
+      }).filter((c) => c.imageUrl);
+    }
+
+    function itunesItemToPhotoRecord(item, width, height, media, appImage) {
+      if (!item) return null;
+      let imageUrl;
+      let screenshotKind = null;
+      const isIphoneShot = media === 'software' && appImage === 'iphoneScreenshot';
+      const isIpadShot = media === 'software' && appImage === 'ipadScreenshot';
+
+      if (isIphoneShot || isIpadShot) {
+        let urls;
+        if (isIpadShot) {
+          urls = item.ipadScreenshotUrls;
+          screenshotKind = 'iPad';
+        } else {
+          urls = item.screenshotUrls;
+          screenshotKind = 'iPhone';
+        }
+        const list = Array.isArray(urls) ? urls.filter((u) => typeof u === 'string' && u) : [];
+        if (list.length === 0) return null;
+        imageUrl = list[0];
+      } else {
+        const rawArt = item.artworkUrl600 || item.artworkUrl100 || item.artworkUrl60 || '';
+        if (!rawArt) return null;
+        imageUrl = upgradeItunesArtworkUrl(rawArt, width, height);
+      }
+
+      const title = item.trackName || item.collectionName || item.name || 'Untitled';
+      const artist = item.artistName || item.sellerName || '';
+      let photographerName = artist ? `${title} — ${artist}` : title;
+      let nw = 600;
+      let nh = 600;
+      if (screenshotKind === 'iPhone') {
+        photographerName += ' — App screenshot (iPhone)';
+        nw = 390;
+        nh = 844;
+      } else if (screenshotKind === 'iPad') {
+        photographerName += ' — App screenshot (iPad)';
+        nw = 1024;
+        nh = 1366;
+      }
+
+      const photographerUrl = item.artistViewUrl || item.collectionViewUrl || 'https://www.apple.com/';
+      const photoUrl = item.trackViewUrl || item.collectionViewUrl || photographerUrl;
+
+      return {
+        service: 'Apple iTunes',
+        imageUrl,
+        thumbUrl: imageUrl,
+        photographerName,
+        photographerUrl,
+        photoUrl,
+        sourceUrl: 'https://www.apple.com/itunes/',
+        width: nw,
+        height: nh,
+      };
+    }
+
+    async function fetchItunesPhotoCandidates(query, width, height, options = {}) {
+      const term = (query || '').trim();
+      if (!term) throw new Error('Search keywords required for Apple iTunes.');
+
+      const media = options.media || 'music';
+      const entity = normalizeItunesEntityForMedia(media, options.entity);
+      const country = String(options.country || 'US').trim().slice(0, 2).toUpperCase() || 'US';
+      const explicitRaw = options.explicit;
+      const explicit = explicitRaw === 'Yes' || explicitRaw === true ? 'Yes' : 'No';
+      const appImage = String(options.itunesAppImage || 'icon');
+
+      const params = new URLSearchParams({
+        term,
+        country,
+        media,
+        entity,
+        limit: '25',
+        explicit,
+      });
+
+      const resp = await fetch(`https://itunes.apple.com/search?${params.toString()}`);
+      if (!resp.ok) throw new Error(`iTunes Search error (${resp.status})`);
+
+      const data = await resp.json();
+      if (!data.results || data.results.length === 0) throw new Error('No iTunes results for this query.');
+
+      const out = [];
+      for (let i = 0; i < data.results.length && out.length < STOCK_PREVIEW_MAX; i++) {
+        const rec = itunesItemToPhotoRecord(data.results[i], width, height, media, appImage);
+        if (rec) out.push(rec);
+      }
+      if (out.length === 0) throw new Error('No usable artwork in iTunes results.');
+      return out;
+    }
+
+    async function fetchStockPhotoCandidates(service, keywords, w, h, itunesFillOptions) {
+      if (service === 'unsplash') return fetchUnsplashPhotoCandidates(keywords, w, h);
+      if (service === 'pixabay') return fetchPixabayPhotoCandidates(keywords, w, h);
+      if (service === 'pexels') return fetchPexelsPhotoCandidates(keywords, w, h);
+      if (service === 'itunes') return fetchItunesPhotoCandidates(keywords, w, h, itunesFillOptions || {});
+      if (['loremflickr', 'picsum', 'placehold'].includes(service)) {
+        return buildOnlinePhotoCandidates(service, w, h, keywords, STOCK_PREVIEW_MAX);
+      }
+      return buildOnlinePhotoCandidates('picsum', w, h, keywords, STOCK_PREVIEW_MAX);
+    }
+
+    function cloneStockPhotoForApply(candidate) {
+      if (!candidate || !candidate.imageUrl) return null;
+      const { unsplashPhoto, thumbUrl, width, height, ...rest } = candidate;
+      return { ...rest, imageUrl: candidate.imageUrl, width, height };
+    }
+
+    function stripStockPhotoInternalFields(values) {
+      if (!values || typeof values !== 'object') return values;
+      const next = { ...values };
+      delete next._forcedStockPhoto;
+      return next;
+    }
+
+    function renderStockPhotoPreviewGrid(candidates) {
+      const grid = document.getElementById('stockPhotoPreviewGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      const selIdx = stockPhotoPreviewSession?.selectedIndex;
+
+      candidates.forEach((c, index) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'stock-photo-preview-card' + (selIdx === index ? ' stock-photo-preview-card--selected' : '');
+        const arW = Math.max(1, Number(c.width) || 4);
+        const arH = Math.max(1, Number(c.height) || 3);
+        card.style.setProperty('--stock-preview-ar', `${arW} / ${arH}`);
+        const frame = document.createElement('div');
+        frame.className = 'stock-photo-preview-card__frame';
+        const img = document.createElement('img');
+        img.className = 'stock-photo-preview-card__img';
+        img.alt = '';
+        img.loading = 'lazy';
+        img.src = c.thumbUrl || c.imageUrl;
+        frame.appendChild(img);
+        const cap = document.createElement('div');
+        cap.className = 'stock-photo-preview-card__caption';
+        cap.textContent = c.photographerName || c.service || '';
+        card.appendChild(frame);
+        card.appendChild(cap);
+        card.addEventListener('click', () => {
+          if (!stockPhotoPreviewSession) return;
+          stockPhotoPreviewSession.selectedIndex = index;
+          stockPhotoPreviewSession.phase = 'ready';
+          grid.querySelectorAll('.stock-photo-preview-card').forEach((el, i) => {
+            el.classList.toggle('stock-photo-preview-card--selected', i === index);
+          });
+          const hint = document.getElementById('stockPhotoPreviewHint');
+          if (hint) hint.classList.add('hidden');
+          updatePromptDrawerSubmitState();
+          updateStockPhotoPreviewSubmitLabel();
+        });
+        grid.appendChild(card);
+      });
+    }
 
     function getSelectionForFill() {
       return new Promise((resolve, reject) => {
@@ -30714,22 +31180,102 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       });
     }
 
-    function buildOnlineImageUrl(service, width, height, keywords) {
-      const w = Math.max(width || 400, 10);
-      const h = Math.max(height || 400, 10);
-      const cacheBuster = Math.floor(Math.random() * 1e9);
-      switch (service) {
-        case 'loremflickr': {
-          const kw = (keywords || 'random').split(/[,\s]+/).filter(Boolean).join(',');
-          return `https://loremflickr.com/${w}/${h}/${encodeURIComponent(kw)}?random=${cacheBuster}`;
+    async function runStockPhotoPreviewSearch(values) {
+      const service = values.service || 'unsplash';
+      const autoDetect = values.autoDetect === true || values.autoDetect === 'true';
+      let keywords = values.keywords || '';
+      const isApiService = API_IMAGE_SERVICES.includes(service);
+
+      const panel = document.getElementById('stockPhotoPreviewPanel');
+      const status = document.getElementById('stockPhotoPreviewStatus');
+      const hint = document.getElementById('stockPhotoPreviewHint');
+      const titleEl = document.getElementById('stockPhotoPreviewTitle');
+      const againBtn = document.getElementById('stockPhotoPreviewSearchAgain');
+
+      const nodes = await getSelectionForFill();
+      const hasSelection = Array.isArray(nodes) && nodes.length > 0;
+
+      if ((service === 'loremflickr' || isApiService) && autoDetect) {
+        if (!hasSelection) {
+          showToast('AI keyword detection needs a selected layer. Using your keywords.', 'warning');
+        } else {
+          showToast('Detecting keywords with AI...', 'info');
+          keywords = await autoDetectKeywords(nodes);
         }
-        case 'picsum':
-          return `https://picsum.photos/${w}/${h}?random=${cacheBuster}`;
-        case 'placehold':
-          return `https://placehold.co/${w}x${h}/png`;
-        default:
-          return `https://picsum.photos/${w}/${h}?random=${cacheBuster}`;
       }
+
+      if (service === 'itunes' && !String(keywords || '').trim()) {
+        if (status) {
+          status.textContent = tu('actions.stock.previewItunesKeywords');
+          status.classList.add('stock-photo-preview-panel__status--error');
+        }
+        return false;
+      }
+
+      const itunesFillOptions = service === 'itunes' ? {
+        media: values.media,
+        entity: values.entity,
+        country: values.country,
+        explicit: values.explicit,
+        itunesAppImage: values.itunesAppImage,
+      } : {};
+
+      const targetW = hasSelection ? Math.max(10, Number(nodes[0].width) || STOCK_CANVAS_DEFAULT_W) : STOCK_CANVAS_DEFAULT_W;
+      const targetH = hasSelection ? Math.max(10, Number(nodes[0].height) || STOCK_CANVAS_DEFAULT_H) : STOCK_CANVAS_DEFAULT_H;
+
+      if (panel) panel.classList.remove('hidden');
+      if (titleEl) titleEl.textContent = tu('actions.stock.previewTitle');
+      if (status) {
+        status.textContent = tu('actions.stock.previewLoading');
+        status.classList.remove('stock-photo-preview-panel__status--error');
+      }
+      if (hint) {
+        hint.textContent = tu('actions.stock.previewSelectHint');
+        hint.classList.remove('hidden');
+      }
+      if (againBtn) {
+        againBtn.textContent = tu('actions.stock.previewSearchAgain');
+        againBtn.classList.remove('hidden');
+      }
+
+      let candidates;
+      try {
+        candidates = await fetchStockPhotoCandidates(service, keywords, targetW, targetH, itunesFillOptions);
+      } catch (err) {
+        console.error('Stock preview search failed:', err);
+        if (status) {
+          status.textContent = err?.message || tu('actions.stock.previewError');
+          status.classList.add('stock-photo-preview-panel__status--error');
+        }
+        return false;
+      }
+
+      const valuesKey = buildStockPhotoValuesKey(values);
+      stockPhotoPreviewSession = {
+        phase: 'needs_pick',
+        candidates,
+        selectedIndex: null,
+        valuesKey,
+        keywordsSnapshot: keywords,
+      };
+      renderStockPhotoPreviewGrid(candidates);
+      if (status) {
+        status.textContent = tu('actions.stock.previewResultsCount', { count: String(candidates.length) });
+      }
+
+      if (againBtn) {
+        againBtn.onclick = async () => {
+          stockPhotoPreviewSession = null;
+          const v = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : values;
+          await runStockPhotoPreviewSearch(v);
+          updatePromptDrawerSubmitState();
+          updateStockPhotoPreviewSubmitLabel();
+        };
+      }
+
+      updatePromptDrawerSubmitState();
+      updateStockPhotoPreviewSubmitLabel();
+      return true;
     }
 
     async function fetchImageAsBase64(url) {
@@ -30984,84 +31530,11 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return defaults[media] || 'album';
     }
 
-    /**
-     * Apple iTunes Search API (keyless). options: media, entity, country, explicit, itunesAppImage (+ saved UI values).
-     */
     async function fetchItunesArtwork(query, width, height, options = {}) {
-      const term = (query || '').trim();
-      if (!term) throw new Error('Search keywords required for Apple iTunes.');
-
-      const media = options.media || 'music';
-      const entity = normalizeItunesEntityForMedia(media, options.entity);
-      const country = String(options.country || 'US').trim().slice(0, 2).toUpperCase() || 'US';
-      const explicitRaw = options.explicit;
-      const explicit = explicitRaw === 'Yes' || explicitRaw === true ? 'Yes' : 'No';
-      const appImage = String(options.itunesAppImage || 'icon');
-
-      const params = new URLSearchParams({
-        term,
-        country,
-        media,
-        entity,
-        limit: '25',
-        explicit,
-      });
-
-      const resp = await fetch(`https://itunes.apple.com/search?${params.toString()}`);
-      if (!resp.ok) throw new Error(`iTunes Search error (${resp.status})`);
-
-      const data = await resp.json();
-      if (!data.results || data.results.length === 0) throw new Error('No iTunes results for this query.');
-
-      const item = data.results[Math.floor(Math.random() * data.results.length)];
-
-      let imageUrl;
-      let screenshotKind = null;
-      const isIphoneShot = media === 'software' && appImage === 'iphoneScreenshot';
-      const isIpadShot = media === 'software' && appImage === 'ipadScreenshot';
-
-      if (isIphoneShot || isIpadShot) {
-        let urls;
-        if (isIpadShot) {
-          urls = item.ipadScreenshotUrls;
-          screenshotKind = 'iPad';
-        } else {
-          urls = item.screenshotUrls;
-          screenshotKind = 'iPhone';
-        }
-        const list = Array.isArray(urls) ? urls.filter((u) => typeof u === 'string' && u) : [];
-        if (list.length === 0) {
-          const label = isIpadShot ? 'iPad screenshots' : 'iPhone screenshots';
-          throw new Error(`No ${label} in this App Store result.`);
-        }
-        imageUrl = list[Math.floor(Math.random() * list.length)];
-      } else {
-        const rawArt = item.artworkUrl600 || item.artworkUrl100 || item.artworkUrl60 || '';
-        if (!rawArt) throw new Error('No artwork in iTunes result.');
-        imageUrl = upgradeItunesArtworkUrl(rawArt, width, height);
-      }
-
-      const title = item.trackName || item.collectionName || item.name || 'Untitled';
-      const artist = item.artistName || item.sellerName || '';
-      let photographerName = artist ? `${title} — ${artist}` : title;
-      if (screenshotKind) {
-        photographerName += ` — App screenshot (${screenshotKind})`;
-      }
-
-      const photographerUrl = item.artistViewUrl || item.collectionViewUrl || 'https://www.apple.com/';
-      const photoUrl = item.trackViewUrl || item.collectionViewUrl || photographerUrl;
-
-      return {
-        service: 'Apple iTunes',
-        imageUrl,
-        photographerName,
-        photographerUrl,
-        photoUrl,
-        sourceUrl: 'https://www.apple.com/itunes/',
-      };
+      const list = await fetchItunesPhotoCandidates(query, width, height, options);
+      if (!list.length) throw new Error('No iTunes results for this query.');
+      return list[Math.floor(Math.random() * list.length)];
     }
-
-    const API_IMAGE_SERVICES = ['unsplash', 'pixabay', 'pexels', 'itunes'];
 
     async function fetchApiPhoto(service, query, width, height, fillOptions = {}) {
       switch (service) {
@@ -31079,14 +31552,18 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const autoDetect = values.autoDetect === true || values.autoDetect === 'true';
       let keywords = values.keywords || '';
       const isApiService = API_IMAGE_SERVICES.includes(service);
+      const forcedRaw = values._forcedStockPhoto;
+      const forcedPhoto = forcedRaw && forcedRaw.imageUrl ? forcedRaw : null;
 
-      showToast('Fetching images...', 'info');
+      if (!forcedPhoto) {
+        showToast('Fetching images...', 'info');
+      }
 
       try {
         const nodes = await getSelectionForFill();
         const hasSelection = Array.isArray(nodes) && nodes.length > 0;
 
-        if ((service === 'loremflickr' || isApiService) && autoDetect) {
+        if (!forcedPhoto && (service === 'loremflickr' || isApiService) && autoDetect) {
           if (!hasSelection) {
             showToast('AI keyword detection needs a selected layer. Using your keywords.', 'warning');
           } else {
@@ -31107,14 +31584,21 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         const attributions = [];
         let nodesForReroll = nodes;
 
+        const photoForAttribution = (photo) => {
+          const { unsplashPhoto: _u, thumbUrl: _t, ...rest } = photo;
+          return rest;
+        };
+
         if (hasSelection) {
           for (const node of nodes) {
             try {
-              if (isApiService) {
-                const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
+              if (forcedPhoto || isApiService) {
+                const photo = forcedPhoto || await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
                 const base64 = await fetchImageAsBase64(photo.imageUrl);
                 await applyImageToNodeWithScale(base64, node.id, scaleMode);
-                attributions.push({ nodeName: node.name, nodeId: node.id, ...photo });
+                if (isApiService || forcedPhoto) {
+                  attributions.push({ nodeName: node.name, nodeId: node.id, ...photoForAttribution(photo) });
+                }
                 successCount++;
               } else {
                 const url = buildOnlineImageUrl(service, node.width, node.height, keywords);
@@ -31132,29 +31616,38 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             return;
           }
 
+          const actionValues = stripStockPhotoInternalFields(values);
+          if (forcedPhoto) {
+            actionValues.forcedStockPhoto = cloneStockPhotoForApply(forcedPhoto);
+          }
           lastFillFromOnlineParams = {
             service,
             scaleMode,
             keywords,
             nodes: nodesForReroll,
-            actionValues: { ...values },
+            actionValues,
             insertMode: 'selection',
           };
 
-          const serviceName = isApiService ? (attributions[0]?.service || service) : 'online';
+          const uk = unsplashApiKeyInput ? unsplashApiKeyInput.value.trim() : unsplashApiKey;
+          if (uk && forcedRaw && forcedRaw.unsplashPhoto) {
+            triggerUnsplashDownload(forcedRaw.unsplashPhoto, uk);
+          }
+
+          const serviceName = isApiService ? (attributions[0]?.service || service) : (forcedPhoto ? forcedPhoto.service : 'online');
           const msg = successCount === nodes.length
             ? `Filled ${successCount} node${successCount > 1 ? 's' : ''} with ${serviceName} images`
             : `Filled ${successCount}/${nodes.length} nodes`;
           showToastWithReroll(msg);
 
-          if (isApiService && attributions.length > 0) {
+          if (attributions.length > 0) {
             showImageAttribution(attributions);
           }
         } else {
           const rawCount = Number(values.stockCanvasCount);
           const canvasCount = Math.min(12, Math.max(1, Number.isFinite(rawCount) ? rawCount : 1));
 
-          if (service === 'itunes' && !String(keywords || '').trim()) {
+          if (!forcedPhoto && service === 'itunes' && !String(keywords || '').trim()) {
             showToast('Enter search keywords for Apple Store.', 'error');
             return;
           }
@@ -31165,12 +31658,14 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
           for (let i = 0; i < canvasCount; i++) {
             try {
-              if (isApiService) {
-                const photo = await fetchApiPhoto(service, keywords, w, h, itunesFillOptions);
+              if (forcedPhoto || isApiService) {
+                const photo = forcedPhoto || await fetchApiPhoto(service, keywords, w, h, itunesFillOptions);
                 const base64 = await fetchImageAsBase64(photo.imageUrl);
                 const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
                 createdMeta.push(meta);
-                attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photo });
+                if (isApiService || forcedPhoto) {
+                  attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photoForAttribution(photo) });
+                }
                 successCount++;
               } else {
                 const url = buildOnlineImageUrl(service, w, h, keywords);
@@ -31197,25 +31692,37 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
             parentName: m.parentName || '',
           }));
 
+          const actionValues = stripStockPhotoInternalFields(values);
+          if (forcedPhoto) {
+            actionValues.forcedStockPhoto = cloneStockPhotoForApply(forcedPhoto);
+          }
           lastFillFromOnlineParams = {
             service,
             scaleMode,
             keywords,
             nodes: nodesForReroll,
-            actionValues: { ...values },
+            actionValues,
             insertMode: 'canvas',
           };
 
-          const serviceName = isApiService ? (attributions[0]?.service || service) : 'online';
+          const uk2 = unsplashApiKeyInput ? unsplashApiKeyInput.value.trim() : unsplashApiKey;
+          if (uk2 && forcedRaw && forcedRaw.unsplashPhoto) {
+            triggerUnsplashDownload(forcedRaw.unsplashPhoto, uk2);
+          }
+
+          const serviceName = isApiService ? (attributions[0]?.service || service) : (forcedPhoto ? forcedPhoto.service : 'online');
           const msg = successCount === canvasCount
             ? `Added ${successCount} stock image${successCount > 1 ? 's' : ''} to canvas (${serviceName})`
             : `Added ${successCount}/${canvasCount} stock images to canvas`;
           showToastWithReroll(msg);
 
-          if (isApiService && attributions.length > 0) {
+          if (attributions.length > 0) {
             showImageAttribution(attributions, { addedToCanvas: true });
           }
         }
+
+        clearStockPhotoPreviewSession();
+        closePromptDrawer();
       } catch (e) {
         console.error('Fill from online image failed:', e);
         showToast('Failed: ' + e.message, 'error');
@@ -31237,13 +31744,19 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         explicit: saved.explicit,
         itunesAppImage: saved.itunesAppImage,
       } : {};
+      const forced = saved.forcedStockPhoto && saved.forcedStockPhoto.imageUrl ? saved.forcedStockPhoto : null;
       showToast('Re-rolling images...', 'info');
 
       let successCount = 0;
       const attributions = [];
       for (const node of nodes) {
         try {
-          if (isApiService) {
+          if (forced) {
+            const base64 = await fetchImageAsBase64(forced.imageUrl);
+            await applyImageToNodeWithScale(base64, node.id, scaleMode);
+            attributions.push({ nodeName: node.name, nodeId: node.id, ...forced });
+            successCount++;
+          } else if (isApiService) {
             const photo = await fetchApiPhoto(service, keywords, node.width, node.height, itunesFillOptions);
             const base64 = await fetchImageAsBase64(photo.imageUrl);
             await applyImageToNodeWithScale(base64, node.id, scaleMode);
@@ -31262,7 +31775,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
       if (successCount > 0) {
         showToastWithReroll(`Re-rolled ${successCount} node${successCount > 1 ? 's' : ''}`);
-        if (isApiService && attributions.length > 0) {
+        if (attributions.length > 0) {
           showImageAttribution(attributions, { addedToCanvas: insertMode === 'canvas' });
         }
       }
@@ -33007,6 +33520,22 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
         }
 
+        if (action.directAction === 'fillFromOnlineImage') {
+          const previewKey = buildStockPhotoValuesKey(values);
+          const sess = stockPhotoPreviewSession;
+          const pick = sess && sess.phase === 'ready' && sess.valuesKey === previewKey && sess.selectedIndex != null
+            ? sess.candidates[sess.selectedIndex]
+            : null;
+          const ready = pick && pick.imageUrl;
+          if (!ready) {
+            showToast(tu('actions.stock.previewSearching'), 'info');
+            const ok = await runStockPhotoPreviewSearch(values);
+            if (!ok) return;
+            return;
+          }
+          values = { ...values, _forcedStockPhoto: pick };
+        }
+
         if (action.directAction) {
           // Only close drawer if it's not a multi-step action like browseIconSet
           const keepDrawerOpenForCreateIcon = action.directAction === 'createIcon' && values.showResultsInDrawer !== false;
@@ -33015,7 +33544,8 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
           const keepDrawerOpenForAddProperty = action.directAction === 'addProperty';
           const keepDrawerOpenForFontMapping = action.directAction === 'fontMapping';
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForImageTo4PointVector && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForFontMapping) {
+          const keepDrawerOpenForFillFromOnlineImage = action.directAction === 'fillFromOnlineImage';
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForImageTo4PointVector && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForFontMapping && !keepDrawerOpenForFillFromOnlineImage) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -33033,7 +33563,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForImageTo4PointVector || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForImageTo4PointVector || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping || keepDrawerOpenForFillFromOnlineImage) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             promptDrawerSubmit.textContent = 'Run Action';
@@ -33097,7 +33627,11 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
         showToast('Failed to run action: ' + error.message, 'error');
       } finally {
         isSubmittingPrompt = false;
-        promptDrawerSubmit.textContent = 'Run Action';
+        if (currentPromptAction && currentPromptAction.directAction === 'fillFromOnlineImage') {
+          updateStockPhotoPreviewSubmitLabel();
+        } else {
+          promptDrawerSubmit.textContent = 'Run Action';
+        }
         updatePromptDrawerSubmitState();
       }
     }
@@ -34429,11 +34963,15 @@ Example structure:
     });
     promptDrawerFields.addEventListener('input', (e) => {
       applyPromptFieldVisibility();
+      stockPhotoPreviewInvalidateIfStale();
       if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
         handleImageRefInput();
       }
     });
-    promptDrawerFields.addEventListener('change', applyPromptFieldVisibility);
+    promptDrawerFields.addEventListener('change', () => {
+      applyPromptFieldVisibility();
+      stockPhotoPreviewInvalidateIfStale();
+    });
 
     promptDrawerFields.addEventListener('keydown', (e) => {
       if (imageRefVisible) {

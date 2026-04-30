@@ -329,7 +329,12 @@ export function createPromptDrawerHelpers({
       }
 
       if (el.type === 'checkbox') {
-        values[key] = el.checked;
+        const stockExplicitWrap = el.closest('[data-stock-explicit-toggle-wrap="true"]');
+        if (stockExplicitWrap && stockExplicitWrap.style.display === 'none') {
+          values[key] = false;
+        } else {
+          values[key] = el.checked;
+        }
       } else if (el.type === 'number') {
         values[key] = el.value ? Number(el.value) : null;
       } else if (el.classList.contains('prompt-image-upload-container')) {
@@ -360,6 +365,11 @@ export function createPromptDrawerHelpers({
       if (!key) return;
       const wrapper = el.closest('.prompt-field');
       if (wrapper && wrapper.dataset.showWhenField && wrapper.style.display === 'none') {
+        return;
+      }
+      const stockExplicitWrap = el.closest('[data-stock-explicit-toggle-wrap="true"]');
+      if (stockExplicitWrap && stockExplicitWrap.style.display === 'none') {
+        values[key] = false;
         return;
       }
       values[key] = el.checked;

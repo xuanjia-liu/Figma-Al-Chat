@@ -259,15 +259,6 @@ export const stylingImageTasks = [
               options: ITUNES_STORE_COUNTRY_OPTIONS,
             },
             {
-              key: 'explicit', type: 'select', label: 'Explicit content',
-              default: 'No',
-              showWhen: { field: 'service', equals: 'itunes' },
-              options: [
-                { value: 'No', label: 'No (exclude explicit)' },
-                { value: 'Yes', label: 'Yes (allow explicit)' }
-              ]
-            },
-            {
               key: 'autoDetect', type: 'checkbox',
               label: 'AI auto-detect keywords from selection',
               default: false,
@@ -278,6 +269,10 @@ export const stylingImageTasks = [
               key: 'keywords', type: 'text',
               label: 'Subject / Keywords',
               placeholder: 'e.g. nature, city, food',
+              labelRowCameraToggle: {
+                key: 'explicit',
+                default: false,
+              },
               showWhen: [
                 { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes'] },
                 { field: 'autoDetect', equals: 'false' }
