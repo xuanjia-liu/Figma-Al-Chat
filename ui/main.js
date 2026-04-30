@@ -17729,6 +17729,7 @@ Generate ONLY the reply text, nothing else.`;
     const promptDrawerHelpText = document.getElementById('promptDrawerHelpText');
     const promptDrawerExamples = document.getElementById('promptDrawerExamples');
     const promptDrawerFields = document.getElementById('promptDrawerFields');
+    const stockPhotoPreviewSettingsMount = document.getElementById('stockPhotoPreviewSettings');
     const promptDrawerCustomContent = document.getElementById('promptDrawerCustomContent');
     const agentMaxTokensInput = document.getElementById('agentMaxTokensInput');
     const auditMaxTokensInput = document.getElementById('auditMaxTokensInput');
@@ -18516,6 +18517,10 @@ Generate ONLY the reply text, nothing else.`;
         // Reset custom content visibility and CLEAR PREVIOUS FIELDS
         promptDrawerFields.classList.add('hidden'); // Hide until rendered
         promptDrawerFields.innerHTML = '';
+        if (stockPhotoPreviewSettingsMount) {
+          stockPhotoPreviewSettingsMount.innerHTML = '';
+          stockPhotoPreviewSettingsMount.setAttribute('hidden', '');
+        }
         promptDrawerCustomContent.classList.add('hidden');
         promptDrawerCustomContent.innerHTML = '';
 
@@ -21572,17 +21577,36 @@ Generate ONLY the reply text, nothing else.`;
       }
 
       let html = '';
+      let stockPreviewSettingsHtml = '';
+      const stockPreviewSettingsKeys = new Set(['autoDetect', 'keywords', 'scaleMode']);
+      const isStockPhotoDrawer = currentPromptAction?.directAction === 'fillFromOnlineImage';
       fields.forEach((field, index) => {
         if (field.type === 'row') {
           const rowFieldsHtml = field.fields.map((f, i) => renderSingleField(f, `${index}-${i}`)).join('');
           const rowExtraClass = field.rowClass ? ` ${escapeHtml(field.rowClass)}` : '';
           html += `<div class="prompt-field-row${rowExtraClass}">${rowFieldsHtml}</div>`;
         } else {
-          html += renderSingleField(field, index);
+          const piece = renderSingleField(field, index);
+          if (isStockPhotoDrawer && field.key && stockPreviewSettingsKeys.has(field.key)) {
+            stockPreviewSettingsHtml += piece;
+          } else {
+            html += piece;
+          }
         }
       });
 
       promptDrawerFields.innerHTML = html;
+
+      const stockPhotoPreviewSettingsEl = document.getElementById('stockPhotoPreviewSettings');
+      if (stockPhotoPreviewSettingsEl) {
+        if (isStockPhotoDrawer) {
+          stockPhotoPreviewSettingsEl.innerHTML = stockPreviewSettingsHtml;
+          stockPhotoPreviewSettingsEl.removeAttribute('hidden');
+        } else {
+          stockPhotoPreviewSettingsEl.innerHTML = '';
+          stockPhotoPreviewSettingsEl.setAttribute('hidden', '');
+        }
+      }
 
       // Setup event listeners for custom selects
       setupCustomSelectListeners();
@@ -23285,7 +23309,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     }
 
     function getPromptVisibilityValue(fieldKey) {
-      const el = promptDrawerFields.querySelector(`[data-field-key="${fieldKey}"]`);
+      const stockMount = document.getElementById('stockPhotoPreviewSettings');
+      const el = promptDrawerFields.querySelector(`[data-field-key="${fieldKey}"]`)
+        || stockMount?.querySelector(`[data-field-key="${fieldKey}"]`);
       if (!el) return '';
       if (el.classList.contains('prompt-custom-select')) {
         if (el.dataset.multi === 'true') {
@@ -23300,6 +23326,12 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     }
 
     function applyPromptFieldVisibility() {
+      const stockPhotoFieldSettings = document.getElementById('stockPhotoPreviewSettings');
+      const forEachPromptVisibilityField = (selector, handler) => {
+        promptDrawerFields.querySelectorAll(selector).forEach(handler);
+        stockPhotoFieldSettings?.querySelectorAll(selector).forEach(handler);
+      };
+
       const evaluatePromptCondition = (fieldEl, attrPrefix) => {
         if (fieldEl.dataset[`${attrPrefix}Json`]) {
           try {
@@ -23334,17 +23366,17 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       };
 
       // 1. Handle standard conditional fields and multiple conditions
-      promptDrawerFields.querySelectorAll('.prompt-field[data-show-when-field], .prompt-field[data-show-when-json]').forEach(fieldEl => {
+      forEachPromptVisibilityField('.prompt-field[data-show-when-field], .prompt-field[data-show-when-json]', (fieldEl) => {
         const match = evaluatePromptCondition(fieldEl, 'showWhen');
         fieldEl.style.display = match ? '' : 'none';
       });
 
       const serviceVal = getPromptVisibilityValue('service');
-      promptDrawerFields.querySelectorAll('[data-stock-explicit-toggle-wrap="true"]').forEach((wrap) => {
+      forEachPromptVisibilityField('[data-stock-explicit-toggle-wrap="true"]', (wrap) => {
         wrap.style.display = serviceVal === 'itunes' ? '' : 'none';
       });
 
-      promptDrawerFields.querySelectorAll('.prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]').forEach(fieldEl => {
+      forEachPromptVisibilityField('.prompt-field[data-disable-when-field], .prompt-field[data-disable-when-json]', (fieldEl) => {
         const shouldDisable = evaluatePromptCondition(fieldEl, 'disableWhen');
         const controlWrap = fieldEl.querySelector('[data-prompt-disable-wrap="true"]');
         if (controlWrap) {
@@ -23373,7 +23405,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
       // 2. Handle special cases (patterns, etc.)
       const hasSelection = Array.isArray(lastKnownSelectionItems) && lastKnownSelectionItems.length > 0;
-      promptDrawerFields.querySelectorAll('.prompt-field[data-hide-when-no-selection="true"]').forEach(fieldEl => {
+      forEachPromptVisibilityField('.prompt-field[data-hide-when-no-selection="true"]', (fieldEl) => {
         fieldEl.style.display = hasSelection ? '' : 'none';
         if (!hasSelection) {
           const checkbox = fieldEl.querySelector('input[type="checkbox"][data-field-key="applyToSelection"]');
@@ -23381,7 +23413,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         }
       });
 
-      promptDrawerFields.querySelectorAll('.prompt-field[data-show-when-no-selection="true"]').forEach(fieldEl => {
+      forEachPromptVisibilityField('.prompt-field[data-show-when-no-selection="true"]', (fieldEl) => {
         if (hasSelection) {
           fieldEl.style.display = 'none';
         } else if (fieldEl.dataset.showWhenJson || fieldEl.dataset.showWhenField) {
@@ -30848,7 +30880,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         status.textContent = '';
         status.classList.remove('stock-photo-preview-panel__status--error');
       }
-      if (hint) hint.classList.add('hidden');
+      if (hint) {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+      }
       if (titleEl) titleEl.textContent = '';
       if (againBtn) againBtn.classList.add('hidden');
       if (countsEl) {
@@ -31436,9 +31471,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         card.type = 'button';
         const isSel = selectedUrls && c.imageUrl && selectedUrls.has(c.imageUrl);
         card.className = 'stock-photo-preview-card' + (isSel ? ' stock-photo-preview-card--selected' : '');
-        const arW = Math.max(1, Number(c.width) || 4);
-        const arH = Math.max(1, Number(c.height) || 3);
-        card.style.setProperty('--stock-preview-ar', `${arW} / ${arH}`);
         const frame = document.createElement('div');
         frame.className = 'stock-photo-preview-card__frame';
         const img = document.createElement('img');
@@ -31463,11 +31495,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           }
           stockPhotoPreviewSession.phase = set.size > 0 ? 'ready' : 'needs_pick';
           card.classList.toggle('stock-photo-preview-card--selected', set.has(c.imageUrl));
-          const hint = document.getElementById('stockPhotoPreviewHint');
-          if (hint) {
-            if (set.size > 0) hint.classList.add('hidden');
-            else hint.classList.remove('hidden');
-          }
           updatePromptDrawerSubmitState();
           updateStockPhotoPreviewSubmitLabel();
           refreshStockPhotoPreviewCounts();
@@ -31503,7 +31530,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
       const panel = document.getElementById('stockPhotoPreviewPanel');
       const status = document.getElementById('stockPhotoPreviewStatus');
-      const hint = document.getElementById('stockPhotoPreviewHint');
       const titleEl = document.getElementById('stockPhotoPreviewTitle');
       const againBtn = document.getElementById('stockPhotoPreviewSearchAgain');
 
@@ -31549,10 +31575,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (status) {
         status.textContent = tu('actions.stock.previewLoading');
         status.classList.remove('stock-photo-preview-panel__status--error');
-      }
-      if (hint) {
-        hint.textContent = tu('actions.stock.previewSelectHint');
-        hint.classList.remove('hidden');
       }
       if (againBtn) {
         againBtn.textContent = tu('actions.stock.previewSearchAgain');
@@ -35327,6 +35349,28 @@ Example structure:
       applyPromptFieldVisibility();
       stockPhotoPreviewInvalidateIfStale();
     });
+
+    if (stockPhotoPreviewSettingsMount) {
+      stockPhotoPreviewSettingsMount.addEventListener('compositionstart', () => {
+        isPromptComposing = true;
+        closeImageRefMenu();
+      });
+      stockPhotoPreviewSettingsMount.addEventListener('compositionend', () => {
+        isPromptComposing = false;
+        handleImageRefInput();
+      });
+      stockPhotoPreviewSettingsMount.addEventListener('input', (e) => {
+        applyPromptFieldVisibility();
+        stockPhotoPreviewInvalidateIfStale();
+        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+          handleImageRefInput();
+        }
+      });
+      stockPhotoPreviewSettingsMount.addEventListener('change', () => {
+        applyPromptFieldVisibility();
+        stockPhotoPreviewInvalidateIfStale();
+      });
+    }
 
     promptDrawerFields.addEventListener('keydown', (e) => {
       if (imageRefVisible) {

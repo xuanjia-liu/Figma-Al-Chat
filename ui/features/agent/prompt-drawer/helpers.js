@@ -25,6 +25,15 @@ export function createPromptDrawerHelpers({
   escapeHtml,
   getPersonaContextVars,
 }) {
+  function getStockPhotoPreviewSettingsMount() {
+    return document.getElementById('stockPhotoPreviewSettings');
+  }
+
+  function forEachPromptFieldValuesRoot(fn) {
+    fn(promptDrawerFields);
+    const stockMount = getStockPhotoPreviewSettingsMount();
+    if (stockMount) fn(stockMount);
+  }
   function syncSelectState(selectEl) {
     const isMulti = selectEl.dataset.multi === 'true';
     const selectedNodes = Array.from(selectEl.querySelectorAll('.prompt-custom-select-option.selected'));
@@ -43,7 +52,8 @@ export function createPromptDrawerHelpers({
 
     const fieldKey = selectEl.dataset.fieldKey;
     if (fieldKey) {
-      const hintEl = promptDrawerFields.querySelector(`[data-dynamic-hint-for="${fieldKey}"]`);
+      const hintEl = promptDrawerFields.querySelector(`[data-dynamic-hint-for="${fieldKey}"]`)
+        || getStockPhotoPreviewSettingsMount()?.querySelector(`[data-dynamic-hint-for="${fieldKey}"]`);
       if (hintEl && !isMulti) {
         const opt = selectedNodes[0];
         if (opt?.dataset.hintText) {
@@ -267,7 +277,9 @@ export function createPromptDrawerHelpers({
   function getPromptFieldValues() {
     const values = {};
 
-    promptDrawerFields.querySelectorAll('[data-field-key]').forEach(el => {
+    forEachPromptFieldValuesRoot((root) => {
+      if (!root) return;
+      root.querySelectorAll('[data-field-key]').forEach(el => {
       if (el.tagName === 'BUTTON') return;
       if (el.type === 'range') return;
 
@@ -352,6 +364,7 @@ export function createPromptDrawerHelpers({
         values[key] = el.value;
       }
     });
+    });
 
     const personaContextVars = getPersonaContextVars();
     if (personaContextVars.length > 0) {
@@ -360,26 +373,31 @@ export function createPromptDrawerHelpers({
 
     // Checkboxes must win over any other control that reused the same data-field-key (document order
     // can leave a stale value from a non-checkbox element).
-    promptDrawerFields.querySelectorAll('input[type="checkbox"][data-field-key]').forEach((el) => {
-      const key = el.dataset.fieldKey;
-      if (!key) return;
-      const wrapper = el.closest('.prompt-field');
-      if (wrapper && wrapper.dataset.showWhenField && wrapper.style.display === 'none') {
-        return;
-      }
-      const stockExplicitWrap = el.closest('[data-stock-explicit-toggle-wrap="true"]');
-      if (stockExplicitWrap && stockExplicitWrap.style.display === 'none') {
-        values[key] = false;
-        return;
-      }
-      values[key] = el.checked;
+    forEachPromptFieldValuesRoot((root) => {
+      if (!root) return;
+      root.querySelectorAll('input[type="checkbox"][data-field-key]').forEach((el) => {
+        const key = el.dataset.fieldKey;
+        if (!key) return;
+        const wrapper = el.closest('.prompt-field');
+        if (wrapper && wrapper.dataset.showWhenField && wrapper.style.display === 'none') {
+          return;
+        }
+        const stockExplicitWrap = el.closest('[data-stock-explicit-toggle-wrap="true"]');
+        if (stockExplicitWrap && stockExplicitWrap.style.display === 'none') {
+          values[key] = false;
+          return;
+        }
+        values[key] = el.checked;
+      });
     });
 
     return values;
   }
 
   function setupCustomSelectListeners() {
-    promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
+    const selectRoots = [promptDrawerFields, getStockPhotoPreviewSettingsMount()].filter(Boolean);
+    selectRoots.forEach((root) => {
+      root.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
       const isMulti = selectEl.dataset.multi === 'true';
       const searchInput = selectEl.querySelector('.prompt-select-search input');
       const isDisabled = () => selectEl.hasAttribute('disabled') || selectEl.classList.contains('disabled');
@@ -557,6 +575,7 @@ export function createPromptDrawerHelpers({
       });
 
       syncSelectState(selectEl);
+    });
     });
   }
 

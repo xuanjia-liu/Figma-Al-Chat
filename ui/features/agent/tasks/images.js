@@ -207,7 +207,6 @@ export const stylingImageTasks = [
               max: 12,
               step: 1,
               numberWithSlider: true,
-              hint: 'When nothing is selected, creates this many rectangles with the image fill on the current page.',
               showWhenNoSelection: true,
             },
             {
@@ -225,7 +224,6 @@ export const stylingImageTasks = [
               type: 'select',
               label: 'App image',
               default: 'icon',
-              hint: 'App Store marketing screenshots are only returned for apps; icon uses the app artwork.',
               showWhen: [
                 { field: 'service', equals: 'itunes' },
                 { field: 'media', equals: 'software' },
@@ -239,7 +237,6 @@ export const stylingImageTasks = [
             {
               key: 'entity', type: 'select', label: 'Apple search entity',
               default: 'album',
-              hint: 'Album searches collections; Song searches tracks.',
               showWhen: [
                 { field: 'service', equals: 'itunes' },
                 { field: 'media', equals: 'music' },
