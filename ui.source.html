@@ -1487,11 +1487,9 @@
         <div class="stock-photo-preview-panel__settings" id="stockPhotoPreviewSettings" hidden></div>
         <div class="stock-photo-preview-panel__head">
           <span class="stock-photo-preview-panel__title" id="stockPhotoPreviewTitle"></span>
-          <button type="button" class="stock-photo-preview-panel__again hidden" id="stockPhotoPreviewSearchAgain"></button>
+          <div class="stock-photo-preview-panel__meta hidden" id="stockPhotoPreviewMeta" aria-live="polite"></div>
         </div>
         <p class="stock-photo-preview-panel__hint hidden" id="stockPhotoPreviewHint"></p>
-        <div class="stock-photo-preview-panel__status" id="stockPhotoPreviewStatus"></div>
-        <div class="stock-photo-preview-panel__counts hidden" id="stockPhotoPreviewCounts" aria-live="polite"></div>
         <div class="stock-photo-preview-panel__body">
           <div class="stock-photo-preview-empty hidden" id="stockPhotoPreviewEmpty" role="status">
             <svg class="stock-photo-preview-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
@@ -1522,6 +1520,7 @@
     <div class="prompt-drawer-footer">
       <button class="prompt-drawer-reset" id="promptDrawerReset" type="button"
         title="Reset all fields to default values">Reset</button>
+      <button type="button" class="prompt-drawer-cancel hidden" id="stockPhotoPreviewSearchAgain">Search again</button>
       <div class="flex-spacer"></div>
       <button class="prompt-drawer-back hidden" id="promptDrawerBack" type="button">← Back</button>
       <button class="prompt-drawer-cancel" id="promptDrawerCancel" type="button">Back to List</button>

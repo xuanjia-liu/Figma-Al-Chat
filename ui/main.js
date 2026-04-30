@@ -30815,6 +30815,44 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return currentPromptAction?.directAction === 'fillFromOnlineImage';
     }
 
+    var stockPhotoPreviewMetaState = { statusText: '', statusError: false, countsCompact: '' };
+
+    function syncStockPhotoPreviewMeta() {
+      const el = document.getElementById('stockPhotoPreviewMeta');
+      if (!el) return;
+      const panel = document.getElementById('stockPhotoPreviewPanel');
+      if (!isStockPhotosPromptAction() || (panel && panel.classList.contains('hidden'))) {
+        el.textContent = '';
+        el.classList.add('hidden');
+        el.classList.remove('stock-photo-preview-panel__meta--error');
+        return;
+      }
+      const { statusText, statusError, countsCompact } = stockPhotoPreviewMetaState;
+      let line = '';
+      if (statusError && statusText) {
+        line = statusText;
+      } else {
+        const parts = [];
+        if (statusText) parts.push(statusText);
+        if (countsCompact) parts.push(countsCompact);
+        line = parts.join(' · ');
+      }
+      el.textContent = line;
+      el.classList.toggle('hidden', !line);
+      el.classList.toggle('stock-photo-preview-panel__meta--error', !!(statusError && statusText));
+    }
+
+    function setStockPhotoPreviewMetaStatus(text, isError) {
+      stockPhotoPreviewMetaState.statusText = text || '';
+      stockPhotoPreviewMetaState.statusError = !!isError;
+      syncStockPhotoPreviewMeta();
+    }
+
+    function resetStockPhotoPreviewMetaState() {
+      stockPhotoPreviewMetaState = { statusText: '', statusError: false, countsCompact: '' };
+      syncStockPhotoPreviewMeta();
+    }
+
     function buildStockPhotoValuesKey(values) {
       if (!values || typeof values !== 'object') return '';
       const trim = (x) => (x == null ? '' : String(x)).trim();
@@ -30850,11 +30888,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const hidePanel = !opts || opts.hidePanel !== false;
       const panel = document.getElementById('stockPhotoPreviewPanel');
       const grid = document.getElementById('stockPhotoPreviewGrid');
-      const status = document.getElementById('stockPhotoPreviewStatus');
       const hint = document.getElementById('stockPhotoPreviewHint');
       const titleEl = document.getElementById('stockPhotoPreviewTitle');
       const againBtn = document.getElementById('stockPhotoPreviewSearchAgain');
-      const countsEl = document.getElementById('stockPhotoPreviewCounts');
       const loadWrap = document.getElementById('stockPhotoPreviewLoadMoreWrap');
       const loadBtn = document.getElementById('stockPhotoPreviewLoadMore');
       const emptyEl = document.getElementById('stockPhotoPreviewEmpty');
@@ -30876,20 +30912,13 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         }
       }
       if (grid) grid.innerHTML = '';
-      if (status) {
-        status.textContent = '';
-        status.classList.remove('stock-photo-preview-panel__status--error');
-      }
+      resetStockPhotoPreviewMetaState();
       if (hint) {
         hint.textContent = '';
         hint.classList.add('hidden');
       }
       if (titleEl) titleEl.textContent = '';
       if (againBtn) againBtn.classList.add('hidden');
-      if (countsEl) {
-        countsEl.textContent = '';
-        countsEl.classList.add('hidden');
-      }
       if (loadWrap) loadWrap.classList.add('hidden');
       if (loadBtn) {
         loadBtn.disabled = false;
@@ -30917,18 +30946,19 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     }
 
     function refreshStockPhotoPreviewCounts() {
-      const el = document.getElementById('stockPhotoPreviewCounts');
       const panel = document.getElementById('stockPhotoPreviewPanel');
-      if (!el) return;
       if (!stockPhotoPreviewSession || (panel && panel.classList.contains('hidden'))) {
-        el.textContent = '';
-        el.classList.add('hidden');
+        stockPhotoPreviewMetaState.countsCompact = '';
+        syncStockPhotoPreviewMeta();
         return;
       }
       const imgCount = stockPhotoPreviewSession.selectedUrls ? stockPhotoPreviewSession.selectedUrls.size : 0;
       const nodeCount = getStockPhotoTargetCountForUi();
-      el.textContent = tu('actions.stock.previewCountLine', { images: String(imgCount), nodes: String(nodeCount) });
-      el.classList.remove('hidden');
+      stockPhotoPreviewMetaState.countsCompact = tu('actions.stock.previewSelectionShort', {
+        images: String(imgCount),
+        nodes: String(nodeCount),
+      });
+      syncStockPhotoPreviewMeta();
     }
 
     function updateStockPhotoLoadMoreUi() {
@@ -31414,7 +31444,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     async function appendStockPhotoPreviewPage() {
       const sess = stockPhotoPreviewSession;
-      const status = document.getElementById('stockPhotoPreviewStatus');
       if (!sess || sess.loadingMore || !sess.hasMore) return;
       sess.loadingMore = true;
       updateStockPhotoLoadMoreUi();
@@ -31427,17 +31456,16 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         } else {
           sess.hasMore = false;
         }
-        if (status && stockPhotoPreviewSession) {
-          status.textContent = tu('actions.stock.previewResultsCount', { count: String(sess.candidates.length) });
-          status.classList.remove('stock-photo-preview-panel__status--error');
+        if (stockPhotoPreviewSession) {
+          setStockPhotoPreviewMetaStatus(
+            tu('actions.stock.previewResultsShort', { count: String(sess.candidates.length) }),
+            false
+          );
         }
         refreshStockPhotoPreviewCounts();
       } catch (e) {
         console.error('Load more stock preview failed:', e);
-        if (status) {
-          status.textContent = e?.message || tu('actions.stock.previewError');
-          status.classList.add('stock-photo-preview-panel__status--error');
-        }
+        setStockPhotoPreviewMetaStatus(e?.message || tu('actions.stock.previewError'), true);
       } finally {
         if (stockPhotoPreviewSession) stockPhotoPreviewSession.loadingMore = false;
         updateStockPhotoLoadMoreUi();
@@ -31529,7 +31557,6 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const isApiService = API_IMAGE_SERVICES.includes(service);
 
       const panel = document.getElementById('stockPhotoPreviewPanel');
-      const status = document.getElementById('stockPhotoPreviewStatus');
       const titleEl = document.getElementById('stockPhotoPreviewTitle');
       const againBtn = document.getElementById('stockPhotoPreviewSearchAgain');
 
@@ -31548,10 +31575,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (service === 'itunes' && !String(keywords || '').trim()) {
         if (panel) panel.classList.remove('hidden');
         hideStockPhotoPreviewEmptyEl();
-        if (status) {
-          status.textContent = tu('actions.stock.previewItunesKeywords');
-          status.classList.add('stock-photo-preview-panel__status--error');
-        }
+        setStockPhotoPreviewMetaStatus(tu('actions.stock.previewItunesKeywords'), true);
         return false;
       }
 
@@ -31572,10 +31596,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
       if (panel) panel.classList.remove('hidden');
       if (titleEl) titleEl.textContent = tu('actions.stock.previewTitle');
-      if (status) {
-        status.textContent = tu('actions.stock.previewLoading');
-        status.classList.remove('stock-photo-preview-panel__status--error');
-      }
+      setStockPhotoPreviewMetaStatus(tu('actions.stock.previewLoading'), false);
       if (againBtn) {
         againBtn.textContent = tu('actions.stock.previewSearchAgain');
         againBtn.classList.remove('hidden');
@@ -31587,10 +31608,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       } catch (err) {
         console.error('Stock preview search failed:', err);
         hideStockPhotoPreviewEmptyEl();
-        if (status) {
-          status.textContent = err?.message || tu('actions.stock.previewError');
-          status.classList.add('stock-photo-preview-panel__status--error');
-        }
+        setStockPhotoPreviewMetaStatus(err?.message || tu('actions.stock.previewError'), true);
         return false;
       }
 
@@ -31614,9 +31632,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         itunesOffset: firstPage.itunesOffset != null ? firstPage.itunesOffset : candidates.length,
       };
       renderStockPhotoPreviewGrid(candidates);
-      if (status) {
-        status.textContent = tu('actions.stock.previewResultsCount', { count: String(candidates.length) });
-      }
+      setStockPhotoPreviewMetaStatus(
+        tu('actions.stock.previewResultsShort', { count: String(candidates.length) }),
+        false
+      );
       updateStockPhotoLoadMoreUi();
 
       const loadBtn = document.getElementById('stockPhotoPreviewLoadMore');
