@@ -31009,7 +31009,10 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const ready = sess && sess.valuesKey === key && numSel > 0;
       const hasResults = sess && sess.valuesKey === key && Array.isArray(sess.candidates) && sess.candidates.length > 0;
       if (ready) {
-        promptDrawerSubmit.textContent = tu('actions.stock.previewApply');
+        const noFigmaSelection = !Array.isArray(lastKnownSelectionItems) || lastKnownSelectionItems.length === 0;
+        promptDrawerSubmit.textContent = noFigmaSelection
+          ? tu('actions.stock.previewAddToFigma')
+          : tu('actions.stock.previewApply');
       } else if (hasResults) {
         promptDrawerSubmit.textContent = tu('actions.stock.previewPickLabel');
       } else {
@@ -31708,6 +31711,24 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
     const STOCK_CANVAS_DEFAULT_W = 800;
     const STOCK_CANVAS_DEFAULT_H = 600;
     const STOCK_CANVAS_GAP = 24;
+    const STOCK_INSERT_FRAME_MAX_SIDE = 4096;
+
+    function stockPhotoInsertFrameSize(photo) {
+      const pw = Number(photo && photo.width);
+      const ph = Number(photo && photo.height);
+      if (!Number.isFinite(pw) || !Number.isFinite(ph) || pw < 1 || ph < 1) {
+        return { width: STOCK_CANVAS_DEFAULT_W, height: STOCK_CANVAS_DEFAULT_H };
+      }
+      let w = pw;
+      let h = ph;
+      const m = Math.max(w, h);
+      if (m > STOCK_INSERT_FRAME_MAX_SIDE) {
+        const s = STOCK_INSERT_FRAME_MAX_SIDE / m;
+        w = Math.round(w * s);
+        h = Math.round(h * s);
+      }
+      return { width: Math.max(10, w), height: Math.max(10, h) };
+    }
 
     async function createStockImageOnCanvas(base64Data, width, height, scaleMode, index) {
       return new Promise((resolve, reject) => {
@@ -31817,7 +31838,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         photographerName: photo.user.name,
         photographerUrl: photo.user.links.html + '?utm_source=figma_gemini&utm_medium=referral',
         photoUrl: photo.links.html + '?utm_source=figma_gemini&utm_medium=referral',
-        sourceUrl: 'https://unsplash.com/?utm_source=figma_gemini&utm_medium=referral'
+        sourceUrl: 'https://unsplash.com/?utm_source=figma_gemini&utm_medium=referral',
+        width: Number(photo.width) || width,
+        height: Number(photo.height) || height,
       };
     }
 
@@ -31848,7 +31871,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         photographerName: photo.user,
         photographerUrl: `https://pixabay.com/users/${photo.user}-${photo.user_id}/`,
         photoUrl: photo.pageURL,
-        sourceUrl: 'https://pixabay.com/'
+        sourceUrl: 'https://pixabay.com/',
+        width: Number(photo.imageWidth) || width,
+        height: Number(photo.imageHeight) || height,
       };
     }
 
@@ -31881,7 +31906,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         photographerName: photo.photographer,
         photographerUrl: photo.photographer_url,
         photoUrl: photo.url,
-        sourceUrl: 'https://www.pexels.com/'
+        sourceUrl: 'https://www.pexels.com/',
+        width: Number(photo.width) || width,
+        height: Number(photo.height) || height,
       };
     }
 
@@ -32049,14 +32076,16 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               if (assignment) {
                 const photo = assignment[i];
                 const base64 = await fetchImageAsBase64(photo.imageUrl);
-                const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
+                const { width: fw, height: fh } = stockPhotoInsertFrameSize(photo);
+                const meta = await createStockImageOnCanvas(base64, fw, fh, scaleMode, i);
                 createdMeta.push(meta);
                 attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photoForAttribution(photo) });
                 successCount++;
               } else if (isApiService) {
                 const photo = await fetchApiPhoto(service, keywords, w, h, itunesFillOptions);
                 const base64 = await fetchImageAsBase64(photo.imageUrl);
-                const meta = await createStockImageOnCanvas(base64, w, h, scaleMode, i);
+                const { width: fw, height: fh } = stockPhotoInsertFrameSize(photo);
+                const meta = await createStockImageOnCanvas(base64, fw, fh, scaleMode, i);
                 createdMeta.push(meta);
                 attributions.push({ nodeName: meta.name, nodeId: meta.id, ...photoForAttribution(photo) });
                 successCount++;
@@ -33961,7 +33990,11 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForImageTo4PointVector || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping || keepDrawerOpenForFillFromOnlineImage) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
-            promptDrawerSubmit.textContent = 'Run Action';
+            if (action.directAction === 'fillFromOnlineImage' && typeof updateStockPhotoPreviewSubmitLabel === 'function') {
+              updateStockPhotoPreviewSubmitLabel();
+            } else {
+              promptDrawerSubmit.textContent = 'Run Action';
+            }
           }
           return;
         }
