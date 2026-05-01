@@ -4419,6 +4419,52 @@ import { optimize as optimizeSvg } from 'svgo/browser';
       window.visualViewport.addEventListener('resize', onPluginViewportEvent);
     }
 
+    function getRootScrollSnapshot() {
+      return {
+        x: window.scrollX || document.documentElement.scrollLeft || document.body.scrollLeft || 0,
+        y: window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0,
+        docX: document.documentElement.scrollLeft || 0,
+        docY: document.documentElement.scrollTop || 0,
+        bodyX: document.body.scrollLeft || 0,
+        bodyY: document.body.scrollTop || 0
+      };
+    }
+
+    function getRootScrollOriginSnapshot() {
+      return {
+        x: 0,
+        y: 0,
+        docX: 0,
+        docY: 0,
+        bodyX: 0,
+        bodyY: 0
+      };
+    }
+
+    function restoreRootScroll(snapshot) {
+      if (!snapshot) return;
+      window.scrollTo(snapshot.x, snapshot.y);
+      document.documentElement.scrollLeft = snapshot.docX;
+      document.documentElement.scrollTop = snapshot.docY;
+      document.body.scrollLeft = snapshot.bodyX;
+      document.body.scrollTop = snapshot.bodyY;
+    }
+
+    function resetRootScroll() {
+      restoreRootScroll(getRootScrollOriginSnapshot());
+    }
+
+    function focusWithoutRootScroll(element, scrollSnapshot = getRootScrollSnapshot()) {
+      if (!element || typeof element.focus !== 'function') return;
+      try {
+        element.focus({ preventScroll: true });
+      } catch (_error) {
+        element.focus();
+      }
+      restoreRootScroll(scrollSnapshot);
+      requestAnimationFrame(() => restoreRootScroll(scrollSnapshot));
+    }
+
     /** Light/dark tokens live on body.light-mode; :root keeps dark defaults, so read from body for Iconify ?color= */
     function getResolvedTextPrimaryColor() {
       const fromBody = getComputedStyle(document.body).getPropertyValue('--text-primary').trim();
@@ -16562,6 +16608,7 @@ Generate ONLY the reply text, nothing else.`;
     // Drawer open/close functions
     function openCommandsDrawer(options = {}) {
       const { keepSelection = false, category = null } = options;
+      resetRootScroll();
       commandsDrawer.classList.add('show');
       commandsDrawerOverlay.classList.add('show');
       commandsDrawerBtn.classList.add('active');
@@ -16582,8 +16629,9 @@ Generate ONLY the reply text, nothing else.`;
       } else if (!selectedCategory) {
         selectedCategory = Object.keys(agentTasks)[0];
       }
+      resetRootScroll();
       renderDrawerContent(commandsSearch.value);
-      setTimeout(() => commandsSearch.focus(), 50); // Focus search after open
+      setTimeout(() => focusWithoutRootScroll(commandsSearch, getRootScrollOriginSnapshot()), 50); // Focus search after open without nudging the scaled body.
 
       // Save as last active category
       if (selectedCategory) {
@@ -16637,7 +16685,7 @@ Generate ONLY the reply text, nothing else.`;
         !!target.closest('[contenteditable="true"]')
       );
       if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !isEditableTarget) {
-        commandsSearch.focus();
+        focusWithoutRootScroll(commandsSearch, getRootScrollOriginSnapshot());
         // The key event will naturally propagate to the input now that it's focused
       }
     });
