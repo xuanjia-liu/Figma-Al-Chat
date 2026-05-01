@@ -36,6 +36,7 @@ export function createPromptDrawerHelpers({
   }
   function syncSelectState(selectEl) {
     const isMulti = selectEl.dataset.multi === 'true';
+    const fieldKeyEarly = selectEl.dataset.fieldKey;
     const selectedNodes = Array.from(selectEl.querySelectorAll('.prompt-custom-select-option.selected'));
     const selectedValues = selectedNodes.map(opt => opt.dataset.value);
     selectEl.dataset.selected = isMulti ? JSON.stringify(selectedValues) : (selectedValues[0] || '');
@@ -44,7 +45,11 @@ export function createPromptDrawerHelpers({
     if (searchInput && !isMulti && document.activeElement !== searchInput) {
       if (selectedNodes.length > 0) {
         const opt = selectedNodes[0];
-        searchInput.value = opt.dataset.text || opt.textContent || opt.dataset.value;
+        if (fieldKeyEarly === 'beforeClickScreenshotRef' && !opt.dataset.value) {
+          searchInput.value = '';
+        } else {
+          searchInput.value = opt.dataset.text || opt.textContent || opt.dataset.value;
+        }
       } else {
         searchInput.value = '';
       }
@@ -484,6 +489,9 @@ export function createPromptDrawerHelpers({
               const text = optionEl.dataset.text || optionEl.textContent || '';
               searchInput.value = text;
             }
+            if (selectEl.dataset.fieldKey === 'beforeClickScreenshotRef' && !optionEl.dataset.value) {
+              searchInput.value = '';
+            }
           }
 
           if (selectEl.dataset.fieldKey === 'styleCategory') {
@@ -497,6 +505,18 @@ export function createPromptDrawerHelpers({
           }
           if (selectEl.dataset.fieldKey === 'renamePreset') {
             applySmartRenamePreset(optionEl.dataset.value);
+          }
+          if (selectEl.dataset.fieldKey === 'beforeClickScreenshotRef') {
+            const picked = optionEl.dataset.value;
+            if (picked) {
+              forEachPromptFieldValuesRoot((root) => {
+                const kw = root.querySelector('input[data-field-key="keywords"]');
+                if (kw && !kw.readOnly && !kw.hasAttribute('disabled')) {
+                  kw.value = picked;
+                  kw.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+              });
+            }
           }
 
           applyPromptFieldVisibility();

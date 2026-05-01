@@ -42,6 +42,7 @@ import {
   getActionIconForTask,
 } from './features/agent/quick-actions.js';
 import { createPromptDrawerHelpers } from './features/agent/prompt-drawer/helpers.js';
+import { buildBeforeClickReferenceOptions } from './features/agent/data/before-click-reference.js';
 import { createAgentTasks } from './features/agent/tasks/index.js';
 import { mountGoogleFontPreview } from './features/font-preview/google-font-preview.js';
 import { mountHueShift } from './features/hue-shift/hue-shift.js';
@@ -18691,6 +18692,7 @@ Generate ONLY the reply text, nothing else.`;
         promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
           syncSelectState(selectEl);
         });
+        applyPromptFieldVisibility();
 
         updatePromptDrawerSubmitState();
 
@@ -20610,6 +20612,19 @@ Generate ONLY the reply text, nothing else.`;
             }
           }
 
+          // Task fields cloned via JSON (reset drawer, maximized prompt restore) drop function options.
+          if (
+            field.key === 'beforeClickScreenshotRef'
+            && (!Array.isArray(optionsArray) || optionsArray.length === 0)
+          ) {
+            try {
+              optionsArray = buildBeforeClickReferenceOptions();
+            } catch (error) {
+              console.error('Error building before.click reference options:', error);
+              optionsArray = [];
+            }
+          }
+
           // Special handling for tone field - get dynamic options
           if (field.key === 'tone') {
             const defaultTones = [
@@ -20841,10 +20856,18 @@ Generate ONLY the reply text, nothing else.`;
           const selectedAttr = isMulti
             ? escapeHtml(JSON.stringify(defaultValues))
             : escapeHtml(effectiveDefault ?? '');
-          const searchHtml = field.searchable ? `
+          const useCollapsibleDropdown = field.searchable === true || field.collapsibleSelect === true;
+          const selectTriggerReadonly =
+            field.collapsibleSelect === true && field.searchable !== true ? ' readonly' : '';
+          const selectInputPlaceholder = isMulti
+            ? tu('actions.select.choose', { label: field.label || '' })
+            : field.collapsibleSelect === true && field.searchable !== true
+              ? tu('actions.select.choose', { label: field.label || '' })
+              : tu('actions.select.search', { label: field.label || '' });
+          const searchHtml = useCollapsibleDropdown ? `
             <div class="prompt-select-search-wrapper">
               <div class="prompt-select-search">
-                <input type="text" placeholder="${escapeHtml(isMulti ? tu('actions.select.choose', { label: field.label || '' }) : tu('actions.select.search', { label: field.label || '' }))}" data-select-search="${fieldId}" autocomplete="off"${selectDisabledAttr}>
+                <input type="text" placeholder="${escapeHtml(selectInputPlaceholder)}" data-select-search="${fieldId}" autocomplete="off"${selectDisabledAttr}${selectTriggerReadonly}>
               </div>
               <svg class="prompt-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M6 9l6 6 6-6" />
@@ -20916,7 +20939,7 @@ Generate ONLY the reply text, nothing else.`;
             <div class="prompt-field${wrapperClass}"${conditionalAttrs}>
               ${fieldHeaderHtml}
               ${field.hint ? `<span class="prompt-field-hint" data-dynamic-hint-for="${escapeHtml(field.key || '')}">${field.hint}</span>` : ''}
-              <div class="prompt-custom-select${field.searchable ? ' collapsible collapsed' : ''}${field.disabled || forceDisabled ? ' disabled' : ''}" id="${fieldId}" data-field-key="${field.key}" data-selected="${selectedAttr}" data-multi="${isMulti ? 'true' : 'false'}" data-searchable="${field.searchable ? 'true' : 'false'}"${selectDisabledAttr}>
+              <div class="prompt-custom-select${useCollapsibleDropdown ? ' collapsible collapsed' : ''}${field.disabled || forceDisabled ? ' disabled' : ''}" id="${fieldId}" data-field-key="${field.key}" data-selected="${selectedAttr}" data-multi="${isMulti ? 'true' : 'false'}" data-searchable="${field.searchable ? 'true' : 'false'}"${selectDisabledAttr}>
                 ${searchHtml}
                 <div class="prompt-custom-select-options">
                   ${optionsHtml}
@@ -21655,6 +21678,7 @@ Generate ONLY the reply text, nothing else.`;
       promptDrawerFields.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
         syncSelectState(selectEl);
       });
+      applyPromptFieldVisibility();
 
       if (currentPromptAction?.directAction === 'imageToAscii') {
         setupImageToAsciiEmojiControls();

@@ -4,6 +4,8 @@ import {
   RE_STYLE_PRESETS,
 } from '../../../config/agent-data.js';
 
+import { buildBeforeClickReferenceOptions } from '../data/before-click-reference.js';
+
 /** Two-letter storefront codes for the iTunes Search API country parameter. */
 export const ITUNES_STORE_COUNTRY_OPTIONS = [
   { value: 'US', label: 'United States' },
@@ -201,6 +203,7 @@ export const stylingImageTasks = [
             {
               key: 'media', type: 'select', label: 'Apple media type',
               default: 'music',
+              collapsibleSelect: true,
               showWhen: { field: 'service', equals: 'itunes' },
               options: [
                 { value: 'music', label: 'Music' },
@@ -213,6 +216,7 @@ export const stylingImageTasks = [
               type: 'select',
               label: 'App image',
               default: 'icon',
+              collapsibleSelect: true,
               showWhen: [
                 { field: 'service', equals: 'itunes' },
                 { field: 'media', equals: 'software' },
@@ -222,6 +226,18 @@ export const stylingImageTasks = [
                 { value: 'iphoneScreenshot', label: 'iPhone screenshot' },
                 { value: 'ipadScreenshot', label: 'iPad screenshot' },
               ],
+            },
+            {
+              key: 'beforeClickScreenshotRef',
+              type: 'select',
+              label: 'Design reference',
+              collapsibleSelect: true,
+              default: '',
+              showWhen: [
+                { field: 'service', equals: 'itunes' },
+                { field: 'media', equals: 'software' },
+              ],
+              options: buildBeforeClickReferenceOptions,
             },
             {
               key: 'entity', type: 'select', label: 'Apple search entity',
