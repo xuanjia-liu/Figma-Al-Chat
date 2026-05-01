@@ -129,7 +129,7 @@ export const stylingImageTasks = [
 {
           name: 'Stock photos',
           desc: 'Fill selection or add stock images to the canvas (Unsplash, Pixabay, Pexels, Apple Store, LoremFlickr, Picsum, placeholders)',
-          searchKeywords: 'Unsplash, Pixabay, Pexels, Apple Store, fill, image, random, stock, LoremFlickr, Picsum, placeholder',
+          searchKeywords: 'Unsplash, Pixabay, Pexels, Apple Store, movie, TV, fill, image, random, stock, LoremFlickr, Picsum, placeholder',
           noSelection: true,
           directAction: 'fillFromOnlineImage',
           fields: [
@@ -141,7 +141,7 @@ export const stylingImageTasks = [
                 { value: 'unsplash', label: 'Unsplash', hintText: 'high-quality, needs API key' },
                 { value: 'pixabay', label: 'Pixabay', hintText: 'free, needs API key' },
                 { value: 'pexels', label: 'Pexels', hintText: 'free, needs API key' },
-                { value: 'itunes', label: 'Apple Store', hintText: 'music, apps, podcasts — no API key' },
+                { value: 'itunes', label: 'Apple Store', hintText: 'apps, music, podcasts, movies, TV — no API key' },
                 { value: 'loremflickr', label: 'LoremFlickr', hintText: 'keyword search' },
                 { value: 'picsum', label: 'Lorem Picsum (random)', hintText: 'random high-quality' },
                 { value: 'placehold', label: 'solid color Placeholder', hintText: 'solid color' }
@@ -155,7 +155,9 @@ export const stylingImageTasks = [
               options: [
                 { value: 'software', label: 'Apps' },
                 { value: 'music', label: 'Music' },
-                { value: 'podcast', label: 'Podcasts' }
+                { value: 'podcast', label: 'Podcasts' },
+                { value: 'movie', label: 'Movie' },
+                { value: 'tvShow', label: 'TV show' },
               ]
             },
             {
@@ -197,6 +199,21 @@ export const stylingImageTasks = [
                 { value: 'album', label: 'Album' },
                 { value: 'song', label: 'Song' },
               ]
+            },
+            {
+              key: 'tvEntity',
+              type: 'select',
+              label: 'TV search entity',
+              default: 'tvSeason',
+              collapsibleSelect: true,
+              showWhen: [
+                { field: 'service', equals: 'itunes' },
+                { field: 'media', equals: 'tvShow' },
+              ],
+              options: [
+                { value: 'tvSeason', label: 'TV season' },
+                { value: 'tvEpisode', label: 'TV episode' },
+              ],
             },
             {
               key: 'country',

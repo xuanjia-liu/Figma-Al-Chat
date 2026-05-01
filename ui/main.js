@@ -30938,6 +30938,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         keywords: trim(values.keywords),
         media: values.media || '',
         entity: values.entity || '',
+        tvEntity: values.tvEntity || '',
         country: values.country || '',
         explicit: values.explicit === true || values.explicit === 'Yes' ? 'Yes' : 'No',
         itunesAppImage: values.itunesAppImage || '',
@@ -31680,7 +31681,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       if (!term) throw new Error('Search keywords required for Apple iTunes.');
 
       const media = options.media || 'music';
-      const entity = normalizeItunesEntityForMedia(media, options.entity);
+      const entity = normalizeItunesEntityForMedia(media, options);
       const country = String(options.country || 'US').trim().slice(0, 2).toUpperCase() || 'US';
       const explicitRaw = options.explicit;
       const explicit = explicitRaw === 'Yes' || explicitRaw === true ? 'Yes' : 'No';
@@ -31973,6 +31974,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const itunesFillOptions = service === 'itunes' ? {
         media: values.media,
         entity: values.entity,
+        tvEntity: values.tvEntity,
         country: values.country,
         explicit: values.explicit,
         itunesAppImage: values.itunesAppImage,
@@ -32312,16 +32314,35 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       return url.replace(/\d+x\d+bb/g, `${side}x${side}bb`);
     }
 
-    function normalizeItunesEntityForMedia(media, entity) {
-      const defaults = { music: 'album', software: 'software', podcast: 'podcast' };
+    function normalizeItunesEntityForMedia(media, options = {}) {
+      const opts = options && typeof options === 'object' ? options : {};
+      const rawEntity = opts.entity;
+      const tvEntity = opts.tvEntity;
+      const defaults = {
+        music: 'album',
+        software: 'software',
+        podcast: 'podcast',
+        movie: 'movie',
+        tvShow: 'tvSeason',
+      };
       const allowed = {
         music: new Set(['album', 'song']),
         software: new Set(['software']),
         podcast: new Set(['podcast']),
+        movie: new Set(['movie']),
+        tvShow: new Set(['tvSeason', 'tvEpisode']),
       };
+      if (media === 'tvShow') {
+        const set = allowed.tvShow;
+        if (tvEntity && set.has(String(tvEntity))) return String(tvEntity);
+        return defaults.tvShow;
+      }
+      if (media === 'movie') {
+        return defaults.movie;
+      }
       const set = allowed[media];
-      if (set && entity && set.has(String(entity))) return String(entity);
-      return defaults[media] || 'album';
+      if (set && rawEntity && set.has(String(rawEntity))) return String(rawEntity);
+      return defaults[media] || defaults.music;
     }
 
     async function fetchItunesArtwork(query, width, height, options = {}) {
@@ -32371,6 +32392,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         const itunesFillOptions = service === 'itunes' ? {
           media: values.media,
           entity: values.entity,
+          tvEntity: values.tvEntity,
           country: values.country,
           explicit: values.explicit,
           itunesAppImage: values.itunesAppImage,
@@ -32550,6 +32572,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       const itunesFillOptions = service === 'itunes' ? {
         media: saved.media,
         entity: saved.entity,
+        tvEntity: saved.tvEntity,
         country: saved.country,
         explicit: saved.explicit,
         itunesAppImage: saved.itunesAppImage,
