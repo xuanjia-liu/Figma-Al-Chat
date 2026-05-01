@@ -13588,7 +13588,7 @@
 
     .stock-photo-itunes-gallery__heading {
       margin: 0;
-      font-size: var(--text-sm);
+      font-size: var(--text-lg);
       font-weight: 600;
       color: var(--text-primary);
       line-height: 1.35;
