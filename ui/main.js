@@ -488,6 +488,9 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           if (typeof localizedOption.detail === 'string') {
             localizedOption.detail = localizeActionString(localizedOption.detail);
           }
+          if (typeof localizedOption.hintText === 'string') {
+            localizedOption.hintText = localizeActionString(localizedOption.hintText);
+          }
           return localizedOption;
         });
       }
