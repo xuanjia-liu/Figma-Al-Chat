@@ -128,7 +128,7 @@ export const stylingImageTasks = [
         },
 {
           name: 'Stock photos',
-          desc: 'Fill selection or add stock images to the canvas (Unsplash, Pixabay, Pexels, Apple Store, LoremFlickr, Picsum, placeholders)',
+          desc: 'Fill selection or add stock images to the canvas',
           searchKeywords: 'Unsplash, Pixabay, Pexels, Apple Store, movie, TV, fill, image, random, stock, LoremFlickr, Picsum, placeholder',
           noSelection: true,
           directAction: 'fillFromOnlineImage',
@@ -229,7 +229,10 @@ export const stylingImageTasks = [
               label: 'AI auto-detect keywords from selection',
               default: false,
               hideWhenNoSelection: true,
-              showWhen: { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes'] }
+              showWhen: {
+                field: 'service',
+                equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes', 'picsum', 'placehold'],
+              }
             },
             {
               key: 'keywords', type: 'text',
@@ -240,7 +243,10 @@ export const stylingImageTasks = [
                 default: false,
               },
               showWhen: [
-                { field: 'service', equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes'] },
+                {
+                  field: 'service',
+                  equalsAny: ['loremflickr', 'unsplash', 'pixabay', 'pexels', 'itunes', 'picsum', 'placehold'],
+                },
                 { field: 'autoDetect', equals: 'false' }
               ]
             },

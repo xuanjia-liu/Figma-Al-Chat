@@ -2526,8 +2526,8 @@ const exactTranslations = {
       'オフのとき、スタイルの解除とインスタンスのデタッチは選択範囲とすべての子孫に適用されます。',
     'Set image fill': '画像塗りを設定',
     'Stock photos': 'ストック写真（選択へ適用・キャンバスに追加）',
-    'Fill selection or add stock images to the canvas (Unsplash, Pixabay, Pexels, Apple Store, LoremFlickr, Picsum, placeholders)':
-      '選択へ塗りつぶすか、キャンバスにストック画像を追加します（Unsplash、Pixabay、Pexels、Apple Store、LoremFlickr、Picsum、プレースホルダー）。',
+    'Fill selection or add stock images to the canvas':
+      '選択範囲を塗りつぶすか、キャンバスにストック画像を追加します。',
     'Apple Store': 'Apple Store',
     'Apple media type': 'Apple メディアの種類',
     'Apps': 'アプリ',
@@ -3205,8 +3205,8 @@ const exactTranslations = {
       '关闭时，样式解除与实例分离会应用到选区及其所有子级。',
     'Set image fill': '设置图像填充',
     'Stock photos': '库存照片（填充选中或添加到画布）',
-    'Fill selection or add stock images to the canvas (Unsplash, Pixabay, Pexels, Apple Store, LoremFlickr, Picsum, placeholders)':
-      '用所选图层填充或向画布添加图库图片（Unsplash、Pixabay、Pexels、Apple Store、LoremFlickr、Picsum、占位图）。',
+    'Fill selection or add stock images to the canvas':
+      '填充所选图层或将图库图片添加到画布。',
     'Apple Store': 'Apple Store',
     'Apple media type': 'Apple 媒体类型',
     'Apps': '应用',
