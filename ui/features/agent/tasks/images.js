@@ -153,8 +153,8 @@ export const stylingImageTasks = [
               collapsibleSelect: true,
               showWhen: { field: 'service', equals: 'itunes' },
               options: [
-                { value: 'music', label: 'Music' },
                 { value: 'software', label: 'Apps' },
+                { value: 'music', label: 'Music' },
                 { value: 'podcast', label: 'Podcasts' }
               ]
             },
@@ -169,9 +169,9 @@ export const stylingImageTasks = [
                 { field: 'media', equals: 'software' },
               ],
               options: [
-                { value: 'icon', label: 'Icon / artwork' },
                 { value: 'iphoneScreenshot', label: 'iPhone screenshot' },
                 { value: 'ipadScreenshot', label: 'iPad screenshot' },
+                { value: 'icon', label: 'Icon / artwork' },
               ],
             },
             {
