@@ -202,6 +202,7 @@ export const TASK_FIELD_EXACT = {
     "Invert": "反転",
     "JSON (Design Tokens)": "JSON（デザイントークン）",
     "Japanese": "日本語",
+    "Keep current font style": "現在のフォントスタイルを保持",
     "Keep manual line breaks": "手動の改行を保持",
     "Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.":
       "、。と「」『』【】〔〕《》（）を縦組み用字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）に置き換え。全角の ，．—：； は変えません。",
@@ -658,6 +659,7 @@ export const TASK_FIELD_EXACT = {
     "Invert": "反相",
     "JSON (Design Tokens)": "JSON（token）",
     "Japanese": "日语",
+    "Keep current font style": "保留当前字体样式",
     "Keep manual line breaks": "保留手动换行",
     "Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.":
       "将 、。与 「」『』【】〔〕《》（）映射为竖排字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）。全角 ，．—：； 保持不变。",

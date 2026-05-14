@@ -12883,6 +12883,7 @@ figma.ui.onmessage = async (msg: {
           sourceRowCount: number;
           sourceCharCount: number;
           fontSize: number;
+          keepCurrentFontStyle: boolean;
           keepManualLineBreaks: boolean;
           unicodeVerticalPunctuation: boolean;
         }> = [];
@@ -12945,6 +12946,7 @@ figma.ui.onmessage = async (msg: {
               sourceRowCount: inferredTarget.sourceRowCount,
               sourceCharCount: countCodePoints(inferredTarget.sourceText),
               fontSize: getTextNodeFontSize(inferredTarget.textNode),
+              keepCurrentFontStyle: false,
               keepManualLineBreaks: false,
               unicodeVerticalPunctuation: false,
             });
@@ -12952,7 +12954,7 @@ figma.ui.onmessage = async (msg: {
           }
 
           if (!textNode) {
-            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0, keepManualLineBreaks: true, unicodeVerticalPunctuation: false });
+            results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0, keepCurrentFontStyle: false, keepManualLineBreaks: true, unicodeVerticalPunctuation: false });
             continue;
           }
 
@@ -12984,6 +12986,7 @@ figma.ui.onmessage = async (msg: {
                 (textNode.getPluginData('fgVerticalTextOriginalContent') || textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')
               ),
               fontSize,
+              keepCurrentFontStyle: textNode.getPluginData('fgVerticalTextKeepCurrentFontStyle') === 'true',
               keepManualLineBreaks: textNode.getPluginData('fgVerticalTextKeepManualBreaks') !== 'false',
               unicodeVerticalPunctuation: textNode.getPluginData('fgVerticalTextUnicodeVerticalPunctuation') === 'true',
             });
@@ -12999,6 +13002,7 @@ figma.ui.onmessage = async (msg: {
               sourceRowCount: 0,
               sourceCharCount: countCodePoints((textNode.characters || '').replace(/\r/g, '').replace(/\n/g, '')),
               fontSize,
+              keepCurrentFontStyle: false,
               keepManualLineBreaks: true,
               unicodeVerticalPunctuation: false,
             });
@@ -13033,6 +13037,7 @@ figma.ui.onmessage = async (msg: {
           if (Number.isFinite(p) && p > 0) parsedReqLineHeightPx = p;
         }
         const reqKeepManualLineBreaks = (msg as any).keepManualLineBreaks !== false;
+        const reqKeepCurrentFontStyle = (msg as any).keepCurrentFontStyle === true;
         const reqUnicodeVerticalPunctuation = (msg as any).unicodeVerticalPunctuation === true;
 
         let updated = 0;
@@ -13098,6 +13103,7 @@ figma.ui.onmessage = async (msg: {
             continue;
           }
 
+          let styleTemplateNode: TextNode | null = null;
           try {
             await loadAllFontsForTextNode(textNode);
 
@@ -13105,6 +13111,11 @@ figma.ui.onmessage = async (msg: {
             const baseFontName = typeof textNode.fontName !== 'symbol' ? textNode.fontName : { family: "Inter", style: "Regular" };
             let baseFills = textNode.fills;
             if (typeof baseFills === 'symbol') baseFills = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }];
+            const baseLineHeight = typeof textNode.lineHeight !== 'symbol' ? textNode.lineHeight as LineHeight : null;
+            styleTemplateNode = reqKeepCurrentFontStyle ? textNode.clone() : null;
+            if (styleTemplateNode) {
+              styleTemplateNode.visible = false;
+            }
 
             // Horizontal line metrics for column side padding (only before first conversion — rerun already has vertical lh on node)
             let originalLineHeight = baseFontSize * 1.2;
@@ -13251,9 +13262,18 @@ figma.ui.onmessage = async (msg: {
             const sourceMaxRowLength = sourceRowLengths.length > 0 ? Math.max(...sourceRowLengths, 1) : 1;
 
             // --- Resolve effective line height: explicit UI px, else font-size default (not Figma/stored leading) ---
-            const effectiveLineHeight = parsedReqLineHeightPx > 0
-              ? parsedReqLineHeightPx
-              : Math.round(baseFontSize * VERTICAL_TEXT_DEFAULT_LINE_HEIGHT_FACTOR * 100) / 100;
+            const currentLineHeightPx = baseLineHeight
+              ? (baseLineHeight.unit === 'PIXELS'
+                ? baseLineHeight.value
+                : baseLineHeight.unit === 'PERCENT'
+                  ? Math.round(baseFontSize * (baseLineHeight.value / 100) * 100) / 100
+                  : 0)
+              : 0;
+            const effectiveLineHeight = reqKeepCurrentFontStyle && currentLineHeightPx > 0
+              ? currentLineHeightPx
+              : (parsedReqLineHeightPx > 0
+                ? parsedReqLineHeightPx
+                : Math.round(baseFontSize * VERTICAL_TEXT_DEFAULT_LINE_HEIGHT_FACTOR * 100) / 100);
 
             let effectiveColumnTextCount = 0;
             let effectiveVerticalColumns = 0;
@@ -13376,10 +13396,12 @@ figma.ui.onmessage = async (msg: {
             const applyVerticalStyle = (tn: TextNode, content: string) => {
               tn.textAutoResize = 'HEIGHT';
               tn.characters = content;
-              tn.textAlignHorizontal = 'CENTER';
-              tn.lineHeight = { value: effectiveLineHeight, unit: 'PIXELS' };
-              // Newlines separate glyphs; paragraph spacing would stack on every line and swamp line height.
-              tn.paragraphSpacing = 0;
+              if (!reqKeepCurrentFontStyle) {
+                tn.textAlignHorizontal = 'CENTER';
+                tn.lineHeight = { value: effectiveLineHeight, unit: 'PIXELS' };
+                // Newlines separate glyphs; paragraph spacing would stack on every line and swamp line height.
+                tn.paragraphSpacing = 0;
+              }
               tn.resize(0.01, tn.height);
             };
 
@@ -13482,12 +13504,15 @@ figma.ui.onmessage = async (msg: {
               const colText = verticalColumnTexts[c];
               if (!colText) continue;
 
-              const colNode = figma.createText();
-              colNode.fontName = baseFontName;
-              colNode.fontSize = baseFontSize;
-              colNode.fills = baseFills as Paint[];
-              if (typeof textNode.letterSpacing !== 'symbol') {
-                colNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+              const colNode = styleTemplateNode ? styleTemplateNode.clone() : figma.createText();
+              colNode.visible = true;
+              if (!styleTemplateNode) {
+                colNode.fontName = baseFontName;
+                colNode.fontSize = baseFontSize;
+                colNode.fills = baseFills as Paint[];
+                if (typeof textNode.letterSpacing !== 'symbol') {
+                  colNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+                }
               }
               applyVerticalStyle(colNode, colText);
               colNode.setPluginData('fgVerticalText', 'true');
@@ -13510,6 +13535,7 @@ figma.ui.onmessage = async (msg: {
               'fgVerticalTextVerticalColumns': String(effectiveVerticalColumns),
               'fgVerticalTextLineHeightPx': String(effectiveLineHeight),
               'fgVerticalTextHeightPx': String(effectiveHeight),
+              'fgVerticalTextKeepCurrentFontStyle': reqKeepCurrentFontStyle ? 'true' : 'false',
               'fgVerticalTextKeepManualBreaks': reqKeepManualLineBreaks ? 'true' : 'false',
               'fgVerticalTextUnicodeVerticalPunctuation': reqUnicodeVerticalPunctuation ? 'true' : 'false',
             };
@@ -13518,9 +13544,15 @@ figma.ui.onmessage = async (msg: {
               textNode.setPluginData(key, val);
               wrapperNode.setPluginData(key, val);
             }
+            if (styleTemplateNode && !styleTemplateNode.removed) {
+              styleTemplateNode.remove();
+            }
 
             updated++;
           } catch (nodeError) {
+            if (styleTemplateNode && !styleTemplateNode.removed) {
+              styleTemplateNode.remove();
+            }
             console.error('local-verticalize-text failed for node', node.id, nodeError);
             failed++;
           }

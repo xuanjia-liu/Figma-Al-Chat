@@ -490,6 +490,7 @@ const WORDS_JA = {
   'Vertical Padding': '垂直パディング',
   'Horizontal (Side-by-side)': '横並び（左右）',
   'Vertical (Stacked)': '縦積み',
+  'Keep current font style': '現在のフォントスタイルを保持',
   'Keep manual line breaks': '手動の改行を保持',
   'Use Unicode vertical punctuation': 'Unicode 縦書き約物を使う',
   'Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.':
@@ -799,6 +800,7 @@ const WORDS_ZH_FULL = {
   'Vertical Padding': '垂直内边距',
   'Horizontal (Side-by-side)': '横向（并排）',
   'Vertical (Stacked)': '纵向（堆叠）',
+  'Keep current font style': '保留当前字体样式',
   'Keep manual line breaks': '保留手动换行',
   'Use Unicode vertical punctuation': '使用 Unicode 竖排标点',
   'Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.':

@@ -362,7 +362,9 @@ export const smartTextTasks = [
               step: 0.01,
               sliderStep: 0.5,
               numberWithSlider: true,
-              reloadLineHeightFromSelection: true
+              reloadLineHeightFromSelection: true,
+              labelRowCheckbox: { key: 'keepCurrentFontStyle', label: 'Keep current font style', default: false },
+              disabledWhen: { field: 'keepCurrentFontStyle', equals: true }
             },
             { key: 'keepManualLineBreaks', type: 'checkbox', label: 'Keep manual line breaks', default: true },
             {

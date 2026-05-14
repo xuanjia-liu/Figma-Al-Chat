@@ -9864,6 +9864,7 @@ Rules:
       const useVerticalColumnsEl = promptDrawerFields.querySelector('input[data-field-key="useVerticalColumns"]');
       const verticalColsEl = promptDrawerFields.querySelector('input[data-field-key="verticalColumns"]');
       const lhEl = promptDrawerFields.querySelector('input[data-field-key="lineHeightPx"]');
+      const keepCurrentFontStyleEl = promptDrawerFields.querySelector('input[data-field-key="keepCurrentFontStyle"]');
 
       if (!heightEl || !colEl || !lhEl) return;
 
@@ -9916,6 +9917,14 @@ Rules:
       });
 
       lhEl.addEventListener('input', updateComputedHeight);
+      keepCurrentFontStyleEl?.addEventListener('input', () => {
+        const currentLineHeightPx = verticalTextHydrationMeta.currentLineHeightPx || 0;
+        if (keepCurrentFontStyleEl.checked && currentLineHeightPx > 0) {
+          lhEl.value = formatNumber(currentLineHeightPx);
+          syncPromptSliderFromNumberInput(lhEl);
+        }
+        updateComputedHeight();
+      });
       useVerticalColumnsEl?.addEventListener('input', updateComputedHeight);
       if (verticalColsEl) {
         verticalColsEl.addEventListener('input', updateComputedHeight);
@@ -9931,7 +9940,8 @@ Rules:
             if (first && typeof first.fontSize === 'number' && first.fontSize > 0) {
               verticalTextHydrationMeta = {
                 sourceCharCount: first.sourceCharCount || 0,
-                useVerticalColumns: first.useVerticalColumns === true
+                useVerticalColumns: first.useVerticalColumns === true,
+                currentLineHeightPx: first.nativeLineHeightPx || first.lineHeightPx || 0
               };
             }
             const px = resolveVerticalTextReloadLineHeightPx(first);
@@ -9962,7 +9972,8 @@ Rules:
           verticalTextLineHeightReloadEnabled = !!(first && typeof first.fontSize === 'number' && first.fontSize > 0);
           verticalTextHydrationMeta = {
             sourceCharCount: first.sourceCharCount || 0,
-            useVerticalColumns: first.useVerticalColumns === true
+            useVerticalColumns: first.useVerticalColumns === true,
+            currentLineHeightPx: first.nativeLineHeightPx || first.lineHeightPx || 0
           };
           if (first.isVertical) {
             const lhDefault = resolveVerticalTextReloadLineHeightPx(first);
@@ -9970,7 +9981,15 @@ Rules:
               if (field.key === 'heightPx' && first.heightPx > 0) return { ...field, default: first.heightPx };
               if (field.key === 'columnTextCount' && first.columnTextCount > 0) return { ...field, default: first.columnTextCount };
               if (field.key === 'verticalColumns' && first.verticalColumns > 0) return { ...field, default: first.verticalColumns };
-              if (field.key === 'lineHeightPx' && lhDefault != null) return { ...field, default: lhDefault };
+              if (field.key === 'lineHeightPx') {
+                return {
+                  ...field,
+                  ...(lhDefault != null ? { default: lhDefault } : {}),
+                  ...(field.labelRowCheckbox?.key === 'keepCurrentFontStyle'
+                    ? { labelRowCheckbox: { ...field.labelRowCheckbox, default: first.keepCurrentFontStyle === true } }
+                    : {})
+                };
+              }
               if (field.key === 'useVerticalColumns') return { ...field, default: first.useVerticalColumns === true };
               if (field.key === 'keepManualLineBreaks') return { ...field, default: first.keepManualLineBreaks !== false };
               if (field.key === 'unicodeVerticalPunctuation') return { ...field, default: first.unicodeVerticalPunctuation === true };
@@ -9987,7 +10006,7 @@ Rules:
       } catch (e) {
         console.warn('Failed to hydrate vertical text fields', e);
       }
-      verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
+      verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false, currentLineHeightPx: 0 };
       verticalTextLineHeightReloadEnabled = false;
       return fields;
     }
@@ -21183,6 +21202,7 @@ Generate ONLY the reply text, nothing else.`;
             numberLabelHtml = `
             <div class="prompt-field-label-row">
               <label class="prompt-field-label" for="${fieldId}">${field.label}</label>
+              ${labelRowCbs.length > 0 ? renderLabelRowCheckboxes(fieldId, labelRowCbs) : ''}
               ${reloadBtnHtml}
             </div>`;
           } else if (headerActionButtonsHtml) {
@@ -30805,6 +30825,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
               useVerticalColumns: values.useVerticalColumns === true,
               verticalColumns: parseInt(values.verticalColumns) || 0,
               lineHeightPx,
+              keepCurrentFontStyle: values.keepCurrentFontStyle === true,
               keepManualLineBreaks: values.keepManualLineBreaks !== false,
               unicodeVerticalPunctuation: values.unicodeVerticalPunctuation === true
             },
