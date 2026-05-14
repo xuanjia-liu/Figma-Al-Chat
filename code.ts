@@ -411,6 +411,114 @@ function buildVerticalColumnsRespectingManualLineBreaks(
   return chunks;
 }
 
+type InferredVerticalTextColumn = {
+  container: SceneNode;
+  textNode: TextNode;
+};
+
+type InferredVerticalTextTarget = {
+  wrapperNode: FrameNode;
+  textNode: TextNode;
+  columns: InferredVerticalTextColumn[];
+  sourceText: string;
+  sourceRowCount: number;
+  columnTextCount: number;
+  verticalColumns: number;
+  heightPx: number;
+  lineHeightPx: number;
+};
+
+function getTextNodeFontSize(tn: TextNode): number {
+  return typeof tn.fontSize === 'number' ? tn.fontSize : 16;
+}
+
+function isVerticalColumnTextNode(tn: TextNode): boolean {
+  const fontSize = getTextNodeFontSize(tn);
+  return tn.width <= fontSize + 0.5 && tn.height > tn.width + 0.5;
+}
+
+function collectTextDescendants(node: BaseNode): TextNode[] {
+  const out: TextNode[] = [];
+  if (node.type === 'TEXT') return [node as TextNode];
+  if ('children' in node) {
+    for (const child of node.children) {
+      out.push(...collectTextDescendants(child));
+    }
+  }
+  return out;
+}
+
+function stripVerticalColumnBreaks(text: string): string {
+  return (text || '').replace(/\r/g, '').replace(/\n/g, '');
+}
+
+function getInferredVerticalTextTarget(node: SceneNode): InferredVerticalTextTarget | null {
+  if (node.type !== 'FRAME' || node.layoutMode !== 'HORIZONTAL') return null;
+
+  const wrapperNode = node as FrameNode;
+  const directChildren = wrapperNode.children.filter((child): child is SceneNode => {
+    return 'visible' in child ? child.visible !== false : true;
+  });
+  if (directChildren.length < 2) return null;
+
+  let columns: InferredVerticalTextColumn[] = [];
+
+  const allDirectText = directChildren.every(child => child.type === 'TEXT');
+  if (allDirectText) {
+    const textChildren = directChildren as TextNode[];
+    if (!textChildren.every(isVerticalColumnTextNode)) return null;
+    columns = textChildren.map(textNode => ({ container: textNode, textNode }));
+  } else {
+    const allFrameColumns = directChildren.every(child => child.type === 'FRAME');
+    if (!allFrameColumns) return null;
+
+    for (const child of directChildren as FrameNode[]) {
+      if (child.height <= child.width + 0.5) return null;
+      const textDescendants = collectTextDescendants(child);
+      if (textDescendants.length !== 1) return null;
+      const textNode = textDescendants[0];
+      if (!isVerticalColumnTextNode(textNode)) return null;
+      columns.push({ container: child, textNode });
+    }
+  }
+
+  if (columns.length < 2) return null;
+
+  const readingColumns = columns
+    .slice()
+    .sort((a, b) => b.container.absoluteTransform[0][2] - a.container.absoluteTransform[0][2]);
+  const sourceText = readingColumns.map(col => stripVerticalColumnBreaks(col.textNode.characters)).join('');
+  const sourceCharCount = countCodePoints(sourceText);
+  if (sourceCharCount === 0) return null;
+
+  const textNode = readingColumns[0].textNode;
+  const fontSize = getTextNodeFontSize(textNode);
+  const lineHeightPx = (() => {
+    const lh = textNode.lineHeight;
+    if (typeof lh !== 'symbol') {
+      if (lh.unit === 'PIXELS') return lh.value;
+      if (lh.unit === 'PERCENT') return Math.round(fontSize * (lh.value / 100) * 100) / 100;
+    }
+    return Math.round(fontSize * VERTICAL_TEXT_DEFAULT_LINE_HEIGHT_FACTOR * 100) / 100;
+  })();
+  const columnTextCount = Math.max(
+    1,
+    ...readingColumns.map(col => countCodePoints(stripVerticalColumnBreaks(col.textNode.characters)))
+  );
+
+  return {
+    wrapperNode,
+    textNode,
+    columns,
+    sourceText,
+    sourceRowCount: readingColumns.length,
+    columnTextCount,
+    verticalColumns: readingColumns.length,
+    heightPx: Math.max(1, columnTextCount * lineHeightPx),
+    lineHeightPx,
+  };
+}
+
 function normalizeFontPreviewBookmarks(raw: unknown): { lists: { id: string; name: string; families: string[] }[]; lastSelectedListId: string | null } {
   const empty = { lists: [] as { id: string; name: string; families: string[] }[], lastSelectedListId: null as string | null };
   if (!raw || typeof raw !== 'object') return empty;
@@ -12824,6 +12932,25 @@ figma.ui.onmessage = async (msg: {
             textNode = node as TextNode;
           }
 
+          const inferredTarget = textNode ? null : getInferredVerticalTextTarget(node);
+          if (inferredTarget) {
+            results.push({
+              isVertical: true,
+              heightPx: inferredTarget.heightPx,
+              columnTextCount: inferredTarget.columnTextCount,
+              verticalColumns: inferredTarget.verticalColumns,
+              useVerticalColumns: false,
+              lineHeightPx: inferredTarget.lineHeightPx,
+              nativeLineHeightPx: inferredTarget.lineHeightPx,
+              sourceRowCount: inferredTarget.sourceRowCount,
+              sourceCharCount: countCodePoints(inferredTarget.sourceText),
+              fontSize: getTextNodeFontSize(inferredTarget.textNode),
+              keepManualLineBreaks: false,
+              unicodeVerticalPunctuation: false,
+            });
+            continue;
+          }
+
           if (!textNode) {
             results.push({ isVertical: false, heightPx: 0, columnTextCount: 0, verticalColumns: 0, useVerticalColumns: false, lineHeightPx: 0, nativeLineHeightPx: 0, sourceRowCount: 0, sourceCharCount: 0, fontSize: 0, keepManualLineBreaks: true, unicodeVerticalPunctuation: false });
             continue;
@@ -12916,6 +13043,7 @@ figma.ui.onmessage = async (msg: {
           let textNode: TextNode | null = null;
           let wrapperNode: FrameNode | null = null;
           let isRerun = false;
+          let inferredTarget: InferredVerticalTextTarget | null = null;
 
           if (node.type === 'FRAME' && node.getPluginData('fgVerticalText') === 'true') {
             // Could be the outer wrapper or a column frame
@@ -12956,6 +13084,13 @@ figma.ui.onmessage = async (msg: {
             }
           } else if (node.type === 'TEXT') {
             textNode = node as TextNode;
+          } else {
+            inferredTarget = getInferredVerticalTextTarget(node);
+            if (inferredTarget) {
+              textNode = inferredTarget.textNode;
+              wrapperNode = inferredTarget.wrapperNode;
+              isRerun = true;
+            }
           }
 
           if (!textNode) {
@@ -12986,7 +13121,7 @@ figma.ui.onmessage = async (msg: {
             if (isRerun) {
               const stored = textNode.getPluginData('fgVerticalTextOriginalContent')
                 || (wrapperNode ? wrapperNode.getPluginData('fgVerticalTextOriginalContent') : '');
-              sourceText = stored || textNode.characters;
+              sourceText = stored || inferredTarget?.sourceText || textNode.characters;
             } else {
               sourceText = textNode.characters;
             }
@@ -13307,15 +13442,29 @@ figma.ui.onmessage = async (msg: {
               wrapperNode = wrapper;
             } else {
               // Re-run: remove all existing column frames and extra nodes
-              const toRemove = wrapperNode.children.filter(
-                c => c.getPluginData('fgVerticalTextColFrame') === 'true'
-                  || c.getPluginData('fgVerticalTextExtra') === 'true'
-              );
-              // Detach the original text node before removing column frames
-              // so it doesn't get deleted with its parent column frame
-              const origParent = textNode.parent;
-              if (origParent && origParent.getPluginData('fgVerticalTextColFrame') === 'true') {
-                wrapperNode.appendChild(textNode);
+              let toRemove: SceneNode[];
+              if (inferredTarget) {
+                const currentColumnContainers = new Set(inferredTarget.columns.map(col => col.container.id));
+                const currentColumnTextNodes = new Set(inferredTarget.columns.map(col => col.textNode.id));
+                const origParent = textNode.parent;
+                if (origParent && origParent.id !== wrapperNode.id) {
+                  wrapperNode.appendChild(textNode);
+                }
+                toRemove = wrapperNode.children.filter(child => {
+                  if (child.id === textNode.id) return false;
+                  return currentColumnContainers.has(child.id) || currentColumnTextNodes.has(child.id);
+                });
+              } else {
+                toRemove = wrapperNode.children.filter(
+                  c => c.getPluginData('fgVerticalTextColFrame') === 'true'
+                    || c.getPluginData('fgVerticalTextExtra') === 'true'
+                );
+                // Detach the original text node before removing column frames
+                // so it doesn't get deleted with its parent column frame
+                const origParent = textNode.parent;
+                if (origParent && origParent.getPluginData('fgVerticalTextColFrame') === 'true') {
+                  wrapperNode.appendChild(textNode);
+                }
               }
               for (const child of toRemove) {
                 if (child.id !== textNode.id) child.remove();
