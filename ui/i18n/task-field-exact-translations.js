@@ -204,6 +204,9 @@ export const TASK_FIELD_EXACT = {
     "Japanese": "日本語",
     "Keep current font style": "現在のフォントスタイルを保持",
     "Keep manual line breaks": "手動の改行を保持",
+    "Vertical text area height (px)": "縦書きエリアの高さ (px)",
+    "Use selection height": "選択範囲の高さを使用",
+    "Use the first selected layer height": "最初に選択したレイヤーの高さを使用",
     "Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.":
       "、。と「」『』【】〔〕《》（）を縦組み用字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）に置き換え。全角の ，．—：； は変えません。",
     "Use Unicode vertical punctuation": "Unicode 縦書き約物を使う",
@@ -661,6 +664,9 @@ export const TASK_FIELD_EXACT = {
     "Japanese": "日语",
     "Keep current font style": "保留当前字体样式",
     "Keep manual line breaks": "保留手动换行",
+    "Vertical text area height (px)": "竖排文本区域高度 (px)",
+    "Use selection height": "使用选择高度",
+    "Use the first selected layer height": "使用第一个所选图层的高度",
     "Map 、。and 「」『』【】〔〕《》（） to vertical forms (︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶). Fullwidth ，．—：； stay unchanged.":
       "将 、。与 「」『』【】〔〕《》（）映射为竖排字形（︑︒﹁﹂﹃﹄︻︼︹︺︽︾︵︶）。全角 ，．—：； 保持不变。",
     "Use Unicode vertical punctuation": "使用 Unicode 竖排标点",

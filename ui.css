@@ -15527,6 +15527,63 @@
       min-width: 64px;
     }
 
+    .vertical-text-mode-indicator {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+    }
+
+    .vertical-text-mode-indicator__dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 5px;
+      border-radius: 999px;
+      background: var(--text-tertiary);
+      flex: 0 0 auto;
+    }
+
+    .vertical-text-mode-indicator__body {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .vertical-text-mode-indicator__title {
+      color: var(--text-primary);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .vertical-text-mode-indicator__detail {
+      font-size: var(--text-xs);
+      line-height: 1.35;
+    }
+
+    .vertical-text-mode-indicator.adjust {
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+      background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
+    }
+
+    .vertical-text-mode-indicator.adjust .vertical-text-mode-indicator__dot {
+      background: var(--accent);
+    }
+
+    .vertical-text-mode-indicator.convert .vertical-text-mode-indicator__dot {
+      background: var(--success);
+    }
+
+    .vertical-text-mode-indicator.unsupported .vertical-text-mode-indicator__dot,
+    .vertical-text-mode-indicator.empty .vertical-text-mode-indicator__dot {
+      background: var(--warning);
+    }
+
     .prompt-field-inline-checkbox {
       display: inline-flex;
       align-items: center;

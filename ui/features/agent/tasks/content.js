@@ -331,13 +331,14 @@ export const smartTextTasks = [
             {
               key: 'heightPx',
               type: 'number',
-              label: 'Height (px)',
+              label: 'Vertical text area height (px)',
               default: '',
               min: 0,
               max: 2000,
               step: 1,
               numberWithSlider: true,
               hint: 'Linked with Column text count using line height',
+              headerActions: [{ key: 'useSelectionHeight', label: 'Use selection height', title: 'Use the first selected layer height' }],
               disabledWhen: { field: 'useVerticalColumns', equals: true }
             },
             { key: 'useVerticalColumns', type: 'checkbox', label: 'Use Vertical columns', default: false },

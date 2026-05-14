@@ -458,6 +458,15 @@ import { optimize as optimizeSvg } from 'svgo/browser';
           return localizedButton;
         });
       }
+      if (Array.isArray(localized.headerActions)) {
+        localized.headerActions = localized.headerActions.map((action) => {
+          if (!action || typeof action !== 'object') return action;
+          const next = { ...action };
+          if (typeof next.label === 'string') next.label = localizeActionString(next.label);
+          if (typeof next.title === 'string') next.title = localizeActionString(next.title);
+          return next;
+        });
+      }
       if (Array.isArray(localized.fields)) {
         localized.fields = localized.fields.map(localizeTaskField);
       }
@@ -3686,6 +3695,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
 
       if (promptDrawer.classList.contains('open') && currentPromptAction?.name === 'Adjust length') {
         updateAdjustLengthDrawerMetrics();
+      }
+
+      if (isVerticalTextPromptOpen()) {
+        refreshVerticalTextModeIndicator();
       }
 
       // Trigger a background update of selection data size for the token counter
@@ -9817,6 +9830,7 @@ Rules:
 
     let verticalTextHydrationMeta = { sourceCharCount: 0, useVerticalColumns: false };
     let verticalTextLineHeightReloadEnabled = false;
+    let verticalTextModeRefreshToken = 0;
 
     function fetchVerticalTextMetadata() {
       return new Promise((resolve) => {
@@ -9837,9 +9851,127 @@ Rules:
       });
     }
 
+    function fetchSelectionDimensions() {
+      return new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handler);
+          resolve(null);
+        }, 5000);
+        const handler = (event) => {
+          const msg = event.data.pluginMessage;
+          if (msg && msg.type === 'first-selection-dimensions') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handler);
+            resolve(msg.data || null);
+          }
+        };
+        window.addEventListener('message', handler);
+        parent.postMessage({ pluginMessage: { type: 'get-first-selection-dimensions' } }, '*');
+      });
+    }
+
     function resolveVerticalTextReloadLineHeightPx(first) {
       if (!first || typeof first.fontSize !== 'number' || first.fontSize <= 0) return null;
       return Math.round(first.fontSize * 1.1 * 100) / 100;
+    }
+
+    function isVerticalTextPromptOpen() {
+      return promptDrawer.classList.contains('open') && currentPromptAction?.name === 'Vertical text';
+    }
+
+    function getVerticalTextModeFromMetadata(metadata) {
+      const results = Array.isArray(metadata) ? metadata : [];
+      const selectedCount = results.length;
+      const adjustableCount = results.filter(item => item && item.isVertical === true).length;
+      const textCount = results.filter(item => item && item.fontSize > 0).length;
+
+      if (selectedCount === 0) {
+        return {
+          mode: 'empty',
+          title: 'No selection',
+          detail: 'Select text, or select an existing vertical-text wrapper to adjust it.'
+        };
+      }
+      if (adjustableCount > 0) {
+        return {
+          mode: 'adjust',
+          title: 'Adjust existing vertical text',
+          detail: adjustableCount === selectedCount
+            ? 'Current selection will be adjusted.'
+            : `${adjustableCount} of ${selectedCount} selected layers look adjustable.`
+        };
+      }
+      if (textCount > 0) {
+        return {
+          mode: 'convert',
+          title: 'Convert selected text',
+          detail: textCount === selectedCount
+            ? 'Current selection will be converted.'
+            : `${textCount} of ${selectedCount} selected layers contain text.`
+        };
+      }
+      return {
+        mode: 'unsupported',
+        title: 'No adjustable vertical text detected',
+        detail: 'Select a text layer or a horizontal vertical-text wrapper.'
+      };
+    }
+
+    function ensureVerticalTextModeIndicator() {
+      if (!promptDrawerFields) return null;
+      let indicator = promptDrawerFields.querySelector('[data-vertical-text-mode]');
+      if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.className = 'vertical-text-mode-indicator pending';
+        indicator.dataset.verticalTextMode = 'pending';
+        indicator.innerHTML = `
+          <span class="vertical-text-mode-indicator__dot"></span>
+          <span class="vertical-text-mode-indicator__body">
+            <span class="vertical-text-mode-indicator__title">Detecting mode...</span>
+            <span class="vertical-text-mode-indicator__detail">Reading the current selection.</span>
+          </span>
+        `;
+        promptDrawerFields.prepend(indicator);
+      }
+      return indicator;
+    }
+
+    function updateVerticalTextModeIndicator(metadata) {
+      const indicator = ensureVerticalTextModeIndicator();
+      if (!indicator) return;
+      const modeInfo = getVerticalTextModeFromMetadata(metadata);
+      indicator.className = `vertical-text-mode-indicator ${modeInfo.mode}`;
+      indicator.dataset.verticalTextMode = modeInfo.mode;
+      const titleEl = indicator.querySelector('.vertical-text-mode-indicator__title');
+      const detailEl = indicator.querySelector('.vertical-text-mode-indicator__detail');
+      if (titleEl) titleEl.textContent = localizeActionString(modeInfo.title);
+      if (detailEl) detailEl.textContent = modeInfo.detail;
+    }
+
+    async function refreshVerticalTextModeIndicator() {
+      if (!isVerticalTextPromptOpen()) return;
+      const token = ++verticalTextModeRefreshToken;
+      const indicator = ensureVerticalTextModeIndicator();
+      if (indicator) {
+        indicator.className = 'vertical-text-mode-indicator pending';
+        indicator.dataset.verticalTextMode = 'pending';
+        const titleEl = indicator.querySelector('.vertical-text-mode-indicator__title');
+        const detailEl = indicator.querySelector('.vertical-text-mode-indicator__detail');
+        if (titleEl) titleEl.textContent = localizeActionString('Detecting mode...');
+        if (detailEl) detailEl.textContent = localizeActionString('Reading the current selection.');
+      }
+      const metadata = await fetchVerticalTextMetadata();
+      if (token !== verticalTextModeRefreshToken || !isVerticalTextPromptOpen()) return;
+      const first = Array.isArray(metadata) ? metadata[0] : null;
+      if (first) {
+        verticalTextHydrationMeta = {
+          ...verticalTextHydrationMeta,
+          sourceCharCount: first.sourceCharCount || 0,
+          useVerticalColumns: first.useVerticalColumns === true,
+          currentLineHeightPx: first.nativeLineHeightPx || first.lineHeightPx || 0
+        };
+      }
+      updateVerticalTextModeIndicator(metadata);
     }
 
     /** Keep range slider in sync when a paired number input value is set in code (e.g. Vertical text linked fields). */
@@ -9867,6 +9999,7 @@ Rules:
       const keepCurrentFontStyleEl = promptDrawerFields.querySelector('input[data-field-key="keepCurrentFontStyle"]');
 
       if (!heightEl || !colEl || !lhEl) return;
+      refreshVerticalTextModeIndicator();
 
       let lastEdited = 'columnTextCount';
 
@@ -9928,6 +10061,32 @@ Rules:
       useVerticalColumnsEl?.addEventListener('input', updateComputedHeight);
       if (verticalColsEl) {
         verticalColsEl.addEventListener('input', updateComputedHeight);
+      }
+
+      const useSelectionHeightBtn = promptDrawerFields.querySelector('button[data-prompt-field-action="useSelectionHeight"]');
+      if (useSelectionHeightBtn) {
+        useSelectionHeightBtn.onclick = async () => {
+          if (useSelectionHeightBtn.disabled) return;
+          useSelectionHeightBtn.disabled = true;
+          try {
+            const dims = await fetchSelectionDimensions();
+            const height = dims && Number(dims.height);
+            if (!Number.isFinite(height) || height <= 0) {
+              showToast(localizeActionString('Select a layer with a height first.'), 'warning');
+              return;
+            }
+            lastEdited = 'heightPx';
+            heightEl.value = formatNumber(height);
+            syncPromptSliderFromNumberInput(heightEl);
+            heightEl.dispatchEvent(new Event('input', { bubbles: true }));
+            heightEl.dispatchEvent(new Event('change', { bubbles: true }));
+          } catch (e) {
+            console.warn('Use selection height failed', e);
+            showToast(localizeActionString('Could not read selection height.'), 'error');
+          } finally {
+            useSelectionHeightBtn.disabled = false;
+          }
+        };
       }
 
       const reloadLhBtn = promptDrawerFields.querySelector('button[data-reload-line-height]');
@@ -18786,6 +18945,10 @@ Generate ONLY the reply text, nothing else.`;
         // Open drawer
         promptDrawer.classList.add('open');
         promptDrawerOverlay.classList.add('open');
+
+        if (actionData.name === 'Vertical text') {
+          refreshVerticalTextModeIndicator();
+        }
 
         if (isRealtimePromptAction(currentPromptAction)) {
           scheduleRealtimePromptAction(0);

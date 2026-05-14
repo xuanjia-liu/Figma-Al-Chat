@@ -14319,6 +14319,19 @@ figma.ui.onmessage = async (msg: {
       break;
     }
 
+    case 'get-first-selection-dimensions': {
+      if (selection.length === 0) {
+        figma.ui.postMessage({ type: 'first-selection-dimensions', data: null });
+        break;
+      }
+
+      const node = selection[0];
+      const width = 'width' in node ? Math.round(node.width) : 0;
+      const height = 'height' in node ? Math.round(node.height) : 0;
+      figma.ui.postMessage({ type: 'first-selection-dimensions', data: { width, height } });
+      break;
+    }
+
     case 'get-selection-bounding-box': {
       if (selection.length === 0) {
         figma.ui.postMessage({ type: 'selection-bounding-box', width: null, height: null });
