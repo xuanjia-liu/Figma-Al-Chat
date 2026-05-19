@@ -1357,6 +1357,46 @@ Return ONLY JSON.`;
           ]
         },
 {
+          name: 'Edit / remove property',
+          desc: 'Edit or remove component properties from the selection',
+          help: 'Lists component properties on every valid component target in the current selection, then renames, edits defaults, or removes the matching property where supported.',
+          directAction: 'editRemoveProperty',
+          fields: [
+            {
+              key: 'propertyAction',
+              type: 'select',
+              label: 'Action',
+              default: 'edit',
+              options: [
+                { value: 'edit', label: 'Edit property' },
+                { value: 'remove', label: 'Remove property' }
+              ]
+            },
+            {
+              key: 'propertySelection',
+              type: 'select',
+              label: 'Property',
+              searchable: true,
+              showThumbnails: false,
+              default: '',
+              options: [],
+              hint: 'Choose a property from the resolved component targets.',
+              actionButton: {
+                action: 'refresh-edit-remove-property-fields',
+                label: 'Refresh',
+                alwaysEnabled: true
+              }
+            },
+            {
+              key: 'newPropertyName',
+              type: 'text',
+              label: 'New Property Name',
+              placeholder: 'e.g., Show Icon',
+              showWhen: { field: 'propertyAction', equals: 'edit' }
+            }
+          ]
+        },
+{
           name: 'Create variants',
           desc: 'Duplicate with color variations',
           requiredContext: ContextMode.MINIMAL,

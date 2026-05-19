@@ -33,6 +33,7 @@ export function createAgentTasks(deps = {}) {
   const buttonTask = getTaskByName(quickCreateUiTasks, 'Button');
   const createGridLineTask = getTaskByName(quickCreateUiTasks, 'Create grid line');
   const addPropertyTask = getTaskByName(quickCreateUiTasks, 'Add property');
+  const editRemovePropertyTask = getTaskByName(quickCreateUiTasks, 'Edit / remove property');
   const createVariantsTask = getTaskByName(quickCreateUiTasks, 'Create variants');
   const duplicateWithInstructionsTask = getTaskByName(quickCreateUiTasks, 'Duplicate with instructions');
   const randomizeSelectedInstanceTask = getTaskByName(quickCreateUiTasks, 'Randomize selected instance');
@@ -55,7 +56,10 @@ export function createAgentTasks(deps = {}) {
       ...stylingImageTasks,
       ...stylingTasks.slice(stylingImageInsertIndex),
     ],
-    'Design System': designSystemTasks,
+    'Design System': [
+      ...designSystemTasks,
+      editRemovePropertyTask,
+    ],
     'Smart Text': smartTextTasks,
     'Layer Naming': layerNamingTasks,
     'Accessibility & Quality': accessibilityQualityTasks,

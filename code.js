@@ -1345,6 +1345,9 @@ async function resolveConcreteComponentForPropertyDefault(node) {
     }
     return null;
 }
+function stripComponentPropertyId(propertyKey) {
+    return typeof propertyKey === 'string' ? propertyKey.replace(/#\d+:\d+$/, '') : '';
+}
 function findNearestInstanceBeforeTarget(node, target) {
     let current = node;
     while (current && current !== target) {
@@ -12460,6 +12463,103 @@ figma.ui.onmessage = async (msg) => {
                 figma.ui.postMessage({
                     type: 'error',
                     message: 'Failed to inspect selection for add property: ' + (error instanceof Error ? error.message : String(error))
+                });
+            }
+            break;
+        }
+        case 'get-edit-remove-property-selection-context': {
+            try {
+                const validTargetMap = new Map();
+                const invalidSelections = [];
+                const instanceOptionMap = new Map();
+                const propertyOptionMap = new Map();
+                for (const selectedNode of selection) {
+                    const target = await resolveComponentPropertyTarget(selectedNode);
+                    if (target) {
+                        if (!validTargetMap.has(target.id)) {
+                            validTargetMap.set(target.id, {
+                                id: target.id,
+                                name: target.name,
+                                type: target.type
+                            });
+                        }
+                        const defs = target.componentPropertyDefinitions || {};
+                        for (const [propertyKey, def] of Object.entries(defs)) {
+                            const propertyType = def === null || def === void 0 ? void 0 : def.type;
+                            if (!propertyType)
+                                continue;
+                            const displayName = stripComponentPropertyId(propertyKey);
+                            const optionKey = `${propertyType}:${encodeURIComponent(displayName)}`;
+                            const targetEntry = Object.assign({ targetId: target.id, targetName: target.name, targetType: target.type, propertyKey, defaultValue: def.defaultValue }, ((Array.isArray(def.variantOptions)) ? { variantOptions: [...def.variantOptions] } : {}));
+                            const existing = propertyOptionMap.get(optionKey);
+                            if (existing) {
+                                if (!existing.targets.some(item => item.targetId === target.id && item.propertyKey === propertyKey)) {
+                                    existing.targets.push(targetEntry);
+                                    existing.targetCount = existing.targets.length;
+                                    existing.detail = `${existing.targetCount} target${existing.targetCount === 1 ? '' : 's'}`;
+                                }
+                            }
+                            else {
+                                propertyOptionMap.set(optionKey, {
+                                    value: optionKey,
+                                    displayName,
+                                    propertyType,
+                                    label: `${displayName} (${propertyType})`,
+                                    detail: '1 target',
+                                    defaultValue: def.defaultValue,
+                                    targetCount: 1,
+                                    targets: [targetEntry]
+                                });
+                            }
+                        }
+                    }
+                    else {
+                        invalidSelections.push({
+                            id: selectedNode.id,
+                            name: selectedNode.name,
+                            type: selectedNode.type,
+                            reason: 'Selection is not inside a component or component set'
+                        });
+                    }
+                    const defaultComponent = await resolveConcreteComponentForPropertyDefault(selectedNode);
+                    if (defaultComponent && !instanceOptionMap.has(defaultComponent.id)) {
+                        const detail = selectedNode.type === 'INSTANCE'
+                            ? `From selected instance "${selectedNode.name}"`
+                            : (selectedNode.id === defaultComponent.id
+                                ? 'Selected component'
+                                : `From selected layer "${selectedNode.name}"`);
+                        instanceOptionMap.set(defaultComponent.id, {
+                            value: defaultComponent.id,
+                            componentId: defaultComponent.id,
+                            sourceNodeId: selectedNode.id,
+                            label: defaultComponent.name,
+                            detail
+                        });
+                    }
+                }
+                const propertyOptions = Array.from(propertyOptionMap.values())
+                    .sort((a, b) => {
+                    const nameCompare = a.displayName.localeCompare(b.displayName);
+                    return nameCompare !== 0 ? nameCompare : a.propertyType.localeCompare(b.propertyType);
+                });
+                figma.ui.postMessage({
+                    type: 'edit-remove-property-selection-context-result',
+                    validTargets: Array.from(validTargetMap.values()),
+                    validTargetCount: validTargetMap.size,
+                    invalidSelections,
+                    invalidSelectionCount: invalidSelections.length,
+                    instanceOptions: Array.from(instanceOptionMap.values()),
+                    instanceOptionCount: instanceOptionMap.size,
+                    propertyOptions,
+                    propertyOptionCount: propertyOptions.length,
+                    selectionCount: selection.length
+                });
+            }
+            catch (error) {
+                console.error('get-edit-remove-property-selection-context failed:', error);
+                figma.ui.postMessage({
+                    type: 'error',
+                    message: 'Failed to inspect selection for edit/remove property: ' + (error instanceof Error ? error.message : String(error))
                 });
             }
             break;

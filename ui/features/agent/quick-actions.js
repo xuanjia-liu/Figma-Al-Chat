@@ -26,6 +26,7 @@ export const actionIcons = {
   'Easy wrapper': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1" stroke-dasharray="2 2"/></svg>',
   'Create Graph': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>',
   'Add property': '<svg viewBox="0 0 24 24" fill="none"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h4m0 0h4m-4 0V8m0 4v4"/><rect width="14.142" height="14.142" x="12" y="2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" rx="2" transform="rotate(45 12 2)"/></svg>',
+  'Edit / remove property': '<svg viewBox="0 0 24 24" fill="none"><rect width="14.142" height="14.142" x="12" y="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" rx="2" transform="rotate(45 12 2)"/><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m8 14 6-6 2 2-6 6-3 1 1-3Zm7 3h3"/></svg>',
 
   // Styling & Effects
   'Swap colors': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>',

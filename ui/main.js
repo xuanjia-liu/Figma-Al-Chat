@@ -18076,6 +18076,16 @@ Generate ONLY the reply text, nothing else.`;
       return result || {};
     }
 
+    async function requestEditRemovePropertySelectionContext() {
+      const result = await runLocalActionRequest({
+        requestType: 'get-edit-remove-property-selection-context',
+        resultType: 'edit-remove-property-selection-context-result',
+        payload: {},
+        errorPrefixes: ['Failed to inspect selection for edit/remove property']
+      });
+      return result || {};
+    }
+
     function buildAddPropertyFields(baseFields = [], selectionContext = {}) {
       const instanceOptions = Array.isArray(selectionContext.instanceOptions)
         ? selectionContext.instanceOptions.map((option) => ({
@@ -18120,6 +18130,134 @@ Generate ONLY the reply text, nothing else.`;
       return !!action && action.directAction === 'addProperty';
     }
 
+    function getEditRemovePropertyOptions(selectionContext = {}) {
+      return Array.isArray(selectionContext.propertyOptions) ? selectionContext.propertyOptions : [];
+    }
+
+    function getSelectedEditRemovePropertyOption(values = {}, action = currentPromptAction) {
+      const selectionContext = action?.editRemovePropertySelectionContext || {};
+      const options = getEditRemovePropertyOptions(selectionContext);
+      const selectedValue = String(values.propertySelection || '').trim();
+      if (selectedValue) {
+        return options.find((option) => String(option.value || '') === selectedValue) || null;
+      }
+      return options[0] || null;
+    }
+
+    function buildEditRemovePropertyFields(baseFields = [], selectionContext = {}, values = {}) {
+      const propertyOptions = getEditRemovePropertyOptions(selectionContext);
+      const instanceOptions = Array.isArray(selectionContext.instanceOptions)
+        ? selectionContext.instanceOptions.map((option) => ({
+            value: String(option.value || ''),
+            label: String(option.label || option.value || ''),
+            detail: String(option.detail || '')
+          }))
+        : [];
+      const validTargetCount = Number(selectionContext.validTargetCount) || 0;
+      const invalidSelectionCount = Number(selectionContext.invalidSelectionCount) || 0;
+      const propertySelectOptions = propertyOptions.map((option) => ({
+        value: String(option.value || ''),
+        label: String(option.label || option.displayName || option.value || ''),
+        detail: String(option.detail || '')
+      }));
+      const selectedValue = String(values.propertySelection || propertySelectOptions[0]?.value || '').trim();
+      const selectedOption = propertyOptions.find((option) => String(option.value || '') === selectedValue) || propertyOptions[0] || null;
+      const actionValue = String(values.propertyAction || 'edit');
+      const targetHintBase = validTargetCount > 0
+        ? `Found ${validTargetCount} component target${validTargetCount === 1 ? '' : 's'} and ${propertyOptions.length} propert${propertyOptions.length === 1 ? 'y' : 'ies'}.`
+        : 'Select a component, component set, instance, or layer inside one.';
+      const invalidHint = invalidSelectionCount > 0
+        ? ` ${invalidSelectionCount} unsupported selection item${invalidSelectionCount === 1 ? '' : 's'} will be skipped.`
+        : '';
+
+      const hydrated = (Array.isArray(baseFields) ? baseFields : [])
+        .filter((field) => !['newBooleanDefault', 'newTextDefault', 'newInstanceDefault', 'variantDefaultNotice'].includes(field.key))
+        .map((field) => {
+          if (field.type === 'row' && Array.isArray(field.fields)) {
+            return {
+              ...field,
+              fields: buildEditRemovePropertyFields(field.fields, selectionContext, values)
+            };
+          }
+          if (field.key === 'propertySelection') {
+            return {
+              ...field,
+              options: propertySelectOptions,
+              default: selectedOption?.value || '',
+              disabled: propertySelectOptions.length === 0,
+              hint: `${targetHintBase}${invalidHint}`
+            };
+          }
+          if (field.key === 'newPropertyName') {
+            return {
+              ...field,
+              default: values.newPropertyName !== undefined ? values.newPropertyName : (selectedOption?.displayName || ''),
+              disabled: !selectedOption
+            };
+          }
+          return field;
+        });
+
+      if (!selectedOption || actionValue !== 'edit') {
+        return hydrated;
+      }
+
+      if (selectedOption.propertyType === 'BOOLEAN') {
+        hydrated.push({
+          key: 'newBooleanDefault',
+          type: 'checkbox',
+          label: 'New Default Value',
+          default: values.newBooleanDefault !== undefined ? values.newBooleanDefault : selectedOption.defaultValue === true,
+          showWhen: { field: 'propertyAction', equals: 'edit' }
+        });
+      } else if (selectedOption.propertyType === 'TEXT') {
+        hydrated.push({
+          key: 'newTextDefault',
+          type: 'text',
+          label: 'New Default String',
+          default: values.newTextDefault !== undefined ? values.newTextDefault : String(selectedOption.defaultValue ?? ''),
+          placeholder: 'e.g., Button',
+          showWhen: { field: 'propertyAction', equals: 'edit' }
+        });
+      } else if (selectedOption.propertyType === 'INSTANCE_SWAP') {
+        const currentDefault = String(values.newInstanceDefault || selectedOption.defaultValue || '');
+        const hasCurrent = instanceOptions.some((option) => String(option.value || '') === currentDefault);
+        hydrated.push({
+          key: 'newInstanceDefault',
+          type: 'select',
+          label: 'New Default Instance',
+          searchable: true,
+          default: hasCurrent ? currentDefault : (instanceOptions[0]?.value || ''),
+          options: instanceOptions,
+          disabled: instanceOptions.length === 0,
+          hint: instanceOptions.length > 0
+            ? 'Choose a concrete component from the current selection.'
+            : 'Select at least one component or instance to use as the default instance.',
+          actionButton: {
+            action: 'refresh-edit-remove-property-fields',
+            label: 'Refresh',
+            alwaysEnabled: true
+          },
+          showWhen: { field: 'propertyAction', equals: 'edit' }
+        });
+      } else if (selectedOption.propertyType === 'VARIANT') {
+        hydrated.push({
+          key: 'variantDefaultNotice',
+          type: 'text',
+          label: 'Default Value',
+          default: 'Variant properties can be renamed, but their defaults cannot be edited.',
+          disabled: true,
+          showWhen: { field: 'propertyAction', equals: 'edit' }
+        });
+      }
+
+      return hydrated;
+    }
+
+    function isEditRemovePropertyPromptAction(action = currentPromptAction) {
+      return !!action && action.directAction === 'editRemoveProperty';
+    }
+
     function getAddPropertyValidation(values = {}, action = currentPromptAction) {
       if (!isAddPropertyPromptAction(action)) {
         return { valid: true, message: '' };
@@ -18147,6 +18285,49 @@ Generate ONLY the reply text, nothing else.`;
           return { valid: false, message: 'Select at least one component instance, or a layer inside one.' };
         }
         const instanceDefault = String(values.instanceDefault || '').trim();
+        if (!instanceDefault) {
+          return { valid: false, message: 'Select a default instance from the current selection.' };
+        }
+        const instanceOptions = Array.isArray(selectionContext.instanceOptions) ? selectionContext.instanceOptions : [];
+        if (!instanceOptions.some((option) => String(option.value || '') === instanceDefault)) {
+          return { valid: false, message: 'Refresh the instance list and choose a valid default instance.' };
+        }
+      }
+
+      return { valid: true, message: '' };
+    }
+
+    function getEditRemovePropertyValidation(values = {}, action = currentPromptAction) {
+      if (!isEditRemovePropertyPromptAction(action)) {
+        return { valid: true, message: '' };
+      }
+
+      const selectionContext = action?.editRemovePropertySelectionContext || {};
+      const validTargetCount = Number(selectionContext.validTargetCount) || 0;
+      if (validTargetCount <= 0) {
+        return { valid: false, message: 'Select at least one component target first.' };
+      }
+
+      const selectedOption = getSelectedEditRemovePropertyOption(values, action);
+      if (!selectedOption) {
+        return { valid: false, message: 'Select a component property first.' };
+      }
+
+      const propertyAction = String(values.propertyAction || 'edit');
+      if (propertyAction === 'remove') {
+        if (selectedOption.propertyType === 'VARIANT') {
+          return { valid: false, message: 'Variant properties can be renamed, but cannot be removed.' };
+        }
+        return { valid: true, message: '' };
+      }
+
+      const newName = String(values.newPropertyName || '').trim();
+      if (!newName) {
+        return { valid: false, message: 'New property name is required.' };
+      }
+
+      if (selectedOption.propertyType === 'INSTANCE_SWAP') {
+        const instanceDefault = String(values.newInstanceDefault || '').trim();
         if (!instanceDefault) {
           return { valid: false, message: 'Select a default instance from the current selection.' };
         }
@@ -18195,6 +18376,12 @@ Generate ONLY the reply text, nothing else.`;
       if (isAddPropertyPromptAction()) {
         promptDrawerSubmit.disabled = !validation.valid;
         promptDrawerSubmit.title = validation.valid ? '' : validation.message;
+        return;
+      }
+      const editRemoveValidation = getEditRemovePropertyValidation(nextValues);
+      if (isEditRemovePropertyPromptAction()) {
+        promptDrawerSubmit.disabled = !editRemoveValidation.valid;
+        promptDrawerSubmit.title = editRemoveValidation.valid ? '' : editRemoveValidation.message;
         return;
       }
       const qd = getQuickDetachValidation(nextValues);
@@ -18269,6 +18456,82 @@ Generate ONLY the reply text, nothing else.`;
           buttonEl.classList.remove('loading');
         }
       }
+    }
+
+    async function refreshOpenEditRemovePropertyDrawerFromSelection(overrides = {}) {
+      if (!promptDrawer.classList.contains('open') || !isEditRemovePropertyPromptAction()) return;
+
+      const preservedValues = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+      const selectionContext = await requestEditRemovePropertySelectionContext();
+      const baseFields = currentPromptAction?._originalFields || currentPromptAction?.fields || [];
+      const propertyOptions = getEditRemovePropertyOptions(selectionContext);
+      const nextValues = { ...preservedValues, ...overrides };
+
+      if (!propertyOptions.some((option) => String(option.value || '') === String(nextValues.propertySelection || ''))) {
+        nextValues.propertySelection = propertyOptions[0]?.value || '';
+        nextValues.newPropertyName = propertyOptions[0]?.displayName || '';
+      }
+
+      const selectedOption = propertyOptions.find((option) => String(option.value || '') === String(nextValues.propertySelection || '')) || propertyOptions[0] || null;
+      if (selectedOption && !String(nextValues.newPropertyName || '').trim()) {
+        nextValues.newPropertyName = selectedOption.displayName || '';
+      }
+      if (selectedOption?.propertyType === 'INSTANCE_SWAP') {
+        const instanceOptions = Array.isArray(selectionContext.instanceOptions) ? selectionContext.instanceOptions : [];
+        if (!instanceOptions.some((option) => String(option.value || '') === String(nextValues.newInstanceDefault || ''))) {
+          nextValues.newInstanceDefault = instanceOptions[0]?.value || '';
+        }
+      }
+
+      const hydratedFields = buildEditRemovePropertyFields(baseFields, selectionContext, nextValues);
+      const localizedFields = hydratedFields.map(localizeTaskField);
+
+      currentPromptAction.editRemovePropertySelectionContext = selectionContext;
+      currentPromptAction.fields = localizedFields;
+      renderPromptFields(localizedFields, nextValues);
+      promptDrawerFields.classList.remove('hidden');
+      updatePromptDrawerSubmitState(nextValues);
+    }
+
+    async function triggerEditRemovePropertyDrawerRefresh(buttonEl = null) {
+      if (buttonEl) {
+        buttonEl.disabled = true;
+        buttonEl.classList.add('loading');
+      }
+      try {
+        await refreshOpenEditRemovePropertyDrawerFromSelection();
+      } catch (error) {
+        console.warn('Failed to refresh edit/remove property drawer:', error);
+        showToast('Failed to refresh selection for Edit / remove property', 'error');
+      } finally {
+        if (buttonEl) {
+          buttonEl.disabled = false;
+          buttonEl.classList.remove('loading');
+        }
+      }
+    }
+
+    function updateEditRemovePropertyDrawerForCurrentValues(resetNameFromSelection = false) {
+      if (!promptDrawer.classList.contains('open') || !isEditRemovePropertyPromptAction()) return;
+      const selectionContext = currentPromptAction?.editRemovePropertySelectionContext || {};
+      const currentValues = typeof getPromptFieldValues === 'function' ? getPromptFieldValues() : {};
+      const selectedOption = getSelectedEditRemovePropertyOption(currentValues, currentPromptAction);
+      const baseFields = currentPromptAction?._originalFields || currentPromptAction?.fields || [];
+      const nextValues = { ...currentValues };
+      if (selectedOption && (resetNameFromSelection || !String(nextValues.newPropertyName || '').trim())) {
+        nextValues.newPropertyName = selectedOption.displayName || '';
+      }
+      if (resetNameFromSelection) {
+        delete nextValues.newBooleanDefault;
+        delete nextValues.newTextDefault;
+        delete nextValues.newInstanceDefault;
+      }
+      const hydratedFields = buildEditRemovePropertyFields(baseFields, selectionContext, nextValues);
+      const localizedFields = hydratedFields.map(localizeTaskField);
+      currentPromptAction.fields = localizedFields;
+      renderPromptFields(localizedFields, nextValues);
+      promptDrawerFields.classList.remove('hidden');
+      updatePromptDrawerSubmitState(nextValues);
     }
 
     function collectInstanceNodesForRandomization(nodes) {
@@ -18832,6 +19095,15 @@ Generate ONLY the reply text, nothing else.`;
           const selectionContext = await requestAddPropertySelectionContext();
           hydratedFields = buildAddPropertyFields(actionData.fields, selectionContext);
           currentPromptAction.addPropertySelectionContext = selectionContext;
+        } else if (actionData.directAction === 'editRemoveProperty') {
+          const selectionContext = await requestEditRemovePropertySelectionContext();
+          const propertyOptions = getEditRemovePropertyOptions(selectionContext);
+          const initialValues = {
+            propertySelection: propertyOptions[0]?.value || '',
+            newPropertyName: propertyOptions[0]?.displayName || ''
+          };
+          hydratedFields = buildEditRemovePropertyFields(actionData.fields, selectionContext, initialValues);
+          currentPromptAction.editRemovePropertySelectionContext = selectionContext;
         } else if (actionData.directAction === 'generatePalette') {
           hydratedFields = await hydratePaletteFields(actionData.fields);
         } else if (actionData.directAction === 'generateImage') {
@@ -18889,6 +19161,25 @@ Generate ONLY the reply text, nothing else.`;
               default: hasMatch ? currentDefault : (instanceOptions[0]?.value || '')
             };
           });
+        } else if (actionData.directAction === 'editRemoveProperty') {
+          const propertyOptions = getEditRemovePropertyOptions(currentPromptAction.editRemovePropertySelectionContext || {});
+          const savedValues = savedActionHistory || {};
+          const savedPropertySelection = String(savedValues.propertySelection || '');
+          const propertySelection = propertyOptions.some((option) => String(option.value || '') === savedPropertySelection)
+            ? savedPropertySelection
+            : (propertyOptions[0]?.value || '');
+          const selectedOption = propertyOptions.find((option) => String(option.value || '') === propertySelection) || propertyOptions[0] || null;
+          const effectiveValues = {
+            ...savedValues,
+            propertyAction: savedValues.propertyAction || 'edit',
+            propertySelection,
+            newPropertyName: savedValues.newPropertyName || selectedOption?.displayName || ''
+          };
+          hydratedFields = buildEditRemovePropertyFields(
+            currentPromptAction._originalFields || actionData.fields || [],
+            currentPromptAction.editRemovePropertySelectionContext || {},
+            effectiveValues
+          );
         }
 
         // Render fields (Screen type, Platform, etc.)
@@ -21125,8 +21416,11 @@ Generate ONLY the reply text, nothing else.`;
           ` : '';
 
           const canAddOption = field.key === 'tone' || field.key === 'imagePreset' || field.key === 'reStylePreset' || field.key === 'renamePreset' || field.key === 'styleCategory';
+          const actionButtonDisabled = field.actionButton && field.actionButton.alwaysEnabled
+            ? forceDisabled
+            : (field.disabled || forceDisabled);
           const actionButtonHtml = field.actionButton ? `
-            <button class="prompt-ai-btn prompt-refresh-instance-scope-btn" data-prompt-action="${escapeHtml(field.actionButton.action || '')}" type="button"${field.disabled || forceDisabled ? ' disabled' : ''}>
+            <button class="prompt-ai-btn prompt-refresh-instance-scope-btn" data-prompt-action="${escapeHtml(field.actionButton.action || '')}" type="button"${actionButtonDisabled ? ' disabled' : ''}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M23 4v6h-6M1 20v-6h6"/>
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -21981,6 +22275,8 @@ Generate ONLY the reply text, nothing else.`;
           e.stopPropagation();
           if (btn.dataset.promptAction === 'refresh-add-property-fields') {
             triggerAddPropertyDrawerRefresh(btn);
+          } else if (btn.dataset.promptAction === 'refresh-edit-remove-property-fields') {
+            triggerEditRemovePropertyDrawerRefresh(btn);
           } else {
             triggerInstanceRandomizationDrawerRefresh(btn);
           }
@@ -22064,6 +22360,11 @@ Generate ONLY the reply text, nothing else.`;
       promptDrawerFields.addEventListener('change', (e) => {
         savePromptHistory();
         updatePromptDrawerSubmitState();
+        const changedFieldKey = e.target?.dataset?.fieldKey || '';
+        if (isEditRemovePropertyPromptAction() && (changedFieldKey === 'propertySelection' || changedFieldKey === 'propertyAction')) {
+          updateEditRemovePropertyDrawerForCurrentValues(changedFieldKey === 'propertySelection');
+          return;
+        }
         if (isRemoveTinySpikesPromptAction()) {
           scheduleTinySpikeDetection();
         }
@@ -28628,6 +28929,127 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
     }
 
+    async function runEditRemovePropertyAction(values, actionMeta) {
+      const selectionContext = await requestEditRemovePropertySelectionContext();
+      currentPromptAction.editRemovePropertySelectionContext = selectionContext;
+
+      const validation = getEditRemovePropertyValidation(values, currentPromptAction);
+      if (!validation.valid) {
+        showToast(validation.message, 'error');
+        updatePromptDrawerSubmitState(values);
+        return;
+      }
+
+      const selectedOption = getSelectedEditRemovePropertyOption(values, currentPromptAction);
+      if (!selectedOption) {
+        showToast('Select a component property first.', 'error');
+        updatePromptDrawerSubmitState(values);
+        return;
+      }
+
+      const propertyAction = String(values.propertyAction || 'edit');
+      const targetEntries = Array.isArray(selectedOption.targets) ? selectedOption.targets : [];
+      if (targetEntries.length === 0) {
+        showToast('No matching component targets found for this property.', 'error');
+        updatePromptDrawerSubmitState(values);
+        return;
+      }
+
+      const invalidItems = Array.isArray(selectionContext.invalidSelections) ? selectionContext.invalidSelections : [];
+      if (invalidItems.length > 0) {
+        const sampleNames = invalidItems
+          .slice(0, 3)
+          .map((item) => item?.name || item?.type || 'Unnamed')
+          .join(', ');
+        const extraCount = Math.max(0, invalidItems.length - 3);
+        const message = `Edit / remove property will skip ${invalidItems.length} unsupported selection item${invalidItems.length === 1 ? '' : 's'}${sampleNames ? ` (${sampleNames}${extraCount > 0 ? ` +${extraCount} more` : ''})` : ''}. Continue?`;
+        if (!window.confirm(message)) {
+          updatePromptDrawerSubmitState(values);
+          return;
+        }
+      }
+
+      showThinkingIndicator(propertyAction === 'remove' ? 'Removing component property...' : 'Editing component property...');
+      setSendButtonMode(true);
+
+      try {
+        let commands = [];
+        if (propertyAction === 'remove') {
+          commands = targetEntries
+            .filter((entry) => selectedOption.propertyType !== 'VARIANT')
+            .map((entry) => ({
+              action: 'editComponentProperty',
+              nodeId: entry.targetId,
+              propertyName: entry.propertyKey,
+              propertyAction: 'remove'
+            }));
+        } else {
+          const newName = String(values.newPropertyName || '').trim();
+          const defaultValueByType = (() => {
+            if (selectedOption.propertyType === 'BOOLEAN') return values.newBooleanDefault === true;
+            if (selectedOption.propertyType === 'TEXT') return String(values.newTextDefault ?? '');
+            if (selectedOption.propertyType === 'INSTANCE_SWAP') return String(values.newInstanceDefault || '');
+            return undefined;
+          })();
+
+          commands = targetEntries.map((entry) => {
+            const command = {
+              action: 'editComponentProperty',
+              nodeId: entry.targetId,
+              propertyName: entry.propertyKey,
+              newName,
+              propertyAction: 'edit'
+            };
+            if (selectedOption.propertyType !== 'VARIANT' && defaultValueByType !== undefined) {
+              command.defaultValue = defaultValueByType;
+            }
+            return command;
+          });
+        }
+
+        if (commands.length === 0) {
+          showToast('No supported matching properties to update.', 'error');
+          return;
+        }
+
+        const execResult = await executeCommands(commands);
+        const commandResults = Array.isArray(execResult?.commands) ? execResult.commands : [];
+        const successCount = commandResults.filter((result) => result?.action === 'editComponentProperty' && result.status === 'success').length;
+        const failedCount = commandResults.filter((result) => result?.action === 'editComponentProperty' && result.status === 'failed').length;
+
+        if (successCount === 0 && failedCount > 0) {
+          const errorMessage = execResult?.error?.message || 'Failed to update property.';
+          showToast(errorMessage, 'error');
+          return;
+        }
+
+        const verb = propertyAction === 'remove' ? 'Removed' : 'Updated';
+        const summaryParts = [`${verb} on ${successCount} target${successCount === 1 ? '' : 's'}`];
+        const skippedByNoMatch = Math.max(0, (Number(selectionContext.validTargetCount) || 0) - targetEntries.length);
+        if (skippedByNoMatch > 0) {
+          summaryParts.push(`${skippedByNoMatch} without match`);
+        }
+        if (invalidItems.length > 0) {
+          summaryParts.push(`${invalidItems.length} skipped`);
+        }
+        if (failedCount > 0) {
+          summaryParts.push(`${failedCount} failed`);
+        }
+
+        showToast(summaryParts.join(' • '), failedCount > 0 ? 'warning' : 'success');
+        if (successCount > 0) {
+          closePromptDrawer();
+        }
+      } catch (error) {
+        console.error('Edit / remove property action failed:', error);
+        showToast(error.message || `Failed to run ${actionMeta?.name || 'Edit / remove property'}`, 'error');
+      } finally {
+        removeThinkingIndicator();
+        setSendButtonMode(false);
+        updatePromptDrawerSubmitState(values);
+      }
+    }
+
     async function runCreateButtonComponentSetAction(values, actionMeta) {
       const btnTypes = Array.isArray(values.btnType) ? values.btnType : [values.btnType || 'solid'];
       const btnStyles = Array.isArray(values.buttonStyle) ? values.buttonStyle : [values.buttonStyle || 'primary'];
@@ -30246,6 +30668,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
           break;
         case 'addProperty':
           await runAddPropertyAction(mergedValues, actionMeta);
+          break;
+        case 'editRemoveProperty':
+          await runEditRemovePropertyAction(mergedValues, actionMeta);
           break;
         case 'removeUnusedProperties':
           await runRemoveUnusedPropertiesAction(mergedValues, actionMeta);
@@ -34563,9 +34988,10 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           const keepDrawerOpenForImageTo4PointVector = action.directAction === 'imageTo4PointVector';
           const keepDrawerOpenForRealtimeAction = isRealtimePromptAction(action);
           const keepDrawerOpenForAddProperty = action.directAction === 'addProperty';
+          const keepDrawerOpenForEditRemoveProperty = action.directAction === 'editRemoveProperty';
           const keepDrawerOpenForFontMapping = action.directAction === 'fontMapping';
           const keepDrawerOpenForFillFromOnlineImage = action.directAction === 'fillFromOnlineImage';
-          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForImageTo4PointVector && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForFontMapping && !keepDrawerOpenForFillFromOnlineImage) {
+          if (action.directAction !== 'browseIconSet' && !keepDrawerOpenForCreateIcon && !keepDrawerOpenForImageToAscii && !keepDrawerOpenForImageTo4PointVector && !keepDrawerOpenForRealtimeAction && !keepDrawerOpenForAddProperty && !keepDrawerOpenForEditRemoveProperty && !keepDrawerOpenForFontMapping && !keepDrawerOpenForFillFromOnlineImage) {
             closePromptDrawer();
           }
           closeCommandsDrawer();
@@ -34583,7 +35009,7 @@ You MUST output exactly 3 DIMENSION blocks, each with exactly 3 options starting
           }
 
           // Re-enable for the browse case
-          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForImageTo4PointVector || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForFontMapping || keepDrawerOpenForFillFromOnlineImage) {
+          if (action.directAction === 'browseIconSet' || keepDrawerOpenForCreateIcon || keepDrawerOpenForImageToAscii || keepDrawerOpenForImageTo4PointVector || keepDrawerOpenForRealtimeAction || keepDrawerOpenForAddProperty || keepDrawerOpenForEditRemoveProperty || keepDrawerOpenForFontMapping || keepDrawerOpenForFillFromOnlineImage) {
             isSubmittingPrompt = false;
             promptDrawerSubmit.disabled = false;
             if (action.directAction === 'fillFromOnlineImage' && typeof updateStockPhotoPreviewSubmitLabel === 'function') {

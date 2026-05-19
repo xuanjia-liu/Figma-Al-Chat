@@ -48,6 +48,7 @@ export const DEFAULT_ANTHROPIC_MODELS = [
 
 export const NON_AI_DIRECT_ACTIONS = new Set([
   'addProperty',
+  'editRemoveProperty',
   'swapColors',
   'removeAllEffects',
   'simulateOklchGradient',

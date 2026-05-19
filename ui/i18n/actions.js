@@ -2672,6 +2672,22 @@ const exactTranslations = {
       '選択範囲のコンポーネントへプロパティを一括追加',
     'Adds a Boolean, Text, or Instance Swap property to every valid component or component set in the current selection. Mixed selections are allowed and unsupported items will be warned about before running.':
       '現在の選択内にある有効なコンポーネント/コンポーネントセットすべてに、Boolean・Text・Instance Swap プロパティを追加します。混在選択にも対応し、非対応項目は実行前に警告されます。',
+    'Edit / remove property': 'プロパティを編集 / 削除',
+    'Edit or remove component properties from the selection':
+      '選択範囲のコンポーネントプロパティを編集または削除',
+    'Lists component properties on every valid component target in the current selection, then renames, edits defaults, or removes the matching property where supported.':
+      '現在の選択内にある有効なコンポーネント対象のプロパティを一覧し、対応している場合は名前変更、デフォルト編集、削除を行います。',
+    'Action': 'アクション',
+    'Edit property': 'プロパティを編集',
+    'Remove property': 'プロパティを削除',
+    'Property': 'プロパティ',
+    'Choose a property from the resolved component targets.':
+      '解決されたコンポーネント対象からプロパティを選択してください。',
+    'New Property Name': '新しいプロパティ名',
+    'e.g., Show Icon': '例: Show Icon',
+    'New Default Value': '新しい初期値',
+    'New Default String': '新しいデフォルト文字列',
+    'New Default Instance': '新しいデフォルトインスタンス',
     'Property Type': 'プロパティ種類',
     'Boolean Property': 'Boolean プロパティ',
     'Text Property': 'Text プロパティ',
@@ -3364,6 +3380,20 @@ const exactTranslations = {
     'Batch add component properties to the selection': '为所选内容批量添加组件属性',
     'Adds a Boolean, Text, or Instance Swap property to every valid component or component set in the current selection. Mixed selections are allowed and unsupported items will be warned about before running.':
       '为当前选择中的每个有效组件或组件集添加布尔、文本或实例替换属性。允许混合选择，运行前会提示不支持的项。',
+    'Edit / remove property': '编辑 / 删除属性',
+    'Edit or remove component properties from the selection': '编辑或删除所选内容的组件属性',
+    'Lists component properties on every valid component target in the current selection, then renames, edits defaults, or removes the matching property where supported.':
+      '列出当前选择中每个有效组件目标的组件属性，并在支持时重命名、编辑默认值或删除匹配属性。',
+    'Action': '操作',
+    'Edit property': '编辑属性',
+    'Remove property': '删除属性',
+    'Property': '属性',
+    'Choose a property from the resolved component targets.': '从解析出的组件目标中选择一个属性。',
+    'New Property Name': '新属性名称',
+    'e.g., Show Icon': '例如：Show Icon',
+    'New Default Value': '新默认值',
+    'New Default String': '新默认文本',
+    'New Default Instance': '新默认实例',
     'Property Type': '属性类型',
     'Boolean Property': '布尔属性',
     'Text Property': '文本属性',
