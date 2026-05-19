@@ -1581,14 +1581,8 @@ async function resolveComponentPropertyTarget(node: SceneNode | null): Promise<C
     }
     return node;
   }
-  if (node.type === 'INSTANCE') {
-    const main = await resolveInstanceMainComponent(node);
-    if (main) {
-      return main.parent && main.parent.type === 'COMPONENT_SET'
-        ? main.parent as ComponentSetNode
-        : main;
-    }
-  }
+  // A selected instance should expose a property on the component that contains
+  // the instance, not on the selected instance's own main component.
   let parent = node.parent as BaseNode | null;
   while (parent) {
     if (parent.type === 'COMPONENT_SET') return parent as ComponentSetNode;
