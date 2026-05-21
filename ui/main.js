@@ -29341,7 +29341,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
       }
       const delimiter = splitMode === 'custom'
         ? String(values.customPattern ?? '')
-        : '/\\r?\\n/g';
+        : '/\\r\\n|\\r|\\n|\\u2028|\\u2029/g';
       const wrapInAutoLayout = splitMode === 'autolayout';
       const removeLeadingSpace = values.removeLeadingSpace === true;
       const keepInputCharacter = splitMode === 'custom' && values.keepInputCharacter === true;
@@ -29354,6 +29354,7 @@ Return as JSON with colors array containing objects with hierarchical names. Use
         trimLeadingSpaces: removeLeadingSpace,
         direction: 'VERTICAL',
         spacing: 0,
+        ...(splitMode !== 'custom' ? { splitVisualLines: true } : {}),
         ...(wrapInAutoLayout ? { wrapInAutoLayout: true } : {}),
       }));
       try {
@@ -29366,7 +29367,8 @@ Return as JSON with colors array containing objects with hierarchical names. Use
             failed > 0 ? 'warning' : 'success'
           );
         } else if (failed > 0) {
-          showToast(`Could not split ${failed} layer${failed === 1 ? '' : 's'}.`, 'error');
+          const errorMessage = execResult?.error?.message;
+          showToast(errorMessage || `Could not split ${failed} layer${failed === 1 ? '' : 's'}.`, 'error');
         }
       } catch (err) {
         console.error('Split text action failed', err);

@@ -2425,6 +2425,33 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function parseRegexLiteral(input: string): RegExp | null {
+  if (!input.startsWith('/')) return null;
+
+  let lastSlash = -1;
+  for (let i = input.length - 1; i > 0; i--) {
+    if (input[i] !== '/') continue;
+    let backslashCount = 0;
+    for (let j = i - 1; j >= 0 && input[j] === '\\'; j--) backslashCount++;
+    if (backslashCount % 2 === 0) {
+      lastSlash = i;
+      break;
+    }
+  }
+
+  if (lastSlash <= 0) return null;
+
+  const pattern = input.slice(1, lastSlash);
+  let flags = input.slice(lastSlash + 1);
+  if (!flags.includes('g')) flags += 'g';
+
+  try {
+    return new RegExp(pattern, flags);
+  } catch (_err) {
+    return null;
+  }
+}
+
 // Helper function to split text and track original indices
 function splitTextWithIndices(
   text: string,
@@ -2444,6 +2471,65 @@ function splitTextWithIndices(
         endIndex: text.length
       });
     }
+    return segments;
+  }
+
+  const delimiterRegex = parseRegexLiteral(delimiterText);
+  if (delimiterRegex) {
+    delimiterRegex.lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = delimiterRegex.exec(text)) !== null) {
+      const matchedText = match[0];
+      const matchStart = match.index;
+      const matchEnd = matchStart + matchedText.length;
+
+      if (matchedText.length === 0) {
+        delimiterRegex.lastIndex = matchEnd + 1;
+        continue;
+      }
+
+      if (matchStart > lastIndex) {
+        segments.push({
+          text: text.substring(lastIndex, matchStart),
+          startIndex: lastIndex,
+          endIndex: matchStart
+        });
+      }
+
+      if (keepDelimiter) {
+        const previousSegment = segments[segments.length - 1];
+        if (attachDelimiterToPrevious && previousSegment) {
+          previousSegment.text += matchedText;
+          previousSegment.endIndex = matchEnd;
+        } else {
+          segments.push({
+            text: matchedText,
+            startIndex: matchStart,
+            endIndex: matchEnd
+          });
+        }
+      }
+
+      lastIndex = matchEnd;
+    }
+
+    if (lastIndex < text.length) {
+      segments.push({
+        text: text.substring(lastIndex),
+        startIndex: lastIndex,
+        endIndex: text.length
+      });
+    }
+
+    if (segments.length === 0 && text.length > 0) {
+      segments.push({
+        text,
+        startIndex: 0,
+        endIndex: text.length
+      });
+    }
+
     return segments;
   }
 
@@ -2607,6 +2693,101 @@ function splitTextLeadingGapPx(textNode: TextNode): number {
     else if (lineHeight.unit === 'PERCENT') lh = fs * (lineHeight.value / 100);
   }
   return Math.max(0, Math.round((lh - fs) * 100) / 100);
+}
+
+function lineBreakLengthAt(text: string, index: number): number {
+  const ch = text[index];
+  if (ch === '\r') return text[index + 1] === '\n' ? 2 : 1;
+  if (ch === '\n' || ch === '\u2028' || ch === '\u2029') return 1;
+  return 0;
+}
+
+async function splitTextIntoMeasuredVisualLines(textNode: TextNode): Promise<Array<{ text: string; startIndex: number; endIndex: number }>> {
+  const originalText = textNode.characters;
+  if (!originalText) return [];
+
+  const autoResizeMode = textNode.textAutoResize || 'NONE';
+  const maxLineWidth = (autoResizeMode === 'HEIGHT' || autoResizeMode === 'NONE') ? textNode.width : Infinity;
+  if (!Number.isFinite(maxLineWidth) || maxLineWidth <= 0) return [];
+
+  let baseFontName: FontName = { family: 'Inter', style: 'Regular' };
+  const nodeFontName = textNode.fontName;
+  if (typeof nodeFontName !== 'symbol') {
+    baseFontName = nodeFontName as FontName;
+  } else if (originalText.length > 0) {
+    try {
+      const firstFontName = textNode.getRangeFontName(0, 1);
+      if (typeof firstFontName !== 'symbol') baseFontName = firstFontName as FontName;
+    } catch (_err) {
+      // Fall back to Inter when a mixed-font range cannot be inspected.
+    }
+  }
+
+  const baseFontSize = typeof textNode.fontSize === 'number' ? textNode.fontSize : 16;
+  baseFontName = await smartLoadFont(baseFontName);
+  const measurementNode = figma.createText();
+  measurementNode.visible = false;
+  measurementNode.textAutoResize = 'WIDTH_AND_HEIGHT';
+  measurementNode.fontName = baseFontName;
+  measurementNode.fontSize = baseFontSize;
+  if (typeof textNode.letterSpacing !== 'symbol') {
+    measurementNode.letterSpacing = textNode.letterSpacing as LetterSpacing;
+  }
+  if (typeof textNode.lineHeight !== 'symbol') {
+    measurementNode.lineHeight = textNode.lineHeight as LineHeight;
+  }
+  figma.currentPage.appendChild(measurementNode);
+
+  const segments: Array<{ text: string; startIndex: number; endIndex: number }> = [];
+  const pushSegment = (start: number, end: number) => {
+    if (end <= start) return;
+    const value = originalText.substring(start, end);
+    if (value.length === 0) return;
+    segments.push({ text: value, startIndex: start, endIndex: end });
+  };
+
+  const measureWidth = (value: string): number => {
+    measurementNode.characters = value || ' ';
+    return value ? measurementNode.width : 0;
+  };
+
+  try {
+    let lineStart = 0;
+    let lineText = '';
+    const wrapTolerance = 0.5;
+
+    for (let i = 0; i < originalText.length;) {
+      const breakLength = lineBreakLengthAt(originalText, i);
+      if (breakLength > 0) {
+        pushSegment(lineStart, i);
+        i += breakLength;
+        lineStart = i;
+        lineText = '';
+        continue;
+      }
+
+      const codePoint = originalText.codePointAt(i);
+      const ch = codePoint === undefined ? originalText[i] : String.fromCodePoint(codePoint);
+      const nextIndex = i + ch.length;
+      const prospectiveText = lineText + ch;
+
+      if (lineText.length > 0 && measureWidth(prospectiveText) > maxLineWidth + wrapTolerance) {
+        pushSegment(lineStart, i);
+        lineStart = i;
+        lineText = ch;
+      } else {
+        lineText = prospectiveText;
+      }
+
+      i = nextIndex;
+    }
+
+    pushSegment(lineStart, originalText.length);
+  } finally {
+    if (!measurementNode.removed) measurementNode.remove();
+  }
+
+  return segments.length > 1 ? segments : [];
 }
 
 // Helper function to filter and shift style segments for a text range
@@ -27382,6 +27563,7 @@ figma.ui.onmessage = async (msg: {
                   const direction = cmd.direction ?? 'VERTICAL';
                   const spacing = cmd.spacing ?? 0;
                   const wrapInAutoLayout = (cmd as { wrapInAutoLayout?: boolean }).wrapInAutoLayout === true;
+                  const splitVisualLines = (cmd as { splitVisualLines?: boolean }).splitVisualLines === true;
 
                   // Load all fonts first
                   await loadAllFontsForTextNode(textNode);
@@ -27391,16 +27573,28 @@ figma.ui.onmessage = async (msg: {
                   const originalSegments = getTextStyleSegments(textNode);
 
                   // Split text and track indices
-                  const textSegments = splitTextWithIndices(
+                  let textSegments = splitTextWithIndices(
                     originalText,
                     delimiter,
                     keepDelimiter,
                     attachDelimiterToPrevious
                   );
 
+                  if (textSegments.length <= 1 && splitVisualLines) {
+                    textSegments = await splitTextIntoMeasuredVisualLines(textNode);
+                  }
+
                   if (textSegments.length <= 1) {
-                    // No splits occurred
-                    success++;
+                    failed++;
+                    if (!firstError) {
+                      firstError = {
+                        action: cmd.action,
+                        nodeId: node.id,
+                        message: splitVisualLines
+                          ? 'No line break or wrapped visual line found in the selected text.'
+                          : 'No line break or delimiter found in the selected text.'
+                      };
+                    }
                     break;
                   }
 
