@@ -7061,7 +7061,15 @@
       color: var(--text-primary);
     }
 
+    .code-editor-lang-anchor {
+      position: relative;
+      display: inline-flex;
+    }
+
     .code-editor-lang-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-family: 'Space Mono', monospace;
       font-size: var(--text-xs);
       font-weight: 400;
@@ -7070,6 +7078,64 @@
       padding: 2px 8px;
       border-radius: var(--radius-sm);
       text-transform: lowercase;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .code-editor-lang-badge:hover {
+      color: var(--text-primary);
+      border-color: var(--border);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .code-editor-lang-chevron {
+      opacity: 0.7;
+      transition: transform 0.15s ease;
+    }
+
+    .code-editor-lang-anchor.open .code-editor-lang-chevron {
+      transform: rotate(180deg);
+    }
+
+    .code-editor-lang-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      min-width: 88px;
+      padding: 6px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      z-index: 15;
+      animation: fadeIn 0.15s ease;
+    }
+
+    .code-editor-lang-anchor.open .code-editor-lang-menu {
+      display: flex;
+    }
+
+    .code-editor-lang-menu-item {
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 6px 8px;
+      font-size: var(--text-xs);
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .code-editor-lang-menu-item:hover,
+    .code-editor-lang-menu-item.active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--accent);
     }
 
     .code-editor-modal-close {
@@ -7099,7 +7165,8 @@
       gap: 4px;
     }
 
-    .code-editor-modal-copy {
+    .code-editor-modal-copy,
+    .code-editor-modal-reload {
       display: flex;
       align-items: center;
       gap: 4px;
@@ -7114,9 +7181,30 @@
       transition: all 0.15s ease;
     }
 
-    .code-editor-modal-copy:hover {
+    .code-editor-modal-copy:hover,
+    .code-editor-modal-reload:hover {
       color: var(--text-primary);
       background: rgba(255, 255, 255, 0.08);
+    }
+
+    .code-editor-modal-reload.is-primary {
+      background: var(--accent-gradient);
+      border-color: transparent;
+      color: var(--text-on-accent);
+    }
+
+    .code-editor-modal-reload.is-primary:hover {
+      color: var(--text-on-accent);
+      box-shadow: 0 2px 10px var(--accent-glow);
+    }
+
+    .code-editor-modal-reload.loading {
+      opacity: 0.65;
+      pointer-events: none;
+    }
+
+    .code-editor-modal-reload.loading svg {
+      animation: spin 0.8s linear infinite;
     }
 
     .code-editor-modal-copy.copied {
@@ -7754,7 +7842,11 @@
     body.light-mode .code-block-copy-btn:hover,
     body.light-mode .code-block-edit-btn:hover,
     body.light-mode .code-editor-modal-copy:hover,
+    body.light-mode .code-editor-modal-reload:hover,
     body.light-mode .code-editor-modal-close:hover,
+    body.light-mode .code-editor-lang-badge:hover,
+    body.light-mode .code-editor-lang-menu-item:hover,
+    body.light-mode .code-editor-lang-menu-item.active,
     body.light-mode .code-sel-btn:hover {
       background: rgba(24, 24, 27, 0.06);
     }
@@ -19883,9 +19975,29 @@
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
           <span data-i18n-action="aux.code.title">Edit Code</span>
-          <span class="code-editor-lang-badge" id="codeEditorLangBadge">text</span>
+          <div class="code-editor-lang-anchor" id="codeEditorLangAnchor">
+            <button class="code-editor-lang-badge" id="codeEditorLangBadge" type="button" aria-haspopup="menu" aria-expanded="false">
+              <span id="codeEditorLangLabel">text</span>
+              <svg class="code-editor-lang-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            <div class="code-editor-lang-menu" id="codeEditorLangMenu" role="menu" aria-label="Code language">
+              <button class="code-editor-lang-menu-item" type="button" data-code-editor-lang="css" role="menuitem">CSS</button>
+              <button class="code-editor-lang-menu-item" type="button" data-code-editor-lang="svg" role="menuitem">SVG</button>
+            </div>
+          </div>
         </div>
         <div class="code-editor-modal-actions">
+          <button class="code-editor-modal-reload" id="reloadCodeEditorBtn" title="Reload from current selection" data-i18n-action-title="aux.code.reloadTitle">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+              <path d="M21 12a9 9 0 0 1-15.31 6.36" />
+              <path d="M3 12A9 9 0 0 1 18.31 5.64" />
+              <path d="M18 2v4h-4" />
+              <path d="M6 22v-4h4" />
+            </svg>
+            <span data-i18n-action="aux.code.reload">Reload</span>
+          </button>
           <button class="code-editor-modal-copy" id="copyCodeEditorBtn" title="Copy code" data-i18n-action-title="aux.code.copyTitle">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
               <rect x="9" y="9" width="13" height="13" rx="2" />
@@ -20212,7 +20324,10 @@
         "googleFontPreview",
         "splitTextLocal",
         "quickDetach",
-        "colorContrastChecker"
+        "colorContrastChecker",
+        "exportMenu",
+        "openCustomQuickActionModal",
+        "uploadImageFromDevice"
       ]);
       NON_AI_LOCAL_TASKS = /* @__PURE__ */ new Set([
         "Smart rename",
@@ -35904,6 +36019,10 @@
           "aux.code.copyTitle": "Copy code",
           "aux.code.copy": "Copy",
           "aux.code.copied": "Copied!",
+          "aux.code.reloadTitle": "Reload from current selection",
+          "aux.code.reload": "Reload",
+          "aux.code.reloading": "Reloading...",
+          "aux.code.reloaded": "Loaded current selection",
           "aux.code.fixTitle": "AI Fix selected code",
           "aux.code.fix": "Fix",
           "aux.code.fixing": "Fixing...",
@@ -36704,6 +36823,10 @@
           "aux.code.copyTitle": "コードをコピー",
           "aux.code.copy": "コピー",
           "aux.code.copied": "コピーしました",
+          "aux.code.reloadTitle": "現在の選択から再読み込み",
+          "aux.code.reload": "再読み込み",
+          "aux.code.reloading": "読み込み中...",
+          "aux.code.reloaded": "現在の選択を読み込みました",
           "aux.code.fixTitle": "選択したコードを AI で修正",
           "aux.code.fix": "修正",
           "aux.code.fixing": "修正中...",
@@ -37504,6 +37627,10 @@
           "aux.code.copyTitle": "复制代码",
           "aux.code.copy": "复制",
           "aux.code.copied": "已复制",
+          "aux.code.reloadTitle": "从当前选择重新加载",
+          "aux.code.reload": "重新加载",
+          "aux.code.reloading": "加载中...",
+          "aux.code.reloaded": "已加载当前选择",
           "aux.code.fixTitle": "用 AI 修复所选代码",
           "aux.code.fix": "修复",
           "aux.code.fixing": "修复中...",
@@ -64258,7 +64385,10 @@
           merged[category].unshift(mapCustomQuickActionToTask(action));
         });
         agentTasks = merged;
-        allQuickActions = buildQuickActionsList(agentTasks);
+        allQuickActions = [
+          ...buildQuickActionsList(agentTasks),
+          ...buildExportMenuSlashActions()
+        ];
         pruneQuickActionUsageState();
         if (refreshUI) {
           if (commandsDrawer == null ? void 0 : commandsDrawer.classList.contains("show")) {
@@ -64994,7 +65124,87 @@
       var quickActionUsage = sanitizeQuickActionUsageMap(loadQuickActionUsageFromLocal());
       var lastUsedQuickActions = loadLastUsedQuickActionsFromLocal();
       var quickActionUsageLoadedFromPlugin = false;
-      var allQuickActions = buildQuickActionsList(agentTasks);
+      function createExportMenuSlashAction({
+        name: name3,
+        desc,
+        directAction,
+        icon,
+        keywords: keywords2,
+        presetValues = {}
+      }) {
+        return {
+          task: {
+            name: name3,
+            desc,
+            directAction,
+            keepCurrentMode: true,
+            searchKeywords: keywords2,
+            presetValues
+          },
+          category: "Export",
+          name: name3,
+          desc,
+          help: "",
+          icon,
+          order: 1e4 + Object.keys(presetValues).length
+        };
+      }
+      function buildExportMenuSlashActions() {
+        return [
+          createExportMenuSlashAction({
+            name: "Custom Action",
+            desc: "Create a custom quick action",
+            directAction: "openCustomQuickActionModal",
+            keywords: "export export-menu exportmenu menu plus custom action quick action slash",
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
+          }),
+          createExportMenuSlashAction({
+            name: "Copy CSS",
+            desc: "Export selected layers as CSS",
+            directAction: "exportMenu",
+            presetValues: { exportType: "css" },
+            keywords: "export export-menu exportmenu menu copy css code style selection slash",
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>'
+          }),
+          createExportMenuSlashAction({
+            name: "Copy SVG",
+            desc: "Export selected layers as SVG",
+            directAction: "exportMenu",
+            presetValues: { exportType: "svg" },
+            keywords: "export export-menu exportmenu menu copy svg vector selection slash",
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'
+          }),
+          createExportMenuSlashAction({
+            name: "Copy Text",
+            desc: "Export selected text",
+            directAction: "exportMenu",
+            presetValues: { exportType: "text" },
+            keywords: "export export-menu exportmenu menu copy text selection slash",
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>'
+          }),
+          createExportMenuSlashAction({
+            name: "Copy Image",
+            desc: "Export selected layers as an image",
+            directAction: "exportMenu",
+            presetValues: { exportType: "png" },
+            keywords: "export export-menu exportmenu menu copy image png selection slash",
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'
+          }),
+          createExportMenuSlashAction({
+            name: "Upload Image",
+            desc: "Upload images into the chat",
+            directAction: "uploadImageFromDevice",
+            keywords: "export export-menu exportmenu menu upload image attach file slash",
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V8"/><path d="m8 8 4-4 4 4"/><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>'
+          })
+        ].map((action, index) => __spreadProps(__spreadValues({}, action), {
+          order: 1e4 + index
+        }));
+      }
+      var allQuickActions = [
+        ...buildQuickActionsList(agentTasks),
+        ...buildExportMenuSlashActions()
+      ];
       function loadQuickActionUsageFromLocal() {
         try {
           const stored = localStorage.getItem(QUICK_ACTION_USAGE_KEY);
@@ -80523,6 +80733,15 @@
           case "colorContrastChecker":
             await runColorContrastCheckerAction(mergedValues, actionMeta);
             break;
+          case "exportMenu":
+            await runExportMenuSlashAction(mergedValues, actionMeta);
+            break;
+          case "openCustomQuickActionModal":
+            await runOpenCustomQuickActionModalAction(mergedValues, actionMeta);
+            break;
+          case "uploadImageFromDevice":
+            await runUploadImageFromDeviceAction(mergedValues, actionMeta);
+            break;
           default:
             showToast("Unknown action", "error");
         }
@@ -87982,8 +88201,11 @@
       }
       var _codeEditorTarget = null;
       var _codeEditorSourceCode = "";
+      var _codeEditorLang = "text";
       var _codeEditorSvgLayerNameHints = [];
       var _isApplyingCodeEditorProgrammatically = false;
+      var _pendingCodeEditorReload = null;
+      var _codeEditorReloadStale = false;
       var _codeEditorCssFilterQuery = "";
       var _codeEditorCssFilterOpen = false;
       var _codeEditorCssAvailableProperties = [];
@@ -88060,6 +88282,134 @@
           };
         }
         return null;
+      }
+      function normalizeCodeEditorLang(lang) {
+        const normalized = String(lang || "").trim().toLowerCase();
+        if (normalized === "css" || normalized === "svg") return normalized;
+        return normalized || "text";
+      }
+      function getCodeEditorLang() {
+        return normalizeCodeEditorLang(_codeEditorLang);
+      }
+      function updateCodeEditorLangUi() {
+        const lang = getCodeEditorLang();
+        const label = document.getElementById("codeEditorLangLabel");
+        const badge = document.getElementById("codeEditorLangBadge");
+        if (label) label.textContent = lang;
+        if (badge) badge.dataset.lang = lang;
+        document.querySelectorAll("#codeEditorLangMenu [data-code-editor-lang]").forEach((item) => {
+          item.classList.toggle("active", item.dataset.codeEditorLang === lang);
+        });
+      }
+      function setCodeEditorLang(lang, { refresh = true, resetFilter = true } = {}) {
+        const previousLang = getCodeEditorLang();
+        _codeEditorLang = normalizeCodeEditorLang(lang);
+        if (resetFilter && !isCssCodeLanguage(_codeEditorLang)) {
+          resetCodeEditorCssFilterState();
+        }
+        updateCodeEditorLangUi();
+        if (_codeEditorTarget && _codeEditorLang !== previousLang) {
+          setCodeEditorReloadStale(true);
+        }
+        if (refresh) {
+          refreshCodeEditorFromSource({ preserveSelection: true });
+        } else {
+          updateCodeEditorOptionsUi();
+        }
+      }
+      function closeCodeEditorLangMenu() {
+        const anchor = document.getElementById("codeEditorLangAnchor");
+        const badge = document.getElementById("codeEditorLangBadge");
+        anchor == null ? void 0 : anchor.classList.remove("open");
+        badge == null ? void 0 : badge.setAttribute("aria-expanded", "false");
+      }
+      function setCodeEditorReloadLoading(isLoading) {
+        const btn = document.getElementById("reloadCodeEditorBtn");
+        const label = btn == null ? void 0 : btn.querySelector("span");
+        if (!btn) return;
+        btn.classList.toggle("loading", isLoading);
+        btn.disabled = isLoading;
+        if (label) label.textContent = isLoading ? tu("aux.code.reloading") : tu("aux.code.reload");
+      }
+      function setCodeEditorReloadStale(isStale) {
+        var _a2;
+        _codeEditorReloadStale = Boolean(isStale);
+        (_a2 = document.getElementById("reloadCodeEditorBtn")) == null ? void 0 : _a2.classList.toggle("is-primary", _codeEditorReloadStale);
+      }
+      function markCodeEditorReloadStaleForSelectionChange() {
+        const modal = document.getElementById("codeEditorModal");
+        if (_codeEditorTarget && (modal == null ? void 0 : modal.classList.contains("show"))) {
+          setCodeEditorReloadStale(true);
+        }
+      }
+      function requestCurrentSelectionCodeForEditor(lang) {
+        const normalizedLang = normalizeCodeEditorLang(lang);
+        const exportType = normalizedLang === "svg" ? "SVG" : "CSS";
+        const messageType = normalizedLang === "svg" ? "svg-result" : "css-result";
+        if (_pendingCodeEditorReload) {
+          clearTimeout(_pendingCodeEditorReload.timeoutId);
+          _pendingCodeEditorReload.reject(new Error("Reload replaced by a newer request."));
+        }
+        return new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            if ((_pendingCodeEditorReload == null ? void 0 : _pendingCodeEditorReload.messageType) === messageType) {
+              _pendingCodeEditorReload = null;
+            }
+            reject(new Error("Timed out loading current selection."));
+          }, 15e3);
+          _pendingCodeEditorReload = {
+            messageType,
+            exportType,
+            timeoutId,
+            resolve,
+            reject
+          };
+          parent.postMessage({
+            pluginMessage: {
+              type: normalizedLang === "svg" ? "get-svg" : "get-css",
+              cssFormat
+            }
+          }, "*");
+        });
+      }
+      function settlePendingCodeEditorReload(msg) {
+        if (!_pendingCodeEditorReload || msg.type !== _pendingCodeEditorReload.messageType) {
+          return false;
+        }
+        const pending = _pendingCodeEditorReload;
+        clearTimeout(pending.timeoutId);
+        _pendingCodeEditorReload = null;
+        pending.resolve({ exportType: pending.exportType, data: msg.data });
+        return true;
+      }
+      async function reloadCodeEditorFromCurrentSelection() {
+        if (!_codeEditorTarget) return;
+        const lang = getCodeEditorLang() === "svg" ? "svg" : "css";
+        setCodeEditorLang(lang, { refresh: false });
+        setCodeEditorReloadLoading(true);
+        try {
+          const result = await requestCurrentSelectionCodeForEditor(lang);
+          let nextCode = "";
+          if (result.exportType === "SVG") {
+            const normalized = normalizeSvgExportPayload(result.data);
+            nextCode = normalized.content;
+            _codeEditorSvgLayerNameHints = normalized.svgLayerNameHints;
+          } else {
+            nextCode = String(result.data || "");
+            _codeEditorSvgLayerNameHints = [];
+          }
+          _codeEditorSourceCode = nextCode;
+          resetCodeEditorCssFilterState();
+          resetCodeEditorHistory();
+          refreshCodeEditorFromSource();
+          codeEditorPushState(_codeEditorSourceCode);
+          setCodeEditorReloadStale(false);
+          showToast(tu("aux.code.reloaded"), "success");
+        } catch (error2) {
+          showToast((error2 == null ? void 0 : error2.message) || "Failed to load current selection", "error");
+        } finally {
+          setCodeEditorReloadLoading(false);
+        }
       }
       function isSvgCode(code2, lang) {
         const normalizedLang = String(lang || "").toLowerCase();
@@ -88620,8 +88970,7 @@
         _isApplyingCodeEditorProgrammatically = false;
       }
       function refreshCodeEditorFromSource({ pushHistory = false, preserveSelection = false } = {}) {
-        const details = getCodeEditorTargetDetails(_codeEditorTarget);
-        const lang = details ? details.lang : "text";
+        const lang = getCodeEditorLang();
         _codeEditorCssAvailableProperties = isCssCodeLanguage(lang) ? getCssFilterProperties(_codeEditorSourceCode) : [];
         if (!isCssCodeLanguage(lang)) {
           _codeEditorCssFilterQuery = "";
@@ -88648,10 +88997,7 @@
         closeCodeEditorCssFilterPopover();
       }
       function updateCodeEditorOptionsUi() {
-        const details = getCodeEditorTargetDetails(_codeEditorTarget);
-        const lang = details ? details.lang : "text";
-        const langBadge = document.getElementById("codeEditorLangBadge");
-        const normalizedLang = String((langBadge == null ? void 0 : langBadge.textContent) || lang || "").trim().toLowerCase();
+        const normalizedLang = getCodeEditorLang();
         const isSvg = normalizedLang === "svg";
         const isCss = normalizedLang === "css";
         Object.entries(DEFAULT_CODE_EDITOR_OPTIONS).forEach(([key]) => {
@@ -88666,14 +89012,15 @@
       }
       function openCodeEditor(target) {
         const modal = document.getElementById("codeEditorModal");
-        const langBadge = document.getElementById("codeEditorLangBadge");
         const details = getCodeEditorTargetDetails(target);
         if (!details) return;
         _codeEditorTarget = target;
         _codeEditorSourceCode = details.code;
         _codeEditorSvgLayerNameHints = Array.isArray(details.svgLayerNameHints) ? [...details.svgLayerNameHints] : [];
+        _codeEditorLang = normalizeCodeEditorLang(details.lang);
         resetCodeEditorCssFilterState();
-        langBadge.textContent = details.lang;
+        setCodeEditorReloadStale(false);
+        updateCodeEditorLangUi();
         resetCodeEditorHistory();
         refreshCodeEditorFromSource();
         codeEditorPushState(_codeEditorSourceCode);
@@ -88695,9 +89042,18 @@
         (_b = document.getElementById("aiAssistantPopup")) == null ? void 0 : _b.classList.remove("visible");
         (_c = document.getElementById("codeEditorAIPopup")) == null ? void 0 : _c.classList.remove("visible");
         closeCodeEditorOptionsMenu();
+        closeCodeEditorLangMenu();
+        if (_pendingCodeEditorReload) {
+          clearTimeout(_pendingCodeEditorReload.timeoutId);
+          _pendingCodeEditorReload = null;
+        }
+        setCodeEditorReloadLoading(false);
+        setCodeEditorReloadStale(false);
         _codeEditorTarget = null;
         _codeEditorSourceCode = "";
+        _codeEditorLang = "text";
         _codeEditorSvgLayerNameHints = [];
+        updateCodeEditorLangUi();
         resetCodeEditorCssFilterState();
         closeCodeEditorFilterTooltip();
         updateCodeEditorFilteredStateUi("text");
@@ -88707,15 +89063,16 @@
         const textarea = document.getElementById("codeEditorTextarea");
         const details = getCodeEditorTargetDetails(_codeEditorTarget);
         if (!details) return;
-        if (isCssCodeLanguage(details.lang) && isCodeEditorCssFilterActive()) {
+        if (isCssCodeLanguage(getCodeEditorLang()) && isCodeEditorCssFilterActive()) {
           showToast("Clear CSS filters before saving changes.", "warning");
           return;
         }
         const newCode = textarea.value;
-        const lang = details.lang;
+        const lang = getCodeEditorLang();
         const escapeHtml3 = (str) => str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         const escaped = escapeHtml3(newCode);
         if (details.type === "message-code-block") {
+          details.codeEl.className = "language-".concat(lang);
           details.codeEl.innerHTML = lang && lang !== "text" ? highlightCode(escaped, lang) : escaped;
           const messageDiv = details.container.closest(".message");
           if (messageDiv && messageDiv.dataset.content) {
@@ -88727,7 +89084,7 @@
               let matchIdx = 0;
               const updatedContent = oldContent.replace(codeBlockRegex, (match, matchLang) => {
                 if (matchIdx++ === targetIdx) {
-                  return "```" + (matchLang || "") + "\n" + newCode + "\n```";
+                  return "```" + (lang || matchLang || "") + "\n" + newCode + "\n```";
                 }
                 return match;
               });
@@ -88736,6 +89093,10 @@
           }
         } else if (details.type === "staged-attachment") {
           details.attachment.content = newCode;
+          details.attachment.lang = lang;
+          details.attachment.exportType = lang === "svg" ? "SVG" : lang === "css" ? "CSS" : "TEXT";
+          details.attachment.name = lang === "svg" ? "SVG export" : lang === "css" ? "CSS export" : "Text export";
+          details.attachment.svgLayerNameHints = lang === "svg" ? [..._codeEditorSvgLayerNameHints] : [];
           renderStagedAttachments();
         }
         showToast(tu("aux.code.updated"), "success");
@@ -88744,6 +89105,25 @@
       document.getElementById("closeCodeEditorBtn").addEventListener("click", closeCodeEditor);
       document.getElementById("codeEditorCancelBtn").addEventListener("click", closeCodeEditor);
       document.getElementById("codeEditorSaveBtn").addEventListener("click", saveCodeEditor);
+      document.getElementById("codeEditorLangBadge").addEventListener("click", (event) => {
+        event.stopPropagation();
+        const anchor = document.getElementById("codeEditorLangAnchor");
+        const badge = document.getElementById("codeEditorLangBadge");
+        const nextState = !(anchor == null ? void 0 : anchor.classList.contains("open"));
+        anchor == null ? void 0 : anchor.classList.toggle("open", nextState);
+        badge == null ? void 0 : badge.setAttribute("aria-expanded", nextState ? "true" : "false");
+        if (nextState) updateCodeEditorLangUi();
+      });
+      document.getElementById("codeEditorLangMenu").addEventListener("click", (event) => {
+        event.stopPropagation();
+        const item = event.target.closest("[data-code-editor-lang]");
+        if (!item) return;
+        setCodeEditorLang(item.dataset.codeEditorLang || "css");
+        closeCodeEditorLangMenu();
+      });
+      document.getElementById("reloadCodeEditorBtn").addEventListener("click", () => {
+        reloadCodeEditorFromCurrentSelection();
+      });
       document.getElementById("codeEditorOptionsBtn").addEventListener("click", (event) => {
         event.stopPropagation();
         const anchor = document.querySelector(".code-editor-options-anchor");
@@ -88868,9 +89248,7 @@
       document.getElementById("codeEditorTextarea").addEventListener("input", (e) => {
         if (_isApplyingCodeEditorProgrammatically) return;
         if (!_codeEditorTarget) return;
-        const details = getCodeEditorTargetDetails(_codeEditorTarget);
-        const lang = details ? details.lang : "text";
-        syncCodeEditorHighlight(e.target.value, lang);
+        syncCodeEditorHighlight(e.target.value, getCodeEditorLang());
       });
       document.getElementById("codeEditorTextarea").addEventListener("scroll", (e) => {
         const highlight = document.querySelector(".code-editor-highlight");
@@ -88880,6 +89258,9 @@
         }
       });
       document.getElementById("codeEditorModal").addEventListener("click", (e) => {
+        if (!e.target.closest("#codeEditorLangAnchor")) {
+          closeCodeEditorLangMenu();
+        }
         if (!e.target.closest(".code-editor-options-anchor")) {
           closeCodeEditorOptionsMenu();
         }
@@ -88905,11 +89286,6 @@
       var _codeEditorSelectedText = "";
       var _codeEditorSelStart = 0;
       var _codeEditorSelEnd = 0;
-      function getCodeEditorLang() {
-        if (!_codeEditorTarget) return "text";
-        const details = getCodeEditorTargetDetails(_codeEditorTarget);
-        return details ? details.lang : "text";
-      }
       function showSelectionToolbar() {
         const textarea = document.getElementById("codeEditorTextarea");
         const toolbar = document.getElementById("codeEditorSelectionToolbar");
@@ -91919,10 +92295,12 @@
         const noSelection = task.noSelection === true;
         const includeTokens = task.includeTokens === true;
         const icon = action.icon || defaultActionIcon;
-        if (task.askMode && currentMode !== "ask") {
-          setMode("ask");
-        } else if (!task.askMode && currentMode !== "agent") {
-          setMode("agent");
+        if (task.keepCurrentMode !== true) {
+          if (task.askMode && currentMode !== "ask") {
+            setMode("ask");
+          } else if (!task.askMode && currentMode !== "agent") {
+            setMode("agent");
+          }
         }
         if (task.fields && task.fields.length > 0 || task.name === "UI Section Outline" || task.directAction === "createIcon" || task.directAction === "browseIconSet" || task.directAction === "generatePalette" || task.directAction === "listAllComponents" || task.directAction === "browseStyles" || task.directAction === "googleFontPreview" || task.directAction === "hueShift" || task.directAction === "fontMapping") {
           let hydratedFields = task.fields || [];
@@ -91950,11 +92328,15 @@
           return;
         }
         if (task.directAction) {
-          setMode("agent");
+          if (task.keepCurrentMode !== true) {
+            setMode("agent");
+          }
           await runDirectAction(task.directAction, {}, __spreadProps(__spreadValues({}, task), { icon }));
           return;
         }
-        setMode("agent");
+        if (task.keepCurrentMode !== true) {
+          setMode("agent");
+        }
         const prompt = task.prompt || (typeof task.promptTemplate === "string" ? task.promptTemplate : "");
         const contextMode = task.requiredContext || ContextMode.SMART;
         await sendQuickActionMessage(prompt, noSelection, { name: task.name, icon }, includeTokens, contextMode);
@@ -92657,6 +93039,33 @@
         pendingAskBackContext = null;
         chatInput.dataset.askBackActive = "false";
       }
+      function closeExportMenu() {
+        plusBtn == null ? void 0 : plusBtn.classList.remove("active");
+        exportMenu == null ? void 0 : exportMenu.classList.remove("show");
+      }
+      function requestExportMenuItem(exportType, sourceItem = null) {
+        if (!exportType) return;
+        const item = sourceItem || (exportMenu == null ? void 0 : exportMenu.querySelector('[data-export="'.concat(exportType, '"]')));
+        item == null ? void 0 : item.classList.add("loading");
+        parent.postMessage({
+          pluginMessage: {
+            type: "get-".concat(exportType),
+            cssFormat
+          }
+        }, "*");
+        closeExportMenu();
+      }
+      async function runExportMenuSlashAction(values = {}) {
+        requestExportMenuItem(values.exportType || values.type);
+      }
+      async function runOpenCustomQuickActionModalAction() {
+        openCustomQuickActionModal();
+        closeExportMenu();
+      }
+      async function runUploadImageFromDeviceAction() {
+        uploadImageInput == null ? void 0 : uploadImageInput.click();
+        closeExportMenu();
+      }
       chatSendBtn.addEventListener("click", () => {
         if (isAIThinking) {
           if (currentAbortController) {
@@ -92705,7 +93114,7 @@
       });
       if (uploadImageBtn && uploadImageInput) {
         uploadImageBtn.addEventListener("click", () => {
-          uploadImageInput.click();
+          runUploadImageFromDeviceAction();
         });
         uploadImageInput.addEventListener("change", async (e) => {
           const files = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
@@ -92727,9 +93136,7 @@
       }
       if (addCustomQuickActionMenuBtn) {
         addCustomQuickActionMenuBtn.addEventListener("click", () => {
-          openCustomQuickActionModal();
-          plusBtn.classList.remove("active");
-          exportMenu.classList.remove("show");
+          runOpenCustomQuickActionModalAction();
         });
       }
       chatMessages.addEventListener("click", async (e) => {
@@ -92921,15 +93328,7 @@
       exportMenuItems.forEach((item) => {
         item.addEventListener("click", () => {
           const exportType = item.dataset.export;
-          item.classList.add("loading");
-          parent.postMessage({
-            pluginMessage: {
-              type: "get-".concat(exportType),
-              cssFormat
-            }
-          }, "*");
-          plusBtn.classList.remove("active");
-          exportMenu.classList.remove("show");
+          requestExportMenuItem(exportType, item);
         });
       });
       imagePreviewClose.addEventListener("click", closeImagePreview);
@@ -94303,9 +94702,11 @@
         exportMenuItems.forEach((item) => item.classList.remove("loading"));
         switch (msg.type) {
           case "css-result":
+            if (settlePendingCodeEditorReload(msg)) break;
             addExportToInput("CSS", msg.data);
             break;
           case "svg-result":
+            if (settlePendingCodeEditorReload(msg)) break;
             addExportToInput("SVG", msg.data);
             break;
           case "png-result":
@@ -94345,6 +94746,9 @@
           case "selection-changed":
           case "selection-info":
             handleSelectionChange(msg.data);
+            if (msg.type === "selection-changed") {
+              markCodeEditorReloadStaleForSelectionChange();
+            }
             requestSelectionDescendantsIfNeeded(false);
             if (currentCommentsScope === "selection") {
               const promptContainer = document.getElementById("promptCommentsContainer");
@@ -94483,6 +94887,13 @@
             }
             break;
           case "error":
+            if (_pendingCodeEditorReload) {
+              clearTimeout(_pendingCodeEditorReload.timeoutId);
+              _pendingCodeEditorReload.reject(new Error(msg.message || "Failed to load current selection"));
+              _pendingCodeEditorReload = null;
+              setCodeEditorReloadLoading(false);
+              break;
+            }
             showToast(msg.message, "error");
             if (pendingSelectionDataReject) {
               pendingSelectionDataReject(new Error(msg.message));

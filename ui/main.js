@@ -9406,7 +9406,10 @@ Rules:
       });
 
       agentTasks = merged;
-      allQuickActions = buildQuickActionsList(agentTasks);
+      allQuickActions = [
+        ...buildQuickActionsList(agentTasks),
+        ...buildExportMenuSlashActions()
+      ];
       pruneQuickActionUsageState();
 
       if (refreshUI) {
@@ -10252,7 +10255,91 @@ Rules:
     let quickActionUsage = sanitizeQuickActionUsageMap(loadQuickActionUsageFromLocal());
     let lastUsedQuickActions = loadLastUsedQuickActionsFromLocal();
     let quickActionUsageLoadedFromPlugin = false;
-    let allQuickActions = buildQuickActionsList(agentTasks);
+
+    function createExportMenuSlashAction({
+      name,
+      desc,
+      directAction,
+      icon,
+      keywords,
+      presetValues = {}
+    }) {
+      return {
+        task: {
+          name,
+          desc,
+          directAction,
+          keepCurrentMode: true,
+          searchKeywords: keywords,
+          presetValues
+        },
+        category: 'Export',
+        name,
+        desc,
+        help: '',
+        icon,
+        order: 10000 + Object.keys(presetValues).length
+      };
+    }
+
+    function buildExportMenuSlashActions() {
+      return [
+        createExportMenuSlashAction({
+          name: 'Custom Action',
+          desc: 'Create a custom quick action',
+          directAction: 'openCustomQuickActionModal',
+          keywords: 'export export-menu exportmenu menu plus custom action quick action slash',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
+        }),
+        createExportMenuSlashAction({
+          name: 'Copy CSS',
+          desc: 'Export selected layers as CSS',
+          directAction: 'exportMenu',
+          presetValues: { exportType: 'css' },
+          keywords: 'export export-menu exportmenu menu copy css code style selection slash',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>'
+        }),
+        createExportMenuSlashAction({
+          name: 'Copy SVG',
+          desc: 'Export selected layers as SVG',
+          directAction: 'exportMenu',
+          presetValues: { exportType: 'svg' },
+          keywords: 'export export-menu exportmenu menu copy svg vector selection slash',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5ZM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>'
+        }),
+        createExportMenuSlashAction({
+          name: 'Copy Text',
+          desc: 'Export selected text',
+          directAction: 'exportMenu',
+          presetValues: { exportType: 'text' },
+          keywords: 'export export-menu exportmenu menu copy text selection slash',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>'
+        }),
+        createExportMenuSlashAction({
+          name: 'Copy Image',
+          desc: 'Export selected layers as an image',
+          directAction: 'exportMenu',
+          presetValues: { exportType: 'png' },
+          keywords: 'export export-menu exportmenu menu copy image png selection slash',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'
+        }),
+        createExportMenuSlashAction({
+          name: 'Upload Image',
+          desc: 'Upload images into the chat',
+          directAction: 'uploadImageFromDevice',
+          keywords: 'export export-menu exportmenu menu upload image attach file slash',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V8"/><path d="m8 8 4-4 4 4"/><path d="M20 16v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/></svg>'
+        })
+      ].map((action, index) => ({
+        ...action,
+        order: 10000 + index
+      }));
+    }
+
+    let allQuickActions = [
+      ...buildQuickActionsList(agentTasks),
+      ...buildExportMenuSlashActions()
+    ];
 
     function loadQuickActionUsageFromLocal() {
       try {
@@ -30716,6 +30803,15 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
         case 'colorContrastChecker':
           await runColorContrastCheckerAction(mergedValues, actionMeta);
           break;
+        case 'exportMenu':
+          await runExportMenuSlashAction(mergedValues, actionMeta);
+          break;
+        case 'openCustomQuickActionModal':
+          await runOpenCustomQuickActionModalAction(mergedValues, actionMeta);
+          break;
+        case 'uploadImageFromDevice':
+          await runUploadImageFromDeviceAction(mergedValues, actionMeta);
+          break;
         default:
           showToast('Unknown action', 'error');
       }
@@ -40236,8 +40332,11 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     // Code Editor Modal logic
     let _codeEditorTarget = null;
     let _codeEditorSourceCode = '';
+    let _codeEditorLang = 'text';
     let _codeEditorSvgLayerNameHints = [];
     let _isApplyingCodeEditorProgrammatically = false;
+    let _pendingCodeEditorReload = null;
+    let _codeEditorReloadStale = false;
     let _codeEditorCssFilterQuery = '';
     let _codeEditorCssFilterOpen = false;
     let _codeEditorCssAvailableProperties = [];
@@ -40329,6 +40428,150 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       }
 
       return null;
+    }
+
+    function normalizeCodeEditorLang(lang) {
+      const normalized = String(lang || '').trim().toLowerCase();
+      if (normalized === 'css' || normalized === 'svg') return normalized;
+      return normalized || 'text';
+    }
+
+    function getCodeEditorLang() {
+      return normalizeCodeEditorLang(_codeEditorLang);
+    }
+
+    function updateCodeEditorLangUi() {
+      const lang = getCodeEditorLang();
+      const label = document.getElementById('codeEditorLangLabel');
+      const badge = document.getElementById('codeEditorLangBadge');
+      if (label) label.textContent = lang;
+      if (badge) badge.dataset.lang = lang;
+      document.querySelectorAll('#codeEditorLangMenu [data-code-editor-lang]').forEach((item) => {
+        item.classList.toggle('active', item.dataset.codeEditorLang === lang);
+      });
+    }
+
+    function setCodeEditorLang(lang, { refresh = true, resetFilter = true } = {}) {
+      const previousLang = getCodeEditorLang();
+      _codeEditorLang = normalizeCodeEditorLang(lang);
+      if (resetFilter && !isCssCodeLanguage(_codeEditorLang)) {
+        resetCodeEditorCssFilterState();
+      }
+      updateCodeEditorLangUi();
+      if (_codeEditorTarget && _codeEditorLang !== previousLang) {
+        setCodeEditorReloadStale(true);
+      }
+      if (refresh) {
+        refreshCodeEditorFromSource({ preserveSelection: true });
+      } else {
+        updateCodeEditorOptionsUi();
+      }
+    }
+
+    function closeCodeEditorLangMenu() {
+      const anchor = document.getElementById('codeEditorLangAnchor');
+      const badge = document.getElementById('codeEditorLangBadge');
+      anchor?.classList.remove('open');
+      badge?.setAttribute('aria-expanded', 'false');
+    }
+
+    function setCodeEditorReloadLoading(isLoading) {
+      const btn = document.getElementById('reloadCodeEditorBtn');
+      const label = btn?.querySelector('span');
+      if (!btn) return;
+      btn.classList.toggle('loading', isLoading);
+      btn.disabled = isLoading;
+      if (label) label.textContent = isLoading ? tu('aux.code.reloading') : tu('aux.code.reload');
+    }
+
+    function setCodeEditorReloadStale(isStale) {
+      _codeEditorReloadStale = Boolean(isStale);
+      document.getElementById('reloadCodeEditorBtn')?.classList.toggle('is-primary', _codeEditorReloadStale);
+    }
+
+    function markCodeEditorReloadStaleForSelectionChange() {
+      const modal = document.getElementById('codeEditorModal');
+      if (_codeEditorTarget && modal?.classList.contains('show')) {
+        setCodeEditorReloadStale(true);
+      }
+    }
+
+    function requestCurrentSelectionCodeForEditor(lang) {
+      const normalizedLang = normalizeCodeEditorLang(lang);
+      const exportType = normalizedLang === 'svg' ? 'SVG' : 'CSS';
+      const messageType = normalizedLang === 'svg' ? 'svg-result' : 'css-result';
+
+      if (_pendingCodeEditorReload) {
+        clearTimeout(_pendingCodeEditorReload.timeoutId);
+        _pendingCodeEditorReload.reject(new Error('Reload replaced by a newer request.'));
+      }
+
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          if (_pendingCodeEditorReload?.messageType === messageType) {
+            _pendingCodeEditorReload = null;
+          }
+          reject(new Error('Timed out loading current selection.'));
+        }, 15000);
+
+        _pendingCodeEditorReload = {
+          messageType,
+          exportType,
+          timeoutId,
+          resolve,
+          reject
+        };
+
+        parent.postMessage({
+          pluginMessage: {
+            type: normalizedLang === 'svg' ? 'get-svg' : 'get-css',
+            cssFormat: cssFormat
+          }
+        }, '*');
+      });
+    }
+
+    function settlePendingCodeEditorReload(msg) {
+      if (!_pendingCodeEditorReload || msg.type !== _pendingCodeEditorReload.messageType) {
+        return false;
+      }
+      const pending = _pendingCodeEditorReload;
+      clearTimeout(pending.timeoutId);
+      _pendingCodeEditorReload = null;
+      pending.resolve({ exportType: pending.exportType, data: msg.data });
+      return true;
+    }
+
+    async function reloadCodeEditorFromCurrentSelection() {
+      if (!_codeEditorTarget) return;
+      const lang = getCodeEditorLang() === 'svg' ? 'svg' : 'css';
+      setCodeEditorLang(lang, { refresh: false });
+      setCodeEditorReloadLoading(true);
+
+      try {
+        const result = await requestCurrentSelectionCodeForEditor(lang);
+        let nextCode = '';
+        if (result.exportType === 'SVG') {
+          const normalized = normalizeSvgExportPayload(result.data);
+          nextCode = normalized.content;
+          _codeEditorSvgLayerNameHints = normalized.svgLayerNameHints;
+        } else {
+          nextCode = String(result.data || '');
+          _codeEditorSvgLayerNameHints = [];
+        }
+
+        _codeEditorSourceCode = nextCode;
+        resetCodeEditorCssFilterState();
+        resetCodeEditorHistory();
+        refreshCodeEditorFromSource();
+        codeEditorPushState(_codeEditorSourceCode);
+        setCodeEditorReloadStale(false);
+        showToast(tu('aux.code.reloaded'), 'success');
+      } catch (error) {
+        showToast(error?.message || 'Failed to load current selection', 'error');
+      } finally {
+        setCodeEditorReloadLoading(false);
+      }
     }
 
     function isSvgCode(code, lang) {
@@ -41009,8 +41252,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     }
 
     function refreshCodeEditorFromSource({ pushHistory = false, preserveSelection = false } = {}) {
-      const details = getCodeEditorTargetDetails(_codeEditorTarget);
-      const lang = details ? details.lang : 'text';
+      const lang = getCodeEditorLang();
       _codeEditorCssAvailableProperties = isCssCodeLanguage(lang) ? getCssFilterProperties(_codeEditorSourceCode) : [];
       if (!isCssCodeLanguage(lang)) {
         _codeEditorCssFilterQuery = '';
@@ -41039,10 +41281,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     }
 
     function updateCodeEditorOptionsUi() {
-      const details = getCodeEditorTargetDetails(_codeEditorTarget);
-      const lang = details ? details.lang : 'text';
-      const langBadge = document.getElementById('codeEditorLangBadge');
-      const normalizedLang = String(langBadge?.textContent || lang || '').trim().toLowerCase();
+      const normalizedLang = getCodeEditorLang();
       const isSvg = normalizedLang === 'svg';
       const isCss = normalizedLang === 'css';
 
@@ -41060,16 +41299,17 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     function openCodeEditor(target) {
       const modal = document.getElementById('codeEditorModal');
-      const langBadge = document.getElementById('codeEditorLangBadge');
       const details = getCodeEditorTargetDetails(target);
       if (!details) return;
 
       _codeEditorTarget = target;
       _codeEditorSourceCode = details.code;
       _codeEditorSvgLayerNameHints = Array.isArray(details.svgLayerNameHints) ? [...details.svgLayerNameHints] : [];
+      _codeEditorLang = normalizeCodeEditorLang(details.lang);
       resetCodeEditorCssFilterState();
+      setCodeEditorReloadStale(false);
 
-      langBadge.textContent = details.lang;
+      updateCodeEditorLangUi();
 
       resetCodeEditorHistory();
       refreshCodeEditorFromSource();
@@ -41099,9 +41339,18 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       document.getElementById('aiAssistantPopup')?.classList.remove('visible');
       document.getElementById('codeEditorAIPopup')?.classList.remove('visible');
       closeCodeEditorOptionsMenu();
+      closeCodeEditorLangMenu();
+      if (_pendingCodeEditorReload) {
+        clearTimeout(_pendingCodeEditorReload.timeoutId);
+        _pendingCodeEditorReload = null;
+      }
+      setCodeEditorReloadLoading(false);
+      setCodeEditorReloadStale(false);
       _codeEditorTarget = null;
       _codeEditorSourceCode = '';
+      _codeEditorLang = 'text';
       _codeEditorSvgLayerNameHints = [];
+      updateCodeEditorLangUi();
       resetCodeEditorCssFilterState();
       closeCodeEditorFilterTooltip();
       updateCodeEditorFilteredStateUi('text');
@@ -41112,13 +41361,13 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const textarea = document.getElementById('codeEditorTextarea');
       const details = getCodeEditorTargetDetails(_codeEditorTarget);
       if (!details) return;
-      if (isCssCodeLanguage(details.lang) && isCodeEditorCssFilterActive()) {
+      if (isCssCodeLanguage(getCodeEditorLang()) && isCodeEditorCssFilterActive()) {
         showToast('Clear CSS filters before saving changes.', 'warning');
         return;
       }
 
       const newCode = textarea.value;
-      const lang = details.lang;
+      const lang = getCodeEditorLang();
 
       const escapeHtml = (str) => str
         .replace(/&/g, '&amp;')
@@ -41129,6 +41378,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
       const escaped = escapeHtml(newCode);
 
       if (details.type === 'message-code-block') {
+        details.codeEl.className = `language-${lang}`;
         details.codeEl.innerHTML = (lang && lang !== 'text') ? highlightCode(escaped, lang) : escaped;
 
         const messageDiv = details.container.closest('.message');
@@ -41141,7 +41391,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
             let matchIdx = 0;
             const updatedContent = oldContent.replace(codeBlockRegex, (match, matchLang) => {
               if (matchIdx++ === targetIdx) {
-                return '```' + (matchLang || '') + '\n' + newCode + '\n```';
+                return '```' + (lang || matchLang || '') + '\n' + newCode + '\n```';
               }
               return match;
             });
@@ -41150,6 +41400,10 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
         }
       } else if (details.type === 'staged-attachment') {
         details.attachment.content = newCode;
+        details.attachment.lang = lang;
+        details.attachment.exportType = lang === 'svg' ? 'SVG' : lang === 'css' ? 'CSS' : 'TEXT';
+        details.attachment.name = lang === 'svg' ? 'SVG export' : lang === 'css' ? 'CSS export' : 'Text export';
+        details.attachment.svgLayerNameHints = lang === 'svg' ? [..._codeEditorSvgLayerNameHints] : [];
         renderStagedAttachments();
       }
 
@@ -41161,6 +41415,25 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     document.getElementById('closeCodeEditorBtn').addEventListener('click', closeCodeEditor);
     document.getElementById('codeEditorCancelBtn').addEventListener('click', closeCodeEditor);
     document.getElementById('codeEditorSaveBtn').addEventListener('click', saveCodeEditor);
+    document.getElementById('codeEditorLangBadge').addEventListener('click', (event) => {
+      event.stopPropagation();
+      const anchor = document.getElementById('codeEditorLangAnchor');
+      const badge = document.getElementById('codeEditorLangBadge');
+      const nextState = !anchor?.classList.contains('open');
+      anchor?.classList.toggle('open', nextState);
+      badge?.setAttribute('aria-expanded', nextState ? 'true' : 'false');
+      if (nextState) updateCodeEditorLangUi();
+    });
+    document.getElementById('codeEditorLangMenu').addEventListener('click', (event) => {
+      event.stopPropagation();
+      const item = event.target.closest('[data-code-editor-lang]');
+      if (!item) return;
+      setCodeEditorLang(item.dataset.codeEditorLang || 'css');
+      closeCodeEditorLangMenu();
+    });
+    document.getElementById('reloadCodeEditorBtn').addEventListener('click', () => {
+      reloadCodeEditorFromCurrentSelection();
+    });
     document.getElementById('codeEditorOptionsBtn').addEventListener('click', (event) => {
       event.stopPropagation();
       const anchor = document.querySelector('.code-editor-options-anchor');
@@ -41287,9 +41560,7 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     document.getElementById('codeEditorTextarea').addEventListener('input', (e) => {
       if (_isApplyingCodeEditorProgrammatically) return;
       if (!_codeEditorTarget) return;
-      const details = getCodeEditorTargetDetails(_codeEditorTarget);
-      const lang = details ? details.lang : 'text';
-      syncCodeEditorHighlight(e.target.value, lang);
+      syncCodeEditorHighlight(e.target.value, getCodeEditorLang());
     });
 
     // Sync scroll between textarea and highlight
@@ -41303,6 +41574,9 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
 
     // Close on backdrop click
     document.getElementById('codeEditorModal').addEventListener('click', (e) => {
+      if (!e.target.closest('#codeEditorLangAnchor')) {
+        closeCodeEditorLangMenu();
+      }
       if (!e.target.closest('.code-editor-options-anchor')) {
         closeCodeEditorOptionsMenu();
       }
@@ -41334,12 +41608,6 @@ ${JSON.stringify(lastUsedSelectionData, null, 2)}`;
     let _codeEditorSelectedText = '';
     let _codeEditorSelStart = 0;
     let _codeEditorSelEnd = 0;
-
-    function getCodeEditorLang() {
-      if (!_codeEditorTarget) return 'text';
-      const details = getCodeEditorTargetDetails(_codeEditorTarget);
-      return details ? details.lang : 'text';
-    }
 
     // Selection toolbar
     function showSelectionToolbar() {
@@ -45944,10 +46212,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
       const icon = action.icon || defaultActionIcon;
 
       // Auto-switch modes based on action type
-      if (task.askMode && currentMode !== 'ask') {
-        setMode('ask');
-      } else if (!task.askMode && currentMode !== 'agent') {
-        setMode('agent');
+      if (task.keepCurrentMode !== true) {
+        if (task.askMode && currentMode !== 'ask') {
+          setMode('ask');
+        } else if (!task.askMode && currentMode !== 'agent') {
+          setMode('agent');
+        }
       }
 
       // Actions that need fields go to prompt drawer
@@ -45993,12 +46263,16 @@ Based on the user's instruction, generate the appropriate commands to modify the
       }
 
       if (task.directAction) {
-        setMode('agent');
+        if (task.keepCurrentMode !== true) {
+          setMode('agent');
+        }
         await runDirectAction(task.directAction, {}, { ...task, icon });
         return;
       }
 
-      setMode('agent');
+      if (task.keepCurrentMode !== true) {
+        setMode('agent');
+      }
       const prompt = task.prompt || (typeof task.promptTemplate === 'string' ? task.promptTemplate : '');
       const contextMode = task.requiredContext || ContextMode.SMART;
       await sendQuickActionMessage(prompt, noSelection, { name: task.name, icon }, includeTokens, contextMode);
@@ -46891,6 +47165,40 @@ Based on the user's instruction, generate the appropriate commands to modify the
       chatInput.dataset.askBackActive = 'false';
     }
 
+    function closeExportMenu() {
+      plusBtn?.classList.remove('active');
+      exportMenu?.classList.remove('show');
+    }
+
+    function requestExportMenuItem(exportType, sourceItem = null) {
+      if (!exportType) return;
+      const item = sourceItem || exportMenu?.querySelector(`[data-export="${exportType}"]`);
+      item?.classList.add('loading');
+
+      parent.postMessage({
+        pluginMessage: {
+          type: `get-${exportType}`,
+          cssFormat: cssFormat
+        }
+      }, '*');
+
+      closeExportMenu();
+    }
+
+    async function runExportMenuSlashAction(values = {}) {
+      requestExportMenuItem(values.exportType || values.type);
+    }
+
+    async function runOpenCustomQuickActionModalAction() {
+      openCustomQuickActionModal();
+      closeExportMenu();
+    }
+
+    async function runUploadImageFromDeviceAction() {
+      uploadImageInput?.click();
+      closeExportMenu();
+    }
+
     // Event listeners
     chatSendBtn.addEventListener('click', () => {
       if (isAIThinking) {
@@ -46952,7 +47260,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
     // Upload image from device
     if (uploadImageBtn && uploadImageInput) {
       uploadImageBtn.addEventListener('click', () => {
-        uploadImageInput.click();
+        runUploadImageFromDeviceAction();
       });
 
       uploadImageInput.addEventListener('change', async (e) => {
@@ -46977,9 +47285,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
     if (addCustomQuickActionMenuBtn) {
       addCustomQuickActionMenuBtn.addEventListener('click', () => {
-        openCustomQuickActionModal();
-        plusBtn.classList.remove('active');
-        exportMenu.classList.remove('show');
+        runOpenCustomQuickActionModalAction();
       });
     }
 
@@ -47233,18 +47539,7 @@ Based on the user's instruction, generate the appropriate commands to modify the
     exportMenuItems.forEach(item => {
       item.addEventListener('click', () => {
         const exportType = item.dataset.export;
-        item.classList.add('loading');
-
-        parent.postMessage({
-          pluginMessage: {
-            type: `get-${exportType}`,
-            cssFormat: cssFormat
-          }
-        }, '*');
-
-        // Close menu
-        plusBtn.classList.remove('active');
-        exportMenu.classList.remove('show');
+        requestExportMenuItem(exportType, item);
       });
     });
 
@@ -48884,10 +49179,12 @@ Based on the user's instruction, generate the appropriate commands to modify the
 
       switch (msg.type) {
         case 'css-result':
+          if (settlePendingCodeEditorReload(msg)) break;
           addExportToInput('CSS', msg.data);
           break;
 
         case 'svg-result':
+          if (settlePendingCodeEditorReload(msg)) break;
           addExportToInput('SVG', msg.data);
           break;
 
@@ -48937,6 +49234,9 @@ Based on the user's instruction, generate the appropriate commands to modify the
         case 'selection-changed':
         case 'selection-info':
           handleSelectionChange(msg.data);
+          if (msg.type === 'selection-changed') {
+            markCodeEditorReloadStaleForSelectionChange();
+          }
           requestSelectionDescendantsIfNeeded(false);
           // Refresh comments if in selection scope
           if (currentCommentsScope === 'selection') {
@@ -49099,6 +49399,13 @@ Based on the user's instruction, generate the appropriate commands to modify the
           break;
 
         case 'error':
+          if (_pendingCodeEditorReload) {
+            clearTimeout(_pendingCodeEditorReload.timeoutId);
+            _pendingCodeEditorReload.reject(new Error(msg.message || 'Failed to load current selection'));
+            _pendingCodeEditorReload = null;
+            setCodeEditorReloadLoading(false);
+            break;
+          }
           showToast(msg.message, 'error');
           // Also reject any pending selection request so it doesn't timeout
           if (pendingSelectionDataReject) {
