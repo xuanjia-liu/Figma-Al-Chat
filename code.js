@@ -3703,6 +3703,166 @@ function pushStyleNameVariants(family, style, out) {
         out.push({ family, style: s.replace(/ /g, '') });
     }
 }
+function normalizeFontPreviewLookupKey(value) {
+    return String(value || '')
+        .trim()
+        .replace(/[\s_-]+/g, '')
+        .toLowerCase();
+}
+function pushUniqueFontPreviewFamily(families, family) {
+    const fam = String(family || '').trim();
+    if (!fam)
+        return;
+    const key = normalizeFontPreviewLookupKey(fam);
+    if (families.some(existing => normalizeFontPreviewLookupKey(existing) === key))
+        return;
+    families.push(fam);
+}
+function pushFontPreviewStyleCandidate(styles, style) {
+    const st = String(style || '').trim();
+    if (!st)
+        return;
+    const key = normalizeFontPreviewLookupKey(st);
+    if (styles.some(existing => normalizeFontPreviewLookupKey(existing) === key))
+        return;
+    styles.push(st);
+}
+function sanitizeFontPreviewAvailableFamilies(raw) {
+    if (!Array.isArray(raw))
+        return [];
+    const out = [];
+    const seen = new Set();
+    for (const item of raw) {
+        if (!item || typeof item !== 'object')
+            continue;
+        const record = item;
+        const family = typeof record.family === 'string' ? record.family.trim() : '';
+        if (!family)
+            continue;
+        const styles = Array.isArray(record.styles)
+            ? record.styles
+                .map(style => (typeof style === 'string' ? style.trim() : ''))
+                .filter(Boolean)
+            : [];
+        if (styles.length === 0)
+            continue;
+        const key = normalizeFontPreviewLookupKey(family);
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        out.push({ family, styles });
+    }
+    return out;
+}
+function normalizeFontPreviewWeightStyle(weightNum, wghtCss) {
+    const staticWeights = staticWeightsFromWghtCss(wghtCss);
+    const weightStep = staticWeights
+        ? nearestInListPreferHeavier(Math.round(weightNum), staticWeights)
+        : (() => {
+            const clamped = Math.max(1, Math.min(1000, Math.round(weightNum)));
+            const steps = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+            return nearestInListPreferHeavier(clamped, steps);
+        })();
+    return normalizeFontStyle(weightStep);
+}
+const FONT_PREVIEW_WIDTH_SUFFIXES = [
+    'Ultra Condensed',
+    'Extra Condensed',
+    'Semi Condensed',
+    'Semi Expanded',
+    'Extra Expanded',
+    'Condensed',
+    'Expanded',
+];
+function getFontPreviewWidthFamilyAlias(googleFamily) {
+    const family = String(googleFamily || '').trim();
+    const lower = family.toLowerCase();
+    for (const suffix of FONT_PREVIEW_WIDTH_SUFFIXES) {
+        const suffixLower = suffix.toLowerCase();
+        if (!lower.endsWith(` ${suffixLower}`))
+            continue;
+        const baseFamily = family.slice(0, family.length - suffix.length).trim();
+        if (!baseFamily)
+            continue;
+        return { baseFamily, width: suffix };
+    }
+    return null;
+}
+function buildFontPreviewFamilyAliases(googleFamily) {
+    const families = [];
+    pushUniqueFontPreviewFamily(families, googleFamily);
+    const widthAlias = getFontPreviewWidthFamilyAlias(googleFamily);
+    if (widthAlias) {
+        pushUniqueFontPreviewFamily(families, `${widthAlias.baseFamily} ${widthAlias.width.replace(/\s+/g, '')}`);
+        pushUniqueFontPreviewFamily(families, widthAlias.baseFamily);
+    }
+    return families;
+}
+function pushWidthStyleVariants(width, weightStyle, styles) {
+    const compactWidth = width.replace(/\s+/g, '');
+    const spacedWeight = /[a-z][A-Z]/.test(weightStyle)
+        ? weightStyle.replace(/([a-z])([A-Z])/g, '$1 $2')
+        : weightStyle;
+    const compactWeight = weightStyle.replace(/\s+/g, '');
+    if (weightStyle === 'Regular') {
+        pushFontPreviewStyleCandidate(styles, width);
+        pushFontPreviewStyleCandidate(styles, compactWidth);
+    }
+    for (const w of [width, compactWidth]) {
+        for (const wt of [weightStyle, spacedWeight, compactWeight]) {
+            pushFontPreviewStyleCandidate(styles, `${w} ${wt}`);
+            pushFontPreviewStyleCandidate(styles, `${w}${wt}`);
+            pushFontPreviewStyleCandidate(styles, `${wt} ${w}`);
+        }
+    }
+}
+function buildFontPreviewStyleAttempts(googleFamily, weightNum, wghtCss) {
+    const styles = [];
+    const weightStyle = normalizeFontPreviewWeightStyle(weightNum, wghtCss);
+    const widthAlias = getFontPreviewWidthFamilyAlias(googleFamily);
+    if (widthAlias) {
+        pushWidthStyleVariants(widthAlias.width, weightStyle, styles);
+    }
+    pushFontPreviewStyleCandidate(styles, weightStyle);
+    if (/[a-z][A-Z]/.test(weightStyle)) {
+        pushFontPreviewStyleCandidate(styles, weightStyle.replace(/([a-z])([A-Z])/g, '$1 $2'));
+    }
+    if (weightStyle.includes(' ')) {
+        pushFontPreviewStyleCandidate(styles, weightStyle.replace(/ /g, ''));
+    }
+    if (weightStyle !== 'Regular') {
+        if (widthAlias) {
+            pushWidthStyleVariants(widthAlias.width, 'Regular', styles);
+        }
+        pushFontPreviewStyleCandidate(styles, 'Regular');
+    }
+    return styles;
+}
+function buildFontPreviewAvailableFontCandidates(googleFamily, weightNum, wghtCss, availableFamilies) {
+    if (!availableFamilies.length)
+        return [];
+    const familyAliases = buildFontPreviewFamilyAliases(googleFamily).map(normalizeFontPreviewLookupKey);
+    const styleAttempts = buildFontPreviewStyleAttempts(googleFamily, weightNum, wghtCss);
+    const widthAlias = getFontPreviewWidthFamilyAlias(googleFamily);
+    const baseFamilyKey = widthAlias ? normalizeFontPreviewLookupKey(widthAlias.baseFamily) : '';
+    const widthStyleKey = widthAlias ? normalizeFontPreviewLookupKey(widthAlias.width) : '';
+    const candidates = [];
+    for (const entry of availableFamilies) {
+        const familyKey = normalizeFontPreviewLookupKey(entry.family);
+        if (!familyAliases.includes(familyKey))
+            continue;
+        const styleAttemptKeys = styleAttempts
+            .filter(style => !widthAlias || familyKey !== baseFamilyKey || normalizeFontPreviewLookupKey(style).includes(widthStyleKey))
+            .map(normalizeFontPreviewLookupKey);
+        for (let i = 0; i < styleAttemptKeys.length; i++) {
+            const hit = entry.styles.find(style => normalizeFontPreviewLookupKey(style) === styleAttemptKeys[i]);
+            if (hit) {
+                candidates.push({ family: entry.family, style: hit });
+            }
+        }
+    }
+    return dedupeFontNames(candidates);
+}
 /**
  * Google Fonts catalog names vs Figma desktop names often differ (OTF suffix, M+/Rounded naming, WD XL spacing).
  * Build an ordered list of {family, style} pairs to try with figma.loadFontAsync.
@@ -3778,11 +3938,24 @@ function buildFontPreviewApplyCandidates(googleFamily, weightNum, wghtCss) {
         'M PLUS 1p': ['Mplus 1p'],
     };
     const familyOrder = [googleFamily, ...(extraFamilies[googleFamily] || [])];
+    const widthAlias = getFontPreviewWidthFamilyAlias(googleFamily);
+    if (widthAlias) {
+        familyOrder.push(`${widthAlias.baseFamily} ${widthAlias.width.replace(/\s+/g, '')}`);
+        familyOrder.push(widthAlias.baseFamily);
+    }
     const seenFam = new Set();
     for (const fam of familyOrder) {
         if (seenFam.has(fam))
             continue;
         seenFam.add(fam);
+        if (widthAlias && normalizeFontPreviewLookupKey(fam) === normalizeFontPreviewLookupKey(widthAlias.baseFamily)) {
+            for (const st of buildFontPreviewStyleAttempts(googleFamily, weightNum, wghtCss)) {
+                if (normalizeFontPreviewLookupKey(st).includes(normalizeFontPreviewLookupKey(widthAlias.width))) {
+                    pushStyleNameVariants(fam, st, candidates);
+                }
+            }
+            continue;
+        }
         pushStyleNameVariants(fam, styleStr, candidates);
         if (styleStr !== 'Regular') {
             pushStyleNameVariants(fam, 'Regular', candidates);
@@ -3804,8 +3977,11 @@ async function tryLoadFontNameOnce(font) {
     }
 }
 /** Resolve Google Fonts preview family + weight to a Figma FontName without falling back to Inter. */
-async function loadFontForFontPreviewApply(googleFamily, weightNum, wghtCss) {
-    const list = buildFontPreviewApplyCandidates(googleFamily, weightNum, wghtCss);
+async function loadFontForFontPreviewApply(googleFamily, weightNum, wghtCss, availableFamilies = []) {
+    const list = dedupeFontNames([
+        ...buildFontPreviewAvailableFontCandidates(googleFamily, weightNum, wghtCss, availableFamilies),
+        ...buildFontPreviewApplyCandidates(googleFamily, weightNum, wghtCss),
+    ]);
     for (const c of list) {
         if (await tryLoadFontNameOnce(c)) {
             return c;
@@ -11246,6 +11422,7 @@ figma.ui.onmessage = async (msg) => {
                 ? localStylesRaw.filter((x) => typeof x === 'string' && String(x).trim()).map((x) => String(x).trim())
                 : [];
             const localStylePref = typeof anyMsg.localStyle === 'string' ? anyMsg.localStyle.trim() : '';
+            const availableFonts = sanitizeFontPreviewAvailableFamilies(anyMsg.availableFonts);
             if (!family) {
                 figma.ui.postMessage({ type: 'font-preview-apply-result', ok: false, applied: 0, failed: 0, error: 'noFamily' });
                 break;
@@ -11263,7 +11440,7 @@ figma.ui.onmessage = async (msg) => {
                     await loadAllFontsForTextNode(textNode);
                     const loaded = applySource === 'local'
                         ? await loadFontForLocalPreviewApply(family, weightNum, localStyles, localStylePref || undefined)
-                        : await loadFontForFontPreviewApply(family, weightNum, wghtCss);
+                        : await loadFontForFontPreviewApply(family, weightNum, wghtCss, availableFonts);
                     const len = textNode.characters.length;
                     if (len > 0) {
                         textNode.setRangeFontName(0, len, loaded);

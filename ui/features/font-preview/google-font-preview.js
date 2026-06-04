@@ -421,6 +421,74 @@ function gfpFormatRowWeightStyle(effectiveWght, tu) {
   return tu('actions.fontPreview.weightStyleMeta', { weight: String(w), style: tu(styleKey) });
 }
 
+function gfpSearchToken(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function gfpCompactSearchToken(value) {
+  return gfpSearchToken(value).replace(/[\s_-]+/g, '');
+}
+
+function gfpWeightStyleSearchLabel(weight) {
+  const w = Math.round(Number(weight)) || 400;
+  if (w <= 120) return 'Thin';
+  if (w <= 220) return 'Extra Light';
+  if (w <= 320) return 'Light';
+  if (w <= 420) return 'Regular';
+  if (w <= 520) return 'Medium';
+  if (w <= 620) return 'Semi Bold';
+  if (w <= 720) return 'Bold';
+  if (w <= 820) return 'Extra Bold';
+  return 'Black';
+}
+
+function gfpWeightsFromCssMeta(f) {
+  const css = f && typeof f.wghtCss === 'string' ? f.wghtCss.trim() : '';
+  if (css && css.includes('..')) {
+    const [rawMin, rawMax] = css.split('..');
+    const min = parseInt(rawMin, 10);
+    const max = parseInt(rawMax, 10);
+    if (Number.isFinite(min) && Number.isFinite(max)) {
+      return [100, 200, 300, 400, 500, 600, 700, 800, 900]
+        .filter(w => w >= min && w <= max);
+    }
+  }
+  if (css) {
+    const weights = css
+      .split(';')
+      .map(part => parseInt(part.trim(), 10))
+      .filter(Number.isFinite);
+    if (weights.length) return weights;
+  }
+  const { min, max } = gfpWghtBounds(f);
+  return [100, 200, 300, 400, 500, 600, 700, 800, 900]
+    .filter(w => w >= min && w <= max);
+}
+
+function gfpFontMatchesSearch(f, rawQuery) {
+  const q = gfpSearchToken(rawQuery);
+  if (!q) return true;
+  const compactQ = gfpCompactSearchToken(q);
+  const fields = [f?.family];
+
+  if (Array.isArray(f?.styles)) {
+    fields.push(...f.styles);
+  }
+
+  for (const weight of gfpWeightsFromCssMeta(f)) {
+    const label = gfpWeightStyleSearchLabel(weight);
+    fields.push(String(weight), label, label.replace(/\s+/g, ''));
+  }
+
+  const haystack = fields.map(gfpSearchToken).filter(Boolean).join(' ');
+  if (haystack.includes(q)) return true;
+  if (compactQ) {
+    const compactHaystack = fields.map(gfpCompactSearchToken).filter(Boolean).join(' ');
+    if (compactHaystack.includes(compactQ)) return true;
+  }
+  return false;
+}
+
 const LOCAL_BOOKMARK_PREFIX = 'LOCAL|';
 
 function parseBookmarkFamilyKey(key) {
@@ -470,6 +538,17 @@ function buildLocalFontEntry(family, styles) {
     wghtMax: 900,
     wghtCss: '100..900',
   };
+}
+
+function gfpLocalFontInventoryPayload(localFamilies) {
+  return (Array.isArray(localFamilies) ? localFamilies : [])
+    .map(f => ({
+      family: typeof f?.family === 'string' ? f.family.trim() : '',
+      styles: Array.isArray(f?.styles)
+        ? f.styles.map(style => (typeof style === 'string' ? style.trim() : '')).filter(Boolean)
+        : [],
+    }))
+    .filter(f => f.family && f.styles.length > 0);
 }
 
 /** @param {(k: string, vars?: object) => string} tu */
@@ -1172,11 +1251,11 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
   }
 
   function familyPassesFilters(f, { includeSearch = true } = {}) {
-    const q = includeSearch ? state.search.trim().toLowerCase() : '';
+    const q = includeSearch ? state.search.trim() : '';
     const needFeeling = state.feeling.size > 0;
     const needAppearance = state.appearance.size > 0;
     const isLocal = f && f.source === 'local';
-    if (q && !familyLower(f).includes(q)) return false;
+    if (q && !gfpFontMatchesSearch(f, q)) return false;
     if (!fontMatchesLangSubset(f, state.langSubset)) return false;
     if (needFeeling && !isLocal) {
       const ok = [...state.feeling].some(tag => FEELING_TEST[tag]?.(f));
@@ -2240,6 +2319,7 @@ export function mountGoogleFontPreview(container, { tu, showToast, canUseSemanti
           wghtCss,
           source: src,
           localStyles: src === 'local' && Array.isArray(meta.styles) ? meta.styles : [],
+          availableFonts: src === 'google' ? gfpLocalFontInventoryPayload(allLocalFamilies) : [],
         },
       },
       '*'
