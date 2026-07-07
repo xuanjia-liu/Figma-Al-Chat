@@ -294,6 +294,36 @@ export const quickCreateImageTasks = [
           ]
         },
 {
+          name: 'Batch create icons',
+          desc: 'Search multiple keywords at once and add icons straight to the canvas',
+          noSelection: true,
+          directAction: 'batchCreateIcons',
+          fields: [
+            { key: 'keywords', type: 'text', label: 'Keywords', placeholder: 'home, search settings user', hint: 'Separate keywords with commas or spaces', translate: true },
+            {
+              type: 'row',
+              fields: [
+                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512 },
+                {
+                  key: 'iconSource', type: 'select', label: 'Icon Source', default: 'iconify', options: [
+                    { value: 'iconify', label: 'Iconify' },
+                    { value: 'antv', label: 'AntV Infographic' },
+                    { value: 'iconfont', label: 'Icon Font' }
+                  ]
+                }
+              ]
+            },
+            {
+              key: 'importMode', type: 'select', label: 'Import as', default: 'frame', options: [
+                { value: 'frame', label: 'Frames' },
+                { value: 'component', label: 'Multiple components' },
+                { value: 'componentSet', label: 'Component Set' }
+              ]
+            },
+            { key: 'useAiFallback', type: 'checkbox', label: 'Generate fallback if missing', default: true }
+          ]
+        },
+{
           name: 'Import icon sets',
           desc: 'Explore and batch import icons from standard sets',
           noSelection: true,

@@ -27834,6 +27834,202 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       }
     }
 
+    async function runBatchCreateIconsAction(values, actionMeta) {
+      const rawKeywords = (values.keywords || '').trim();
+      const keywords = Array.from(new Set(
+        rawKeywords.split(/[\s,]+/).map(k => k.trim()).filter(Boolean)
+      ));
+      if (!keywords.length) {
+        showToast('Enter at least one keyword.', 'error');
+        return;
+      }
+
+      const size = clampNumber(values.size || 24, 8, 512);
+      const importMode = values.importMode || 'frame';
+      const selectedIconSource = values.iconSource || 'iconify';
+      const iconSourceMap = {
+        iconify: { apiSource: 'iconify', label: 'Iconify' },
+        antv: { apiSource: 'antv', label: 'AntV Infographic' },
+        iconfont: { apiSource: 'iconfont', label: 'Icon Font' }
+      };
+      const resolvedIconSource = iconSourceMap[selectedIconSource] || iconSourceMap.iconify;
+      const iconApiSource = resolvedIconSource.apiSource;
+      const isNoAiMode = isAiOffModeEnabled();
+      const useAiFallback = iconApiSource !== 'iconfont' && !isNoAiMode && values.useAiFallback !== false;
+
+      const importModeLabel = importMode === 'component'
+        ? 'multiple components'
+        : importMode === 'componentSet'
+          ? 'a component set'
+          : 'frames';
+
+      const userText = `Batch create ${keywords.length} ${resolvedIconSource.label} icon${keywords.length === 1 ? '' : 's'} as ${importModeLabel}: ${keywords.join(', ')}`;
+      addMessage('user', userText, null, { name: actionMeta?.name || 'Batch create icons', icon: actionMeta?.icon });
+      chatHistory.push({ role: 'user', parts: [{ text: userText }] });
+      await autoSaveAfterResponse();
+
+      showThinkingIndicator('Searching and building icons...');
+      setSendButtonMode(true);
+
+      const resolveTopMatchId = async (keyword) => {
+        const cleanDesc = keyword.replace(/["']/g, '').trim();
+        const slug = normalizeIconSlug(cleanDesc || keyword || 'icon');
+        const searchQueries = buildCreateIconSearchQueries(cleanDesc, slug);
+        let matches = [];
+        if (iconApiSource === 'antv') {
+          for (const q of searchQueries) {
+            const res = await searchAntVIcon(q, 20);
+            if (res && res.length) matches.push(...res);
+          }
+          if (!matches.length) {
+            const loosened = await searchAntVIcon(cleanDesc || slug || 'icon', 30);
+            if (loosened && loosened.length) matches.push(...loosened);
+          }
+        } else if (iconApiSource === 'iconfont') {
+          const terms = expandIconFontSynonymTerms(...searchQueries).slice(0, 12);
+          matches = await searchLocalIconFontNames(terms, 240);
+        } else {
+          for (const q of searchQueries) {
+            const res = await searchIconifyIconGlobal(q, 20);
+            if (res && res.length) matches.push(...res);
+          }
+          if (!matches.length) {
+            const loosened = await searchIconifyIconGlobal(cleanDesc || slug || 'icon', 30);
+            if (loosened && loosened.length) matches.push(...loosened);
+          }
+        }
+
+        const uniqueMap = new Map();
+        (matches || []).forEach(m => {
+          if (m?.id && m.id !== '__generate__' && m.id !== '__load_more__') {
+            uniqueMap.set(`${m.fontFamily || ''}:${m.id}`, m);
+          }
+        });
+        let ranked = attachCreateIconMatchMetadata(Array.from(uniqueMap.values()), searchQueries);
+        ranked = sortCreateIconMatches(ranked, { iconApiSource });
+        return { match: ranked[0] || null, slug };
+      };
+
+      // Resolve an icon-font glyph payload (text + font metadata) so the icon
+      // can be inserted as a live font glyph, mirroring the "Create icon" flow.
+      const buildIconFontGlyph = async (iconId, fontFamily) => {
+        try {
+          const selectedFont = fontFamily || 'Font Awesome 6 Free';
+          const fontStyle = getIconFontStyleForIconId(iconId, selectedFont);
+          const availabilityMap = await ensureIconFontAvailabilityMap();
+          const figmaFromList = isIconFontFamilyAvailable(selectedFont, availabilityMap)
+            ? resolveFigmaFontNameForIconFont(selectedFont, fontStyle, availabilityMap)
+            : null;
+          const orderedFamilies = buildOrderedIconFontFamilies(selectedFont, figmaFromList?.family);
+          const primaryFamily = orderedFamilies[0] || selectedFont;
+          const primaryStyle = figmaFromList?.style || fontStyle;
+          const fontFamilyCandidates = orderedFamilies.slice(1);
+          const resolvedInsert = await resolveIconFontInsertText(iconId, selectedFont);
+          const text = resolvedInsert?.text || '?';
+          return { text, fontFamily: primaryFamily, fontStyle: primaryStyle, fontFamilyCandidates };
+        } catch (err) {
+          console.warn('buildIconFontGlyph failed', iconId, err);
+          return null;
+        }
+      };
+
+      const iconsPayload = [];
+      const skipped = [];
+      try {
+        for (const keyword of keywords) {
+          try {
+            const { match } = await resolveTopMatchId(keyword);
+            const id = match?.id || null;
+            let payloadIcon = null;
+
+            if (iconApiSource === 'iconfont') {
+              // Insert as a live icon-font glyph, with SVG as a load fallback.
+              if (id) {
+                const glyph = await buildIconFontGlyph(id, match?.fontFamily);
+                let svgFallback = null;
+                try {
+                  svgFallback = await fetchIconifySvg(id, size, null);
+                } catch (svgErr) {
+                  console.warn('Icon font SVG fallback fetch failed', id, svgErr);
+                }
+                if (glyph || svgFallback) {
+                  payloadIcon = { id: `${keyword}` };
+                  if (glyph) payloadIcon.glyph = glyph;
+                  if (svgFallback) payloadIcon.svg = svgFallback;
+                }
+              }
+            } else {
+              let svg = null;
+              if (id) {
+                svg = id.startsWith('http')
+                  ? await fetchAntVIconSvg(id, size, null)
+                  : await fetchIconifySvg(id, size, null);
+              }
+              if (!svg && useAiFallback) {
+                svg = await generateSvgIconFallback({ description: keyword, strokeWidth: 2, isSolid: false, size, color: null }, size, null);
+              }
+              if (svg) {
+                payloadIcon = { id: `${keyword}`, svg };
+              }
+            }
+
+            if (payloadIcon) {
+              iconsPayload.push(payloadIcon);
+            } else {
+              skipped.push(keyword);
+            }
+          } catch (err) {
+            console.error('Batch create icon failed for keyword', keyword, err);
+            skipped.push(keyword);
+          }
+        }
+
+        if (!iconsPayload.length) {
+          const failText = `No icons could be created for: ${keywords.join(', ')}.`;
+          showToast(failText, 'error');
+          addMessage('bot', failText);
+          chatHistory.push({ role: 'model', parts: [{ text: failText }] });
+          await autoSaveAfterResponse();
+          return;
+        }
+
+        parent.postMessage({
+          pluginMessage: {
+            type: 'import-icons-batch',
+            icons: iconsPayload,
+            config: {
+              size,
+              color: null,
+              importMode,
+              collectionName: 'Batch icons',
+              categoryName: 'Regular',
+              batchIndex: 0,
+              isFirstBatch: true,
+              totalBatches: 1
+            }
+          }
+        }, '*');
+
+        let resultText = `Added ${iconsPayload.length} icon${iconsPayload.length === 1 ? '' : 's'} as ${importModeLabel}.`;
+        if (skipped.length) {
+          resultText += ` Skipped (no match): ${skipped.join(', ')}.`;
+        }
+        addMessage('bot', resultText);
+        chatHistory.push({ role: 'model', parts: [{ text: resultText }] });
+        await autoSaveAfterResponse();
+        showToast(resultText, skipped.length ? 'info' : 'success');
+      } catch (err) {
+        console.error('Batch create icons action failed', err);
+        showToast('Failed to batch create icons.', 'error');
+        addMessage('bot', 'Failed to batch create icons.');
+        chatHistory.push({ role: 'model', parts: [{ text: 'Failed to batch create icons.' }] });
+        await autoSaveAfterResponse();
+      } finally {
+        removeThinkingIndicator();
+        setSendButtonMode(false);
+      }
+    }
+
     function cleanupBrowseState() {
       const submitBtn = document.getElementById('promptDrawerSubmit');
       const cancelBtn = document.getElementById('promptDrawerCancel');
@@ -30703,6 +30899,9 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
       switch (actionKey) {
         case 'createIcon':
           await runCreateIconAction(mergedValues, actionMeta);
+          break;
+        case 'batchCreateIcons':
+          await runBatchCreateIconsAction(mergedValues, actionMeta);
           break;
         case 'browseIconSet':
           await runBrowseIconSetAction(mergedValues, actionMeta);

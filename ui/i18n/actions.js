@@ -2689,6 +2689,9 @@ const exactTranslations = {
     'Create icon': 'アイコン作成',
     'Icon fonts (search all sets via Iconify); glyph if font is active, else SVG':
       'アイコンフォント（Iconify ですべて検索）。フォント有効時はグリフ、未有効時は SVG を挿入。',
+    'Batch create icons': 'アイコン一括作成',
+    'Search multiple keywords at once and add icons straight to the canvas':
+      '複数のキーワードを一度に検索し、アイコンをキャンバスに直接追加します。',
     'Import icon sets': 'アイコンセット読込',
     'SVG UI Pattern': 'SVG UI パターン',
     'Create grid line': 'グリッド線作成',
@@ -3411,6 +3414,9 @@ const exactTranslations = {
     'Create icon': '创建图标',
     'Icon fonts (search all sets via Iconify); glyph if font is active, else SVG':
       '图标字体（通过 Iconify 搜索全部图标集）；若字体已启用则插入字形，否则插入 SVG。',
+    'Batch create icons': '批量创建图标',
+    'Search multiple keywords at once and add icons straight to the canvas':
+      '一次搜索多个关键词，并将图标直接添加到画布。',
     'Import icon sets': '导入图标集',
     'SVG UI Pattern': 'SVG UI 图案',
     'Create grid line': '创建网格线',

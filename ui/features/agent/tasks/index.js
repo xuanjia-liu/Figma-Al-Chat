@@ -39,6 +39,7 @@ export function createAgentTasks(deps = {}) {
   const randomizeSelectedInstanceTask = getTaskByName(quickCreateUiTasks, 'Randomize selected instance');
 
   const createIconTask = getTaskByName(quickCreateImageTasks, 'Create icon');
+  const batchCreateIconsTask = getTaskByName(quickCreateImageTasks, 'Batch create icons');
   const importIconSetsTask = getTaskByName(quickCreateImageTasks, 'Import icon sets');
   const imageToAsciiTask = getTaskByName(quickCreateImageTasks, 'Image to ASCII');
   const perspectiveToolTask = getTaskByName(quickCreateImageTasks, 'Perspective tool');
@@ -70,6 +71,7 @@ export function createAgentTasks(deps = {}) {
       cardComponentTask,
       modalDialogTask,
       createIconTask,
+      batchCreateIconsTask,
       importIconSetsTask,
       imageToAsciiTask,
       buttonTask,

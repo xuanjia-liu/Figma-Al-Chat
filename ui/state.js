@@ -57,6 +57,7 @@ export const NON_AI_DIRECT_ACTIONS = new Set([
   'textLinkColor',
   'removeUnusedProperties',
   'createIcon',
+  'batchCreateIcons',
   'browseIconSet',
   'createGridLines',
   'placeholderSet',

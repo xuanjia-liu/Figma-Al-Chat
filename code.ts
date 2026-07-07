@@ -14613,7 +14613,7 @@ figma.ui.onmessage = async (msg: {
     }
 
     case 'import-icons-batch': {
-      const { icons, config } = msg as unknown as { icons: { id: string, svg: string }[], config: any };
+      const { icons, config } = msg as unknown as { icons: any[], config: any };
       const { size, color, importMode, categoryName, batchIndex, isFirstBatch } = config;
 
       const STYLE_KEYWORDS = [
@@ -14623,6 +14623,52 @@ figma.ui.onmessage = async (msg: {
       ];
 
       const sortedKeywords = [...STYLE_KEYWORDS].sort((a, b) => b.length - a.length);
+
+      // Fill a size x size container (frame or component) with either an
+      // icon-font glyph (a live text node) or an SVG icon (vector). Returns
+      // false when nothing could be created so callers can discard the empty
+      // container. Icon-font glyphs fall back to SVG when the font can't load.
+      const populateIconContainer = async (
+        container: FrameNode | ComponentNode,
+        icon: any
+      ): Promise<boolean> => {
+        const glyph = icon && icon.glyph;
+        if (glyph && glyph.text) {
+          const candidates: string[] = Array.isArray(glyph.fontFamilyCandidates)
+            ? glyph.fontFamilyCandidates.filter((x: unknown) => typeof x === 'string' && (x as string).trim())
+            : [];
+          const font = await resolveIconFontLoad(
+            glyph.fontFamily || 'Font Awesome 6 Free',
+            glyph.fontStyle || 'Regular',
+            candidates
+          );
+          if (font) {
+            const text = figma.createText();
+            text.fontName = font;
+            text.characters = glyph.text;
+            text.fontSize = size;
+            container.appendChild(text);
+            text.x = (size - text.width) / 2;
+            text.y = (size - text.height) / 2;
+            return true;
+          }
+          // Font unavailable in this file: fall back to SVG when provided.
+        }
+        if (icon && icon.svg) {
+          const svgNode = figma.createNodeFromSvg(icon.svg);
+          const offsetX = (size - svgNode.width) / 2;
+          const offsetY = (size - svgNode.height) / 2;
+          const children = [...svgNode.children];
+          for (const child of children) {
+            container.appendChild(child);
+            child.x += offsetX;
+            child.y += offsetY;
+          }
+          svgNode.remove();
+          return true;
+        }
+        return false;
+      };
 
       try {
         const nodes: SceneNode[] = [];
@@ -14641,7 +14687,7 @@ figma.ui.onmessage = async (msg: {
           const batchComponents: ComponentNode[] = [];
 
           // Create all components for this batch
-          icons.forEach(icon => {
+          for (const icon of icons) {
             const fullName = icon.id.split(':').pop() || icon.id;
             let category = categoryName || 'Regular';
             let iconName = fullName;
@@ -14654,22 +14700,17 @@ figma.ui.onmessage = async (msg: {
               }
             }
 
-            const svgNode = figma.createNodeFromSvg(icon.svg);
             const comp = figma.createComponent();
             comp.resize(size, size);
             comp.name = `Category=${category}, Icon Name=${iconName}`;
 
-            const offsetX = (size - svgNode.width) / 2;
-            const offsetY = (size - svgNode.height) / 2;
-            const children = [...svgNode.children];
-            for (const child of children) {
-              comp.appendChild(child);
-              child.x += offsetX;
-              child.y += offsetY;
+            const ok = await populateIconContainer(comp, icon);
+            if (!ok) {
+              comp.remove();
+              continue;
             }
-            svgNode.remove();
             batchComponents.push(comp);
-          });
+          }
 
           if (batchComponents.length > 0) {
             if (!activeComponentSet || activeComponentSet.removed) {
@@ -14710,8 +14751,8 @@ figma.ui.onmessage = async (msg: {
             }
           }
         } else {
-          icons.forEach((icon, idx) => {
-            const svgNode = figma.createNodeFromSvg(icon.svg);
+          for (let idx = 0; idx < icons.length; idx++) {
+            const icon = icons[idx];
             const fullIconName = icon.id.split(':').pop() || icon.id;
 
             // For individual components: style/baseName format
@@ -14745,15 +14786,11 @@ figma.ui.onmessage = async (msg: {
               comp.x = x;
               comp.y = y;
 
-              const offsetX = (size - svgNode.width) / 2;
-              const offsetY = (size - svgNode.height) / 2;
-              const children = [...svgNode.children];
-              for (const child of children) {
-                comp.appendChild(child);
-                child.x += offsetX;
-                child.y += offsetY;
+              const ok = await populateIconContainer(comp, icon);
+              if (!ok) {
+                comp.remove();
+                continue;
               }
-              svgNode.remove();
 
               nodes.push(comp);
             } else {
@@ -14765,19 +14802,15 @@ figma.ui.onmessage = async (msg: {
               frame.y = y;
               frame.fills = []; // Transparent background
 
-              const offsetX = (size - svgNode.width) / 2;
-              const offsetY = (size - svgNode.height) / 2;
-              const children = [...svgNode.children];
-              for (const child of children) {
-                frame.appendChild(child);
-                child.x += offsetX;
-                child.y += offsetY;
+              const ok = await populateIconContainer(frame, icon);
+              if (!ok) {
+                frame.remove();
+                continue;
               }
-              svgNode.remove();
 
               nodes.push(frame);
             }
-          });
+          }
         }
 
         figma.currentPage.selection = nodes;
