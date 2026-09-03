@@ -399,10 +399,17 @@ export function createPromptDrawerHelpers({
     return values;
   }
 
-  function setupCustomSelectListeners() {
-    const selectRoots = [promptDrawerFields, getStockPhotoPreviewSettingsMount()].filter(Boolean);
+  // `scope` limits wiring to a single select (or subtree) - used when one field's
+  // options are rebuilt in place and must not re-bind every other select in the drawer.
+  function setupCustomSelectListeners(scope = null) {
+    const selectRoots = scope
+      ? [scope]
+      : [promptDrawerFields, getStockPhotoPreviewSettingsMount()].filter(Boolean);
     selectRoots.forEach((root) => {
-      root.querySelectorAll('.prompt-custom-select').forEach(selectEl => {
+      const selects = root.classList && root.classList.contains('prompt-custom-select')
+        ? [root]
+        : Array.from(root.querySelectorAll('.prompt-custom-select'));
+      selects.forEach(selectEl => {
       const isMulti = selectEl.dataset.multi === 'true';
       const searchInput = selectEl.querySelector('.prompt-select-search input');
       const isDisabled = () => selectEl.hasAttribute('disabled') || selectEl.classList.contains('disabled');
@@ -557,42 +564,45 @@ export function createPromptDrawerHelpers({
         }
       });
 
-      selectEl.addEventListener('keydown', (e) => {
-        if (e.target.classList.contains('embedded-input')) return;
-        if (isDisabled()) return;
+      if (selectEl.dataset.keydownBound !== 'true') {
+        selectEl.dataset.keydownBound = 'true';
+        selectEl.addEventListener('keydown', (e) => {
+          if (e.target.classList.contains('embedded-input')) return;
+          if (isDisabled()) return;
 
-        const targetOption = e.target.closest('.prompt-custom-select-option');
-        const isOptionContext = !!targetOption;
-        const isSearchInput = e.target.closest('.prompt-select-search');
-        if (getIsPromptComposing()) return;
+          const targetOption = e.target.closest('.prompt-custom-select-option');
+          const isOptionContext = !!targetOption;
+          const isSearchInput = e.target.closest('.prompt-select-search');
+          if (getIsPromptComposing()) return;
 
-        if (isOptionContext && (e.key === 'Enter' || e.key === ' ')) {
-          if (e.metaKey || e.ctrlKey) return;
-          e.preventDefault();
-          if (targetOption.dataset.disabled === 'true') return;
-          targetOption.click();
-          return;
-        }
-
-        if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) {
-          e.preventDefault();
-          const visibleOptions = Array.from(selectEl.querySelectorAll('.prompt-custom-select-option'))
-            .filter(opt => opt.style.display !== 'none' && opt.dataset.disabled !== 'true');
-          if (visibleOptions.length === 0) return;
-
-          const current = targetOption || (isSearchInput ? null : null);
-          const currentIndex = current ? visibleOptions.indexOf(current) : -1;
-          const delta = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1;
-          const nextIndex = currentIndex === -1
-            ? (delta === 1 ? 0 : visibleOptions.length - 1)
-            : (currentIndex + delta + visibleOptions.length) % visibleOptions.length;
-
-          const nextOpt = visibleOptions[nextIndex];
-          if (nextOpt) {
-            nextOpt.focus();
+          if (isOptionContext && (e.key === 'Enter' || e.key === ' ')) {
+            if (e.metaKey || e.ctrlKey) return;
+            e.preventDefault();
+            if (targetOption.dataset.disabled === 'true') return;
+            targetOption.click();
+            return;
           }
-        }
-      });
+
+          if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft'].includes(e.key)) {
+            e.preventDefault();
+            const visibleOptions = Array.from(selectEl.querySelectorAll('.prompt-custom-select-option'))
+              .filter(opt => opt.style.display !== 'none' && opt.dataset.disabled !== 'true');
+            if (visibleOptions.length === 0) return;
+
+            const current = targetOption || (isSearchInput ? null : null);
+            const currentIndex = current ? visibleOptions.indexOf(current) : -1;
+            const delta = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1;
+            const nextIndex = currentIndex === -1
+              ? (delta === 1 ? 0 : visibleOptions.length - 1)
+              : (currentIndex + delta + visibleOptions.length) % visibleOptions.length;
+
+            const nextOpt = visibleOptions[nextIndex];
+            if (nextOpt) {
+              nextOpt.focus();
+            }
+          }
+        });
+      }
 
       syncSelectState(selectEl);
     });

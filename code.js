@@ -17851,6 +17851,28 @@ figma.ui.onmessage = async (msg) => {
                 }
                 return bytes;
             };
+            // Pick which IMAGE paint layers an image action should write to.
+            // A node can stack several image fills; paints render bottom-first, so the
+            // last one is the layer actually seen. 'ALL' (default) writes to every image
+            // fill, 'VISIBLE' writes only to the top-most visible one.
+            const resolveImageFillTargets = (fills, target) => {
+                const mode = typeof target === 'string' ? target.trim().toUpperCase() : '';
+                const indices = [];
+                for (let i = 0; i < fills.length; i++) {
+                    if (fills[i] && fills[i].type === 'IMAGE')
+                        indices.push(i);
+                }
+                if (indices.length === 0)
+                    return indices;
+                if (mode === 'VISIBLE' || mode === 'VISIBLE_ONLY' || mode === 'TOP') {
+                    for (let i = indices.length - 1; i >= 0; i--) {
+                        if (fills[indices[i]].visible !== false)
+                            return [indices[i]];
+                    }
+                    return [indices[indices.length - 1]];
+                }
+                return indices;
+            };
             // Build prototyping trigger
             const buildTrigger = (triggerInput) => {
                 const type = ((triggerInput === null || triggerInput === void 0 ? void 0 : triggerInput.type) || 'ON_CLICK');
@@ -23062,7 +23084,7 @@ figma.ui.onmessage = async (msg) => {
                                         throw new Error('Mixed fills not supported for setImageFill');
                                     }
                                     const fills = Array.isArray(currentFills) ? [...currentFills] : [];
-                                    const imageFillIndex = fills.findIndex((paint) => paint.type === 'IMAGE');
+                                    const targetIndices = resolveImageFillTargets(fills, cmd.fillTarget || cmd.imageFillTarget);
                                     let nextImageHash = null;
                                     if (cmd.imageHash || cmd.imageData) {
                                         const bytes = cmd.imageHash ? null : base64ToBytes(cmd.imageData);
@@ -23072,24 +23094,30 @@ figma.ui.onmessage = async (msg) => {
                                         }
                                         nextImageHash = image.hash;
                                     }
-                                    else if (imageFillIndex !== -1) {
-                                        nextImageHash = fills[imageFillIndex].imageHash;
-                                    }
-                                    else {
+                                    else if (targetIndices.length === 0) {
                                         throw new Error('No image data or existing image fill provided');
                                     }
-                                    if (!nextImageHash) {
-                                        throw new Error('Failed to determine image hash');
-                                    }
-                                    if (cmd.addAsNewLayer || imageFillIndex === -1) {
+                                    if (cmd.addAsNewLayer || targetIndices.length === 0) {
+                                        if (!nextImageHash) {
+                                            throw new Error('Failed to determine image hash');
+                                        }
                                         // Always add as a new top-most fill layer
                                         fills.push(Object.assign(Object.assign({ type: 'IMAGE', imageHash: nextImageHash, scaleMode }, (scaleMode === 'TILE' && scalingFactor !== undefined ? { scalingFactor } : {})), (filters ? { filters } : {})));
                                     }
                                     else {
-                                        const existing = fills[imageFillIndex];
-                                        fills[imageFillIndex] = Object.assign(Object.assign(Object.assign(Object.assign({}, existing), { imageHash: nextImageHash, scaleMode }), (scaleMode === 'TILE'
-                                            ? { scalingFactor: (_38 = scalingFactor !== null && scalingFactor !== void 0 ? scalingFactor : existing.scalingFactor) !== null && _38 !== void 0 ? _38 : 1 }
-                                            : { scalingFactor: undefined })), (filters ? { filters } : {}));
+                                        // Without new image data each target keeps its own image and only
+                                        // the scale mode / adjustments change.
+                                        for (const index of targetIndices) {
+                                            const existing = fills[index];
+                                            const imageHash = nextImageHash || existing.imageHash;
+                                            if (!imageHash) {
+                                                throw new Error('Failed to determine image hash');
+                                            }
+                                            fills[index] = Object.assign(Object.assign(Object.assign(Object.assign({}, existing), { imageHash,
+                                                scaleMode }), (scaleMode === 'TILE'
+                                                ? { scalingFactor: (_38 = scalingFactor !== null && scalingFactor !== void 0 ? scalingFactor : existing.scalingFactor) !== null && _38 !== void 0 ? _38 : 1 }
+                                                : { scalingFactor: undefined })), (filters ? { filters } : {}));
+                                        }
                                     }
                                     node.fills = fills;
                                     success++;
@@ -23180,18 +23208,19 @@ figma.ui.onmessage = async (msg) => {
                                         throw new Error('Mixed fills are not supported for this action');
                                     }
                                     const fills = Array.isArray(currentFills) ? [...currentFills] : [];
-                                    const imageFillIndex = fills.findIndex((paint) => (paint === null || paint === void 0 ? void 0 : paint.type) === 'IMAGE');
+                                    const targetIndices = resolveImageFillTargets(fills, cmd.fillTarget || cmd.imageFillTarget);
                                     const imageFill = {
                                         type: 'IMAGE',
                                         imageHash: image.hash,
                                         scaleMode: 'FIT'
                                     };
-                                    if (imageFillIndex === -1) {
+                                    if (targetIndices.length === 0) {
                                         fills.push(imageFill);
                                     }
                                     else {
-                                        const existing = fills[imageFillIndex];
-                                        fills[imageFillIndex] = Object.assign(Object.assign({}, existing), imageFill);
+                                        for (const index of targetIndices) {
+                                            fills[index] = Object.assign(Object.assign({}, fills[index]), imageFill);
+                                        }
                                     }
                                     anyNode.fills = fills;
                                     success++;

@@ -9439,6 +9439,19 @@ Rules:
       samples: ['home', 'search', 'settings'],
     };
 
+    // Tick box shown inside multi-select options that opt in via `showOptionCheckboxes`.
+    const PROMPT_OPTION_CHECKBOX_HTML = '<span class="prompt-option-checkbox" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
+
+    // Pseudo-prefix used by multi-select icon set pickers (Batch create icons) to mean
+    // "don't restrict the search to any collection".
+    const ALL_ICON_SETS_VALUE = '__all__';
+
+    const allIconSetsOption = {
+      value: ALL_ICON_SETS_VALUE,
+      label: 'All icon sets',
+      detail: 'Search across every Iconify collection',
+    };
+
     let iconCollectionsCache = null;
     let iconSetOptionsCache = [anyIconSetOption, defaultIconSetOption];
     let isLoadingIconSets = false;
@@ -9446,6 +9459,8 @@ Rules:
     const POPULAR_ICONIFY_LOCAL_SEARCH_PREFIXES = ['material-symbols', 'mdi', 'tabler', 'lucide', 'carbon', 'bi'];
     let createIconLazySearchRunId = 0;
     const CREATE_ICON_DRAWER_HISTORY_LIMIT = 8;
+    // Ceiling for the "Icons per keyword" setting in Batch create icons.
+    const BATCH_ICON_MAX_MATCHES_PER_KEYWORD = 10;
     let createIconDrawerHistoryTabs = [];
     let activeCreateIconDrawerHistoryTabId = null;
 
@@ -9604,8 +9619,31 @@ Rules:
         if (field.key === 'iconSet') {
           return { ...field, options: filteredOptions, default: defaultPrefix };
         }
+        if (field.key === 'iconSets') {
+          return { ...field, options: buildIconSetMultiOptions(iconOptions) };
+        }
         return field;
       });
+    }
+
+    // Turns the multi-select value into real Iconify prefixes. An empty result means
+    // "All icon sets" (or nothing ticked) and callers should search every collection.
+    function normalizeSelectedIconSetPrefixes(rawValue) {
+      const list = Array.isArray(rawValue)
+        ? rawValue
+        : (typeof rawValue === 'string' ? rawValue.split(',') : []);
+      const prefixes = list
+        .map(value => String(value || '').trim())
+        .filter(value => value && value !== ALL_ICON_SETS_VALUE);
+      return Array.from(new Set(prefixes));
+    }
+
+    // Options for the multi-select icon set picker: an "All icon sets" entry followed by
+    // every real Iconify collection ("Any Iconify set" is replaced by the All entry).
+    function buildIconSetMultiOptions(options) {
+      const source = Array.isArray(options) && options.length > 0 ? options : iconSetOptionsCache;
+      const setOptions = (source || []).filter(option => option && option.value);
+      return [allIconSetsOption, ...setOptions];
     }
 
     async function hydratePaletteFields(fields = []) {
@@ -11078,8 +11116,8 @@ Rules:
 
           if (hasFields && task) {
             let hydratedFields = task.fields || [];
-            if (task.directAction === 'browseIconSet') {
-              const excludeAnyIconifySet = true;
+            if (task.directAction === 'browseIconSet' || task.directAction === 'batchCreateIcons') {
+              const excludeAnyIconifySet = task.directAction === 'browseIconSet';
               hydratedFields = await hydrateCreateIconFields(task.fields, excludeAnyIconifySet);
             }
             // Open custom prompt drawer for actions with fields
@@ -19175,8 +19213,8 @@ Generate ONLY the reply text, nothing else.`;
           promptDrawerReset.classList.remove('hidden');
         }
 
-        if (actionData.directAction === 'browseIconSet') {
-          const excludeAnyIconifySet = true;
+        if (actionData.directAction === 'browseIconSet' || actionData.directAction === 'batchCreateIcons') {
+          const excludeAnyIconifySet = actionData.directAction === 'browseIconSet';
           hydratedFields = await hydrateCreateIconFields(actionData.fields, excludeAnyIconifySet);
         } else if (actionData.directAction === 'addProperty') {
           const selectionContext = await requestAddPropertySelectionContext();
@@ -19311,6 +19349,8 @@ Generate ONLY the reply text, nothing else.`;
         // THEN attach behaviors to the rendered elements
         if (actionData.directAction === 'browseIconSet') {
           attachCreateIconFieldBehaviors();
+        } else if (actionData.directAction === 'batchCreateIcons') {
+          attachBatchIconSetFieldBehaviors();
         }
 
         if (actionData.name === 'Vertical text') {
@@ -20206,6 +20246,7 @@ Generate ONLY the reply text, nothing else.`;
       applyReStylePreset,
       updatePromptFieldIndicator,
       applySmartRenamePreset,
+      parseSelectedValues,
       getPromptFieldValues,
       setupCustomSelectListeners,
     } = createPromptDrawerHelpers({
@@ -21448,7 +21489,11 @@ Generate ONLY the reply text, nothing else.`;
               ${previewHtml}
             `;
 
-            const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${hasThumbnail || (hasRichLayout && !previewIcons.length) ? ' with-thumbnail' : ''}${isDisabledInAiOffMode ? ' option-disabled' : ''}`;
+            const showOptionCheckbox = isMulti && field.showOptionCheckboxes === true;
+            // Checkbox lists stay full-width rows; the compact thumbnail layout would
+            // shrink options that have a detail line but no preview art.
+            const useThumbnailLayout = !showOptionCheckbox && (hasThumbnail || (hasRichLayout && !previewIcons.length));
+            const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasRichLayout ? ' with-preview' : ''}${useThumbnailLayout ? ' with-thumbnail' : ''}${showOptionCheckbox ? ' with-checkbox' : ''}${isDisabledInAiOffMode ? ' option-disabled' : ''}`;
 
             // Include provider data attribute if present (for image model selection)
             const providerAttr = opt.provider ? ` data-provider="${escapeHtmlAttr(opt.provider)}"` : '';
@@ -21458,6 +21503,7 @@ Generate ONLY the reply text, nothing else.`;
             const hintTextAttr = opt.hintText ? ` data-hint-text="${escapeHtmlAttr(String(opt.hintText))}"` : '';
             return `
               <div class="${classes}" data-value="${escapeHtmlAttr(valueRaw)}" data-label="${escapeHtmlAttr(String(labelRaw).toLowerCase())}" data-text="${escapeHtmlAttr(String(labelRaw))}"${hintTextAttr}${providerAttr}${disabledAttr}${disabledTitleAttr}${ariaDisabledAttr} tabindex="${optionTabIndex}">
+                ${showOptionCheckbox ? PROMPT_OPTION_CHECKBOX_HTML : ''}
                 ${hasRichLayout ? bodyHtml : escapeHtml(labelRaw)}
                 ${moreBtnHtml}
               </div>
@@ -24362,63 +24408,9 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       });
 
       const rebuildIconSetSelect = (options) => {
-        const isMulti = iconSetSelect.dataset.multi === 'true';
-        const selectedValues = parseSelectedValues(iconSetSelect.dataset.selected);
-        const searchable = iconSetSelect.dataset.searchable === 'true';
-        const searchHtml = searchable ? `
-                  <div class="prompt-select-search">
-                    <input type="text" placeholder="Search icon sets" data-select-search="true">
-                    </div>
-                ` : '';
-
-        const optionsHtml = (options || []).map(opt => {
-          const valueRaw = opt.value ?? '';
-          const labelRaw = opt.label ?? valueRaw;
-          const previewIcons = Array.isArray(opt.samples) ? opt.samples : [];
-          const hasPreview = previewIcons.length > 0 || opt.detail;
-          const isSelected = isMulti
-            ? selectedValues.includes(String(valueRaw))
-            : selectedValues[0] === String(valueRaw);
-
-          const previewHtml = previewIcons.length
-            ? `< span class="icon-set-preview" > ${previewIcons.slice(0, 3).map(sample => {
-              const safePrefix = encodeURIComponent(String(valueRaw));
-              const safeSample = encodeURIComponent(String(sample));
-              const textPrimaryColor = getResolvedTextPrimaryColor();
-              return `<img src="https://api.iconify.design/${safePrefix}:${safeSample}.svg?height=20&color=${encodeURIComponent(textPrimaryColor)}" alt="${escapeHtml(sample)}" loading="lazy">`;
-            }).join('')
-            }</span > `
-            : '';
-
-          const bodyHtml = `
-                  <div class="prompt-select-option-main">
-                    <span class="option-title">${escapeHtml(labelRaw)}</span>
-              ${opt.detail ? `<span class="option-sub">${escapeHtml(opt.detail)}</span>` : ''}
-            </div >
-          ${previewHtml}
-        `;
-
-          const classes = `prompt-custom-select-option${isSelected ? ' selected' : ''}${hasPreview ? ' with-preview' : ''}`;
-
-          return `
-          <div class="${classes}" data-value="${escapeHtml(valueRaw)}" data-label="${escapeHtml(String(labelRaw).toLowerCase())}" data-text="${escapeHtml(String(labelRaw))}">
-            ${hasPreview ? bodyHtml : escapeHtml(labelRaw)}
-            </div >
-          `;
-        }).join('');
-
-        iconSetSelect.innerHTML = `
-          ${searchHtml}
-        <div class="prompt-custom-select-options">
-          ${optionsHtml}
-        </div>
-        `;
-
-        // restore selection dataset
-        iconSetSelect.dataset.selected = isMulti ? JSON.stringify(selectedValues) : (selectedValues[0] || '');
-
-        setupCustomSelectListeners();
-        attachPrefixClickHandlers();
+        if (rebuildIconSetSelectOptions(iconSetSelect, options)) {
+          attachPrefixClickHandlers();
+        }
       };
 
       attachPrefixClickHandlers();
@@ -24428,9 +24420,129 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         const optionsBefore = iconSetOptionsCache;
         await ensureIconCollectionsLoaded();
         if (!iconCollectionsCache || iconSetOptionsCache === optionsBefore) return;
-        rebuildIconSetSelect(iconSetOptionsCache);
+        // Browse always imports from a concrete set, so keep "Any Iconify set" out of the list.
+        rebuildIconSetSelect(iconSetOptionsCache.filter(option => option && option.value));
         const current = parseSelectedValues(iconSetSelect.dataset.selected)[0] || iconSetOptionsCache[0]?.value || 'material-symbols';
         console.log('Icon set options loaded, current', current);
+      })();
+    }
+
+    // Renders the option list for an icon set picker. Mirrors the markup produced by
+    // renderPromptFields so an in-place refresh keeps previews (and tick boxes) intact.
+    function buildIconSetOptionsHtml(options, selectedValues, { showCheckbox = false } = {}) {
+      const selected = (selectedValues || []).map(String);
+      return (options || []).map(opt => {
+        const valueRaw = opt.value ?? '';
+        const labelRaw = localizeActionString(opt.label ?? valueRaw);
+        const detail = opt.detail ? localizeActionString(opt.detail) : '';
+        const previewIcons = Array.isArray(opt.samples) ? opt.samples.slice(0, 3) : [];
+        const isSelected = selected.includes(String(valueRaw));
+
+        const previewHtml = previewIcons.length
+          ? `<span class="icon-set-preview">${previewIcons.map(sample => {
+            const safePrefix = encodeURIComponent(String(valueRaw));
+            const safeSample = encodeURIComponent(String(sample));
+            return `<img src="https://api.iconify.design/${safePrefix}:${safeSample}.svg?height=20" alt="${escapeHtmlAttr(sample)}" loading="lazy">`;
+          }).join('')}</span>`
+          : '';
+
+        const classes = `prompt-custom-select-option with-preview${showCheckbox ? ' with-checkbox' : ''}${isSelected ? ' selected' : ''}`;
+
+        return `
+          <div class="${classes}" data-value="${escapeHtmlAttr(valueRaw)}" data-label="${escapeHtmlAttr(String(labelRaw).toLowerCase())}" data-text="${escapeHtmlAttr(String(labelRaw))}" tabindex="0">
+            ${showCheckbox ? PROMPT_OPTION_CHECKBOX_HTML : ''}
+            <div class="prompt-select-option-main">
+              <span class="option-title">${escapeHtml(labelRaw)}</span>
+              ${detail ? `<span class="option-sub">${escapeHtml(detail)}</span>` : ''}
+            </div>
+            ${previewHtml}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Swaps in a freshly loaded icon set list without re-rendering the rest of the drawer,
+    // preserving the current selection and any active search filter.
+    function rebuildIconSetSelectOptions(selectEl, options) {
+      const optionsContainer = selectEl?.querySelector('.prompt-custom-select-options');
+      if (!optionsContainer) return false;
+
+      const isMulti = selectEl.dataset.multi === 'true';
+      const selectedValues = parseSelectedValues(selectEl.dataset.selected);
+      optionsContainer.innerHTML = buildIconSetOptionsHtml(options, selectedValues, { showCheckbox: isMulti });
+
+      const searchInput = selectEl.querySelector('[data-select-search]');
+      const query = (searchInput?.value || '').toLowerCase().trim();
+      if (query) {
+        optionsContainer.querySelectorAll('.prompt-custom-select-option').forEach(opt => {
+          opt.style.display = (opt.dataset.label || '').includes(query) ? '' : 'none';
+        });
+      }
+
+      setupCustomSelectListeners(selectEl);
+      return true;
+    }
+
+    function attachBatchIconSetFieldBehaviors() {
+      const iconSetsSelect = promptDrawerFields.querySelector('[data-field-key="iconSets"]');
+      if (!iconSetsSelect) return;
+
+      let lastSelection = parseSelectedValues(iconSetsSelect.dataset.selected);
+
+      // "All icon sets" is mutually exclusive with individual sets, and at least one
+      // entry always stays ticked so the action never runs with an empty scope.
+      const applyAllIconSetsRule = () => {
+        const options = Array.from(iconSetsSelect.querySelectorAll('.prompt-custom-select-option'));
+        const allOption = options.find(opt => opt.dataset.value === ALL_ICON_SETS_VALUE);
+        if (!allOption) return;
+
+        const selected = parseSelectedValues(iconSetsSelect.dataset.selected);
+        const hasAll = selected.includes(ALL_ICON_SETS_VALUE);
+        const hadAll = lastSelection.includes(ALL_ICON_SETS_VALUE);
+        let changed = false;
+
+        if (hasAll && selected.length > 1) {
+          if (hadAll) {
+            // A single set was just ticked while "All" was on - drop "All".
+            allOption.classList.remove('selected');
+          } else {
+            // "All" was just ticked - clear the individual sets.
+            options.forEach(opt => {
+              if (opt !== allOption) opt.classList.remove('selected');
+            });
+          }
+          changed = true;
+        } else if (selected.length === 0) {
+          allOption.classList.add('selected');
+          changed = true;
+        }
+
+        if (changed) {
+          syncSelectState(iconSetsSelect);
+        }
+        lastSelection = parseSelectedValues(iconSetsSelect.dataset.selected);
+      };
+
+      iconSetsSelect.addEventListener('change', applyAllIconSetsRule);
+      applyAllIconSetsRule();
+
+      // Lazy load the full Iconify collection list without blocking the drawer opening.
+      (async () => {
+        const optionsBefore = iconSetOptionsCache;
+        await ensureIconCollectionsLoaded();
+        if (iconSetOptionsCache === optionsBefore) return;
+        if (!promptDrawerFields.contains(iconSetsSelect)) return;
+
+        const nextOptions = buildIconSetMultiOptions(iconSetOptionsCache);
+        // The change listener above lives on the select itself, so it survives this rebuild.
+        if (!rebuildIconSetSelectOptions(iconSetsSelect, nextOptions)) return;
+
+        const currentAction = currentPromptAction;
+        if (currentAction && Array.isArray(currentAction.fields)) {
+          currentAction.fields = currentAction.fields.map(field => (
+            field && field.key === 'iconSets' ? { ...field, options: nextOptions } : field
+          ));
+        }
       })();
     }
 
@@ -27069,6 +27181,51 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         .filter(Boolean);
     }
 
+    // Icon ids carry their style in the name or the set prefix - "mdi:email-outline",
+    // "ri:mail-fill", "fa6-solid:envelope" - so a stroke/fill preference can rank hits.
+    const ICON_STYLE_PATTERNS = {
+      outline: /(^|[-_/:])(outline|outlined|line|linear|stroke|thin|light)($|[-_/:0-9])/,
+      filled: /(^|[-_/:])(fill|filled|solid|glyph|bold)($|[-_/:0-9])/,
+    };
+
+    // Returns 'outline', 'filled', or '' when the id carries no style signal.
+    function detectIconStyle(iconId) {
+      const id = String(iconId || '').toLowerCase();
+      if (!id) return '';
+      const hasPrefix = id.includes(':');
+      const name = hasPrefix ? id.slice(id.indexOf(':') + 1) : id;
+      const prefix = hasPrefix ? id.slice(0, id.indexOf(':')) : '';
+
+      // The icon's own name is the strongest signal, then the set it comes from.
+      for (const source of [name, prefix]) {
+        if (!source) continue;
+        if (ICON_STYLE_PATTERNS.filled.test(source)) return 'filled';
+        if (ICON_STYLE_PATTERNS.outline.test(source)) return 'outline';
+      }
+
+      const tags = prefix ? iconCollectionsCache?.[prefix]?.tags : null;
+      if (Array.isArray(tags) && tags.length) {
+        const joined = tags.join(' ').toLowerCase();
+        const isFilled = /fill|solid|glyph/.test(joined);
+        const isOutline = /outline|line|stroke/.test(joined);
+        if (isFilled !== isOutline) return isFilled ? 'filled' : 'outline';
+      }
+      return '';
+    }
+
+    // Stable re-sort that floats the preferred style to the top and sinks the opposite
+    // one, leaving the relevance order produced by sortCreateIconMatches intact.
+    function sortIconMatchesByStylePreference(matches, preference) {
+      const list = Array.isArray(matches) ? [...matches] : [];
+      if (!preference || preference === 'any') return list;
+      const rank = (match) => {
+        const style = detectIconStyle(match?.id);
+        if (!style) return 1;
+        return style === preference ? 0 : 2;
+      };
+      return list.sort((a, b) => rank(a) - rank(b));
+    }
+
     function sortCreateIconMatches(matches, { iconApiSource } = {}) {
       const list = Array.isArray(matches) ? [...matches] : [];
       list.sort((a, b) => {
@@ -27856,6 +28013,13 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       const iconApiSource = resolvedIconSource.apiSource;
       const isNoAiMode = isAiOffModeEnabled();
       const useAiFallback = iconApiSource !== 'iconfont' && !isNoAiMode && values.useAiFallback !== false;
+      // Empty means "All icon sets" - search every Iconify collection.
+      const iconSetPrefixes = iconApiSource === 'iconify'
+        ? normalizeSelectedIconSetPrefixes(values.iconSets)
+        : [];
+      const iconStyle = ['outline', 'filled'].includes(values.iconStyle) ? values.iconStyle : 'any';
+      const aiStrokeWidth = clampNumber(values.strokeWidth || 2, 0.5, 12);
+      const matchesPerKeyword = Math.round(clampNumber(values.matchesPerKeyword || 1, 1, BATCH_ICON_MAX_MATCHES_PER_KEYWORD));
 
       const importModeLabel = importMode === 'component'
         ? 'multiple components'
@@ -27863,7 +28027,18 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           ? 'a component set'
           : 'frames';
 
-      const userText = `Batch create ${keywords.length} ${resolvedIconSource.label} icon${keywords.length === 1 ? '' : 's'} as ${importModeLabel}: ${keywords.join(', ')}`;
+      const iconSetScopeLabel = iconSetPrefixes.length
+        ? ` from ${iconSetPrefixes.join(', ')}`
+        : '';
+      const iconStyleLabel = iconStyle === 'outline'
+        ? ', preferring outline icons'
+        : iconStyle === 'filled'
+          ? ', preferring filled icons'
+          : '';
+      const perKeywordLabel = matchesPerKeyword > 1
+        ? ` (up to ${matchesPerKeyword} matches each)`
+        : '';
+      const userText = `Batch create ${keywords.length} ${resolvedIconSource.label} icon${keywords.length === 1 ? '' : 's'}${iconSetScopeLabel}${iconStyleLabel} as ${importModeLabel}${perKeywordLabel}: ${keywords.join(', ')}`;
       addMessage('user', userText, null, { name: actionMeta?.name || 'Batch create icons', icon: actionMeta?.icon });
       chatHistory.push({ role: 'user', parts: [{ text: userText }] });
       await autoSaveAfterResponse();
@@ -27871,11 +28046,14 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
       showThinkingIndicator('Searching and building icons...');
       setSendButtonMode(true);
 
-      const resolveTopMatchId = async (keyword) => {
+      // Returns the ranked matches for one keyword, best first, so the caller can take
+      // as many as the "Icons per keyword" setting asks for.
+      const resolveKeywordMatches = async (keyword) => {
         const cleanDesc = keyword.replace(/["']/g, '').trim();
         const slug = normalizeIconSlug(cleanDesc || keyword || 'icon');
         const searchQueries = buildCreateIconSearchQueries(cleanDesc, slug);
         let matches = [];
+        let scopedApiMatches = [];
         if (iconApiSource === 'antv') {
           for (const q of searchQueries) {
             const res = await searchAntVIcon(q, 20);
@@ -27888,6 +28066,27 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         } else if (iconApiSource === 'iconfont') {
           const terms = expandIconFontSynonymTerms(...searchQueries).slice(0, 12);
           matches = await searchLocalIconFontNames(terms, 240);
+        } else if (iconSetPrefixes.length) {
+          // Scoped to the ticked icon sets: match locally against each collection's icon list.
+          const perSetLimit = Math.max(matchesPerKeyword * 4, Math.ceil(60 / iconSetPrefixes.length));
+          const groups = await Promise.all(
+            iconSetPrefixes.map(prefix => searchIconifyCollectionLocal(prefix, searchQueries, perSetLimit))
+          );
+          matches = groups.flat();
+          if (!matches.length) {
+            // Nothing matched locally - ask the Iconify search API, still one set at a time.
+            const apiResults = await Promise.all(iconSetPrefixes.map(async prefix => {
+              for (const q of searchQueries) {
+                const foundName = await searchIconifyIcon(prefix, q);
+                if (foundName) {
+                  return { prefix, name: foundName, id: `${prefix}:${foundName}`, label: `${prefix}:${foundName}` };
+                }
+              }
+              return null;
+            }));
+            scopedApiMatches = apiResults.filter(Boolean);
+            matches = scopedApiMatches.slice();
+          }
         } else {
           for (const q of searchQueries) {
             const res = await searchIconifyIconGlobal(q, 20);
@@ -27907,7 +28106,13 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         });
         let ranked = attachCreateIconMatchMetadata(Array.from(uniqueMap.values()), searchQueries);
         ranked = sortCreateIconMatches(ranked, { iconApiSource });
-        return { match: ranked[0] || null, slug };
+        ranked = sortIconMatchesByStylePreference(ranked, iconStyle);
+        // API hits inside a chosen set can score below the keyword threshold; keep them
+        // rather than falling back to a generated icon from outside the chosen sets.
+        if (!ranked.length && scopedApiMatches.length) {
+          ranked = sortIconMatchesByStylePreference(scopedApiMatches, iconStyle);
+        }
+        return { matches: ranked, slug };
       };
 
       // Resolve an icon-font glyph payload (text + font metadata) so the icon
@@ -27935,16 +28140,57 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
 
       const iconsPayload = [];
       const skipped = [];
+      const usedNames = new Set();
+
+      // Frames/components are named from this id, so every icon needs its own.
+      // A single hit keeps the user's keyword; multiple hits use the real icon names.
+      const claimIconName = (preferred, fallback) => {
+        const base = String(preferred || fallback || 'icon').replace(/:/g, '-');
+        if (!usedNames.has(base)) {
+          usedNames.add(base);
+          return base;
+        }
+        for (let suffix = 2; suffix < 1000; suffix += 1) {
+          const candidate = `${base}-${suffix}`;
+          if (!usedNames.has(candidate)) {
+            usedNames.add(candidate);
+            return candidate;
+          }
+        }
+        return base;
+      };
+
+      // "mdi:email-outline" -> "mdi-email-outline", so duplicate icon names coming from
+      // different sets stay distinct (and keep their style suffix for variant naming).
+      const buildMatchName = (match, keyword, index) => {
+        const rawId = String(match?.id || '');
+        if (!rawId || rawId.startsWith('http')) return `${keyword}-${index + 1}`;
+        const [prefix, ...rest] = rawId.split(':');
+        const name = rest.join('-') || prefix;
+        const qualified = rest.length ? `${prefix}-${name}` : name;
+        return usedNames.has(name) ? qualified : name;
+      };
+
       try {
         for (const keyword of keywords) {
           try {
-            const { match } = await resolveTopMatchId(keyword);
-            const id = match?.id || null;
-            let payloadIcon = null;
+            const { matches } = await resolveKeywordMatches(keyword);
+            const picked = matches.slice(0, matchesPerKeyword);
+            const useRealNames = picked.length > 1;
+            const builtForKeyword = [];
 
-            if (iconApiSource === 'iconfont') {
-              // Insert as a live icon-font glyph, with SVG as a load fallback.
-              if (id) {
+            for (let index = 0; index < picked.length; index += 1) {
+              const match = picked[index];
+              const id = match?.id || null;
+              if (!id) continue;
+              const iconName = claimIconName(
+                useRealNames ? buildMatchName(match, keyword, index) : keyword,
+                keyword
+              );
+              let payloadIcon = null;
+
+              if (iconApiSource === 'iconfont') {
+                // Insert as a live icon-font glyph, with SVG as a load fallback.
                 const glyph = await buildIconFontGlyph(id, match?.fontFamily);
                 let svgFallback = null;
                 try {
@@ -27953,28 +28199,41 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
                   console.warn('Icon font SVG fallback fetch failed', id, svgErr);
                 }
                 if (glyph || svgFallback) {
-                  payloadIcon = { id: `${keyword}` };
+                  payloadIcon = { id: iconName };
                   if (glyph) payloadIcon.glyph = glyph;
                   if (svgFallback) payloadIcon.svg = svgFallback;
                 }
-              }
-            } else {
-              let svg = null;
-              if (id) {
-                svg = id.startsWith('http')
+              } else {
+                const svg = id.startsWith('http')
                   ? await fetchAntVIconSvg(id, size, null)
                   : await fetchIconifySvg(id, size, null);
+                if (svg) {
+                  payloadIcon = { id: iconName, svg };
+                }
               }
-              if (!svg && useAiFallback) {
-                svg = await generateSvgIconFallback({ description: keyword, strokeWidth: 2, isSolid: false, size, color: null }, size, null);
-              }
-              if (svg) {
-                payloadIcon = { id: `${keyword}`, svg };
+
+              if (payloadIcon) {
+                builtForKeyword.push(payloadIcon);
+              } else {
+                usedNames.delete(iconName);
               }
             }
 
-            if (payloadIcon) {
-              iconsPayload.push(payloadIcon);
+            // Only generate when the search came back empty - a partial result still
+            // means the keyword found real icons.
+            if (!builtForKeyword.length && iconApiSource !== 'iconfont' && useAiFallback) {
+              const svg = await generateSvgIconFallback(
+                { description: keyword, strokeWidth: aiStrokeWidth, isSolid: iconStyle === 'filled', size, color: null },
+                size,
+                null
+              );
+              if (svg) {
+                builtForKeyword.push({ id: claimIconName(keyword, keyword), svg });
+              }
+            }
+
+            if (builtForKeyword.length) {
+              iconsPayload.push(...builtForKeyword);
             } else {
               skipped.push(keyword);
             }
@@ -28010,7 +28269,11 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           }
         }, '*');
 
-        let resultText = `Added ${iconsPayload.length} icon${iconsPayload.length === 1 ? '' : 's'} as ${importModeLabel}.`;
+        const matchedKeywords = keywords.length - skipped.length;
+        const perKeywordSummary = matchesPerKeyword > 1
+          ? ` for ${matchedKeywords} keyword${matchedKeywords === 1 ? '' : 's'}`
+          : '';
+        let resultText = `Added ${iconsPayload.length} icon${iconsPayload.length === 1 ? '' : 's'}${perKeywordSummary} as ${importModeLabel}.`;
         if (skipped.length) {
           resultText += ` Skipped (no match): ${skipped.join(', ')}.`;
         }
@@ -31018,6 +31281,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
 
     async function runSetImageFillFromSelectionAction(values, actionMeta) {
       const scaleMode = values.scaleMode || 'FILL';
+      const fillTarget = values.fillTarget === 'VISIBLE' ? 'VISIBLE' : 'ALL';
       const tileScalePercentRaw = values.tileScale;
       const tileScalePercent = scaleMode === 'TILE' && tileScalePercentRaw !== undefined && tileScalePercentRaw !== null && tileScalePercentRaw !== ''
         ? Number(tileScalePercentRaw)
@@ -31081,6 +31345,7 @@ Respond ONLY with a JSON object containing the "commands" array. Ensure each nod
                 action: 'setImageFill',
                 nodeId: node.id,
                 scaleMode,
+                fillTarget,
                 ...(scaleMode === 'TILE' && tileScale !== undefined ? { scalingFactor: tileScale } : {}),
                 ...(imageFilters ? { filters: imageFilters } : {})
               }))
@@ -45714,7 +45979,8 @@ AVAILABLE COMMANDS:
   - if applyToSelection is true and nodeId is provided, applies to that node.
   - use parentName (frame name) or parentId to specify the parent frame; refId identifies the new node.
 - createImage: { "action": "createImage", "base64": "<BASE64_DATA>" }
-- setImageFill: { "action": "setImageFill", "nodeId": "xxx", "imageHash": "<HASH_OR_EMPTY>", "imageData": "<BASE64_IF_NO_HASH>", "scaleMode": "FILL" }
+- setImageFill: { "action": "setImageFill", "nodeId": "xxx", "imageHash": "<HASH_OR_EMPTY>", "imageData": "<BASE64_IF_NO_HASH>", "scaleMode": "FILL", "fillTarget": "ALL" }
+  - fillTarget: "ALL" (default, updates every image fill layer on the node) or "VISIBLE" (only the top-most visible image fill). Omit imageHash/imageData to keep each layer's image and only change scaleMode/filters.
 - getImageByHash: { "action": "getImageByHash", "hash": "<IMAGE_HASH>" }
 - setFillStyle: { "action": "setFillStyle", "nodeId": "xxx", "styleId": "<PAINT_STYLE_ID>" } (applies a paint style)
 - setStrokeStyle: { "action": "setStrokeStyle", "nodeId": "xxx", "styleId": "<PAINT_STYLE_ID>" } (applies a stroke paint style)
@@ -46431,8 +46697,8 @@ Based on the user's instruction, generate the appropriate commands to modify the
         task.directAction === 'hueShift' ||
         task.directAction === 'fontMapping') {
         let hydratedFields = task.fields || [];
-        if (task.directAction === 'browseIconSet') {
-          const excludeAnyIconifySet = true;
+        if (task.directAction === 'browseIconSet' || task.directAction === 'batchCreateIcons') {
+          const excludeAnyIconifySet = task.directAction === 'browseIconSet';
           hydratedFields = await hydrateCreateIconFields(task.fields, excludeAnyIconifySet);
         } else if (task.directAction === 'generatePalette') {
           // hydratedFields will be handled inside openPromptDrawer for palette generation

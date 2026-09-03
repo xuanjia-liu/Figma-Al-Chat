@@ -47,6 +47,17 @@ export const stylingImageTasks = [
               showWhen: { field: 'scaleMode', equals: 'TILE' }
             },
             {
+              key: 'fillTarget',
+              type: 'select',
+              label: 'Apply to fill layers',
+              default: 'ALL',
+              options: [
+                { value: 'ALL', label: 'All image fill layers' },
+                { value: 'VISIBLE', label: 'Top visible image fill only' }
+              ],
+              hint: 'A node can stack several image fills; the top one is the one you see'
+            },
+            {
               key: 'exposure',
               type: 'slider',
               label: 'Exposure',
@@ -299,11 +310,18 @@ export const quickCreateImageTasks = [
           noSelection: true,
           directAction: 'batchCreateIcons',
           fields: [
-            { key: 'keywords', type: 'text', label: 'Keywords', placeholder: 'home, search settings user', hint: 'Separate keywords with commas or spaces', translate: true },
+            {
+              key: 'keywords',
+              type: 'textarea',
+              label: 'Keywords',
+              placeholder: 'home, search, settings\nuser, profile, logout',
+              hint: 'Separate keywords with commas, spaces, or new lines',
+              translate: true
+            },
             {
               type: 'row',
               fields: [
-                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512 },
+                { key: 'size', type: 'number', label: 'Size (px)', default: 24, min: 8, max: 512, wrapperClass: 'prompt-field--compact' },
                 {
                   key: 'iconSource', type: 'select', label: 'Icon Source', default: 'iconify', options: [
                     { value: 'iconify', label: 'Iconify' },
@@ -312,6 +330,48 @@ export const quickCreateImageTasks = [
                   ]
                 }
               ]
+            },
+            {
+              key: 'iconSets',
+              type: 'select',
+              label: 'Icon sets',
+              multi: true,
+              searchable: true,
+              showThumbnails: false,
+              showOptionCheckboxes: true,
+              default: ['__all__'],
+              options: [],
+              hint: 'Tick "All icon sets" to search everywhere, or tick one or more sets to search only those.',
+              showWhen: { field: 'iconSource', equals: 'iconify' }
+            },
+            {
+              type: 'row',
+              fields: [
+                {
+                  key: 'iconStyle', type: 'select', label: 'Style preference', default: 'any', options: [
+                    { value: 'any', label: 'Any style' },
+                    { value: 'outline', label: 'Outline / stroke' },
+                    { value: 'filled', label: 'Filled / solid' }
+                  ]
+                },
+                {
+                  key: 'strokeWidth', type: 'number', label: 'AI stroke width', default: 2, min: 0.5, step: 0.5,
+                  showWhen: [
+                    { field: 'useAiFallback', equals: true },
+                    { field: 'iconStyle', equalsAny: ['any', 'outline'] }
+                  ]
+                }
+              ]
+            },
+            {
+              key: 'matchesPerKeyword',
+              type: 'slider',
+              label: 'Icons per keyword',
+              default: 1,
+              min: 1,
+              max: 10,
+              step: 1,
+              hint: 'Keep 1 for the single best match, or raise it to import every related hit (up to 10) per keyword.'
             },
             {
               key: 'importMode', type: 'select', label: 'Import as', default: 'frame', options: [

@@ -16436,6 +16436,41 @@
       gap: var(--space-sm);
     }
 
+    .prompt-option-checkbox {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      margin-top: 2px;
+      border: 1px solid var(--border-intense);
+      border-radius: var(--radius-sm);
+      background: var(--bg-primary);
+      color: transparent;
+      transition: all 0.15s ease;
+    }
+
+    .prompt-option-checkbox svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    .prompt-custom-select-option.with-checkbox:hover .prompt-option-checkbox {
+      border-color: var(--accent-agent);
+    }
+
+    .prompt-custom-select-option.with-checkbox.selected .prompt-option-checkbox {
+      background: var(--text-on-accent);
+      border-color: var(--text-on-accent);
+      color: var(--accent-agent);
+    }
+
+    .prompt-custom-select-option.with-checkbox.option-disabled .prompt-option-checkbox {
+      border-color: var(--border);
+      background: var(--bg-tertiary);
+    }
+
     .prompt-custom-select-option.with-thumbnail {
       flex-direction: row;
       align-items: center;
