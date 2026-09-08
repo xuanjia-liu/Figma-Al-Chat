@@ -14212,6 +14212,70 @@
       z-index: 2;
     }
 
+    /* Filter/multi-select toolbar for the Create icon results panel */
+    .icon-hidden {
+      display: none !important;
+    }
+
+    .icon-browse-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .icon-kind-filter {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .icon-kind-filter-label {
+      font-size: var(--text-xs);
+      color: var(--text-muted);
+      margin-right: 2px;
+    }
+
+    .icon-kind-chip {
+      font-size: var(--text-xs);
+      padding: 2px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .icon-kind-chip:hover:not(:disabled) {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .icon-kind-chip.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--text-on-accent);
+    }
+
+    .icon-kind-chip:disabled {
+      opacity: var(--disabled-opacity);
+      cursor: default;
+    }
+
+    /* In multi-select mode a tile toggles instead of inserting, so show the checkbox-ish
+       affordance rather than the "about to insert" pointer. */
+    .icon-browse-results-panel.multi-select .icon-browse-item {
+      cursor: copy;
+    }
+
+    .icon-browse-results-panel.multi-select .icon-browse-item.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
     .icon-browse-selection-bar {
       position: sticky;
       bottom: -12px;
@@ -57140,6 +57204,7 @@
       init_svgo_browser();
       var OLLAMA_LOCAL_BADGE_MODEL_IDS = /* @__PURE__ */ new Set(["gemma4:26b"]);
       var OLLAMA_GEMMA4_MODEL_ID = "gemma4:26b";
+      var TRANSPARENT_PIXEL_DATA_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
       var quickActionNoSelectionBadgeIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 9.42 5.1a1 1 0 0 0 .53.53L13.25 7 9.95 8.37a1 1 0 0 0-.58.58L8 12.25 6.63 8.95a1 1 0 0 0-.58-.58L2.75 7l3.3-1.37a1 1 0 0 0 .58-.58L8 1.75Z"/></svg>';
       var quickActionImmediateBadgeIcon = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.25 3.35c0-.62.68-1 1.2-.67l5.77 3.65a.79.79 0 0 1 0 1.34L6.45 11.32a.8.8 0 0 1-1.2-.67V3.35Z"/></svg>';
       function quickActionHasFields(task) {
@@ -73941,9 +74006,7 @@
                 return '\n                <div class="prompt-custom-select-option'.concat(isSelected ? " selected" : "", '" \n                     data-value="').concat(escapeHtml2(valueRaw), '" \n                     data-label="').concat(escapeHtml2(String(labelRaw).toLowerCase()), '"\n                     data-text="').concat(escapeHtml2(String(labelRaw)), '"\n                     data-has-input="true"\n                     data-input-key="').concat(opt.inputKey, '"\n                     tabindex="').concat(optionTabIndex2, '"').concat(disabledAttr2).concat(disabledTitleAttr).concat(ariaDisabledAttr2, ">\n                  <span>").concat(escapeHtml2(labelRaw), '</span>\n                  <input type="').concat(opt.inputType || "number", '" class="embedded-input"\n                         value="').concat(escapeHtml2(String(inputDefault)), '"\n                         ').concat(opt.inputPlaceholder ? 'placeholder="'.concat(escapeHtml2(String(opt.inputPlaceholder)), '"') : "", "\n                         ").concat(opt.inputMin !== void 0 ? 'min="'.concat(opt.inputMin, '"') : "", "\n                         ").concat(opt.inputMax !== void 0 ? 'max="'.concat(opt.inputMax, '"') : "", '\n                         data-embedded-key="').concat(opt.inputKey, '">\n                  ').concat(suffix, "\n                  ").concat(moreBtnHtml, "\n                </div>\n              ");
               }
               const previewHtml = previewIcons.length ? '<span class="icon-set-preview">'.concat(previewIcons.slice(0, 3).map((sample) => {
-                const safePrefix = encodeURIComponent(String(valueRaw));
-                const safeSample = encodeURIComponent(String(sample));
-                return '<img src="https://api.iconify.design/'.concat(safePrefix, ":").concat(safeSample, '.svg?height=20" alt="').concat(escapeHtml2(sample), '" loading="lazy">');
+                return '<img src="'.concat(TRANSPARENT_PIXEL_DATA_URL, '" data-iconify-id="').concat(escapeHtmlAttr("".concat(valueRaw, ":").concat(sample)), '" data-iconify-size="20" data-iconify-color="#000000" alt="').concat(escapeHtml2(sample), '">');
               }).join(""), "</span>") : "";
               const thumbnailHtml = hasThumbnail && field.showThumbnails !== false ? '<div class="prompt-option-thumbnail"><img src="'.concat(escapeHtml2(opt.thumbnail), '" alt="').concat(escapeHtml2(labelRaw), '" loading="lazy"></div>') : hasRichLayout && !hasThumbnail && !previewIcons.length && field.showThumbnails !== false ? '<div class="prompt-option-thumbnail" style="display:flex;align-items:center;justify-content:center;background:var(--bg-tertiary);color:var(--text-tertiary)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>' : "";
               const bodyHtml = opt.html || "\n              ".concat(thumbnailHtml, '\n              <div class="prompt-select-option-main">\n                <span class="option-title">').concat(escapeHtml2(labelRaw), "</span>\n                ").concat(opt.detail ? '<span class="option-sub">'.concat(escapeHtml2(opt.detail), "</span>") : "", "\n              </div>\n              ").concat(previewHtml, "\n            ");
@@ -74343,6 +74406,7 @@
             scheduleRealtimePromptAction();
           }
         });
+        hydrateIconifyPreviewImages(promptDrawerFields);
         updatePromptDrawerImageChips();
       }
       function savePromptHistory() {
@@ -75825,9 +75889,7 @@
           const previewIcons = Array.isArray(opt.samples) ? opt.samples.slice(0, 3) : [];
           const isSelected = selected.includes(String(valueRaw));
           const previewHtml = previewIcons.length ? '<span class="icon-set-preview">'.concat(previewIcons.map((sample) => {
-            const safePrefix = encodeURIComponent(String(valueRaw));
-            const safeSample = encodeURIComponent(String(sample));
-            return '<img src="https://api.iconify.design/'.concat(safePrefix, ":").concat(safeSample, '.svg?height=20" alt="').concat(escapeHtmlAttr(sample), '" loading="lazy">');
+            return '<img src="'.concat(TRANSPARENT_PIXEL_DATA_URL, '" data-iconify-id="').concat(escapeHtmlAttr("".concat(valueRaw, ":").concat(sample)), '" data-iconify-size="20" data-iconify-color="#000000" alt="').concat(escapeHtmlAttr(sample), '">');
           }).join(""), "</span>") : "";
           const classes = "prompt-custom-select-option with-preview".concat(showCheckbox ? " with-checkbox" : "").concat(isSelected ? " selected" : "");
           return '\n          <div class="'.concat(classes, '" data-value="').concat(escapeHtmlAttr(valueRaw), '" data-label="').concat(escapeHtmlAttr(String(labelRaw).toLowerCase()), '" data-text="').concat(escapeHtmlAttr(String(labelRaw)), '" tabindex="0">\n            ').concat(showCheckbox ? PROMPT_OPTION_CHECKBOX_HTML : "", '\n            <div class="prompt-select-option-main">\n              <span class="option-title">').concat(escapeHtml2(labelRaw), "</span>\n              ").concat(detail ? '<span class="option-sub">'.concat(escapeHtml2(detail), "</span>") : "", "\n            </div>\n            ").concat(previewHtml, "\n          </div>\n        ");
@@ -75847,6 +75909,7 @@
           });
         }
         setupCustomSelectListeners(selectEl);
+        hydrateIconifyPreviewImages(optionsContainer);
         return true;
       }
       function attachBatchIconSetFieldBehaviors() {
@@ -76268,7 +76331,9 @@
         return "unknown";
       }
       function applyIconRenderKindBadge(rootEl, kind) {
-        if (!rootEl || !kind || kind === "unknown") return;
+        if (!rootEl) return;
+        rootEl.dataset.renderKind = kind || "unknown";
+        if (!kind || kind === "unknown") return;
         rootEl.querySelectorAll(".icon-render-kind-badge").forEach((el) => el.remove());
         const badge = document.createElement("span");
         badge.className = "icon-render-kind-badge icon-render-kind-".concat(kind);
@@ -76289,14 +76354,17 @@
           if (cached && cached.svg) {
             raw = cached.svg;
           } else if (match.source === "antv" || String(match.id || "").startsWith("http")) {
-            const res = await fetch(match.id, { cache: "force-cache" });
+            const res = await fetch(match.id, { cache: "no-store" });
             raw = res.ok ? await res.text() : null;
           } else {
             raw = await fetchIconifySvgTextRaw(match.id, 24, null);
           }
           const kind = raw ? classifySvgIconRenderKind(raw) : "unknown";
           applyIconRenderKindBadge(itemEl, kind);
+          return kind;
         } catch (e) {
+          applyIconRenderKindBadge(itemEl, "unknown");
+          return "unknown";
         }
       }
       function getNoImagePlaceholderDataUrl(size = 48) {
@@ -76346,18 +76414,16 @@
           return iconPreviewCache.get(opt.id);
         }
         if (opt.source !== "antv" && typeof opt.id === "string" && !opt.id.startsWith("http")) {
-          const url = "https://api.iconify.design/".concat(opt.id, ".svg?color=").concat(encodeURIComponent(color));
-          const res = await fetch(url, { cache: "force-cache" });
-          const raw2 = res.ok ? await res.text() : null;
+          const raw2 = await fetchIconifySvgTextRaw(opt.id, null, color);
           const renderKind2 = raw2 ? classifySvgIconRenderKind(raw2) : "unknown";
-          const result2 = { preview: url, svg: raw2, renderKind: renderKind2 };
-          iconPreviewCache.set(opt.id, result2);
+          const result2 = { preview: raw2 ? svgToDataUrl(raw2) : null, svg: raw2, renderKind: renderKind2 };
+          if (raw2) iconPreviewCache.set(opt.id, result2);
           return result2;
         }
         let raw = null;
         if (opt.source === "antv" || typeof opt.id === "string" && opt.id.startsWith("http")) {
           try {
-            const res = await fetch(opt.id, { cache: "force-cache" });
+            const res = await fetch(opt.id, { cache: "no-store" });
             raw = res.ok ? await res.text() : null;
           } catch (e) {
             raw = null;
@@ -76466,6 +76532,88 @@
         activeCreateIconDrawerHistoryTabId = createIconDrawerHistoryTabs[0].id;
         return createIconDrawerHistoryTabs[0];
       }
+      async function insertCreateIconMatches(selected, { size, iconApiSource, iconFontFamily } = {}) {
+        const picked = (Array.isArray(selected) ? selected : []).filter((m) => m && m.id && m.id !== "__generate__");
+        if (!picked.length) return { inserted: 0, skipped: [] };
+        const safeSize = clampNumber(size || 24, 16, 512);
+        const gap = Math.max(8, Math.round(safeSize * 0.5));
+        const columns = Math.max(1, Math.min(10, Math.ceil(Math.sqrt(picked.length))));
+        let availabilityMap = null;
+        const unavailableFamilies = /* @__PURE__ */ new Set();
+        if (iconApiSource === "iconfont") {
+          try {
+            availabilityMap = await ensureIconFontAvailabilityMap();
+            const families = new Set(picked.map((m) => m.fontFamily || iconFontFamily).filter(Boolean));
+            families.forEach((family) => {
+              if (!isIconFontFamilyAvailable(family, availabilityMap)) unavailableFamilies.add(family);
+            });
+          } catch (err) {
+            console.warn("Icon font availability lookup failed; inserting as SVG", err);
+            picked.forEach((m) => unavailableFamilies.add(m.fontFamily || iconFontFamily));
+          }
+        }
+        const buildSvgCommand = async (match, x, y) => {
+          let raw = null;
+          if (match.source === "antv" || String(match.id).startsWith("http")) {
+            const preview = await loadPreviewForOption({ id: match.id, source: match.source }, null);
+            raw = (preview == null ? void 0 : preview.svg) || null;
+          } else {
+            raw = await fetchIconifySvgTextRaw(match.id, safeSize, null);
+          }
+          if (!raw) return null;
+          const issues = checkSvgQuality(raw);
+          const fixed = issues.length ? autoFixSvgQuality(raw, issues) : raw;
+          const svg = prepareSvgForFigma(fixed, safeSize, null);
+          if (!svg) return null;
+          return { action: "createNodeFromSvg", svg, name: match.id, width: safeSize, height: safeSize, x, y };
+        };
+        const commands = [];
+        const skipped = [];
+        let fontFallbackCount = 0;
+        for (let i = 0; i < picked.length; i += 1) {
+          const match = picked[i];
+          const x = i % columns * (safeSize + gap);
+          const y = Math.floor(i / columns) * (safeSize + gap);
+          const family = match.fontFamily || iconFontFamily;
+          const useIconFont = iconApiSource === "iconfont" && family && !unavailableFamilies.has(family);
+          try {
+            if (useIconFont) {
+              const fontStyle = getIconFontStyleForIconId(match.id, family);
+              const figmaFromList = resolveFigmaFontNameForIconFont(family, fontStyle, availabilityMap);
+              const orderedFamilies = buildOrderedIconFontFamilies(family, figmaFromList == null ? void 0 : figmaFromList.family);
+              const resolvedInsert = await resolveIconFontInsertText(match.id, family);
+              commands.push({
+                action: "createText",
+                text: (resolvedInsert == null ? void 0 : resolvedInsert.text) || "?",
+                name: "icon-font:".concat(match.id),
+                fontFamily: orderedFamilies[0] || family,
+                fontStyle: (figmaFromList == null ? void 0 : figmaFromList.style) || fontStyle,
+                fontFamilyCandidates: orderedFamilies.slice(1),
+                iconFontStrictLoad: true,
+                fontSize: safeSize,
+                x,
+                y
+              });
+              continue;
+            }
+            const command = await buildSvgCommand(match, x, y);
+            if (command) {
+              if (iconApiSource === "iconfont") fontFallbackCount += 1;
+              commands.push(command);
+            } else {
+              skipped.push(match.id);
+            }
+          } catch (err) {
+            console.warn("Failed to prepare icon for batch insert", match.id, err);
+            skipped.push(match.id);
+          }
+        }
+        if (!commands.length) return { inserted: 0, skipped };
+        const execResult = await executeCommands(commands);
+        const failedCount = Number(execResult == null ? void 0 : execResult.failed) || 0;
+        const inserted = Math.max(0, commands.length - failedCount);
+        return { inserted, skipped, failedCount, fontFallbackCount };
+      }
       function buildCreateIconDrawerResultsPanel(tab) {
         const matches2 = Array.isArray(tab == null ? void 0 : tab.matches) ? tab.matches : [];
         if (!matches2.length) return null;
@@ -76495,6 +76643,188 @@
         let isInserting = false;
         const textPrimaryColor = getResolvedTextPrimaryColor();
         const safeSize = clampNumber(size || 24, 16, 512);
+        const baseStatsText = statsEl.textContent;
+        const KIND_FILTERS = [
+          { key: "all", label: "All" },
+          { key: "fill", label: "Filled" },
+          { key: "stroke", label: "Stroke" },
+          { key: "mixed", label: "Mixed" }
+        ];
+        let activeKindFilter = "all";
+        let multiSelectMode = false;
+        const selectedIds = /* @__PURE__ */ new Set();
+        const renderedItems = [];
+        const matchByKey = /* @__PURE__ */ new Map();
+        const selectionKeyFor = (match) => "".concat(match.fontFamily || "", "|").concat(match.id);
+        const toolbar = document.createElement("div");
+        toolbar.className = "icon-browse-toolbar";
+        const filterGroup = document.createElement("div");
+        filterGroup.className = "icon-kind-filter";
+        const filterLabel = document.createElement("span");
+        filterLabel.className = "icon-kind-filter-label";
+        filterLabel.textContent = "Type";
+        filterGroup.appendChild(filterLabel);
+        const filterChips = /* @__PURE__ */ new Map();
+        KIND_FILTERS.forEach(({ key, label }) => {
+          const chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "icon-kind-chip".concat(key === activeKindFilter ? " active" : "");
+          chip.dataset.kind = key;
+          chip.textContent = label;
+          chip.title = key === "all" ? "Show every result" : key === "fill" ? "Only filled icons" : key === "stroke" ? "Only stroke/outline icons" : "Only icons combining stroke and fill";
+          chip.addEventListener("click", () => {
+            if (activeKindFilter === key) return;
+            activeKindFilter = key;
+            filterChips.forEach((el, k) => el.classList.toggle("active", k === activeKindFilter));
+            applyKindFilter();
+          });
+          filterChips.set(key, chip);
+          filterGroup.appendChild(chip);
+        });
+        toolbar.appendChild(filterGroup);
+        const multiToggle = document.createElement("button");
+        multiToggle.type = "button";
+        multiToggle.className = "cat-select-btn icon-multi-select-toggle";
+        multiToggle.textContent = "Select multiple";
+        multiToggle.title = "Pick several icons and insert them together";
+        toolbar.appendChild(multiToggle);
+        panel.appendChild(toolbar);
+        const selectionBar = document.createElement("div");
+        selectionBar.className = "icon-browse-selection-bar icon-hidden";
+        const selectionStats = document.createElement("div");
+        selectionStats.className = "icon-browse-stats";
+        selectionBar.appendChild(selectionStats);
+        const selectionActions = document.createElement("div");
+        selectionActions.className = "icon-browse-actions";
+        const selectVisibleBtn = document.createElement("button");
+        selectVisibleBtn.type = "button";
+        selectVisibleBtn.className = "cat-select-btn";
+        selectVisibleBtn.textContent = "Select shown";
+        selectionActions.appendChild(selectVisibleBtn);
+        const clearSelectionBtn = document.createElement("button");
+        clearSelectionBtn.type = "button";
+        clearSelectionBtn.className = "cat-select-btn";
+        clearSelectionBtn.textContent = "Clear";
+        selectionActions.appendChild(clearSelectionBtn);
+        const insertSelectedBtn = document.createElement("button");
+        insertSelectedBtn.type = "button";
+        insertSelectedBtn.className = "setting-btn";
+        insertSelectedBtn.style.padding = "4px 12px";
+        selectionActions.appendChild(insertSelectedBtn);
+        selectionBar.appendChild(selectionActions);
+        const isItemVisible = (el) => !el.classList.contains("icon-hidden");
+        const updateSelectionBar = () => {
+          const count = selectedIds.size;
+          const visibleCount = renderedItems.filter(({ el, match }) => match.id !== "__generate__" && isItemVisible(el)).length;
+          selectionStats.textContent = count ? "".concat(count, " selected of ").concat(visibleCount, " shown") : "".concat(visibleCount, " shown — click icons to pick several");
+          insertSelectedBtn.textContent = count ? "Insert ".concat(count, " icon").concat(count === 1 ? "" : "s") : "Insert";
+          insertSelectedBtn.disabled = count === 0 || isInserting;
+          clearSelectionBtn.disabled = count === 0;
+        };
+        const applyKindFilter = () => {
+          const counts = { all: 0, fill: 0, stroke: 0, mixed: 0 };
+          renderedItems.forEach(({ el, match }) => {
+            if (match.id === "__generate__") {
+              el.classList.toggle("icon-hidden", activeKindFilter !== "all" || multiSelectMode);
+              return;
+            }
+            const kind = el.dataset.renderKind || "";
+            counts.all += 1;
+            if (counts[kind] !== void 0) counts[kind] += 1;
+            const show = activeKindFilter === "all" || kind === activeKindFilter;
+            el.classList.toggle("icon-hidden", !show);
+          });
+          filterChips.forEach((chip, key) => {
+            var _a2;
+            const base = ((_a2 = KIND_FILTERS.find((f) => f.key === key)) == null ? void 0 : _a2.label) || key;
+            chip.textContent = "".concat(base, " (").concat(counts[key] || 0, ")");
+            chip.disabled = key !== "all" && !counts[key];
+          });
+          panel.querySelectorAll(".icon-browse-grid").forEach((grid) => {
+            const hasVisible = Array.from(grid.children).some((child) => isItemVisible(child));
+            grid.classList.toggle("icon-hidden", !hasVisible);
+            const heading = grid.previousElementSibling;
+            if (heading && heading.classList.contains("icon-browse-font-family-heading")) {
+              heading.classList.toggle("icon-hidden", !hasVisible);
+            }
+          });
+          panel.querySelectorAll(".icon-browse-section").forEach((section) => {
+            const hasVisible = Array.from(section.querySelectorAll(".icon-browse-item")).some((item) => isItemVisible(item));
+            section.classList.toggle("icon-hidden", !hasVisible);
+          });
+          updateSelectionBar();
+        };
+        let kindFilterFrame = 0;
+        const scheduleKindFilter = () => {
+          if (kindFilterFrame) return;
+          kindFilterFrame = requestAnimationFrame(() => {
+            kindFilterFrame = 0;
+            applyKindFilter();
+          });
+        };
+        const setItemSelected = (el, match, selected) => {
+          if (match.id === "__generate__") return;
+          const key = selectionKeyFor(match);
+          if (selected) selectedIds.add(key);
+          else selectedIds.delete(key);
+          el.classList.toggle("selected", selected);
+        };
+        const setMultiSelectMode = (enabled) => {
+          multiSelectMode = enabled;
+          panel.classList.toggle("multi-select", enabled);
+          multiToggle.classList.toggle("all-selected", enabled);
+          multiToggle.textContent = enabled ? "Done selecting" : "Select multiple";
+          selectionBar.classList.toggle("icon-hidden", !enabled);
+          statsEl.textContent = enabled ? baseStatsText.replace(" Click an icon to insert.", "") : baseStatsText;
+          if (!enabled) {
+            renderedItems.forEach(({ el, match }) => setItemSelected(el, match, false));
+          }
+          applyKindFilter();
+        };
+        multiToggle.addEventListener("click", () => setMultiSelectMode(!multiSelectMode));
+        selectVisibleBtn.addEventListener("click", () => {
+          renderedItems.forEach(({ el, match }) => {
+            if (match.id === "__generate__" || !isItemVisible(el)) return;
+            setItemSelected(el, match, true);
+          });
+          updateSelectionBar();
+        });
+        clearSelectionBtn.addEventListener("click", () => {
+          renderedItems.forEach(({ el, match }) => setItemSelected(el, match, false));
+          updateSelectionBar();
+        });
+        insertSelectedBtn.addEventListener("click", async () => {
+          var _a2;
+          if (isInserting || !selectedIds.size) return;
+          const picked = Array.from(selectedIds).map((key) => matchByKey.get(key)).filter(Boolean);
+          isInserting = true;
+          updateSelectionBar();
+          showThinkingIndicator("Inserting ".concat(picked.length, " icon").concat(picked.length === 1 ? "" : "s", "..."));
+          try {
+            const result = await insertCreateIconMatches(picked, { size: safeSize, iconApiSource, iconFontFamily });
+            let text = "Inserted ".concat(result.inserted, " icon").concat(result.inserted === 1 ? "" : "s", ".");
+            if (result.fontFallbackCount) {
+              text += " ".concat(result.fontFallbackCount, " inserted as SVG (icon font unavailable in Figma).");
+            }
+            if ((_a2 = result.skipped) == null ? void 0 : _a2.length) {
+              text += " Skipped ".concat(result.skipped.length, ": ").concat(result.skipped.slice(0, 8).join(", ")).concat(result.skipped.length > 8 ? "..." : "", ".");
+            }
+            addMessage("bot", text);
+            chatHistory.push({ role: "model", parts: [{ text }] });
+            await autoSaveAfterResponse();
+            showToast(text, result.inserted ? "success" : "error");
+            if (result.inserted) {
+              renderedItems.forEach(({ el, match }) => setItemSelected(el, match, false));
+            }
+          } catch (err) {
+            console.error("Batch icon insert failed", err);
+            showToast("Failed to insert the selected icons.", "error");
+          } finally {
+            removeThinkingIndicator();
+            isInserting = false;
+            updateSelectionBar();
+          }
+        });
         const appendMatchItem = (grid, match) => {
           const item = document.createElement("div");
           item.className = "icon-browse-item";
@@ -76521,18 +76851,39 @@
             img.src = placeholder;
             setImagePlaceholderFallback(img, 24);
             previewBox.appendChild(img);
+            const applyPreviewDataUrl = (dataUrl) => {
+              if (!dataUrl) {
+                markIconPreviewUnavailable(img, 24);
+                return;
+              }
+              img.style.filter = "";
+              img.style.opacity = "";
+              img.src = dataUrl;
+            };
             if (match.source === "antv" || String(match.id || "").startsWith("http")) {
               loadPreviewForOption({ id: match.id, source: match.source }, textPrimaryColor).then((preview) => {
-                if (!preview) return;
-                if (preview.preview) img.src = preview.preview;
-                else if (preview.svg) img.src = svgToDataUrl(preview.svg);
-              }).catch((err) => console.warn("Failed to load icon preview", match.id, err));
+                var _a2;
+                if (preview == null ? void 0 : preview.svg) applyPreviewDataUrl(svgToDataUrl(preview.svg));
+                else if ((_a2 = preview == null ? void 0 : preview.preview) == null ? void 0 : _a2.startsWith("data:")) applyPreviewDataUrl(preview.preview);
+                else applyPreviewDataUrl(null);
+              }).catch((err) => {
+                console.warn("Failed to load icon preview", match.id, err);
+                markIconPreviewUnavailable(img, 24);
+              });
             } else {
-              img.src = "https://api.iconify.design/".concat(match.id, ".svg?height=24&color=").concat(encodeURIComponent(textPrimaryColor));
+              loadIconPreviewDataUrl(match.id, textPrimaryColor, 24).then(applyPreviewDataUrl).catch((err) => {
+                console.warn("Failed to load icon preview", match.id, err);
+                markIconPreviewUnavailable(img, 24);
+              });
             }
           }
           item.appendChild(previewBox);
           item.addEventListener("click", async () => {
+            if (multiSelectMode && match.id !== "__generate__") {
+              setItemSelected(item, match, !selectedIds.has(selectionKeyFor(match)));
+              updateSelectionBar();
+              return;
+            }
             if (isInserting) return;
             isInserting = true;
             item.classList.add("selected");
@@ -76563,7 +76914,10 @@
             }
           });
           grid.appendChild(item);
-          fetchAndApplyBrowseItemKindBadge(item, match).catch(() => {
+          item.dataset.selectionKey = selectionKeyFor(match);
+          renderedItems.push({ el: item, match });
+          matchByKey.set(item.dataset.selectionKey, match);
+          fetchAndApplyBrowseItemKindBadge(item, match).then(() => scheduleKindFilter()).catch(() => {
           });
         };
         const tieredMatches = /* @__PURE__ */ new Map();
@@ -76606,7 +76960,77 @@
           }
           panel.appendChild(section);
         });
+        panel.appendChild(selectionBar);
+        applyKindFilter();
+        attachIconGridDragSelect(panel, {
+          isEnabled: () => multiSelectMode,
+          onSelect: (items) => {
+            items.forEach((el) => {
+              const match = matchByKey.get(el.dataset.selectionKey);
+              if (!match) return;
+              setItemSelected(el, match, !selectedIds.has(el.dataset.selectionKey));
+            });
+            updateSelectionBar();
+          }
+        });
         return panel;
+      }
+      function attachIconGridDragSelect(container2, { isEnabled, onSelect }) {
+        let isDragging = false;
+        let startClientX = 0;
+        let startClientY = 0;
+        let selectionRect = null;
+        const removeSelectionRect = () => {
+          if (selectionRect) {
+            selectionRect.remove();
+            selectionRect = null;
+          }
+        };
+        const itemsInRect = (rect) => Array.from(container2.querySelectorAll(".icon-browse-item")).filter((item) => {
+          if (item.classList.contains("icon-hidden")) return false;
+          const box = item.getBoundingClientRect();
+          return box.right > rect.left && box.left < rect.right && box.bottom > rect.top && box.top < rect.bottom;
+        });
+        const onMouseMove = (e) => {
+          if (!isDragging || !selectionRect) return;
+          selectionRect.style.left = "".concat(Math.min(startClientX, e.clientX), "px");
+          selectionRect.style.top = "".concat(Math.min(startClientY, e.clientY), "px");
+          selectionRect.style.width = "".concat(Math.abs(e.clientX - startClientX), "px");
+          selectionRect.style.height = "".concat(Math.abs(e.clientY - startClientY), "px");
+        };
+        const onMouseUp = () => {
+          if (!isDragging) return;
+          if (selectionRect) {
+            const picked = itemsInRect(selectionRect.getBoundingClientRect());
+            if (picked.length) onSelect(picked);
+          }
+          removeSelectionRect();
+          isDragging = false;
+          window.removeEventListener("mousemove", onMouseMove);
+          window.removeEventListener("mouseup", onMouseUp);
+        };
+        container2.addEventListener("mousedown", (e) => {
+          if (!isEnabled() || e.button !== 0) return;
+          if (e.target.closest(".icon-browse-item")) return;
+          if (e.target.closest(".icon-browse-toolbar, .icon-browse-selection-bar")) return;
+          if (!e.target.closest(".icon-browse-section, .icon-browse-grid") && e.target !== container2) return;
+          isDragging = true;
+          startClientX = e.clientX;
+          startClientY = e.clientY;
+          selectionRect = document.createElement("div");
+          selectionRect.className = "icon-selection-rect";
+          selectionRect.style.left = "".concat(startClientX, "px");
+          selectionRect.style.top = "".concat(startClientY, "px");
+          selectionRect.style.width = "0px";
+          selectionRect.style.height = "0px";
+          document.body.appendChild(selectionRect);
+          window.addEventListener("mousemove", onMouseMove);
+          window.addEventListener("mouseup", onMouseUp);
+          e.preventDefault();
+        });
+        container2.addEventListener("selectstart", (e) => {
+          if (isDragging) e.preventDefault();
+        });
       }
       function renderCreateIconDrawerHistoryView() {
         const activeTab = getActiveCreateIconDrawerHistoryTab();
@@ -77049,8 +77473,217 @@
         }
         return fixed;
       }
+      var ICONIFY_BULK_CHUNK_SIZE = 80;
+      var ICONIFY_BULK_BATCH_DELAY_MS = 30;
+      var iconifyBodyCache = /* @__PURE__ */ new Map();
+      var iconifyBodyPending = /* @__PURE__ */ new Map();
+      var iconifyBodyQueues = /* @__PURE__ */ new Map();
+      var iconifyBulkFailureLogCount = 0;
+      var ICONIFY_BULK_CONCURRENCY = 6;
+      var iconifyBulkActive = 0;
+      var iconifyBulkWaiters = [];
+      function acquireIconifyBulkSlot() {
+        const release = () => {
+          iconifyBulkActive -= 1;
+          const next = iconifyBulkWaiters.shift();
+          if (next) {
+            iconifyBulkActive += 1;
+            next(release);
+          }
+        };
+        if (iconifyBulkActive < ICONIFY_BULK_CONCURRENCY) {
+          iconifyBulkActive += 1;
+          return Promise.resolve(release);
+        }
+        return new Promise((resolve) => iconifyBulkWaiters.push(resolve));
+      }
+      function requestIconifyIconBody(prefix, name3) {
+        if (!prefix || !name3) return Promise.resolve(null);
+        const key = "".concat(prefix, ":").concat(name3);
+        if (iconifyBodyCache.has(key)) return Promise.resolve(iconifyBodyCache.get(key));
+        if (iconifyBodyPending.has(key)) return iconifyBodyPending.get(key);
+        let resolveEntry;
+        const pending = new Promise((resolve) => {
+          resolveEntry = resolve;
+        });
+        iconifyBodyPending.set(key, pending);
+        let queue = iconifyBodyQueues.get(prefix);
+        if (!queue) {
+          queue = { resolvers: /* @__PURE__ */ new Map(), timer: null };
+          iconifyBodyQueues.set(prefix, queue);
+        }
+        if (!queue.resolvers.has(name3)) queue.resolvers.set(name3, []);
+        queue.resolvers.get(name3).push(resolveEntry);
+        if (!queue.timer) {
+          queue.timer = setTimeout(() => {
+            flushIconifyBodyQueue(prefix).catch(() => {
+            });
+          }, ICONIFY_BULK_BATCH_DELAY_MS);
+        }
+        return pending;
+      }
+      async function flushIconifyBodyQueue(prefix) {
+        const queue = iconifyBodyQueues.get(prefix);
+        if (!queue) return;
+        iconifyBodyQueues.delete(prefix);
+        if (queue.timer) clearTimeout(queue.timer);
+        const names = Array.from(queue.resolvers.keys());
+        const settle = (name3, value2, cacheable) => {
+          const key = "".concat(prefix, ":").concat(name3);
+          if (cacheable) iconifyBodyCache.set(key, value2);
+          iconifyBodyPending.delete(key);
+          (queue.resolvers.get(name3) || []).forEach((fn2) => fn2(value2));
+        };
+        for (let i = 0; i < names.length; i += ICONIFY_BULK_CHUNK_SIZE) {
+          const chunk = names.slice(i, i + ICONIFY_BULK_CHUNK_SIZE);
+          let data = null;
+          const release = await acquireIconifyBulkSlot();
+          try {
+            const url = new URL("https://api.iconify.design/".concat(prefix, ".json"));
+            url.searchParams.set("icons", chunk.join(","));
+            const res = await fetch(url.toString(), { cache: "no-store" });
+            if (res.ok) data = await res.json();
+            else if (iconifyBulkFailureLogCount < 3) {
+              iconifyBulkFailureLogCount += 1;
+              console.warn("Iconify bulk fetch returned", res.status, "for", prefix);
+            }
+          } catch (err) {
+            if (iconifyBulkFailureLogCount < 3) {
+              iconifyBulkFailureLogCount += 1;
+              console.warn("Iconify bulk fetch failed for", prefix, err);
+            }
+          } finally {
+            release();
+          }
+          if (!data || typeof data !== "object") {
+            chunk.forEach((name3) => settle(name3, null, false));
+            continue;
+          }
+          const fallbackWidth = Number(data.width) || 24;
+          const fallbackHeight = Number(data.height) || 24;
+          const icons = data.icons || {};
+          const aliases2 = data.aliases || {};
+          chunk.forEach((name3) => {
+            var _a2;
+            let entry = icons[name3];
+            if (!entry) {
+              const parent2 = (_a2 = aliases2[name3]) == null ? void 0 : _a2.parent;
+              if (parent2) entry = icons[parent2];
+            }
+            if (entry && entry.body) {
+              settle(name3, {
+                body: entry.body,
+                width: Number(entry.width) || fallbackWidth,
+                height: Number(entry.height) || fallbackHeight
+              }, true);
+            } else {
+              settle(name3, null, true);
+            }
+          });
+        }
+      }
+      function buildSvgFromIconifyBody(entry, size, color) {
+        if (!entry || !entry.body) return null;
+        const viewWidth = Number(entry.width) || 24;
+        const viewHeight = Number(entry.height) || 24;
+        const requested = Number(size) > 0 ? Number(size) : null;
+        const renderWidth = requested || viewWidth;
+        const renderHeight = requested || viewHeight;
+        const body = color ? entry.body.replace(/currentColor/g, color) : entry.body;
+        return '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ' + 'viewBox="0 0 '.concat(viewWidth, " ").concat(viewHeight, '" width="').concat(renderWidth, '" height="').concat(renderHeight, '">').concat(body, "</svg>");
+      }
+      function splitIconifyId(iconId) {
+        const raw = String(iconId || "").trim();
+        const sep = raw.indexOf(":");
+        if (sep <= 0 || sep === raw.length - 1) return null;
+        return { prefix: raw.slice(0, sep), name: raw.slice(sep + 1) };
+      }
+      var iconPreviewDataUrlCache = /* @__PURE__ */ new Map();
+      function loadIconPreviewDataUrl(iconId, color, size = 24) {
+        const parts = splitIconifyId(iconId);
+        if (!parts) return Promise.resolve(null);
+        const cacheKey = "".concat(parts.prefix, ":").concat(parts.name, "|").concat(color || "", "|").concat(size);
+        if (iconPreviewDataUrlCache.has(cacheKey)) return iconPreviewDataUrlCache.get(cacheKey);
+        const pending = requestIconifyIconBody(parts.prefix, parts.name).then((entry) => {
+          const svg = buildSvgFromIconifyBody(entry, size, color);
+          const dataUrl = svg ? svgToDataUrl(svg) : null;
+          if (!dataUrl) iconPreviewDataUrlCache.delete(cacheKey);
+          return dataUrl;
+        }).catch((err) => {
+          iconPreviewDataUrlCache.delete(cacheKey);
+          console.warn("Icon preview build failed", iconId, err);
+          return null;
+        });
+        iconPreviewDataUrlCache.set(cacheKey, pending);
+        return pending;
+      }
+      function hydrateIconifyImage(img) {
+        var _a2;
+        const iconId = (_a2 = img == null ? void 0 : img.dataset) == null ? void 0 : _a2.iconifyId;
+        if (!iconId) return;
+        const state = img.dataset.iconifyHydrated;
+        if (state === "pending" || state === "true") return;
+        img.dataset.iconifyHydrated = "pending";
+        const size = Number(img.dataset.iconifySize) || 24;
+        const color = img.dataset.iconifyColor || null;
+        loadIconPreviewDataUrl(iconId, color, size).then((dataUrl) => {
+          if (dataUrl) {
+            img.dataset.iconifyHydrated = "true";
+            img.src = dataUrl;
+          } else {
+            img.dataset.iconifyHydrated = "failed";
+            markIconPreviewUnavailable(img, size);
+          }
+        }).catch(() => {
+          img.dataset.iconifyHydrated = "failed";
+          markIconPreviewUnavailable(img, size);
+        });
+      }
+      var iconifyPreviewLazyObserver = null;
+      function getIconifyPreviewLazyObserver() {
+        if (iconifyPreviewLazyObserver) return iconifyPreviewLazyObserver;
+        if (typeof IntersectionObserver !== "function") return null;
+        iconifyPreviewLazyObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            iconifyPreviewLazyObserver.unobserve(entry.target);
+            hydrateIconifyImage(entry.target);
+          });
+        }, { rootMargin: "200px" });
+        return iconifyPreviewLazyObserver;
+      }
+      function hydrateIconifyPreviewImages(root, { lazy = true } = {}) {
+        const scope2 = root || document;
+        const targets = scope2.querySelectorAll("img[data-iconify-id]:not([data-iconify-hydrated])");
+        if (!targets.length) return;
+        const observer = lazy ? getIconifyPreviewLazyObserver() : null;
+        targets.forEach((img) => {
+          if (observer) {
+            img.dataset.iconifyHydrated = "observed";
+            observer.observe(img);
+          } else {
+            hydrateIconifyImage(img);
+          }
+        });
+      }
+      function markIconPreviewUnavailable(img, size = 24) {
+        if (!img) return;
+        img.style.filter = "none";
+        img.style.opacity = "0.6";
+        img.src = getNoImagePlaceholderDataUrl(size);
+      }
       async function fetchIconifySvgTextRaw(iconId, size, color) {
         if (!iconId) return null;
+        const parts = splitIconifyId(iconId);
+        if (parts) {
+          try {
+            const entry = await requestIconifyIconBody(parts.prefix, parts.name);
+            const built = buildSvgFromIconifyBody(entry, size, color);
+            if (built) return built;
+          } catch (err) {
+            console.warn("Iconify JSON fetch failed", iconId, err);
+          }
+        }
         try {
           const url = new URL("https://api.iconify.design/".concat(iconId, ".svg"));
           if (size) {
@@ -77064,7 +77697,7 @@
           if (!res.ok) return null;
           return await res.text();
         } catch (err) {
-          console.error("Iconify fetch failed", err);
+          console.warn("Iconify SVG endpoint fetch failed", iconId, err);
           return null;
         }
       }
@@ -79136,9 +79769,8 @@
           entries.forEach((entry) => {
             if (entry.isIntersecting) {
               const img = entry.target.querySelector("img");
-              if (img && img.dataset.src) {
-                img.src = img.dataset.src;
-                delete img.dataset.src;
+              if (img && img.dataset.iconifyId && !img.dataset.iconifyHydrated) {
+                hydrateIconifyPreviewImages(entry.target, { lazy: false });
                 if (window._currentBrowseObserver) {
                   window._currentBrowseObserver.unobserve(entry.target);
                 }
@@ -79216,7 +79848,9 @@
             item.className = "icon-browse-item".concat(selectedIcons.has(iconName) ? " selected" : "");
             item.dataset.name = iconName;
             const img = document.createElement("img");
-            img.dataset.src = "https://api.iconify.design/".concat(collectionData.prefix, ":").concat(iconName, ".svg?color=").concat(encodeURIComponent(iconBrowsePreviewColor));
+            img.src = TRANSPARENT_PIXEL_DATA_URL;
+            img.dataset.iconifyId = "".concat(collectionData.prefix, ":").concat(iconName);
+            img.dataset.iconifyColor = iconBrowsePreviewColor;
             item.onclick = () => {
               if (selectedIcons.has(iconName)) {
                 selectedIcons.delete(iconName);

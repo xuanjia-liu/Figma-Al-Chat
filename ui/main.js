@@ -79,6 +79,10 @@ import { optimize as optimizeSvg } from 'svgo/browser';
     const OLLAMA_LOCAL_BADGE_MODEL_IDS = new Set(['gemma4:26b']);
     const OLLAMA_GEMMA4_MODEL_ID = 'gemma4:26b';
 
+    // 1x1 transparent GIF: holds an <img>'s place until its icon body arrives, so the tile
+    // does not flash a broken-image glyph.
+    const TRANSPARENT_PIXEL_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
     const quickActionNoSelectionBadgeIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.75 9.42 5.1a1 1 0 0 0 .53.53L13.25 7 9.95 8.37a1 1 0 0 0-.58.58L8 12.25 6.63 8.95a1 1 0 0 0-.58-.58L2.75 7l3.3-1.37a1 1 0 0 0 .58-.58L8 1.75Z"/></svg>';
     const quickActionImmediateBadgeIcon = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.25 3.35c0-.62.68-1 1.2-.67l5.77 3.65a.79.79 0 0 1 0 1.34L6.45 11.32a.8.8 0 0 1-1.2-.67V3.35Z"/></svg>';
 
@@ -21470,9 +21474,9 @@ Generate ONLY the reply text, nothing else.`;
 
             const previewHtml = previewIcons.length
               ? `<span class="icon-set-preview">${previewIcons.slice(0, 3).map(sample => {
-                const safePrefix = encodeURIComponent(String(valueRaw));
-                const safeSample = encodeURIComponent(String(sample));
-                return `<img src="https://api.iconify.design/${safePrefix}:${safeSample}.svg?height=20" alt="${escapeHtml(sample)}" loading="lazy">`;
+                // The chip renders on a white background, so bake in black rather than the
+                // theme text colour (see .icon-set-preview img in ui.css).
+                return `<img src="${TRANSPARENT_PIXEL_DATA_URL}" data-iconify-id="${escapeHtmlAttr(`${valueRaw}:${sample}`)}" data-iconify-size="20" data-iconify-color="#000000" alt="${escapeHtml(sample)}">`;
               }).join('')}</span>`
               : '';
 
@@ -22508,6 +22512,9 @@ Generate ONLY the reply text, nothing else.`;
           scheduleRealtimePromptAction();
         }
       });
+
+      // Fill in any icon-set sample previews emitted as HTML strings above.
+      hydrateIconifyPreviewImages(promptDrawerFields);
 
       // Initialize image chips if there are any images
       updatePromptDrawerImageChips();
@@ -24440,9 +24447,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
 
         const previewHtml = previewIcons.length
           ? `<span class="icon-set-preview">${previewIcons.map(sample => {
-            const safePrefix = encodeURIComponent(String(valueRaw));
-            const safeSample = encodeURIComponent(String(sample));
-            return `<img src="https://api.iconify.design/${safePrefix}:${safeSample}.svg?height=20" alt="${escapeHtmlAttr(sample)}" loading="lazy">`;
+            return `<img src="${TRANSPARENT_PIXEL_DATA_URL}" data-iconify-id="${escapeHtmlAttr(`${valueRaw}:${sample}`)}" data-iconify-size="20" data-iconify-color="#000000" alt="${escapeHtmlAttr(sample)}">`;
           }).join('')}</span>`
           : '';
 
@@ -24480,6 +24485,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       }
 
       setupCustomSelectListeners(selectEl);
+      hydrateIconifyPreviewImages(optionsContainer);
       return true;
     }
 
@@ -24996,7 +25002,11 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
     }
 
     function applyIconRenderKindBadge(rootEl, kind) {
-      if (!rootEl || !kind || kind === 'unknown') return;
+      if (!rootEl) return;
+      // Recorded even for 'unknown' so the fill/stroke/mixed filter can tell "not yet
+      // classified" apart from "classified as unknown".
+      rootEl.dataset.renderKind = kind || 'unknown';
+      if (!kind || kind === 'unknown') return;
       rootEl.querySelectorAll('.icon-render-kind-badge').forEach(el => el.remove());
       const badge = document.createElement('span');
       badge.className = `icon-render-kind-badge icon-render-kind-${kind}`;
@@ -25018,15 +25028,18 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         if (cached && cached.svg) {
           raw = cached.svg;
         } else if (match.source === 'antv' || String(match.id || '').startsWith('http')) {
-          const res = await fetch(match.id, { cache: 'force-cache' });
+          const res = await fetch(match.id, { cache: 'no-store' });
           raw = res.ok ? await res.text() : null;
         } else {
           raw = await fetchIconifySvgTextRaw(match.id, 24, null);
         }
         const kind = raw ? classifySvgIconRenderKind(raw) : 'unknown';
         applyIconRenderKindBadge(itemEl, kind);
+        return kind;
       } catch (e) {
         /* ignore badge failures */
+        applyIconRenderKindBadge(itemEl, 'unknown');
+        return 'unknown';
       }
     }
 
@@ -25094,22 +25107,21 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         return iconPreviewCache.get(opt.id);
       }
 
-      // Optimization: For Iconify icons, use direct API URLs which are more reliable
+      // Iconify icons: go through the JSON API and build a data: URL. Pointing an <img> at
+      // `/<id>.svg` (or fetching it) fails inside Figma's opaque-origin plugin iframe --
+      // that endpoint sends no Access-Control-Allow-Origin header for origin "null".
       if (opt.source !== 'antv' && typeof opt.id === 'string' && !opt.id.startsWith('http')) {
-        const url = `https://api.iconify.design/${opt.id}.svg?color=${encodeURIComponent(color)}`;
-        // We still need the raw SVG for direct insertion
-        const res = await fetch(url, { cache: 'force-cache' });
-        const raw = res.ok ? await res.text() : null;
+        const raw = await fetchIconifySvgTextRaw(opt.id, null, color);
         const renderKind = raw ? classifySvgIconRenderKind(raw) : 'unknown';
-        const result = { preview: url, svg: raw, renderKind };
-        iconPreviewCache.set(opt.id, result);
+        const result = { preview: raw ? svgToDataUrl(raw) : null, svg: raw, renderKind };
+        if (raw) iconPreviewCache.set(opt.id, result);
         return result;
       }
 
       let raw = null;
       if (opt.source === 'antv' || (typeof opt.id === 'string' && opt.id.startsWith('http'))) {
         try {
-          const res = await fetch(opt.id, { cache: 'force-cache' });
+          const res = await fetch(opt.id, { cache: 'no-store' });
           raw = res.ok ? await res.text() : null;
         } catch (e) {
           raw = null;
@@ -25231,6 +25243,105 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return createIconDrawerHistoryTabs[0];
     }
 
+    // Inserts several picked icons in one go, laid out on a grid, as a single
+    // executeCommands batch so the canvas gets one undo step and the chat one message
+    // (looping createIconFromId would post a message per icon).
+    async function insertCreateIconMatches(selected, { size, iconApiSource, iconFontFamily } = {}) {
+      const picked = (Array.isArray(selected) ? selected : []).filter(m => m && m.id && m.id !== '__generate__');
+      if (!picked.length) return { inserted: 0, skipped: [] };
+
+      const safeSize = clampNumber(size || 24, 16, 512);
+      const gap = Math.max(8, Math.round(safeSize * 0.5));
+      const columns = Math.max(1, Math.min(10, Math.ceil(Math.sqrt(picked.length))));
+
+      // Icon fonts insert as text nodes, which needs the family actually loadable in Figma.
+      // Resolve availability once up front: an unavailable family falls back to SVG for just
+      // its own icons, rather than failing the whole strict-load batch part way through.
+      let availabilityMap = null;
+      const unavailableFamilies = new Set();
+      if (iconApiSource === 'iconfont') {
+        try {
+          availabilityMap = await ensureIconFontAvailabilityMap();
+          const families = new Set(picked.map(m => m.fontFamily || iconFontFamily).filter(Boolean));
+          families.forEach(family => {
+            if (!isIconFontFamilyAvailable(family, availabilityMap)) unavailableFamilies.add(family);
+          });
+        } catch (err) {
+          console.warn('Icon font availability lookup failed; inserting as SVG', err);
+          picked.forEach(m => unavailableFamilies.add(m.fontFamily || iconFontFamily));
+        }
+      }
+
+      const buildSvgCommand = async (match, x, y) => {
+        let raw = null;
+        if (match.source === 'antv' || String(match.id).startsWith('http')) {
+          const preview = await loadPreviewForOption({ id: match.id, source: match.source }, null);
+          raw = preview?.svg || null;
+        } else {
+          raw = await fetchIconifySvgTextRaw(match.id, safeSize, null);
+        }
+        if (!raw) return null;
+
+        const issues = checkSvgQuality(raw);
+        const fixed = issues.length ? autoFixSvgQuality(raw, issues) : raw;
+        const svg = prepareSvgForFigma(fixed, safeSize, null);
+        if (!svg) return null;
+        return { action: 'createNodeFromSvg', svg, name: match.id, width: safeSize, height: safeSize, x, y };
+      };
+
+      const commands = [];
+      const skipped = [];
+      let fontFallbackCount = 0;
+
+      for (let i = 0; i < picked.length; i += 1) {
+        const match = picked[i];
+        const x = (i % columns) * (safeSize + gap);
+        const y = Math.floor(i / columns) * (safeSize + gap);
+        const family = match.fontFamily || iconFontFamily;
+        const useIconFont = iconApiSource === 'iconfont' && family && !unavailableFamilies.has(family);
+
+        try {
+          if (useIconFont) {
+            const fontStyle = getIconFontStyleForIconId(match.id, family);
+            const figmaFromList = resolveFigmaFontNameForIconFont(family, fontStyle, availabilityMap);
+            const orderedFamilies = buildOrderedIconFontFamilies(family, figmaFromList?.family);
+            const resolvedInsert = await resolveIconFontInsertText(match.id, family);
+            commands.push({
+              action: 'createText',
+              text: resolvedInsert?.text || '?',
+              name: `icon-font:${match.id}`,
+              fontFamily: orderedFamilies[0] || family,
+              fontStyle: figmaFromList?.style || fontStyle,
+              fontFamilyCandidates: orderedFamilies.slice(1),
+              iconFontStrictLoad: true,
+              fontSize: safeSize,
+              x,
+              y
+            });
+            continue;
+          }
+
+          const command = await buildSvgCommand(match, x, y);
+          if (command) {
+            if (iconApiSource === 'iconfont') fontFallbackCount += 1;
+            commands.push(command);
+          } else {
+            skipped.push(match.id);
+          }
+        } catch (err) {
+          console.warn('Failed to prepare icon for batch insert', match.id, err);
+          skipped.push(match.id);
+        }
+      }
+
+      if (!commands.length) return { inserted: 0, skipped };
+
+      const execResult = await executeCommands(commands);
+      const failedCount = Number(execResult?.failed) || 0;
+      const inserted = Math.max(0, commands.length - failedCount);
+      return { inserted, skipped, failedCount, fontFallbackCount };
+    }
+
     function buildCreateIconDrawerResultsPanel(tab) {
       const matches = Array.isArray(tab?.matches) ? tab.matches : [];
       if (!matches.length) return null;
@@ -25264,6 +25375,239 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       let isInserting = false;
       const textPrimaryColor = getResolvedTextPrimaryColor();
       const safeSize = clampNumber(size || 24, 16, 512);
+
+      // The stats line tells the user to click an icon to insert, which stops being true
+      // once multi-select is on.
+      const baseStatsText = statsEl.textContent;
+
+      // --- render-kind filter + multi-select state -------------------------------------
+      // Tracked per rendered panel so switching history tabs starts clean.
+      const KIND_FILTERS = [
+        { key: 'all', label: 'All' },
+        { key: 'fill', label: 'Filled' },
+        { key: 'stroke', label: 'Stroke' },
+        { key: 'mixed', label: 'Mixed' }
+      ];
+      let activeKindFilter = 'all';
+      let multiSelectMode = false;
+      const selectedIds = new Set();
+      const renderedItems = [];   // { el, match }
+      const matchByKey = new Map();
+
+      // buildLocalIconFontId maps several icon-font families onto the same iconify id
+      // (Material Icons and Material Symbols Outlined both give material-symbols:<name>),
+      // so a raw id would let two tiles share one selection entry.
+      const selectionKeyFor = match => `${match.fontFamily || ''}|${match.id}`;
+
+      const toolbar = document.createElement('div');
+      toolbar.className = 'icon-browse-toolbar';
+
+      const filterGroup = document.createElement('div');
+      filterGroup.className = 'icon-kind-filter';
+      const filterLabel = document.createElement('span');
+      filterLabel.className = 'icon-kind-filter-label';
+      filterLabel.textContent = 'Type';
+      filterGroup.appendChild(filterLabel);
+
+      const filterChips = new Map();
+      KIND_FILTERS.forEach(({ key, label }) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `icon-kind-chip${key === activeKindFilter ? ' active' : ''}`;
+        chip.dataset.kind = key;
+        chip.textContent = label;
+        chip.title = key === 'all'
+          ? 'Show every result'
+          : key === 'fill'
+            ? 'Only filled icons'
+            : key === 'stroke'
+              ? 'Only stroke/outline icons'
+              : 'Only icons combining stroke and fill';
+        chip.addEventListener('click', () => {
+          if (activeKindFilter === key) return;
+          activeKindFilter = key;
+          filterChips.forEach((el, k) => el.classList.toggle('active', k === activeKindFilter));
+          applyKindFilter();
+        });
+        filterChips.set(key, chip);
+        filterGroup.appendChild(chip);
+      });
+      toolbar.appendChild(filterGroup);
+
+      const multiToggle = document.createElement('button');
+      multiToggle.type = 'button';
+      multiToggle.className = 'cat-select-btn icon-multi-select-toggle';
+      multiToggle.textContent = 'Select multiple';
+      multiToggle.title = 'Pick several icons and insert them together';
+      toolbar.appendChild(multiToggle);
+      panel.appendChild(toolbar);
+
+      // --- selection bar (only shown while multi-select is on) -------------------------
+      const selectionBar = document.createElement('div');
+      selectionBar.className = 'icon-browse-selection-bar icon-hidden';
+
+      const selectionStats = document.createElement('div');
+      selectionStats.className = 'icon-browse-stats';
+      selectionBar.appendChild(selectionStats);
+
+      const selectionActions = document.createElement('div');
+      selectionActions.className = 'icon-browse-actions';
+
+      const selectVisibleBtn = document.createElement('button');
+      selectVisibleBtn.type = 'button';
+      selectVisibleBtn.className = 'cat-select-btn';
+      selectVisibleBtn.textContent = 'Select shown';
+      selectionActions.appendChild(selectVisibleBtn);
+
+      const clearSelectionBtn = document.createElement('button');
+      clearSelectionBtn.type = 'button';
+      clearSelectionBtn.className = 'cat-select-btn';
+      clearSelectionBtn.textContent = 'Clear';
+      selectionActions.appendChild(clearSelectionBtn);
+
+      const insertSelectedBtn = document.createElement('button');
+      insertSelectedBtn.type = 'button';
+      insertSelectedBtn.className = 'setting-btn';
+      insertSelectedBtn.style.padding = '4px 12px';
+      selectionActions.appendChild(insertSelectedBtn);
+
+      selectionBar.appendChild(selectionActions);
+
+      const isItemVisible = el => !el.classList.contains('icon-hidden');
+
+      const updateSelectionBar = () => {
+        const count = selectedIds.size;
+        const visibleCount = renderedItems.filter(({ el, match }) => match.id !== '__generate__' && isItemVisible(el)).length;
+        selectionStats.textContent = count
+          ? `${count} selected of ${visibleCount} shown`
+          : `${visibleCount} shown \u2014 click icons to pick several`;
+        insertSelectedBtn.textContent = count ? `Insert ${count} icon${count === 1 ? '' : 's'}` : 'Insert';
+        insertSelectedBtn.disabled = count === 0 || isInserting;
+        clearSelectionBtn.disabled = count === 0;
+      };
+
+      // Kinds resolve asynchronously (each needs the icon body), so the chip counts and the
+      // filter are both re-applied as classifications land.
+      const applyKindFilter = () => {
+        const counts = { all: 0, fill: 0, stroke: 0, mixed: 0 };
+        renderedItems.forEach(({ el, match }) => {
+          if (match.id === '__generate__') {
+            // The AI-generate tile is an action, not a result: it has no render kind and
+            // cannot be batch-inserted, so it only belongs in the unfiltered list.
+            el.classList.toggle('icon-hidden', activeKindFilter !== 'all' || multiSelectMode);
+            return;
+          }
+          const kind = el.dataset.renderKind || '';
+          counts.all += 1;
+          if (counts[kind] !== undefined) counts[kind] += 1;
+          const show = activeKindFilter === 'all' || kind === activeKindFilter;
+          el.classList.toggle('icon-hidden', !show);
+        });
+
+        filterChips.forEach((chip, key) => {
+          const base = KIND_FILTERS.find(f => f.key === key)?.label || key;
+          chip.textContent = `${base} (${counts[key] || 0})`;
+          chip.disabled = key !== 'all' && !counts[key];
+        });
+
+        // Collapse grids, font-family headings and tier sections that filtered down to nothing.
+        panel.querySelectorAll('.icon-browse-grid').forEach(grid => {
+          const hasVisible = Array.from(grid.children).some(child => isItemVisible(child));
+          grid.classList.toggle('icon-hidden', !hasVisible);
+          const heading = grid.previousElementSibling;
+          if (heading && heading.classList.contains('icon-browse-font-family-heading')) {
+            heading.classList.toggle('icon-hidden', !hasVisible);
+          }
+        });
+        panel.querySelectorAll('.icon-browse-section').forEach(section => {
+          const hasVisible = Array.from(section.querySelectorAll('.icon-browse-item')).some(item => isItemVisible(item));
+          section.classList.toggle('icon-hidden', !hasVisible);
+        });
+
+        updateSelectionBar();
+      };
+
+      // Every tile's classification resolves separately; coalesce the refreshes into one
+      // pass per frame instead of re-scanning the panel once per icon.
+      let kindFilterFrame = 0;
+      const scheduleKindFilter = () => {
+        if (kindFilterFrame) return;
+        kindFilterFrame = requestAnimationFrame(() => {
+          kindFilterFrame = 0;
+          applyKindFilter();
+        });
+      };
+
+      const setItemSelected = (el, match, selected) => {
+        if (match.id === '__generate__') return;
+        const key = selectionKeyFor(match);
+        if (selected) selectedIds.add(key);
+        else selectedIds.delete(key);
+        el.classList.toggle('selected', selected);
+      };
+
+      const setMultiSelectMode = enabled => {
+        multiSelectMode = enabled;
+        panel.classList.toggle('multi-select', enabled);
+        multiToggle.classList.toggle('all-selected', enabled);
+        multiToggle.textContent = enabled ? 'Done selecting' : 'Select multiple';
+        selectionBar.classList.toggle('icon-hidden', !enabled);
+        statsEl.textContent = enabled
+          ? baseStatsText.replace(' Click an icon to insert.', '')
+          : baseStatsText;
+        if (!enabled) {
+          renderedItems.forEach(({ el, match }) => setItemSelected(el, match, false));
+        }
+        applyKindFilter();
+      };
+
+      multiToggle.addEventListener('click', () => setMultiSelectMode(!multiSelectMode));
+
+      selectVisibleBtn.addEventListener('click', () => {
+        renderedItems.forEach(({ el, match }) => {
+          if (match.id === '__generate__' || !isItemVisible(el)) return;
+          setItemSelected(el, match, true);
+        });
+        updateSelectionBar();
+      });
+
+      clearSelectionBtn.addEventListener('click', () => {
+        renderedItems.forEach(({ el, match }) => setItemSelected(el, match, false));
+        updateSelectionBar();
+      });
+
+      insertSelectedBtn.addEventListener('click', async () => {
+        if (isInserting || !selectedIds.size) return;
+        const picked = Array.from(selectedIds).map(key => matchByKey.get(key)).filter(Boolean);
+        isInserting = true;
+        updateSelectionBar();
+        showThinkingIndicator(`Inserting ${picked.length} icon${picked.length === 1 ? '' : 's'}...`);
+        try {
+          const result = await insertCreateIconMatches(picked, { size: safeSize, iconApiSource, iconFontFamily });
+          let text = `Inserted ${result.inserted} icon${result.inserted === 1 ? '' : 's'}.`;
+          if (result.fontFallbackCount) {
+            text += ` ${result.fontFallbackCount} inserted as SVG (icon font unavailable in Figma).`;
+          }
+          if (result.skipped?.length) {
+            text += ` Skipped ${result.skipped.length}: ${result.skipped.slice(0, 8).join(', ')}${result.skipped.length > 8 ? '...' : ''}.`;
+          }
+          addMessage('bot', text);
+          chatHistory.push({ role: 'model', parts: [{ text }] });
+          await autoSaveAfterResponse();
+          showToast(text, result.inserted ? 'success' : 'error');
+          if (result.inserted) {
+            renderedItems.forEach(({ el, match }) => setItemSelected(el, match, false));
+          }
+        } catch (err) {
+          console.error('Batch icon insert failed', err);
+          showToast('Failed to insert the selected icons.', 'error');
+        } finally {
+          removeThinkingIndicator();
+          isInserting = false;
+          updateSelectionBar();
+        }
+      });
+
       const appendMatchItem = (grid, match) => {
         const item = document.createElement('div');
         item.className = 'icon-browse-item';
@@ -25294,21 +25638,44 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           setImagePlaceholderFallback(img, 24);
           previewBox.appendChild(img);
 
+          const applyPreviewDataUrl = dataUrl => {
+            if (!dataUrl) {
+              markIconPreviewUnavailable(img, 24);
+              return;
+            }
+            img.style.filter = '';
+            img.style.opacity = '';
+            img.src = dataUrl;
+          };
+
           if (match.source === 'antv' || String(match.id || '').startsWith('http')) {
             loadPreviewForOption({ id: match.id, source: match.source }, textPrimaryColor)
               .then(preview => {
-                if (!preview) return;
-                if (preview.preview) img.src = preview.preview;
-                else if (preview.svg) img.src = svgToDataUrl(preview.svg);
+                if (preview?.svg) applyPreviewDataUrl(svgToDataUrl(preview.svg));
+                else if (preview?.preview?.startsWith('data:')) applyPreviewDataUrl(preview.preview);
+                else applyPreviewDataUrl(null);
               })
-              .catch(err => console.warn('Failed to load icon preview', match.id, err));
+              .catch(err => {
+                console.warn('Failed to load icon preview', match.id, err);
+                markIconPreviewUnavailable(img, 24);
+              });
           } else {
-            img.src = `https://api.iconify.design/${match.id}.svg?height=24&color=${encodeURIComponent(textPrimaryColor)}`;
+            loadIconPreviewDataUrl(match.id, textPrimaryColor, 24)
+              .then(applyPreviewDataUrl)
+              .catch(err => {
+                console.warn('Failed to load icon preview', match.id, err);
+                markIconPreviewUnavailable(img, 24);
+              });
           }
         }
 
         item.appendChild(previewBox);
         item.addEventListener('click', async () => {
+          if (multiSelectMode && match.id !== '__generate__') {
+            setItemSelected(item, match, !selectedIds.has(selectionKeyFor(match)));
+            updateSelectionBar();
+            return;
+          }
           if (isInserting) return;
           isInserting = true;
           item.classList.add('selected');
@@ -25339,7 +25706,12 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           }
         });
         grid.appendChild(item);
-        fetchAndApplyBrowseItemKindBadge(item, match).catch(() => {});
+        item.dataset.selectionKey = selectionKeyFor(match);
+        renderedItems.push({ el: item, match });
+        matchByKey.set(item.dataset.selectionKey, match);
+        fetchAndApplyBrowseItemKindBadge(item, match)
+          .then(() => scheduleKindFilter())
+          .catch(() => {});
       };
 
       const tieredMatches = new Map();
@@ -25389,7 +25761,91 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
           panel.appendChild(section);
         });
 
+      panel.appendChild(selectionBar);
+      applyKindFilter();
+      attachIconGridDragSelect(panel, {
+        isEnabled: () => multiSelectMode,
+        onSelect: items => {
+          items.forEach(el => {
+            const match = matchByKey.get(el.dataset.selectionKey);
+            if (!match) return;
+            setItemSelected(el, match, !selectedIds.has(el.dataset.selectionKey));
+          });
+          updateSelectionBar();
+        }
+      });
+
       return panel;
+    }
+
+    // Rubber-band selection over an icon grid, matching the Import icon sets behaviour.
+    // Drags that start on a tile are ignored so a plain click still toggles just that tile.
+    function attachIconGridDragSelect(container, { isEnabled, onSelect }) {
+      let isDragging = false;
+      let startClientX = 0;
+      let startClientY = 0;
+      let selectionRect = null;
+
+      const removeSelectionRect = () => {
+        if (selectionRect) {
+          selectionRect.remove();
+          selectionRect = null;
+        }
+      };
+
+      const itemsInRect = rect => Array.from(container.querySelectorAll('.icon-browse-item'))
+        .filter(item => {
+          if (item.classList.contains('icon-hidden')) return false;
+          const box = item.getBoundingClientRect();
+          return box.right > rect.left && box.left < rect.right
+            && box.bottom > rect.top && box.top < rect.bottom;
+        });
+
+      const onMouseMove = e => {
+        if (!isDragging || !selectionRect) return;
+        selectionRect.style.left = `${Math.min(startClientX, e.clientX)}px`;
+        selectionRect.style.top = `${Math.min(startClientY, e.clientY)}px`;
+        selectionRect.style.width = `${Math.abs(e.clientX - startClientX)}px`;
+        selectionRect.style.height = `${Math.abs(e.clientY - startClientY)}px`;
+      };
+
+      const onMouseUp = () => {
+        if (!isDragging) return;
+        if (selectionRect) {
+          const picked = itemsInRect(selectionRect.getBoundingClientRect());
+          if (picked.length) onSelect(picked);
+        }
+        removeSelectionRect();
+        isDragging = false;
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+      };
+
+      container.addEventListener('mousedown', e => {
+        if (!isEnabled() || e.button !== 0) return;
+        if (e.target.closest('.icon-browse-item')) return;
+        if (e.target.closest('.icon-browse-toolbar, .icon-browse-selection-bar')) return;
+        if (!e.target.closest('.icon-browse-section, .icon-browse-grid') && e.target !== container) return;
+
+        isDragging = true;
+        startClientX = e.clientX;
+        startClientY = e.clientY;
+        selectionRect = document.createElement('div');
+        selectionRect.className = 'icon-selection-rect';
+        selectionRect.style.left = `${startClientX}px`;
+        selectionRect.style.top = `${startClientY}px`;
+        selectionRect.style.width = '0px';
+        selectionRect.style.height = '0px';
+        document.body.appendChild(selectionRect);
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        e.preventDefault();
+      });
+
+      container.addEventListener('selectstart', e => {
+        if (isDragging) e.preventDefault();
+      });
     }
 
     function renderCreateIconDrawerHistoryView() {
@@ -25985,8 +26441,268 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
       return fixed;
     }
 
+    // api.iconify.design's `/<prefix>:<name>.svg` endpoint is unusable from the plugin UI:
+    // the iframe runs on an opaque origin ("null"), and those requests come back without an
+    // Access-Control-Allow-Origin header, so the browser rejects them. The JSON API
+    // (/collection, /search, /<prefix>.json) does pass CORS from the same iframe -- that is
+    // why icon *search* works while every preview and insert failed.
+    //
+    // So fetch icon bodies through /<prefix>.json?icons=a,b,c and assemble the SVG locally.
+    // Bonus: it is a bulk endpoint, so a 120-tile grid costs one request per icon set
+    // instead of 120 individual requests.
+    const ICONIFY_BULK_CHUNK_SIZE = 80;
+    const ICONIFY_BULK_BATCH_DELAY_MS = 30;
+    const iconifyBodyCache = new Map();    // 'prefix:name' -> { body, width, height } | null (null = no such icon)
+    const iconifyBodyPending = new Map();  // 'prefix:name' -> Promise
+    const iconifyBodyQueues = new Map();   // prefix -> { resolvers: Map<name, fn[]>, timer }
+    let iconifyBulkFailureLogCount = 0;
+
+    // Each icon set needs its own request, and the set list is long, so cap how many are in
+    // flight at once.
+    const ICONIFY_BULK_CONCURRENCY = 6;
+    let iconifyBulkActive = 0;
+    const iconifyBulkWaiters = [];
+
+    function acquireIconifyBulkSlot() {
+      const release = () => {
+        iconifyBulkActive -= 1;
+        const next = iconifyBulkWaiters.shift();
+        if (next) {
+          iconifyBulkActive += 1;
+          next(release);
+        }
+      };
+      if (iconifyBulkActive < ICONIFY_BULK_CONCURRENCY) {
+        iconifyBulkActive += 1;
+        return Promise.resolve(release);
+      }
+      return new Promise(resolve => iconifyBulkWaiters.push(resolve));
+    }
+
+    function requestIconifyIconBody(prefix, name) {
+      if (!prefix || !name) return Promise.resolve(null);
+      const key = `${prefix}:${name}`;
+      if (iconifyBodyCache.has(key)) return Promise.resolve(iconifyBodyCache.get(key));
+      if (iconifyBodyPending.has(key)) return iconifyBodyPending.get(key);
+
+      let resolveEntry;
+      const pending = new Promise(resolve => { resolveEntry = resolve; });
+      iconifyBodyPending.set(key, pending);
+
+      let queue = iconifyBodyQueues.get(prefix);
+      if (!queue) {
+        queue = { resolvers: new Map(), timer: null };
+        iconifyBodyQueues.set(prefix, queue);
+      }
+      if (!queue.resolvers.has(name)) queue.resolvers.set(name, []);
+      queue.resolvers.get(name).push(resolveEntry);
+
+      // Coalesce the tiles that render in the same frame into one bulk request.
+      if (!queue.timer) {
+        queue.timer = setTimeout(() => { flushIconifyBodyQueue(prefix).catch(() => {}); }, ICONIFY_BULK_BATCH_DELAY_MS);
+      }
+      return pending;
+    }
+
+    async function flushIconifyBodyQueue(prefix) {
+      const queue = iconifyBodyQueues.get(prefix);
+      if (!queue) return;
+      iconifyBodyQueues.delete(prefix);
+      if (queue.timer) clearTimeout(queue.timer);
+
+      const names = Array.from(queue.resolvers.keys());
+      // `cacheable` is false for network failures so a transient error does not permanently
+      // poison the cache with a miss.
+      const settle = (name, value, cacheable) => {
+        const key = `${prefix}:${name}`;
+        if (cacheable) iconifyBodyCache.set(key, value);
+        iconifyBodyPending.delete(key);
+        (queue.resolvers.get(name) || []).forEach(fn => fn(value));
+      };
+
+      for (let i = 0; i < names.length; i += ICONIFY_BULK_CHUNK_SIZE) {
+        const chunk = names.slice(i, i + ICONIFY_BULK_CHUNK_SIZE);
+        let data = null;
+        const release = await acquireIconifyBulkSlot();
+        try {
+          const url = new URL(`https://api.iconify.design/${prefix}.json`);
+          url.searchParams.set('icons', chunk.join(','));
+          const res = await fetch(url.toString(), { cache: 'no-store' });
+          if (res.ok) data = await res.json();
+          else if (iconifyBulkFailureLogCount < 3) {
+            iconifyBulkFailureLogCount += 1;
+            console.warn('Iconify bulk fetch returned', res.status, 'for', prefix);
+          }
+        } catch (err) {
+          if (iconifyBulkFailureLogCount < 3) {
+            iconifyBulkFailureLogCount += 1;
+            console.warn('Iconify bulk fetch failed for', prefix, err);
+          }
+        } finally {
+          release();
+        }
+
+        if (!data || typeof data !== 'object') {
+          chunk.forEach(name => settle(name, null, false));
+          continue;
+        }
+
+        const fallbackWidth = Number(data.width) || 24;
+        const fallbackHeight = Number(data.height) || 24;
+        const icons = data.icons || {};
+        const aliases = data.aliases || {};
+        chunk.forEach(name => {
+          let entry = icons[name];
+          if (!entry) {
+            const parent = aliases[name]?.parent;
+            if (parent) entry = icons[parent];
+          }
+          if (entry && entry.body) {
+            settle(name, {
+              body: entry.body,
+              width: Number(entry.width) || fallbackWidth,
+              height: Number(entry.height) || fallbackHeight
+            }, true);
+          } else {
+            settle(name, null, true);
+          }
+        });
+      }
+    }
+
+    function buildSvgFromIconifyBody(entry, size, color) {
+      if (!entry || !entry.body) return null;
+      const viewWidth = Number(entry.width) || 24;
+      const viewHeight = Number(entry.height) || 24;
+      const requested = Number(size) > 0 ? Number(size) : null;
+      const renderWidth = requested || viewWidth;
+      const renderHeight = requested || viewHeight;
+      // Iconify bodies paint with `currentColor`; an <img>/data: URL has no inherited colour,
+      // so bake the requested colour in.
+      const body = color ? entry.body.replace(/currentColor/g, color) : entry.body;
+      return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" `
+        + `viewBox="0 0 ${viewWidth} ${viewHeight}" width="${renderWidth}" height="${renderHeight}">${body}</svg>`;
+    }
+
+    function splitIconifyId(iconId) {
+      const raw = String(iconId || '').trim();
+      const sep = raw.indexOf(':');
+      if (sep <= 0 || sep === raw.length - 1) return null;
+      return { prefix: raw.slice(0, sep), name: raw.slice(sep + 1) };
+    }
+
+    const iconPreviewDataUrlCache = new Map();
+
+    function loadIconPreviewDataUrl(iconId, color, size = 24) {
+      const parts = splitIconifyId(iconId);
+      if (!parts) return Promise.resolve(null);
+      const cacheKey = `${parts.prefix}:${parts.name}|${color || ''}|${size}`;
+      if (iconPreviewDataUrlCache.has(cacheKey)) return iconPreviewDataUrlCache.get(cacheKey);
+
+      const pending = requestIconifyIconBody(parts.prefix, parts.name)
+        .then(entry => {
+          const svg = buildSvgFromIconifyBody(entry, size, color);
+          const dataUrl = svg ? svgToDataUrl(svg) : null;
+          if (!dataUrl) iconPreviewDataUrlCache.delete(cacheKey);
+          return dataUrl;
+        })
+        .catch(err => {
+          iconPreviewDataUrlCache.delete(cacheKey);
+          console.warn('Icon preview build failed', iconId, err);
+          return null;
+        });
+
+      iconPreviewDataUrlCache.set(cacheKey, pending);
+      return pending;
+    }
+
+    // Markup built as HTML strings cannot await an icon body, so those <img> elements are
+    // emitted with data-iconify-id and filled in here once they are in the DOM.
+    function hydrateIconifyImage(img) {
+      const iconId = img?.dataset?.iconifyId;
+      if (!iconId) return;
+      const state = img.dataset.iconifyHydrated;
+      if (state === 'pending' || state === 'true') return;
+
+      img.dataset.iconifyHydrated = 'pending';
+      const size = Number(img.dataset.iconifySize) || 24;
+      const color = img.dataset.iconifyColor || null;
+      loadIconPreviewDataUrl(iconId, color, size)
+        .then(dataUrl => {
+          if (dataUrl) {
+            img.dataset.iconifyHydrated = 'true';
+            img.src = dataUrl;
+          } else {
+            img.dataset.iconifyHydrated = 'failed';
+            markIconPreviewUnavailable(img, size);
+          }
+        })
+        .catch(() => {
+          img.dataset.iconifyHydrated = 'failed';
+          markIconPreviewUnavailable(img, size);
+        });
+    }
+
+    // The icon set list can hold a couple of hundred entries, each with sample chips. The
+    // markup these replaced carried loading="lazy", so hydrate on visibility to keep that
+    // behaviour instead of firing a request per icon set on drawer open. A null root still
+    // accounts for clipping by the scrolling drawer.
+    let iconifyPreviewLazyObserver = null;
+    function getIconifyPreviewLazyObserver() {
+      if (iconifyPreviewLazyObserver) return iconifyPreviewLazyObserver;
+      if (typeof IntersectionObserver !== 'function') return null;
+      iconifyPreviewLazyObserver = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return;
+          iconifyPreviewLazyObserver.unobserve(entry.target);
+          hydrateIconifyImage(entry.target);
+        });
+      }, { rootMargin: '200px' });
+      return iconifyPreviewLazyObserver;
+    }
+
+    function hydrateIconifyPreviewImages(root, { lazy = true } = {}) {
+      const scope = root || document;
+      const targets = scope.querySelectorAll('img[data-iconify-id]:not([data-iconify-hydrated])');
+      if (!targets.length) return;
+      const observer = lazy ? getIconifyPreviewLazyObserver() : null;
+      targets.forEach(img => {
+        if (observer) {
+          img.dataset.iconifyHydrated = 'observed';
+          observer.observe(img);
+        } else {
+          hydrateIconifyImage(img);
+        }
+      });
+    }
+
+    function markIconPreviewUnavailable(img, size = 24) {
+      if (!img) return;
+      // The grid CSS applies `filter: brightness(0) invert(1)` so icons pick up the theme
+      // colour; on the placeholder that turns it into a featureless white square. Drop the
+      // filter so a failed preview actually looks like a failed preview.
+      img.style.filter = 'none';
+      img.style.opacity = '0.6';
+      img.src = getNoImagePlaceholderDataUrl(size);
+    }
+
     async function fetchIconifySvgTextRaw(iconId, size, color) {
       if (!iconId) return null;
+
+      // Preferred route: the JSON API, which passes CORS from the plugin's opaque origin.
+      const parts = splitIconifyId(iconId);
+      if (parts) {
+        try {
+          const entry = await requestIconifyIconBody(parts.prefix, parts.name);
+          const built = buildSvgFromIconifyBody(entry, size, color);
+          if (built) return built;
+        } catch (err) {
+          console.warn('Iconify JSON fetch failed', iconId, err);
+        }
+      }
+
+      // Fallback: the .svg endpoint. Kept for ids the JSON API cannot resolve; it is
+      // CORS-blocked inside Figma's plugin iframe but works in other hosts.
       try {
         const url = new URL(`https://api.iconify.design/${iconId}.svg`);
         if (size) {
@@ -26000,7 +26716,7 @@ Do NOT include any preamble, explanation, or markdown formatting.`;
         if (!res.ok) return null;
         return await res.text();
       } catch (err) {
-        console.error('Iconify fetch failed', err);
+        console.warn('Iconify SVG endpoint fetch failed', iconId, err);
         return null;
       }
     }
@@ -28455,9 +29171,8 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
         entries.forEach(entry => {
           if (entry.isIntersecting) {
             const img = entry.target.querySelector('img');
-            if (img && img.dataset.src) {
-              img.src = img.dataset.src;
-              delete img.dataset.src;
+            if (img && img.dataset.iconifyId && !img.dataset.iconifyHydrated) {
+              hydrateIconifyPreviewImages(entry.target, { lazy: false });
               if (window._currentBrowseObserver) {
                 window._currentBrowseObserver.unobserve(entry.target);
               }
@@ -28556,8 +29271,10 @@ Respond with ONLY the slug in lowercase hyphenated form (e.g., calendar-check). 
           item.dataset.name = iconName;
 
           const img = document.createElement('img');
-          // Get the text-primary color value from CSS variables
-          img.dataset.src = `https://api.iconify.design/${collectionData.prefix}:${iconName}.svg?color=${encodeURIComponent(iconBrowsePreviewColor)}`;
+          img.src = TRANSPARENT_PIXEL_DATA_URL;
+          // Resolved by the IntersectionObserver below once the tile scrolls into view.
+          img.dataset.iconifyId = `${collectionData.prefix}:${iconName}`;
+          img.dataset.iconifyColor = iconBrowsePreviewColor;
 
           item.onclick = () => {
             if (selectedIcons.has(iconName)) {
